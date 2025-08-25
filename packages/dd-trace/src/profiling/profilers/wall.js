@@ -31,16 +31,20 @@ function getActiveSpan () {
   return store && store.span
 }
 
+function toBigInt (spanId) {
+  return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
+}
+
 function updateContext (context) {
   // Converting spanIDs to strings is not necessary as generateLabels will do it
   // too. When we don't use async context frame, we can convert them when the
   // sample is taken though so we amortize the latency of operations. It is an
   // optimization.
-  if (typeof context.spanId === 'object') {
-    context.spanId = context.spanId.toString(10)
+  if (context.spanId !== null && typeof context.spanId === 'object') {
+    context.spanId = context.spanId.toBigInt()
   }
-  if (typeof context.rootSpanId === 'object') {
-    context.rootSpanId = context.rootSpanId.toString(10)
+  if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
+    context.rootSpanId = context.rootSpanId.toBigInt()
   }
   if (context.webTags !== undefined && context.endpoint === undefined) {
     // endpoint may not be determined yet, but keep it as fallback
@@ -392,10 +396,10 @@ class NativeWallProfiler {
     const { spanId, rootSpanId, webTags, endpoint } = ref
 
     if (spanId !== undefined) {
-      labels[SPAN_ID_LABEL] = typeof spanId === 'object' ? spanId.toString(10) : spanId
+      labels[SPAN_ID_LABEL] = toBigInt(spanId)
     }
     if (rootSpanId !== undefined) {
-      labels[LOCAL_ROOT_SPAN_ID_LABEL] = typeof rootSpanId === 'object' ? rootSpanId.toString(10) : rootSpanId
+      labels[LOCAL_ROOT_SPAN_ID_LABEL] = toBigInt(rootSpanId)
     }
     if (webTags !== undefined && Object.keys(webTags).length !== 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
