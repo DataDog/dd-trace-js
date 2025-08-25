@@ -13,17 +13,10 @@ addHook({
   versions: ['>=6.0.0']
 }, obj => {
   const EventHubProducerClient = obj.EventHubProducerClient
-
   shimmer.wrap(EventHubProducerClient.prototype, 'sendBatch',
     sendBatch => async function (eventData) {
       const functionName = sendBatch.name
       return producerCh.tracePromise(sendBatch, { functionName, eventData }, this, ...arguments)
-  })
-
-  shimmer.wrap(EventHubProducerClient.prototype, 'createBatch',
-    createBatch => async function (options) {
-      const functionName = createBatch.name
-      return producerCh.tracePromise(createBatch, { functionName }, this, ...arguments)
     })
   return obj
 })
@@ -41,6 +34,6 @@ addHook({
         tryAdd,
         { functionName, eventData, options },
         this, ...arguments)
-  })
+    })
   return obj
 })
