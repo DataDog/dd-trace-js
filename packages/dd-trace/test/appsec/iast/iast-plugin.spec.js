@@ -59,7 +59,6 @@ describe('IAST Plugin', () => {
         './telemetry': {
           isEnabled: () => false
         },
-        './telemetry/metrics': {},
         '../../../../datadog-core': { storage: () => legacyStorage }
       })
       iastPlugin = new iastPluginMod.IastPlugin()

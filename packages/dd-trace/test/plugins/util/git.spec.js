@@ -239,7 +239,12 @@ describe('generatePackFilesForCommits', () => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
-    statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
+    const realStatSync = fs.statSync
+    statSyncStub = sinon.stub(fs, 'statSync').callsFake((p, ...args) =>
+      p === fakeDirectory || p === 'cwd'
+        ? { isDirectory: () => true }
+        : realStatSync(p, ...args)
+    )
   })
 
   afterEach(() => {
