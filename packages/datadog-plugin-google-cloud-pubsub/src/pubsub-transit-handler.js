@@ -120,13 +120,66 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         const producerParent = this.tracer.extract('text_map', attrs) || null
         const effectiveParent = producerParent || undefined
 
-        // ToDo: create pubsub.delivery; create HTTP span directly as child of producer
+        // Compute pubsub scheduling duration (publish → HTTP receipt)
+        const publishStartTimeRawForHttp = attrs['x-dd-publish-start-time']
+        let schedulingMs = null
+        if (publishStartTimeRawForHttp) {
+          const t0 = Number.parseInt(publishStartTimeRawForHttp, 10)
+          if (Number.isFinite(t0) && t0 > 0) schedulingMs = Date.now() - t0
+        }
+
+        // Create pubsub.delivery span to represent infra delivery latency and parent the HTTP span
+        let parentForHttp = effectiveParent
+        const publishStartTimeRaw = attrs['x-dd-publish-start-time']
+        if (publishStartTimeRaw) {
+          const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
+          if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+            const messageId = (message && message.messageId) || req.headers['ce-id']
+            const deliveryTags = {
+              component: 'google-cloud-pubsub',
+              'span.kind': 'consumer',
+              'span.type': 'pubsub',
+              'gcloud.project_id': projectId,
+              'pubsub.topic': topicName,
+              'pubsub.subscription': subscription,
+              'pubsub.message_id': messageId,
+              'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
+              'pubsub.operation': 'delivery',
+              'pubsub.scheduling_duration_ms': schedulingMs
+            }
+            // Add CloudEvents/Eventarc tags for CloudEvent requests
+            if (isCloudEvent) {
+              if (attrs['ce-source'] || req.headers['ce-source']) {
+                deliveryTags['cloudevents.source'] = attrs['ce-source'] || req.headers['ce-source']
+              }
+              if (attrs['ce-type'] || req.headers['ce-type']) {
+                deliveryTags['cloudevents.type'] = attrs['ce-type'] || req.headers['ce-type']
+              }
+              if (req.headers['ce-id']) deliveryTags['cloudevents.id'] = req.headers['ce-id']
+              if (req.headers['ce-specversion']) deliveryTags['cloudevents.specversion'] = req.headers['ce-specversion']
+              if (req.headers['ce-time']) deliveryTags['cloudevents.time'] = req.headers['ce-time']
+              deliveryTags['eventarc.trigger'] = 'pubsub'
+            }
+            const deliverySpan = this.tracer.startSpan('pubsub.delivery', {
+              childOf: effectiveParent,
+              service: this.tracer._service ? `${this.tracer._service}-pubsub-scheduling` : undefined,
+              resource: `${topicName} → ${subscription}`,
+              type: 'pubsub',
+              tags: deliveryTags,
+              startTime: publishStartTime
+            })
+            const deliveryEnd = Date.now()
+            try { deliverySpan.setTag('pubsub.delivery.duration_ms', deliveryEnd - publishStartTime) } catch {}
+            deliverySpan.finish(deliveryEnd)
+            parentForHttp = deliverySpan
+          }
+        }
 
         // Add parsed body for downstream middleware that expects it
         req.body = json
         // Create enhanced HTTP span as child of producer
         const httpSpan = this.tracer.startSpan('http.request', {
-          childOf: effectiveParent,
+          childOf: parentForHttp,
           tags: {
             'http.method': req.method,
             'http.url': `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}${req.url}`,
