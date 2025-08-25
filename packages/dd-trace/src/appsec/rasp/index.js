@@ -6,7 +6,7 @@ const {
   expressMiddlewareError,
   fastifyMiddlewareError
 } = require('../channels')
-const { block, delegateBlock, isBlocked } = require('../blocking')
+const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
@@ -91,10 +91,10 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
 
   const { req, res, blockingAction, raspRule, ruleTriggered } = abortError
   if (!isBlocked(res)) {
-    const blockFn = isTopLevel ? block : delegateBlock
+    const blockFn = isTopLevel ? block : registerBlockDelegation
     const blocked = blockFn(req, res, web.root(req), null, blockingAction)
     if (ruleTriggered) {
-      // block() returns a bool, and delegateBlock() returns a promise
+      // block() returns a bool, and registerBlockDelegation() returns a promise
       // we use Promise.resolve() to handle both cases
       Promise.resolve(blocked).then(blocked => {
         // TODO: bug: this should probably be called for each match even without block

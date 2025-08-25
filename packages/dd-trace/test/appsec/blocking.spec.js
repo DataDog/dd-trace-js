@@ -16,7 +16,7 @@ describe('blocking', () => {
   }
 
   let log, telemetry
-  let block, delegateBlock, blockDelegate, setTemplates
+  let block, registerBlockDelegation, callBlockDelegation, setTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -35,8 +35,8 @@ describe('blocking', () => {
     })
 
     block = blocking.block
-    delegateBlock = blocking.delegateBlock
-    blockDelegate = blocking.blockDelegate
+    registerBlockDelegation = blocking.registerBlockDelegation
+    callBlockDelegation = blocking.callBlockDelegation
     setTemplates = blocking.setTemplates
 
     req = {
@@ -158,7 +158,7 @@ describe('blocking', () => {
       setTemplates(config)
 
       const abortController = new AbortController()
-      const promise = delegateBlock(req, res, rootSpan, abortController)
+      const promise = registerBlockDelegation(req, res, rootSpan, abortController)
 
       expect(rootSpan.setTag).to.not.have.been.called
       expect(res.writeHead).to.not.have.been.called
@@ -166,7 +166,7 @@ describe('blocking', () => {
       expect(abortController.signal.aborted).to.be.false
       expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
 
-      const blocked = blockDelegate(res)
+      const blocked = callBlockDelegation(res)
 
       expect(blocked).to.be.true
       expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
@@ -185,13 +185,13 @@ describe('blocking', () => {
     })
 
     it('should only resolve the first blocking delegation per request', (done) => {
-      const firstPromise = delegateBlock(req, res, rootSpan)
+      const firstPromise = registerBlockDelegation(req, res, rootSpan)
       const secondPromise = sinon.stub()
       const thirdPromise = sinon.stub()
-      delegateBlock(req, res, rootSpan).then(secondPromise)
-      delegateBlock(req, res, rootSpan).then(thirdPromise)
+      registerBlockDelegation(req, res, rootSpan).then(secondPromise)
+      registerBlockDelegation(req, res, rootSpan).then(thirdPromise)
 
-      const blocked = blockDelegate(res)
+      const blocked = callBlockDelegation(res)
 
       expect(blocked).to.be.true
       expect(rootSpan.setTag).to.have.been.calledOnce
@@ -211,7 +211,7 @@ describe('blocking', () => {
     })
 
     it('should do nothing if no blocking delegation exists', () => {
-      const blocked = blockDelegate(res)
+      const blocked = callBlockDelegation(res)
 
       expect(blocked).to.not.be.ok
       expect(log.warn).to.not.have.been.called
@@ -224,7 +224,7 @@ describe('blocking', () => {
     it('should cancel block delegations when block is called', (done) => {
       const promise = sinon.stub()
 
-      delegateBlock(req, res, rootSpan).then(promise)
+      registerBlockDelegation(req, res, rootSpan).then(promise)
 
       const blocked = block(req, res, rootSpan)
 
@@ -234,7 +234,7 @@ describe('blocking', () => {
       expect(res.constructor.prototype.end).to.have.been.calledOnce
       expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
 
-      const result = blockDelegate(res)
+      const result = callBlockDelegation(res)
 
       expect(result).to.not.be.ok
       expect(rootSpan.setTag).to.have.been.calledOnce

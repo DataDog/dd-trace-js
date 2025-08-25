@@ -34,7 +34,7 @@ describe('RASP', () => {
 
     blocking = {
       block: sinon.stub().returns(true),
-      delegateBlock: sinon.stub().resolves(true),
+      registerBlockDelegation: sinon.stub().resolves(true),
       isBlocked: sinon.stub().callsFake(() => blocked)
     }
 
@@ -97,7 +97,7 @@ describe('RASP', () => {
       rasp.blockOnDatadogRaspAbortError({ error: new Error() })
 
       sinon.assert.notCalled(blocking.block)
-      sinon.assert.notCalled(blocking.delegateBlock)
+      sinon.assert.notCalled(blocking.registerBlockDelegation)
       sinon.assert.notCalled(updateRaspRuleMatchMetricTags)
     })
 
@@ -106,7 +106,7 @@ describe('RASP', () => {
         error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
-      sinon.assert.calledOnce(blocking.delegateBlock)
+      sinon.assert.calledOnce(blocking.registerBlockDelegation)
 
       setImmediate(() => {
         sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
@@ -128,7 +128,7 @@ describe('RASP', () => {
         error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
-      sinon.assert.calledOnce(blocking.delegateBlock)
+      sinon.assert.calledOnce(blocking.registerBlockDelegation)
 
       setImmediate(() => {
         sinon.assert.calledOnce(updateRaspRuleMatchMetricTags)

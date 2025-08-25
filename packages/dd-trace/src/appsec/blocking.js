@@ -139,7 +139,7 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
   }
 }
 
-function delegateBlock (req, res) {
+function registerBlockDelegation (req, res) {
   const args = arguments
 
   return new Promise((resolve) => {
@@ -150,7 +150,7 @@ function delegateBlock (req, res) {
   })
 }
 
-function blockDelegate (res) {
+function callBlockDelegation (res) {
   const delegation = blockDelegations.get(res)
   if (delegation) {
     const result = block.apply(this, delegation.args)
@@ -185,8 +185,8 @@ function setDefaultBlockingActionParameters (actions) {
 module.exports = {
   addSpecificEndpoint,
   block,
-  delegateBlock,
-  blockDelegate,
+  registerBlockDelegation,
+  callBlockDelegation,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,
