@@ -235,23 +235,16 @@ function useLlmobs ({
 
   beforeEach(() => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
-      console.log('apmTracesPromise resolved')
-      const flattened = apmTraces.flatMap(trace => trace)
-      console.log('flattened', flattened)
-      const sorted = flattened.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-      console.log('sorted', sorted)
-      return sorted
+      return apmTraces
+        .flatMap(trace => trace)
+        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
     })
 
     llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
-      console.log('llmobsTracesPromise resolved')
-      const flattened = llmobsTraces.flatMap(trace => trace)
-      console.log('flattened', flattened)
-      const firstSpans = flattened.map(trace => trace.spans[0])
-      console.log('first spans', firstSpans)
-      const sorted = firstSpans.sort((a, b) => a.start_ns - b.start_ns)
-      console.log('sorted', sorted)
-      return sorted
+      return llmobsTraces
+        .flatMap(trace => trace)
+        .map(trace => trace.spans[0])
+        .sort((a, b) => a.start_ns - b.start_ns)
     })
   })
 
@@ -260,12 +253,7 @@ function useLlmobs ({
   })
 
   return async function () {
-    console.log('before awaiting llmobsTracesPromise')
-    const llmobsSpans = await llmobsTracesPromise
-    console.log('llmobsSpans', llmobsSpans)
-    console.log('before awaiting apmTracesPromise')
-    const apmSpans = await apmTracesPromise
-    console.log('apmSpans', apmSpans)
+    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
 
     return { apmSpans, llmobsSpans }
   }
