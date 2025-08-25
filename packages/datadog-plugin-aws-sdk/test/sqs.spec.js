@@ -146,7 +146,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -196,7 +197,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -369,6 +371,7 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
               region: 'us-east-1'
             })
