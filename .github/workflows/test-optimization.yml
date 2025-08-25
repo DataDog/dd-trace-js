@@ -120,8 +120,9 @@ jobs:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
         # 10.2.0 is the minimum version we support in >=6
+        # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
-        cypress-version: [6.7.0, 10.2.0, latest]
+        cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
