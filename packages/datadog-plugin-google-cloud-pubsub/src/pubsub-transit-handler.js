@@ -134,6 +134,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         if (publishStartTimeRaw) {
           const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
           if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+            const messageId = (message && message.messageId) || req.headers['ce-id']
             const deliveryTags = {
               component: 'google-cloud-pubsub',
               'span.kind': 'consumer',
@@ -141,8 +142,23 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
               'gcloud.project_id': projectId,
               'pubsub.topic': topicName,
               'pubsub.subscription': subscription,
+              'pubsub.message_id': messageId,
               'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
-              'pubsub.operation': 'delivery'
+              'pubsub.operation': 'delivery',
+              'pubsub.scheduling_duration_ms': schedulingMs
+            }
+            // Add CloudEvents/Eventarc tags for CloudEvent requests
+            if (isCloudEvent) {
+              if (attrs['ce-source'] || req.headers['ce-source']) {
+                deliveryTags['cloudevents.source'] = attrs['ce-source'] || req.headers['ce-source']
+              }
+              if (attrs['ce-type'] || req.headers['ce-type']) {
+                deliveryTags['cloudevents.type'] = attrs['ce-type'] || req.headers['ce-type']
+              }
+              if (req.headers['ce-id']) deliveryTags['cloudevents.id'] = req.headers['ce-id']
+              if (req.headers['ce-specversion']) deliveryTags['cloudevents.specversion'] = req.headers['ce-specversion']
+              if (req.headers['ce-time']) deliveryTags['cloudevents.time'] = req.headers['ce-time']
+              deliveryTags['eventarc.trigger'] = 'pubsub'
             }
             const deliverySpan = this.tracer.startSpan('pubsub.delivery', {
               childOf: effectiveParent,
