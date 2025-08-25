@@ -14,7 +14,7 @@ addHook({
 }, obj => {
   const EventHubProducerClient = obj.EventHubProducerClient
   shimmer.wrap(EventHubProducerClient.prototype, 'sendBatch',
-    sendBatch => async function (eventData) {
+    sendBatch => function (eventData) {
       const functionName = sendBatch.name
       return producerCh.tracePromise(sendBatch, { functionName, eventData }, this, ...arguments)
     })

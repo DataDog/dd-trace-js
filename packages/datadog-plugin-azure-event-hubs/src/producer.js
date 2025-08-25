@@ -1,6 +1,5 @@
 'use strict'
 
-const { send } = require('process')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
@@ -12,48 +11,50 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
     // We cannot inject trace context into a batch due to encoding
     // We must add it when a message is added to the batch
     if (ctx.functionName === 'tryAdd') {
-      injectTraceContext(this._tracer, ctx.span, ctx.eventData)
+      injectTraceContext(this._tracer, this.activeSpan, ctx.eventData)
     }
 
     if (ctx.functionName === 'sendBatch') {
-
-      const span = this.startSpan({
-        type: 'messaging',
-        meta: {
-          component: 'azure-event-hubs',
-          'messaging.operation': 'send',
-          'messaging.system': 'eventhubs',
-        }
-      }, ctx)
-
       const eventType = getEventType(ctx)
-      console.log("This is the event type: " + eventType)
-      switch (eventType) {
-        case 'batch':
-          const config = ctx.eventData._context.config
-          let qualifiedSenderNamespace = config.endpoint.replace('sb://', '')
-          qualifiedSenderNamespace = qualifiedSenderNamespace.replace('/', '')
-          span.resource = config.entityPath
-          span.meta = { ...span.meta,
-            'messaging.destination.name': config.entityPath,
-            'network.destination.name': qualifiedSenderNamespace,
-            'peer.service': qualifiedSenderNamespace
-          }
-          break;
-        case 'array':
-          span.resource = 'EventHub'
-          console.log("This is the event data: " + ctx.eventData)
-          ctx.eventData.forEach(event => {
-            injectTraceContext(this._tracer, span, event)
-          })
-          break;
-        case 'single':
-          span.resource = 'EventHub'
-          injectTraceContext(this._tracer, span, ctx.eventData)
-          break;
+
+      if (eventType === 'single') {
+        // single event sends are possible but not officially supported in the SDK so we should skip it
+        return ctx.currentStore
       }
-    return ctx.currentStore
+
+      if (eventType === 'batch') {
+        const eventHubConfig = ctx.eventData._context.config
+        const qualifiedNamespace = eventHubConfig.endpoint.replace('sb://', '').replace('/', '')
+
+        this.startSpan({
+          resource: eventHubConfig.entityPath,
+          type: 'messaging',
+          meta: {
+            component: 'azure-event-hubs',
+            'messaging.operation': 'send',
+            'messaging.system': 'eventhubs',
+            'messaging.destination.name': eventHubConfig.entityPath,
+            'network.destination.name': qualifiedNamespace,
+          }
+        }, ctx)
+
+      } else {
+        const span = this.startSpan({
+          resource: 'EventHub',
+          type: 'messaging',
+          meta: {
+            component: 'azure-event-hubs',
+            'messaging.operation': 'send',
+            'messaging.system': 'eventhubs',
+          }
+        }, ctx)
+
+        ctx.eventData.forEach(event => {
+          injectTraceContext(this._tracer, span, event)
+        })
+      }
     }
+    return ctx.currentStore
   }
 
   asyncEnd (ctx) {
@@ -62,21 +63,21 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
 }
 
 function getEventType (ctx) {
-  if (ctx.eventData.constructor.name === 'EventDataBatchImpl') {
+  if (ctx.eventData._context) {
     return 'batch'
-  } else if (Array.isArray(ctx.eventData)) {
-    return 'array'
-  } else {
-    return 'single'
   }
+
+  if (Array.isArray(ctx.eventData)) {
+    return 'array'
+  }
+  return 'single'
 }
 
-function injectTraceContext(tracer, span, event) {
+function injectTraceContext (tracer, span, event) {
   if (!event.properties) {
     event.properties = {}
   }
   tracer.inject(span, 'text_map', event.properties)
 }
-
 
 module.exports = AzureEventHubsProducerPlugin
