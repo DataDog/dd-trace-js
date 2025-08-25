@@ -43,6 +43,31 @@ describe('RASP - utils.js', () => {
     }
   })
 
+  function testAbortErrorInFramework (framework) {
+    const rootSpan = {
+      context: sinon.stub().returns({ _name: framework })
+    }
+    const abortController = {
+      abort: sinon.stub(),
+      signal: {}
+    }
+    const result = {
+      actions: {
+        blocking_action: { type: 'block_request' }
+      }
+    }
+
+    web.root.returns(rootSpan)
+
+    utils.handleResult(result, req, res, abortController, config, raspRule)
+
+    sinon.assert.calledOnce(abortController.abort)
+    const abortError = abortController.abort.firstCall.args[0]
+    expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
+    expect(abortError.raspRule).to.equal(raspRule)
+    expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+  }
+
   describe('handleResult', () => {
     it('should report stack trace when generate_stack action is present in waf result', () => {
       const rootSpan = {}
@@ -128,53 +153,11 @@ describe('RASP - utils.js', () => {
     })
 
     it('should create DatadogRaspAbortError when blockingAction is present in express', () => {
-      const rootSpan = {
-        context: sinon.stub().returns({ _name: 'express.request' })
-      }
-      const abortController = {
-        abort: sinon.stub(),
-        signal: {}
-      }
-      const result = {
-        actions: {
-          blocking_action: { type: 'block_request' }
-        }
-      }
-
-      web.root.returns(rootSpan)
-
-      utils.handleResult(result, req, res, abortController, config, raspRule)
-
-      sinon.assert.calledOnce(abortController.abort)
-      const abortError = abortController.abort.firstCall.args[0]
-      expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
-      expect(abortError.raspRule).to.equal(raspRule)
-      expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+      testAbortErrorInFramework('express.request')
     })
 
     it('should create DatadogRaspAbortError when blockingAction is present in fastify', () => {
-      const rootSpan = {
-        context: sinon.stub().returns({ _name: 'fastify.request' })
-      }
-      const abortController = {
-        abort: sinon.stub(),
-        signal: {}
-      }
-      const result = {
-        actions: {
-          blocking_action: { type: 'block_request' }
-        }
-      }
-
-      web.root.returns(rootSpan)
-
-      utils.handleResult(result, req, res, abortController, config, raspRule)
-
-      sinon.assert.calledOnce(abortController.abort)
-      const abortError = abortController.abort.firstCall.args[0]
-      expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
-      expect(abortError.raspRule).to.equal(raspRule)
-      expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+      testAbortErrorInFramework('fastify.request')
     })
 
     it('should not create DatadogRaspAbortError when blockingAction is present in an unsupported framework', () => {
