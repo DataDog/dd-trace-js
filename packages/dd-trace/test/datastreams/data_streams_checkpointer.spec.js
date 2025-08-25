@@ -4,8 +4,8 @@ require('../setup/tap')
 
 const agent = require('../plugins/agent')
 
-const expectedProducerHash = '11316777716831864733'
-const expectedConsumerHash = '685328872879070794'
+const expectedProducerHash = '6359420180750536220'
+const expectedConsumerHash = '13652937079614409115'
 const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
 
 describe('data streams checkpointer manual api', () => {

@@ -7,6 +7,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
+const id = require('../../dd-trace/src/id')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -57,7 +60,7 @@ describe('Kinesis', function () {
       })
 
       beforeEach(done => {
-        streamName = 'KINESIS_STREAM'
+        streamName = `MyStream-${id()}`
         createResources(streamName, done)
       })
 
@@ -198,9 +201,22 @@ describe('Kinesis', function () {
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
 
-        streamNameDSM = 'KINESIS_STREAM_DSM'
-        expectedProducerHash = '15742857388623921431'
-        expectedConsumerHash = '4357163173475750101'
+        streamNameDSM = `MyStreamDSM-${id()}`
+
+        const producerHash = computePathwayHash(
+          'test',
+          'tester',
+          ['direction:out', 'topic:' + streamNameDSM, 'type:kinesis'],
+          ENTRY_PARENT_HASH
+        )
+
+        expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+        expectedConsumerHash = computePathwayHash(
+          'test',
+          'tester',
+          ['direction:in', 'topic:' + streamNameDSM, 'type:kinesis'],
+          producerHash
+        ).readBigUInt64LE(0).toString()
 
         createResources(streamNameDSM, done)
       })
