@@ -1,5 +1,7 @@
 'use strict'
 
+console.log('adding hooks for ai instrumentation')
+
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -130,6 +132,7 @@ addHook({
   name: 'ai',
   versions: ['>=4.0.0'],
 }, exports => {
+  console.log('patching ai functions')
   for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
     exports = shimmer.wrap(exports, fnName, patchingFn, { replaceGetter: true })
   }
