@@ -102,8 +102,12 @@ class Sqs extends BaseAwsSdkPlugin {
       queuename: queueName,
     }
 
-    if (queueMetadata?.arn) {
-      tags['cloud.resource_id'] = queueMetadata.arn
+    if (queueMetadata?.accountId && queueName && response?.request) {
+      const region = this.requestTags.get(response.request)?.['aws.region']
+      if (region) {
+        const partition = this.getAwsPartition(region)
+        tags['cloud.resource_id'] = `arn:${partition}:sqs:${region}:${queueMetadata.accountId}:${queueName}`
+      }
     }
 
     switch (operation) {
@@ -121,30 +125,11 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   extractQueueMetadata (queueUrl) {
-    if (!queueUrl) return null
-
     // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
     const parts = queueUrl.split('/')
     if (parts.length < 5) return null
 
-    const queueName = parts[4]
-    const accountId = parts[3]
-    const hostname = parts[2]
-
-    // Only build ARN if we can extract region from a real AWS URL
-    if (hostname.includes('.amazonaws.com')) {
-      const hostParts = hostname.split('.')
-      if (hostParts.length >= 4 && hostParts[0] === 'sqs') {
-        const region = hostParts[1]
-        const partition = this.getAwsPartition(region)
-        return {
-          queueName,
-          arn: `arn:${partition}:sqs:${region}:${accountId}:${queueName}`
-        }
-      }
-    }
-
-    return { queueName }
+    return { queueName: parts[4], accountId: parts[3] }
   }
 
   getAwsPartition (region) {
