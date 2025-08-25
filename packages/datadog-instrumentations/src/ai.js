@@ -88,7 +88,7 @@ function wrapTracer (tracer) {
         }
       })
 
-      console.log('how many start subscribers are there?', vercelAiTracingChannel.start._subscribers.length)
+      console.log('how many start subscribers are there?', vercelAiTracingChannel.start._subscribers?.length, '**')
 
       return vercelAiTracingChannel.start.runStores(ctx, () => {
         console.log('running start subscribers')
