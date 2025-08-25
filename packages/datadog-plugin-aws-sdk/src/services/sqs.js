@@ -92,17 +92,18 @@ class Sqs extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params || (!params.QueueName && !params.QueueUrl)) return {}
-    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
-    let queueName = params.QueueName
-    if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/').at(-1)
-    }
+
+    const queueMetadata = params.QueueUrl && this.extractQueueMetadata(params.QueueUrl)
+    const queueName = queueMetadata?.queueName || params.QueueName
 
     const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
       queuename: queueName,
-      queue_url: params.QueueUrl
+    }
+
+    if (queueMetadata?.arn) {
+      tags['cloud.resource_id'] = queueMetadata.arn
     }
 
     switch (operation) {
@@ -117,6 +118,39 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     return tags
+  }
+
+  extractQueueMetadata (queueUrl) {
+    if (!queueUrl) return null
+
+    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
+    const parts = queueUrl.split('/')
+    if (parts.length < 5) return null
+
+    const queueName = parts[4]
+    const accountId = parts[3]
+    const hostname = parts[2]
+
+    // Only build ARN if we can extract region from a real AWS URL
+    if (hostname.includes('.amazonaws.com')) {
+      const hostParts = hostname.split('.')
+      if (hostParts.length >= 4 && hostParts[0] === 'sqs') {
+        const region = hostParts[1]
+        const partition = this.getAwsPartition(region)
+        return {
+          queueName,
+          arn: `arn:${partition}:sqs:${region}:${accountId}:${queueName}`
+        }
+      }
+    }
+
+    return { queueName }
+  }
+
+  getAwsPartition (region) {
+    if (region.startsWith('cn-')) return 'aws-cn'
+    if (region.startsWith('us-gov-')) return 'aws-us-gov'
+    return 'aws'
   }
 
   responseExtract (params, operation, response) {

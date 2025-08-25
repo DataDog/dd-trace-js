@@ -50,9 +50,9 @@ describe('Plugin', () => {
         queueOptionsDsm = getQueueParams(queueNameDSM)
         queueOptionsDsmConsumerOnly = getQueueParams(queueNameDSMConsumerOnly)
 
-        QueueUrl = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME-${id}`
-        QueueUrlDsm = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM-${id}`
-        QueueUrlDsmConsumerOnly = `http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
+        QueueUrl = `https://sqs.us-east-1.amazonaws.com/00000000000000000000/SQS_QUEUE_NAME-${id}`
+        QueueUrlDsm = `https://sqs.us-east-1.amazonaws.com/00000000000000000000/SQS_QUEUE_NAME_DSM-${id}`
+        QueueUrlDsmConsumerOnly = `https://sqs.us-east-1.amazonaws.com/00000000000000000000/SQS_QUEUE_NAME_DSM_CONSUMER_ONLY-${id}`
       })
 
       describe('without configuration', () => {
@@ -147,7 +147,7 @@ describe('Plugin', () => {
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
               queuename: queueName,
-              queue_url: QueueUrl
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -198,7 +198,7 @@ describe('Plugin', () => {
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
             expect(span.meta).to.include({
               queuename: queueName,
-              queue_url: QueueUrl
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -371,7 +371,7 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               queuename: queueName,
-              queue_url: QueueUrl,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
               region: 'us-east-1'
             })
