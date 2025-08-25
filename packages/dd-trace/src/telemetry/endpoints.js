@@ -107,7 +107,7 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
   getRetryData = getRetryDataFunction
   updateRetryData = updateRetryDataFunction
 
-  fastifyRouteCh.subscribe(onFastifyRoute)
+  // fastifyRouteCh.subscribe(onFastifyRoute)
 }
 
 function stop () {
