@@ -307,20 +307,14 @@ describe('end to end sdk integration tests', () => {
       tracer._tracer._config.llmobs.mlApp = originalMlApp
     })
 
-    it('does not submit a span if there is no mlApp', () => {
+    it('defaults to the service name', () => {
       payloadGenerator = function () {
-        let error
-        try {
-          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
-        } catch (e) {
-          error = e
-        }
-
-        expect(error).to.exist
+        llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
       }
 
       const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(0)
+      expect(llmobsSpans).to.have.lengthOf(1)
+      expect(getTag(llmobsSpans[0], 'ml_app')).to.exist
     })
   })
 })
