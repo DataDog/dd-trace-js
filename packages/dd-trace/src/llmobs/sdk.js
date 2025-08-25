@@ -23,6 +23,7 @@ const LLMObsTagger = require('./tagger')
 const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
+const registerProcessorCh = channel('llmobs:register-processor')
 const NoopLLMObs = require('./noop')
 
 class LLMObs extends NoopLLMObs {
@@ -307,6 +308,10 @@ class LLMObs extends NoopLLMObs {
     } finally {
       telemetry.recordExportSpan(span, err)
     }
+  }
+
+  registerProcessor (processor) {
+    registerProcessorCh.publish(processor)
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {
