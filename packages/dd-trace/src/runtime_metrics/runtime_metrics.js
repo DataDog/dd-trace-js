@@ -4,27 +4,35 @@
 
 const v8 = require('v8')
 const os = require('os')
+const process = require('process')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
 const { performance, PerformanceObserver } = require('perf_hooks')
 const { getEnvironmentVariable } = require('../config-helper')
 
-const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../version')
+// TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
+// It is only a variable for testing. Think about alternatives.
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
-// Node >=16 has PerformanceObserver with `gc` type, but <16.7 had a critical bug.
-// See: https://github.com/nodejs/node/issues/39548
-const hasGCObserver = NODE_MAJOR >= 18 || (NODE_MAJOR === 16 && NODE_MINOR >= 7)
+// The starttime plus half a second for rounding
+let START_TIME = 0n
 
 let nativeMetrics = null
 let gcObserver = null
 
 let interval
 let client
-let time
-let cpuUsage
-let elu
+let lastTime = 0n
+let lastCpuUsage
+
+// !!!!!!!!!!!
+//  IMPORTANT
+// !!!!!!!!!!!
+//
+// ALL metrics that relate to time are handled in nanoseconds in the backend.
+// https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
 reset()
 
@@ -34,11 +42,7 @@ const runtimeMetrics = module.exports = {
     const watchers = []
 
     if (config.runtimeMetrics.gc !== false) {
-      if (hasGCObserver) {
-        startGCObserver()
-      } else {
-        watchers.push('gc')
-      }
+      startGCObserver()
     }
 
     if (config.runtimeMetrics.eventLoop !== false) {
@@ -48,33 +52,34 @@ const runtimeMetrics = module.exports = {
     try {
       nativeMetrics = require('@datadog/native-metrics')
       nativeMetrics.start(...watchers)
-    } catch (e) {
-      log.error('Error starting native metrics', e)
+    } catch (error) {
+      log.error('Error starting native metrics', error)
       nativeMetrics = null
     }
 
     client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
-    time = process.hrtime()
+    lastTime = process.hrtime.bigint()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
-        captureCommonMetrics()
         captureNativeMetrics()
+        captureCommonMetrics()
         client.flush()
       }, INTERVAL)
     } else {
-      cpuUsage = process.cpuUsage()
+      lastCpuUsage = process.cpuUsage()
 
       interval = setInterval(() => {
-        captureCommonMetrics()
         captureCpuUsage()
+        captureCommonMetrics()
         captureHeapSpace()
         client.flush()
       }, INTERVAL)
     }
 
     interval.unref()
+    START_TIME = lastTime - BigInt(Math.round(process.uptime() * 1e9)) + 500_000_000n
   },
 
   stop () {
@@ -99,19 +104,19 @@ const runtimeMetrics = module.exports = {
   },
 
   boolean (name, value, tag) {
-    client && client.boolean(name, value, tag)
+    client?.boolean(name, value, tag)
   },
 
   histogram (name, value, tag) {
-    client && client.histogram(name, value, tag)
+    client?.histogram(name, value, tag)
   },
 
   count (name, count, tag, monotonic = false) {
-    client && client.count(name, count, tag, monotonic)
+    client?.count(name, count, tag, monotonic)
   },
 
   gauge (name, value, tag) {
-    client && client.gauge(name, value, tag)
+    client?.gauge(name, value, tag)
   },
 
   increment (name, tag, monotonic) {
@@ -126,26 +131,31 @@ const runtimeMetrics = module.exports = {
 function reset () {
   interval = null
   client = null
-  time = null
-  cpuUsage = null
+  lastTime = 0n
+  lastCpuUsage = null
   nativeMetrics = null
-  gcObserver && gcObserver.disconnect()
+  gcObserver?.disconnect()
   gcObserver = null
 }
 
 function captureCpuUsage () {
   if (!process.cpuUsage) return
 
-  const elapsedTime = process.hrtime(time)
-  const elapsedUsage = process.cpuUsage(cpuUsage)
+  const currentTime = process.hrtime.bigint() // Nanoseconds
+  const elapsedTime = currentTime - lastTime
+  lastTime = currentTime
 
-  time = process.hrtime()
-  cpuUsage = process.cpuUsage()
+  const currentCpuUsage = process.cpuUsage()
 
-  const elapsedMs = elapsedTime[0] * 1000 + elapsedTime[1] / 1_000_000
-  const userPercent = 100 * elapsedUsage.user / 1000 / elapsedMs
-  const systemPercent = 100 * elapsedUsage.system / 1000 / elapsedMs
+  const elapsedUsageUser = currentCpuUsage.user - lastCpuUsage.user
+  const elapsedUsageSystem = currentCpuUsage.system - lastCpuUsage.system
+
+  const elapsedUsMultipliedBy100 = Number(elapsedTime / 10n) // Microseconds * 100 for percent
+  const userPercent = elapsedUsageUser / elapsedUsMultipliedBy100
+  const systemPercent = elapsedUsageSystem / elapsedUsMultipliedBy100
   const totalPercent = userPercent + systemPercent
+
+  lastCpuUsage = currentCpuUsage
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
@@ -164,8 +174,10 @@ function captureMemoryUsage () {
   stats.external && client.gauge('runtime.node.mem.external', stats.external)
 }
 
-function captureProcess () {
-  client.gauge('runtime.node.process.uptime', Math.round(process.uptime()))
+function captureUptime () {
+  // WARNING: lastTime must be updated in the same interval before this function is called!
+  // This is a faster `process.uptime()`.
+  client.gauge('runtime.node.process.uptime', Number((lastTime - START_TIME) / 1_000_000_000n))
 }
 
 function captureHeapStats () {
@@ -197,26 +209,28 @@ function captureHeapSpace () {
 }
 
 /**
- * Gathers and reports Event Loop Utilization (ELU) since last run
+ * Gathers and reports Event Loop Utilization (ELU) since last run, or from the
+ * start of the process on first run.
  *
  * ELU is a measure of how busy the event loop is, like running JavaScript or
  * waiting on *Sync functions. The value is between 0 (idle) and 1 (exhausted).
- *
- * performance.eventLoopUtilization available in Node.js >= v14.10, >= v12.19, >= v16
  */
-let captureELU = () => {}
-if ('eventLoopUtilization' in performance) {
-  captureELU = () => {
-    // if elu is undefined (first run) the measurement is from start of process
-    elu = performance.eventLoopUtilization(elu)
+let lastElu = { idle: 0, active: 0 }
+function captureELU () {
+  const elu = performance.eventLoopUtilization()
 
-    client.gauge('runtime.node.event_loop.utilization', elu.utilization)
-  }
+  const idle = elu.idle - lastElu.idle
+  const active = elu.active - lastElu.active
+  const utilization = active / (idle + active)
+
+  lastElu = elu
+
+  client.gauge('runtime.node.event_loop.utilization', utilization)
 }
 
 function captureCommonMetrics () {
   captureMemoryUsage()
-  captureProcess()
+  captureUptime()
   captureHeapStats()
   captureELU()
 }
@@ -224,13 +238,13 @@ function captureCommonMetrics () {
 function captureNativeMetrics () {
   const stats = nativeMetrics.stats()
   const spaces = stats.heap.spaces
-  const elapsedTime = process.hrtime(time)
 
-  time = process.hrtime()
+  const currentTime = process.hrtime.bigint() // Nanoseconds
+  const elapsedUsTimeMultipliedBy100 = Number((currentTime - lastTime) / 10n)
+  lastTime = currentTime
 
-  const elapsedUs = elapsedTime[0] * 1e6 + elapsedTime[1] / 1e3
-  const userPercent = 100 * stats.cpu.user / elapsedUs
-  const systemPercent = 100 * stats.cpu.system / elapsedUs
+  const userPercent = stats.cpu.user / elapsedUsTimeMultipliedBy100
+  const systemPercent = stats.cpu.system / elapsedUsTimeMultipliedBy100
   const totalPercent = userPercent + systemPercent
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
@@ -284,34 +298,16 @@ function startGCObserver () {
   gcObserver.observe({ type: 'gc' })
 }
 
-function gcType (kind) {
-  if (NODE_MAJOR >= 22) {
-    switch (kind) {
-      case 1: return 'scavenge'
-      case 2: return 'minor_mark_sweep'
-      case 4: return 'mark_sweep_compact' // Deprecated, might be removed soon.
-      case 8: return 'incremental_marking'
-      case 16: return 'process_weak_callbacks'
-      case 31: return 'all'
-    }
-  } else if (NODE_MAJOR >= 18) {
-    switch (kind) {
-      case 1: return 'scavenge'
-      case 2: return 'minor_mark_compact'
-      case 4: return 'mark_sweep_compact'
-      case 8: return 'incremental_marking'
-      case 16: return 'process_weak_callbacks'
-      case 31: return 'all'
-    }
-  } else {
-    switch (kind) {
-      case 1: return 'scavenge'
-      case 2: return 'mark_sweep_compact'
-      case 4: return 'incremental_marking'
-      case 8: return 'process_weak_callbacks'
-      case 15: return 'all'
-    }
-  }
+const minorGCType = NODE_MAJOR >= 22 ? 'minor_mark_sweep' : 'minor_mark_compact'
 
-  return 'unknown'
+function gcType (kind) {
+  switch (kind) {
+    case 1: return 'scavenge'
+    case 2: return minorGCType
+    case 4: return 'mark_sweep_compact' // Deprecated, might be removed soon.
+    case 8: return 'incremental_marking'
+    case 16: return 'process_weak_callbacks'
+    case 31: return 'all'
+    default: return 'unknown'
+  }
 }
