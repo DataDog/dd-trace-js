@@ -8,47 +8,29 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get prefix () { return 'tracing:apm:azure-event-hubs:send' }
 
   bindStart (ctx) {
-    // We cannot inject trace context into a batch due to encoding
-    // We must add it when a message is added to the batch
+
     if (ctx.functionName === 'tryAdd') {
       injectTraceContext(this._tracer, this.activeSpan, ctx.eventData)
     }
 
-    if (ctx.functionName === 'sendBatch') {
-      const eventType = getEventType(ctx)
+    // only batch and array eventTypes are supported by the Azure Event Hubs SDK
+    if (ctx.functionName === 'sendBatch' && eventType(ctx) !== 'single') {
 
-      if (eventType === 'single') {
-        // single event sends are possible but not officially supported in the SDK so we should skip it
-        return ctx.currentStore
-      }
+      const qualifiedNamespace = ctx.config.endpoint.replace('sb://', '').replace('/', '')
+      const entityPath = ctx.config.entityPath
+      const span = this.startSpan({
+        resource: entityPath,
+        type: 'messaging',
+        meta: {
+          component: 'azure-event-hubs',
+          'messaging.operation': 'send',
+          'messaging.system': 'eventhubs',
+          'messaging.destination.name': entityPath,
+          'network.destination.name': qualifiedNamespace,
+        }
+      }, ctx)
 
-      if (eventType === 'batch') {
-        const eventHubConfig = ctx.eventData._context.config
-        const qualifiedNamespace = eventHubConfig.endpoint.replace('sb://', '').replace('/', '')
-
-        this.startSpan({
-          resource: eventHubConfig.entityPath,
-          type: 'messaging',
-          meta: {
-            component: 'azure-event-hubs',
-            'messaging.operation': 'send',
-            'messaging.system': 'eventhubs',
-            'messaging.destination.name': eventHubConfig.entityPath,
-            'network.destination.name': qualifiedNamespace,
-          }
-        }, ctx)
-
-      } else {
-        const span = this.startSpan({
-          resource: 'EventHub',
-          type: 'messaging',
-          meta: {
-            component: 'azure-event-hubs',
-            'messaging.operation': 'send',
-            'messaging.system': 'eventhubs',
-          }
-        }, ctx)
-
+      if (eventType(ctx) === 'array') {
         ctx.eventData.forEach(event => {
           injectTraceContext(this._tracer, span, event)
         })
@@ -62,7 +44,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   }
 }
 
-function getEventType (ctx) {
+function eventType (ctx) {
   if (ctx.eventData._context) {
     return 'batch'
   }
