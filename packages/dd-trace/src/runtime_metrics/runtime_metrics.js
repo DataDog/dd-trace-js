@@ -16,16 +16,13 @@ const { NODE_MAJOR } = require('../../../../version')
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
-// The starttime plus half a second for rounding
-let START_TIME = 0n
-
+let startTime = 0n
 let nativeMetrics = null
 let gcObserver = null
-
-let interval
-let client
+let interval = null
+let client = null
 let lastTime = 0n
-let lastCpuUsage
+let lastCpuUsage = null
 
 // !!!!!!!!!!!
 //  IMPORTANT
@@ -34,18 +31,20 @@ let lastCpuUsage
 // ALL metrics that relate to time are handled in nanoseconds in the backend.
 // https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
-reset()
-
-const runtimeMetrics = module.exports = {
+module.exports = {
   start (config) {
+    this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
     const watchers = []
 
-    if (config.runtimeMetrics.gc !== false) {
+    const trackEventLoop = config.runtimeMetrics.eventLoop !== false
+    const trackGc = config.runtimeMetrics.gc !== false
+
+    if (trackGc) {
       startGCObserver()
     }
 
-    if (config.runtimeMetrics.eventLoop !== false) {
+    if (trackEventLoop) {
       watchers.push('loop')
     }
 
@@ -63,8 +62,8 @@ const runtimeMetrics = module.exports = {
 
     if (nativeMetrics) {
       interval = setInterval(() => {
-        captureNativeMetrics()
-        captureCommonMetrics()
+        captureNativeMetrics(trackEventLoop, trackGc)
+        captureCommonMetrics(trackEventLoop)
         client.flush()
       }, INTERVAL)
     } else {
@@ -72,23 +71,30 @@ const runtimeMetrics = module.exports = {
 
       interval = setInterval(() => {
         captureCpuUsage()
-        captureCommonMetrics()
+        captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
         client.flush()
       }, INTERVAL)
     }
 
     interval.unref()
-    START_TIME = lastTime - BigInt(Math.round(process.uptime() * 1e9)) + 500_000_000n
+    // The starttime plus half a second for rounding.
+    startTime = lastTime - BigInt(Math.round(process.uptime() * 1e9)) + 500_000_000n
   },
 
   stop () {
-    if (nativeMetrics) {
-      nativeMetrics.stop()
-    }
+    nativeMetrics?.stop()
+    nativeMetrics = null
 
     clearInterval(interval)
-    reset()
+    interval = null
+
+    client = null
+    lastTime = 0n
+    lastCpuUsage = null
+
+    gcObserver?.disconnect()
+    gcObserver = null
   },
 
   track (span) {
@@ -128,19 +134,7 @@ const runtimeMetrics = module.exports = {
   }
 }
 
-function reset () {
-  interval = null
-  client = null
-  lastTime = 0n
-  lastCpuUsage = null
-  nativeMetrics = null
-  gcObserver?.disconnect()
-  gcObserver = null
-}
-
 function captureCpuUsage () {
-  if (!process.cpuUsage) return
-
   const currentTime = process.hrtime.bigint() // Nanoseconds
   const elapsedTime = currentTime - lastTime
   lastTime = currentTime
@@ -150,7 +144,7 @@ function captureCpuUsage () {
   const elapsedUsageUser = currentCpuUsage.user - lastCpuUsage.user
   const elapsedUsageSystem = currentCpuUsage.system - lastCpuUsage.system
 
-  const elapsedUsMultipliedBy100 = Number(elapsedTime / 10n) // Microseconds * 100 for percent
+  const elapsedUsMultipliedBy100 = Number(elapsedTime / 100_000n) // Microseconds * 100 for percent
   const userPercent = elapsedUsageUser / elapsedUsMultipliedBy100
   const systemPercent = elapsedUsageSystem / elapsedUsMultipliedBy100
   const totalPercent = userPercent + systemPercent
@@ -170,14 +164,17 @@ function captureMemoryUsage () {
   client.gauge('runtime.node.mem.rss', stats.rss)
   client.gauge('runtime.node.mem.total', os.totalmem())
   client.gauge('runtime.node.mem.free', os.freemem())
-
-  stats.external && client.gauge('runtime.node.mem.external', stats.external)
+  client.gauge('runtime.node.mem.external', stats.external)
+  // TODO: Add arrayBuffers to the metrics. That also requires the
+  // node_metadata.csv to be updated for the website.
+  //
+  // client.gauge('runtime.node.mem.arrayBuffers', stats.arrayBuffers)
 }
 
 function captureUptime () {
   // WARNING: lastTime must be updated in the same interval before this function is called!
   // This is a faster `process.uptime()`.
-  client.gauge('runtime.node.process.uptime', Number((lastTime - START_TIME) / 1_000_000_000n))
+  client.gauge('runtime.node.process.uptime', Number((lastTime - startTime) / 1_000_000_000n))
 }
 
 function captureHeapStats () {
@@ -188,14 +185,17 @@ function captureHeapStats () {
   client.gauge('runtime.node.heap.total_physical_size', stats.total_physical_size)
   client.gauge('runtime.node.heap.total_available_size', stats.total_available_size)
   client.gauge('runtime.node.heap.heap_size_limit', stats.heap_size_limit)
-
-  stats.malloced_memory && client.gauge('runtime.node.heap.malloced_memory', stats.malloced_memory)
-  stats.peak_malloced_memory && client.gauge('runtime.node.heap.peak_malloced_memory', stats.peak_malloced_memory)
+  client.gauge('runtime.node.heap.malloced_memory', stats.malloced_memory)
+  client.gauge('runtime.node.heap.peak_malloced_memory', stats.peak_malloced_memory)
+  // TODO: Add number_of_native_contexts and number_of_detached_contexts to the
+  // metrics. Those metrics allow to identify memory leaks. Adding them also
+  // requires the node_metadata.csv to be updated for the website.
+  //
+  // client.gauge('runtime.node.heap.number_of_native_contexts', stats.number_of_native_contexts)
+  // client.gauge('runtime.node.heap.number_of_detached_contexts', stats.number_of_detached_contexts)
 }
 
 function captureHeapSpace () {
-  if (!v8.getHeapSpaceStatistics) return
-
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
@@ -228,19 +228,21 @@ function captureELU () {
   client.gauge('runtime.node.event_loop.utilization', utilization)
 }
 
-function captureCommonMetrics () {
+function captureCommonMetrics (trackEventLoop) {
   captureMemoryUsage()
   captureUptime()
   captureHeapStats()
-  captureELU()
+  if (trackEventLoop) {
+    captureELU()
+  }
 }
 
-function captureNativeMetrics () {
+function captureNativeMetrics (trackEventLoop, trackGc) {
   const stats = nativeMetrics.stats()
   const spaces = stats.heap.spaces
 
   const currentTime = process.hrtime.bigint() // Nanoseconds
-  const elapsedUsTimeMultipliedBy100 = Number((currentTime - lastTime) / 10n)
+  const elapsedUsTimeMultipliedBy100 = Number((currentTime - lastTime) / 100_000n)
   lastTime = currentTime
 
   const userPercent = stats.cpu.user / elapsedUsTimeMultipliedBy100
@@ -251,15 +253,19 @@ function captureNativeMetrics () {
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  histogram('runtime.node.event_loop.delay', stats.eventLoop)
+  if (trackEventLoop) {
+    histogram('runtime.node.event_loop.delay', stats.eventLoop)
+  }
 
-  Object.keys(stats.gc).forEach(type => {
-    if (type === 'all') {
-      histogram('runtime.node.gc.pause', stats.gc[type])
-    } else {
-      histogram('runtime.node.gc.pause.by.type', stats.gc[type], `gc_type:${type}`)
+  if (trackGc) {
+    for (const [type, value] of Object.entries(stats.gc)) {
+      if (type === 'all') {
+        histogram('runtime.node.gc.pause', value)
+      } else {
+        histogram('runtime.node.gc.pause.by.type', value, `gc_type:${type}`)
+      }
     }
-  })
+  }
 
   for (let i = 0, l = spaces.length; i < l; i++) {
     const tag = `heap_space:${spaces[i].space_name}`
@@ -290,8 +296,9 @@ function startGCObserver () {
       const type = gcType(entry.detail?.kind || entry.kind)
       const duration = entry.duration * 1_000_000
 
-      runtimeMetrics.histogram('runtime.node.gc.pause.by.type', duration, `gc_type:${type}`)
-      runtimeMetrics.histogram('runtime.node.gc.pause', duration)
+      // These are individual metrics for each type of GC.
+      client.histogram('runtime.node.gc.pause.by.type', duration, `gc_type:${type}`)
+      client.histogram('runtime.node.gc.pause', duration)
     }
   })
 
