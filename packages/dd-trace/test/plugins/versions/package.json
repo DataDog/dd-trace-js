@@ -15,7 +15,7 @@
     "@aws-sdk/client-s3": "3.873.0",
     "@aws-sdk/client-sfn": "3.873.0",
     "@aws-sdk/client-sns": "3.873.0",
-    "@aws-sdk/client-sqs": "3.873.0",
+    "@aws-sdk/client-sqs": "3.875.0",
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/smithy-client": "3.374.0",
     "@azure/functions": "4.7.3",
@@ -183,6 +183,6 @@
     "workerpool": "9.3.3",
     "ws": "8.18.3",
     "yarn": "1.22.22",
-    "zod": "4.1.1"
+    "zod": "4.1.2"
   }
 }
