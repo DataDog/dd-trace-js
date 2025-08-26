@@ -149,7 +149,7 @@ function getPlaywrightConfig (playwrightRunner) {
 }
 
 function getRootDir (playwrightRunner, configArg) {
-  const config = configArg ? configArg.config : getPlaywrightConfig(playwrightRunner)
+  const config = configArg?.config || getPlaywrightConfig(playwrightRunner)
   if (config.rootDir) {
     return config.rootDir
   }
@@ -163,7 +163,7 @@ function getRootDir (playwrightRunner, configArg) {
 }
 
 function getProjectsFromRunner (runner, configArg) {
-  const config = configArg || getPlaywrightConfig(runner)
+  const config = configArg?.projects ? configArg : getPlaywrightConfig(runner)
   return config.projects?.map((project) => {
     if (project.project) {
       return project.project
