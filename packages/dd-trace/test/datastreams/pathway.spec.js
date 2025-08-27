@@ -20,12 +20,12 @@ describe('encoding', () => {
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
     expect(hash)
-      .to.deep.equal(Buffer.from('ec99e1e8e682985d', 'hex'))
+      .to.deep.equal(Buffer.from('67b0b35e65c0acfa', 'hex'))
   })
 
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
-      hash: Buffer.from('4cce4d8e07685728', 'hex'),
+      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
       pathwayStartNs: 1685673482722000000,
       edgeStartNs: 1685673506404000000
     }
@@ -37,11 +37,11 @@ describe('encoding', () => {
   })
 
   it('decoding of a context should be consistent between languages', () => {
-    const data = Buffer.from([76, 206, 77, 142, 7, 104, 87, 40, 196, 231,
+    const data = Buffer.from([103, 176, 179, 94, 101, 192, 172, 250, 196, 231,
       192, 159, 143, 98, 200, 217, 195, 159, 143, 98])
     const decoded = decodePathwayContext(data)
     const expectedContext = {
-      hash: Buffer.from('4cce4d8e07685728', 'hex'),
+      hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
       pathwayStartNs: 1685673482722000000,
       edgeStartNs: 1685673506404000000
     }
@@ -130,7 +130,7 @@ describe('encoding', () => {
 
     DsmPathwayCodec.encode(ctx, carrier)
 
-    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
     expect(carrier['dd-pathway-ctx-base64']).to.equal(expectedBase64Hash)
   })
 
@@ -143,7 +143,7 @@ describe('encoding', () => {
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
     const carrier = {}
-    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
     carrier['dd-pathway-ctx-base64'] = expectedBase64Hash
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 

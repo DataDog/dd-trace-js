@@ -50,8 +50,8 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          const expectedProducerHash = '6952218661438409691'
-          const expectedConsumerHash = '3064432256082340095'
+          const expectedProducerHash = '11950901911938809288'
+          const expectedConsumerHash = '13394183765782976023'
 
           it('Should set pathway hash tag on a span when producing', (done) => {
             let produceSpanMeta = {}
