@@ -136,19 +136,17 @@ module.exports = {
 
 function captureCpuUsage () {
   const currentTime = process.hrtime.bigint() // Nanoseconds
-  const elapsedTime = currentTime - lastTime
-  lastTime = currentTime
-
   const currentCpuUsage = process.cpuUsage()
 
   const elapsedUsageUser = currentCpuUsage.user - lastCpuUsage.user
   const elapsedUsageSystem = currentCpuUsage.system - lastCpuUsage.system
 
-  const elapsedUsMultipliedBy100 = Number(elapsedTime / 100_000n) // Microseconds * 100 for percent
-  const userPercent = elapsedUsageUser / elapsedUsMultipliedBy100
-  const systemPercent = elapsedUsageSystem / elapsedUsMultipliedBy100
+  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n) // Microseconds * 100 for percent
+  const userPercent = elapsedUsageUser / elapsedUsDividedBy100
+  const systemPercent = elapsedUsageSystem / elapsedUsDividedBy100
   const totalPercent = userPercent + systemPercent
 
+  lastTime = currentTime
   lastCpuUsage = currentCpuUsage
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))
@@ -242,11 +240,11 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
   const spaces = stats.heap.spaces
 
   const currentTime = process.hrtime.bigint() // Nanoseconds
-  const elapsedUsTimeMultipliedBy100 = Number((currentTime - lastTime) / 100_000n)
+  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n)
   lastTime = currentTime
 
-  const userPercent = stats.cpu.user / elapsedUsTimeMultipliedBy100
-  const systemPercent = stats.cpu.system / elapsedUsTimeMultipliedBy100
+  const userPercent = stats.cpu.user / elapsedUsDividedBy100
+  const systemPercent = stats.cpu.system / elapsedUsDividedBy100
   const totalPercent = userPercent + systemPercent
 
   client.gauge('runtime.node.cpu.system', systemPercent.toFixed(2))

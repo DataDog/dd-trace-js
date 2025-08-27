@@ -3,7 +3,9 @@
 require('./setup/tap')
 const { DogStatsDClient } = require('../src/dogstatsd')
 
-const os = require('os')
+const assert = require('node:assert')
+const os = require('node:os')
+const performance = require('node:perf_hooks').performance
 
 const isWindows = os.platform() === 'win32'
 
@@ -118,6 +120,8 @@ suiteDescribe('runtimeMetrics', () => {
   let setImmediate
   let client
   let Client
+  // TODO: Improve tests to run with both native and non-native metrics.
+  const nativeMetrics = true
 
   beforeEach(() => {
     // This is needed because sinon spies keep references to arguments which
@@ -226,61 +230,71 @@ suiteDescribe('runtimeMetrics', () => {
 
       clock.tick(10000)
 
+      const isFiniteNumber = sinon.match((value) => {
+        return value >= 0 && Number.isFinite(value)
+      })
+
+      const isIntegerNumber = sinon.match((value) => {
+        return value > 0 && Number.isInteger(value)
+      })
+
+      // These return percentages as strings and are tested later.
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used', isFiniteNumber)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime', isIntegerNumber)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit', isFiniteNumber)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory', isFiniteNumber)
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', sinon.match.number)
+      // TODO: Fix the implementation for non-native metrics.
+      if (nativeMetrics) {
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', isFiniteNumber)
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', isFiniteNumber)
+        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', isFiniteNumber)
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', isFiniteNumber)
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median', isFiniteNumber)
+        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', isFiniteNumber)
+        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', isIntegerNumber)
+      }
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count', sinon.match.number)
-
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', sinon.match.number)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', sinon.match.number)
-      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', sinon.match.number)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count', isIntegerNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', isIntegerNumber)
       expect(client.increment).to.have.been.calledWith(
         'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
           return val && /^gc_type:[a-z_]+$/.test(val[0])
         })
       )
 
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space')
-      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space', isFiniteNumber)
 
       expect(client.flush).to.have.been.called
     })
@@ -297,7 +311,7 @@ suiteDescribe('runtimeMetrics', () => {
 
       clock.tick(60 * 60 * 1000)
 
-      // If a metric is leaking, it will leak expontentially because it will
+      // If a metric is leaking, it will leak exponentially because it will
       // be sent one more time each flush, in addition to the previous
       // flushes that also had the metric multiple times in them, so after
       // 1 hour even if a single metric is leaking it would get over
@@ -305,6 +319,242 @@ suiteDescribe('runtimeMetrics', () => {
       // value is used here to be on the safer side.
       expect(client.gauge.callCount).to.be.lt(60000)
       expect(client.increment.callCount).to.be.lt(60000)
+    })
+
+    it('should handle configuration changes correctly', () => {
+      // Test with GC disabled
+      const configWithoutGC = { ...config, runtimeMetrics: { ...config.runtimeMetrics, gc: false } }
+      runtimeMetrics.stop()
+      runtimeMetrics.start(configWithoutGC)
+
+      clock.tick(10000)
+
+      // Should still collect basic metrics
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
+      // expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
+      expect(client.gauge).to.not.have.been.calledWith('runtime.node.gc.pause.95percentile')
+
+      // Test with event loop disabled
+      const configWithoutEL = { ...config, runtimeMetrics: { ...config.runtimeMetrics, eventLoop: false } }
+      // Calling start again should stop any former metric collection
+      runtimeMetrics.start(configWithoutEL)
+      client.gauge.resetHistory()
+
+      clock.tick(10000)
+
+      // Should still collect other metrics
+      expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
+      // expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
+      expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
+    })
+  })
+
+  describe('Event Loop Utilization', () => {
+    afterEach(() => {
+      performance.eventLoopUtilization.restore?.()
+    })
+
+    it('should calculate utilization correctly with delta values', () => {
+      const firstElu = { idle: 80000000, active: 20000000, utilization: 0.2 }
+      const secondElu = { idle: 100000000, active: 80000000, utilization: 0.4444444444444444 }
+      let diff = performance.eventLoopUtilization(firstElu, secondElu)
+      assert.strictEqual(diff.utilization, 0.75)
+      const thirdElu = { idle: 200000000, active: 80000000, utilization: 0.2857142857142857 }
+      diff = performance.eventLoopUtilization(secondElu, thirdElu)
+      assert.strictEqual(diff.utilization, -0)
+
+      sinon.stub(performance, 'eventLoopUtilization')
+        .onFirstCall().returns(firstElu)
+        .onSecondCall().returns(secondElu)
+        .onThirdCall().returns(thirdElu)
+
+      clock.tick(10000) // First collection
+      clock.tick(10000) // Second collection with delta
+      clock.tick(10000) // Second collection with delta
+
+      const eluCalls = client.gauge.getCalls().filter(call =>
+        call.args[0] === 'runtime.node.event_loop.utilization'
+      )
+
+      assert.strictEqual(eluCalls.length, 3)
+      assert.strictEqual(eluCalls[0].args[1], 0.2)
+      assert.strictEqual(eluCalls[1].args[1], 0.75)
+      assert.strictEqual(eluCalls[2].args[1], 0)
+    })
+  })
+
+  describe('CPU Usage Calculations', () => {
+    it('should report CPU percentages within valid ranges', () => {
+      const startCpuUsage = process.cpuUsage()
+      const startTime = Date.now()
+      let iterations = 0
+      let ticks = 0
+      while (Date.now() - startTime < 100) {
+        iterations++
+        if (iterations % 1000000 === 0) {
+          clock.tick(1)
+          ticks++
+        }
+      }
+      const cpuUsage = process.cpuUsage()
+      sinon.stub(process, 'cpuUsage').returns(cpuUsage)
+      clock.tick(10000 - ticks)
+
+      const timeDivisor = 100_000 // Microseconds * 100 for percent
+
+      const cpuMetrics = new Map([[
+        'runtime.node.cpu.user',
+        Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2))
+      ], [
+        'runtime.node.cpu.system',
+        Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2))
+      ], [
+        'runtime.node.cpu.total',
+        Number((
+          ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
+        ).toFixed(2))
+      ]])
+
+      let userPercent = 0
+      let systemPercent = 0
+      let totalPercent = 0
+
+      for (const call of client.gauge.getCalls()) {
+        const metric = call.args[0]
+        const expected = cpuMetrics.get(metric)
+        cpuMetrics.delete(metric)
+        if (expected !== undefined) {
+          const stringValue = call.args[1]
+          assert.match(stringValue, /^\d+(\.\d{1,2})?$/)
+          const number = Number(stringValue)
+          if (metric === 'runtime.node.cpu.user') {
+            assert(number >= 1, `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`)
+            userPercent = number
+          }
+          if (metric === 'runtime.node.cpu.system') {
+            assert(number >= 0 && number <= 1, `${metric} sanity check failed: ${number}`)
+            systemPercent = number
+          }
+          if (metric === 'runtime.node.cpu.total') {
+            assert(
+              number >= expected && number <= expected + 1,
+              `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
+            )
+            totalPercent = number
+          }
+          assert(number - expected < 0.5)
+        }
+      }
+
+      assert.strictEqual(cpuMetrics.size, 0, `All CPU metrics should be matched, missing ${[...cpuMetrics.keys()]}`)
+
+      const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
+      assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
+    })
+  })
+
+  describe('Memory and Heap Metrics', () => {
+    it('should ensure heap_used <= heap_total', () => {
+      clock.tick(10000)
+
+      const heapUsedCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.mem.heap_used')
+      const heapTotalCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.mem.heap_total')
+
+      assert.strictEqual(heapUsedCalls.length, 1)
+      assert.strictEqual(heapTotalCalls.length, 1)
+
+      const heapUsed = heapUsedCalls[0].args[1]
+      const heapTotal = heapTotalCalls[0].args[1]
+
+      assert(heapUsed <= heapTotal)
+    })
+  })
+
+  describe('Process Uptime', () => {
+    it('should report realistic uptime values', () => {
+      clock.tick(10000)
+
+      const uptimeCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
+      assert.strictEqual(uptimeCalls.length, 1)
+
+      const uptime = uptimeCalls[0].args[1]
+
+      assert.strictEqual(uptime < 5 * 60 && uptime >= 0, true)
+    })
+
+    it('should show increasing uptime over time', () => {
+      clock.tick(10000)
+      const firstUptimeCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
+      const firstUptime = firstUptimeCalls[0].args[1]
+
+      client.gauge.resetHistory()
+      clock.tick(10000) // Advance another 10 seconds
+
+      let nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
+      assert.strictEqual(nextUptimeCall.length, 1)
+      let nextUptime = nextUptimeCall[0].args[1]
+
+      // Uptime should be 10 seconds more
+      assert.strictEqual(nextUptime - firstUptime, 10)
+      client.gauge.resetHistory()
+
+      clock.tick(10000) // Advance another 10 seconds
+
+      nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
+      assert.strictEqual(nextUptimeCall.length, 1)
+      nextUptime = nextUptimeCall[0].args[1]
+
+      // Uptime should be 10 seconds more
+      assert.strictEqual(nextUptime - firstUptime, 20)
+    })
+  })
+
+  describe('Metric Consistency and Reliability', () => {
+    it('should produce consistent metrics across multiple flushes', () => {
+      const flushCount = 3
+
+      for (let i = 0; i < flushCount; i++) {
+        client.gauge.resetHistory()
+        client.increment.resetHistory()
+        client.histogram.resetHistory()
+
+        clock.tick(10000)
+
+        const metrics = client.gauge.getCalls().reduce((acc, call) => {
+          acc.add(call.args[0])
+          return acc
+        }, new Set())
+
+        assert.strictEqual(metrics.size, nativeMetrics ? 32 : 22)
+        assert.strictEqual(client.histogram.getCalls().length, 0)
+        assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 6 : 0)
+      }
+    })
+
+    it('should report expected memory usage values', () => {
+      const stats = process.memoryUsage()
+      const totalmem = os.totalmem()
+      const freemem = os.freemem()
+
+      sinon.stub(process, 'memoryUsage').returns(stats)
+      sinon.stub(os, 'totalmem').returns(totalmem)
+      sinon.stub(os, 'freemem').returns(freemem)
+
+      clock.tick(10000)
+
+      const metrics = client.gauge.getCalls().reduce((acc, call) => {
+        acc[call.args[0]] = call.args[1]
+        return acc
+      }, {})
+
+      assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
+      assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
+      assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
+      assert.strictEqual(metrics['runtime.node.mem.total'], os.totalmem())
+      assert.strictEqual(metrics['runtime.node.mem.free'], os.freemem())
+      assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
     })
   })
 
