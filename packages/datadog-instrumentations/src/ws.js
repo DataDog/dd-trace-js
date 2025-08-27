@@ -87,7 +87,14 @@ function wrapListener (originalOn) {
 
 function wrapClose (close) {
   return function (code, data) {
-    const ctx = { code, data, socket: this._sender._socket }
+    // _closeFrameReceived is set to true when receiver receives a close frame from a peer
+    // _closeFrameSent is set to true when a close frame is sent
+    // in the case that a close frame is received and not yet sent then connection is closed by peer
+    // if both are true then the self is sending the close event
+    const isPeerClose = this._closeFrameReceived === true && this._closeFrameSent === false
+
+    const ctx = { code, data, socket: this._sender._socket, isPeerClose }
+
     return closeCh.traceSync(close, ctx, this, ...arguments)
   }
 }
@@ -108,7 +115,6 @@ addHook({
   versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'send', wrapSend)
-
   return ws
 })
 
@@ -118,7 +124,6 @@ addHook({
   versions: ['>=8.0.0']
 }, ws => {
   shimmer.wrap(ws.prototype, 'emit', createWrapEmit)
-
   return ws
 })
 

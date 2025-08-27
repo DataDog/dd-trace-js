@@ -145,7 +145,10 @@ module.exports = class PluginManager {
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
       isServiceUserProvided,
-      middlewareTracingEnabled
+      middlewareTracingEnabled,
+      traceWebsocketMessagesEnabled,
+      traceWebsocketMessagesInheritSampling,
+      traceWebsocketMessagesSeparateTraces
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -160,7 +163,10 @@ module.exports = class PluginManager {
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
-      isServiceUserProvided
+      isServiceUserProvided,
+      traceWebsocketMessagesEnabled,
+      traceWebsocketMessagesInheritSampling,
+      traceWebsocketMessagesSeparateTraces
     }
 
     if (logInjection !== undefined) {

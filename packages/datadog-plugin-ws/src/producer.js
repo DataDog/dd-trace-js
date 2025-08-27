@@ -3,19 +3,31 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
 class WSProducerPlugin extends TracingPlugin {
-  static get id () { return 'websocket' }
+  static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:send' }
   static get type () { return 'websocket' }
   static get kind () { return 'producer' }
 
   bindStart (ctx) {
-    const span = this.startSpan(this.operationName(), {
-      meta: {
-        service: this.serviceName({ pluginConfig: this.config }),
-        'resource.name': 'websocket.send',
-        'span.type': 'websocket',
-        'span.kind': 'producer'
+    const messagesEnabled = this.config.traceWebsocketMessagesEnabled
+    if (!messagesEnabled) return
 
+    const { byteLength, socket, binary } = ctx
+    const spanTags = socket.spanContext ? socket.spanContext.spanTags : {}
+    const path = spanTags['resource.name'] ? spanTags['resource.name'].split(' ')[1] : '/'
+    const opCode = binary ? 'binary' : 'text'
+    const service = this.serviceName({ pluginConfig: this.config })
+    const span = this.startSpan(this.operationName(), {
+      service,
+      meta: {
+        'span.type': 'websocket',
+        'span.kind': 'producer',
+        'resource.name': `websocket ${path}`,
+        'websocket.message.type': opCode,
+
+      },
+      metrics: {
+        'websocket.message.length': byteLength
       }
 
     }, ctx)
@@ -36,7 +48,7 @@ class WSProducerPlugin extends TracingPlugin {
   end (ctx) {
     if (!Object.hasOwn(ctx, 'result')) return
 
-    ctx.span.addLink(ctx.socket.spanContext, { 'dd.kind': 'resuming' })
+    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext, { 'dd.kind': 'resuming' })
 
     ctx.span.finish()
     return ctx.parentStore
