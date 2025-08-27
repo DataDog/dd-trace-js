@@ -7,7 +7,7 @@ const os = require('os')
 const process = require('process')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { performance, PerformanceObserver } = require('perf_hooks')
+const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { getEnvironmentVariable } = require('../config-helper')
 
 const { NODE_MAJOR } = require('../../../../version')
@@ -16,6 +16,8 @@ const { NODE_MAJOR } = require('../../../../version')
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
+const eventLoopDelayResolution = 20
+
 let startTime = 0n
 let nativeMetrics = null
 let gcObserver = null
@@ -23,6 +25,7 @@ let interval = null
 let client = null
 let lastTime = 0n
 let lastCpuUsage = null
+let eventLoopDelayObserver = null
 
 // !!!!!!!!!!!
 //  IMPORTANT
@@ -69,10 +72,18 @@ module.exports = {
     } else {
       lastCpuUsage = process.cpuUsage()
 
+      if (trackEventLoop) {
+        eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
+        eventLoopDelayObserver.enable()
+      }
+
       interval = setInterval(() => {
         captureCpuUsage()
         captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
+        if (trackEventLoop) {
+          captureEventLoopDelay()
+        }
         client.flush()
       }, INTERVAL)
     }
@@ -95,6 +106,9 @@ module.exports = {
 
     gcObserver?.disconnect()
     gcObserver = null
+
+    eventLoopDelayObserver?.disable()
+    eventLoopDelayObserver = null
   },
 
   track (span) {
@@ -173,6 +187,13 @@ function captureUptime () {
   // WARNING: lastTime must be updated in the same interval before this function is called!
   // This is a faster `process.uptime()`.
   client.gauge('runtime.node.process.uptime', Number((lastTime - startTime) / 1_000_000_000n))
+}
+
+function captureEventLoopDelay () {
+  eventLoopDelayObserver.disable()
+  histogram('runtime.node.event_loop.delay', eventLoopDelayObserver)
+  eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
+  eventLoopDelayObserver.enable()
 }
 
 function captureHeapStats () {
@@ -278,12 +299,16 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
 function histogram (name, stats, tag) {
   client.gauge(`${name}.min`, stats.min, tag)
   client.gauge(`${name}.max`, stats.max, tag)
-  client.increment(`${name}.sum`, stats.sum, tag)
-  client.increment(`${name}.total`, stats.sum, tag)
-  client.gauge(`${name}.avg`, stats.avg, tag)
+  const sum = stats.sum ?? stats.mean * stats.count
+  client.increment(`${name}.sum`, sum, tag)
+  client.increment(`${name}.total`, sum, tag)
+  client.gauge(`${name}.avg`, stats.avg ?? stats.mean, tag)
   client.increment(`${name}.count`, stats.count, tag)
-  client.gauge(`${name}.median`, stats.median, tag)
-  client.gauge(`${name}.95percentile`, stats.p95, tag)
+  if (stats.median !== undefined) {
+    // TODO: Consider adding the median to the Node.js histogram.
+    client.gauge(`${name}.median`, stats.median, tag)
+  }
+  client.gauge(`${name}.95percentile`, stats.p95 ?? stats.percentile(95), tag)
 }
 
 function startGCObserver () {

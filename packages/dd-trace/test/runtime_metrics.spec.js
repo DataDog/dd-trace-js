@@ -6,6 +6,7 @@ const { DogStatsDClient } = require('../src/dogstatsd')
 const assert = require('node:assert')
 const os = require('node:os')
 const performance = require('node:perf_hooks').performance
+const { setImmediate, setTimeout } = require('node:timers/promises')
 
 const isWindows = os.platform() === 'win32'
 
@@ -117,7 +118,6 @@ suiteDescribe('runtimeMetrics', () => {
   let runtimeMetrics
   let config
   let clock
-  let setImmediate
   let client
   let Client
   // TODO: Improve tests to run with both native and non-native metrics.
@@ -176,7 +176,6 @@ suiteDescribe('runtimeMetrics', () => {
       }
     }
 
-    setImmediate = require('timers/promises').setImmediate
     clock = sinon.useFakeTimers()
 
     runtimeMetrics.start(config)
@@ -228,7 +227,15 @@ suiteDescribe('runtimeMetrics', () => {
       await setImmediate()
       await setImmediate()
 
-      clock.tick(10000)
+      const startTime = Date.now()
+      const waitTime = 100
+      while (Date.now() - startTime < waitTime) {
+        // Need ticks for the event loop delay
+        await setTimeout(1)
+        clock.tick(1)
+      }
+
+      clock.tick(10000 - waitTime)
 
       const isFiniteNumber = sinon.match((value) => {
         return value >= 0 && Number.isFinite(value)
@@ -259,16 +266,17 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory', isFiniteNumber)
 
-      // TODO: Fix the implementation for non-native metrics.
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', isFiniteNumber)
       if (nativeMetrics) {
-        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', isFiniteNumber)
-        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', isFiniteNumber)
-        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', isFiniteNumber)
-        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', isFiniteNumber)
         expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median', isFiniteNumber)
-        expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', isFiniteNumber)
-        expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', isIntegerNumber)
+      } else {
+        expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.delay.median')
       }
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', isFiniteNumber)
+      expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', isIntegerNumber)
 
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max', isFiniteNumber)
@@ -527,9 +535,9 @@ suiteDescribe('runtimeMetrics', () => {
           return acc
         }, new Set())
 
-        assert.strictEqual(metrics.size, nativeMetrics ? 32 : 22)
+        assert.strictEqual(metrics.size, nativeMetrics ? 32 : 26)
         assert.strictEqual(client.histogram.getCalls().length, 0)
-        assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 6 : 0)
+        assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 6 : 3)
       }
     })
 
