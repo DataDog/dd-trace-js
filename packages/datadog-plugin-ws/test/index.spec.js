@@ -1,125 +1,90 @@
 'use strict'
 
 const { expect } = require('chai')
-const http = require('http')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {
-  let ws
   let WebSocket
   let wsServer
-  let httpServer
-  let tracer
+  let connectionReceived
+  let clientPort = 6015
+  let client
+  let messageReceived
 
   describe('ws', () => {
-    withVersions('ws', 'ws', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-
+    withVersions('ws', 'ws', '>=8.0.0', version => {
       describe('when using WebSocket', () => {
-        before(() => {
-          return agent.load('ws')
+        beforeEach(async () => {
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          client = new WebSocket(`ws://localhost:${clientPort}`)
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
         })
 
-        beforeEach(done => {
-          ws = require(`../../../versions/ws@${version}`).get()
-          WebSocket = ws
-
-          httpServer = http.createServer()
-          wsServer = new ws.Server({ server: httpServer })
-
-          wsServer.on('connection', ws => {
-            ws.on('message', msg => {
-              console.log('echo')
-              // Echo back the message with "server:" prefix
-              ws.send('echo')
-            })
+        it('should do automatic instrumentation', () => {
+          wsServer.on('connection', (ws) => {
+            connectionReceived = true
+            ws.send('test message')
           })
 
-          httpServer.listen(0, 'localhost', () => {
-            done()
-          })
-        })
-
-        afterEach(() => {
-          if (wsServer) {
-            wsServer.close()
-          }
-          if (httpServer) {
-            httpServer.close()
-          }
-        })
-
-        it('should do automatic instrumentatio', done => {
-          console.log('trace', agent.assertFirstTraceSpan())
-          agent.assertSomeTraces(traces => {
-            // expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            // expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-            // expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-            // expect(traces[0][0]).to.have.property('type', 'sql')
-            // expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-            // expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-            // expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-            // expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-            // expect(traces[0][0].meta).to.have.property('component', 'pg')
-            // expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
-          })
-            .then(done)
-            .catch(done)
-
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
-
-          client.on('open', () => {
-            client.send('hello')
+          client.on('message', (msg) => {
+            expect(msg.toString()).to.equal('test message')
           })
 
-          client.on('message', msg => {
-            console.log('message', msg.toString())
-            expect(msg.toString()).to.equal('echo')
-            done()
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'websocket.request')
           })
-
-          client.on('error', done)
         })
 
         it('should do automatic instrumentation for server connections', done => {
-          let connectionReceived = false
+          connectionReceived = false
 
           wsServer.on('connection', (ws) => {
             connectionReceived = true
-            ws.close()
+            ws.send('echo')
           })
-
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
 
           client.on('open', () => {
-            // Give a small delay to ensure trace is captured
             setTimeout(() => {
               expect(connectionReceived).to.be.true
-              client.close()
-              done()
-            }, 10)
+            }, 1000)
           })
 
+          client.on('message', msg => {
+            expect(msg.toString()).to.equal('echo')
+          })
+          setTimeout(() => {
+            done()
+          }, 1000)
           client.on('error', done)
         })
 
         it('should instrument message sending', done => {
-          wsServer.on('connection', (ws) => {
-            ws.send('test message')
+          wsServer.on('connection', ws => {
+            connectionReceived = true
+            ws.on('message', msg => {
+              // Echo back the message with "server:" prefix
+              ws.send(msg)
+            })
           })
 
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
+          client.on('open', () => {
+            client.send('test message')
+          })
 
           client.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
-            client.close()
             done()
           })
 
@@ -130,12 +95,13 @@ describe('Plugin', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               expect(data.toString()).to.equal('test message from client')
-              ws.close()
-              done()
             })
           })
-
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
+          agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
+          })
+            .then(done)
+            .catch(done)
 
           client.on('open', () => {
             client.send('test message from client')
@@ -144,99 +110,222 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument connection close', done => {
+        it('should instrument connection close', () => {
+          client.removeAllListeners()
           wsServer.on('connection', (ws) => {
-            setTimeout(() => ws.close(), 10)
+            ws.close()
           })
 
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
-
-          client.on('close', () => {
-            done()
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('name', 'websocket.close')
           })
-
-          client.on('error', done)
         })
-
-        // it.only('should run callbacks in the parent context', done => {
-        //   const span = tracer.startSpan('parent')
-
-        //   console.log('span', span._spanContext._tags)
-        //   tracer.scope().activate(span, () => {
-        //     console.log('span', span._spanContext._tags)
-        //     // console.log('span in connection', span._spanContext._tags)
-        //     const spanIn = tracer.scope().active()
-        //     wsServer.on('connection', (ws) => {
-        //       console.log('span in connection', tracer.scope().active())
-        //       expect(spanIn).to.equal(span)
-        //       ws.close()
-        //       done()
-        //     })
-
-        //     const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
-        //     client.on('error', done)
-        //   })
-        // })
       })
 
       describe('with service configuration', () => {
-        before(() => {
-          return agent.load('ws', { service: 'custom-ws-service' })
+        beforeEach(async () => {
+          await agent.load(['ws'], [{
+            service: 'custom-ws-service',
+            traceWebsocketMessagesEnabled: true
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          client = new WebSocket(`ws://localhost:${clientPort}`)
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
         })
 
-        beforeEach(done => {
-          ws = require(`../../../versions/ws@${version}`).get()
-          WebSocket = ws
-
-          httpServer = http.createServer()
-          wsServer = new ws.Server({ server: httpServer })
-
-          httpServer.listen(0, 'localhost', () => {
-            done()
+        it('should work with custom service configuration', () => {
+          wsServer.on('connection', (ws) => {
           })
-        })
+          messageReceived = false
 
-        afterEach(() => {
-          if (wsServer) {
-            wsServer.close()
-          }
-          if (httpServer) {
-            httpServer.close()
-          }
-        })
-
-        it('should work with custom service configuration', done => {
-          agent.assertSomeTraces(traces => {
-            console.log('assert some')
+          return agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
             expect(traces[0][0]).to.have.property('name', 'websocket.request')
             expect(traces[0][0]).to.have.property('type', 'websocket')
           })
-            .then(done)
-            .catch(done)
+        })
 
-          let messageReceived = false
-
+        it('should trace messages when traceWebsocketMessagesEnabled is set to true', () => {
           wsServer.on('connection', (ws) => {
             ws.send('test message')
-            setTimeout(() => ws.close(), 10)
           })
-
-          const client = new WebSocket(`ws://localhost:${httpServer.address().port}`)
+          messageReceived = false
 
           client.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
             messageReceived = true
           })
 
-          client.on('error', done)
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.send')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+
+        it('should trace received messages when traceWebsocketMessagesEnabled is set to true', () => {
+          messageReceived = false
+          wsServer.on('connection', (ws) => {
+            ws.send('test message')
+          })
+          wsServer.on('message', (data) => {
+            expect(data.toString()).to.equal('test message')
+            expect(messageReceived).prototype.equal(true)
+          })
+
+          client.on('message', (data) => {
+            client.send(data)
+            expect(data.toString()).to.equal('test message')
+            messageReceived = true
+          })
+
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.send')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+
+        it('should trace send messages when messages are not received', () => {
+          messageReceived = false
+          wsServer.on('connection', (ws) => {
+            ws.send('test message')
+          })
+          client.on('message', (data) => {
+            client.send(data)
+            expect(data.toString()).to.equal('test message')
+            messageReceived = true
+          })
+
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.send')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+      })
+      describe('with WebSocket Messages Disabled', () => {
+        beforeEach(async () => {
+          await agent.load(['ws'], [{
+            service: 'custom-ws-service',
+            traceWebsocketMessagesEnabled: true
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          client = new WebSocket(`ws://localhost:${clientPort}`)
+        })
+
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should not produce message spans when traceWebsocketMessagesEnabled is not set to true', () => {
+          wsServer.on('connection', (ws) => {
+            ws.send('test message')
+          })
+          messageReceived = false
+
+          client.on('message', (data) => {
+            expect(data.toString()).to.equal('test message')
+            messageReceived = true
+          })
+
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+
+        it('should not produce close event spans when traceWebsocketMessagesEnabled is not set to true', () => {
+          wsServer.on('connection', (ws) => {
+            ws.close()
+          })
+
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+      })
+      describe('with WebSocket configurations settings', () => {
+        beforeEach(async () => {
+          await agent.load(['ws'], [{
+            service: 'custom-ws-service',
+            traceWebsocketMessagesEnabled: true,
+            traceWebsocketMessagesInheritSampling: false,
+            traceWebsocketMessagesSeparateTraces: false
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          client = new WebSocket(`ws://localhost:${clientPort}`)
+        })
+
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should not inherit sampling decisions from root trace', () => {
+          wsServer.on('connection', (ws) => {
+            ws.on('message', (data) => {
+              expect(data.toString()).to.equal('test message from client')
+            })
+          })
+
+          client.on('open', () => {
+            client.send('test message from client')
+          })
+
+          return agent.assertSomeTraces(traces => {
+            expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
+            expect(traces[0][0].meta).to.have.property('span.kind', 'consumer')
+            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
+        })
+
+        it('should have span links', () => {
+          let firstTraceId
+          wsServer.on('connection', (ws) => {
+            ws.on('message', (data) => {
+              // expect(data.toS tring()).to.equal('With a great big hug...')
+            })
+            ws.send('We are a happy family!')
+          })
+
+          client.on('open', () => {
+          })
+
+          client.on('message', (data) => {
+            client.send('With a great big hug...')
+          })
+          agent.assertFirstTraceSpan(trace => {
+            firstTraceId = Number(trace.trace_id)
+          })
+          return agent.assertSomeTraces(traces => {
+            const metaData = JSON.parse(traces[0][0].meta['_dd.span_links'])
+            const spanId = Number(BigInt('0x' + metaData[0].span_id))
+            expect(spanId).to.equal(firstTraceId)
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
+            expect(traces[0][0]).to.have.property('type', 'websocket')
+          })
         })
       })
     })
   })
-}
-)
+})

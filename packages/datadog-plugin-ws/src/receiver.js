@@ -3,33 +3,45 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
 class WSReceiverPlugin extends TracingPlugin {
-  static get id () { return 'websocket' }
+  static get id () { return 'ws' }
   static get prefix () { return 'tracing:ws:receive' }
   static get type () { return 'websocket' }
   static get kind () { return 'consumer' }
 
   bindStart (ctx) {
-    const { spanTags } = ctx.socket.spanContext
-    const path = spanTags['resource.name'].split(' ')[1]
-    const opCode = ctx.binary ? 'binary' : 'text'
+    const {
+      traceWebsocketMessagesEnabled,
+      traceWebsocketMessagesInheritSampling,
+      traceWebsocketMessagesSeparateTraces
+    } = this.config
+    if (!traceWebsocketMessagesEnabled) return
 
+    const { byteLength, socket, binary } = ctx
+    const spanTags = socket.spanContext ? socket.spanContext.spanTags : {}
+    const path = spanTags['resource.name'] ? spanTags['resource.name'].split(' ')[1] : '/'
+    const opCode = binary ? 'binary' : 'text'
+
+    const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
+      service,
       meta: {
-        service: this.serviceName({ pluginConfig: this.config }),
         'span.type': 'websocket',
         'span.kind': 'consumer',
         'resource.name': `websocket ${path}`,
-        'dd.kind': 'executed_by',
+        'websocket.duration.style': 'handler',
+        'websocket.message.type': opCode,
       },
       metrics: {
-        'websocket.message.type': opCode,
-        'websocket.message.length': ctx.byteLength,
-        '_dd.dm.inherited': 1,
-        '_dd.dm.service': spanTags['service.name'],
-        '_dd.dm.resource': spanTags['resource.name']
+        'websocket.message.length': byteLength,
       }
 
     }, ctx)
+
+    if (traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
+      span.setTag('_dd.dm.service', spanTags['service.name'] || service)
+      span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
+      span.setTag('_dd.dm.inherited', 1)
+    }
 
     ctx.span = span
     return ctx.currentStore
@@ -46,7 +58,7 @@ class WSReceiverPlugin extends TracingPlugin {
   end (ctx) {
     if (!Object.hasOwn(ctx, 'result')) return
 
-    ctx.span.addLink(ctx.socket.spanContext)
+    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext, { 'dd.kind': 'executed_by' })
 
     ctx.span.finish()
     return ctx.parentStore

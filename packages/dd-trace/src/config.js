@@ -630,10 +630,9 @@ class Config {
     defaults['tracePropagationStyle.inject'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.extract'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.otelPropagators'] = false
-    defaults.traceWebsocketMessagesEnabled = false
-    defaults.traceWebsocketMessagesInheritSampling = false
-    defaults.traceWebsocketMessagesSeparateTraces = false
-    defaults.traceWebsocketTagSessionId = false
+    defaults.traceWebsocketMessagesEnabled = true
+    defaults.traceWebsocketMessagesInheritSampling = true
+    defaults.traceWebsocketMessagesSeparateTraces = true
     defaults.tracing = true
     defaults.url = undefined
     defaults.version = pkg.version
@@ -819,7 +818,6 @@ class Config {
       DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,
       DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,
       DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,
-      DD_TRACE_WEBSOCKET_TAG_SESSION_ID,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
@@ -1061,7 +1059,6 @@ class Config {
     this._setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
     this._setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
     this._setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
-    this._setBoolean(env, 'traceWebsocketTagSessionId', DD_TRACE_WEBSOCKET_TAG_SESSION_ID)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
@@ -1227,6 +1224,9 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesEnabled', options.traceWebsocketMessagesEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesInheritSampling', options.traceWebsocketMessagesInheritSampling)
+    this._setBoolean(opts, 'traceWebsocketMessagesSeparateTraces', options.traceWebsocketMessagesSeparateTraces)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)

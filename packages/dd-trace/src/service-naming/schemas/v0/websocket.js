@@ -1,30 +1,28 @@
 'use strict'
 
-const { identityService } = require('../util')
-
 const websocket = {
   request: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.request',
-      serviceName: identityService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     }
   },
   producer: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.send',
-      serviceName: identityService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     }
   },
   consumer: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.receive',
-      serviceName: identityService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     }
   },
   close: {
-    websocket: {
+    ws: {
       opName: () => 'websocket.close',
-      serviceName: identityService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     }
   }
 }
