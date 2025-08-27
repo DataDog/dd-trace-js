@@ -9,7 +9,10 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  # this ensures that only one workflow runs at a time for a given branch on pull requests
+  # as the group key is the workflow name and the branch name
+  # for scheduled runs and pushes to master, we use the run id to ensure that all runs are executed
+  group: ${{ (github.event_name == 'pull_request' && format('{0}-{1}', github.workflow, github.ref)) || format('{0}-{1}', github.workflow, github.run_id) }}
   cancel-in-progress: true
 
 jobs:
