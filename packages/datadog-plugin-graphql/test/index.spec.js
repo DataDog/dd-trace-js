@@ -23,6 +23,22 @@ describe('Plugin', () => {
   let markSlow
   let markSync
 
+  // Mock "thenable" that throws if .then() is called more than once.
+  class OneTimeThenable {
+    constructor (value) {
+      this._value = value
+      this._called = false
+    }
+
+    then (onFulfilled, onRejected) {
+      if (this._called) {
+        throw new Error('This thenable has already been executed.')
+      }
+      this._called = true
+      return Promise.resolve(this._value).then(onFulfilled, onRejected)
+    }
+  }
+
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
       name: 'Human',
@@ -111,6 +127,10 @@ describe('Plugin', () => {
             markSync = performance.now()
             return 'sync field'
           }
+        },
+        oneTime: {
+          type: graphql.GraphQLString,
+          resolve: () => new OneTimeThenable('one-time result')
         }
       }
     })
@@ -831,6 +851,18 @@ describe('Plugin', () => {
           const document = graphql.parse(source)
           graphql.validate(schema, document)
           graphql.execute({ schema, document })
+        })
+
+        it('should not re-execute thenables from resolvers', done => {
+          const source = '{ human { oneTime } }'
+
+          graphql.graphql({ schema, source })
+            .then(result => {
+              expect(result).to.not.have.property('errors')
+              expect(result.data.human.oneTime).to.equal('one-time result')
+              done()
+            })
+            .catch(done)
         })
 
         it('should handle Source objects', done => {
