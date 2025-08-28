@@ -18,7 +18,6 @@ const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 const eventLoopDelayResolution = 1
 
-let startTime = 0n
 let nativeMetrics = null
 let gcObserver = null
 let interval = null
@@ -38,7 +37,6 @@ module.exports = {
   start (config) {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    const watchers = []
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
@@ -47,14 +45,10 @@ module.exports = {
       startGCObserver()
     }
 
-    if (trackEventLoop) {
-      watchers.push('loop')
-    } else {
-      // Prevent the native gc metrics from being tracked. Not passing any
-      // options means all metrics are tracked.
-      // TODO: This is a workaround. We should find a better solution.
-      watchers.push('no-gc')
-    }
+    // Using no-gc prevents the native gc metrics from being tracked. Not
+    // passing any options means all metrics are tracked.
+    // TODO: This is a workaround. We should find a better solution.
+    const watchers = trackEventLoop ? ['loop'] : ['no-gc']
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
@@ -66,7 +60,7 @@ module.exports = {
 
     client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
-    lastTime = process.hrtime.bigint()
+    lastTime = performance.now()
 
     if (nativeMetrics) {
       interval = setInterval(() => {
@@ -99,8 +93,6 @@ module.exports = {
     }
 
     interval.unref()
-    // The starttime plus half a second for rounding.
-    startTime = lastTime - BigInt(Math.round(process.uptime() * 1e9)) + 500_000_000n
   },
 
   stop () {
@@ -163,8 +155,8 @@ function captureCpuUsage () {
   const elapsedUsageUser = currentCpuUsage.user - lastCpuUsage.user
   const elapsedUsageSystem = currentCpuUsage.system - lastCpuUsage.system
 
-  const currentTime = process.hrtime.bigint() // Nanoseconds
-  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n)
+  const currentTime = performance.now() // Milliseconds with decimal places
+  const elapsedUsDividedBy100 = (currentTime - lastTime) * 10
   const userPercent = elapsedUsageUser / elapsedUsDividedBy100
   const systemPercent = elapsedUsageSystem / elapsedUsDividedBy100
   const totalPercent = userPercent + systemPercent
@@ -195,7 +187,7 @@ function captureMemoryUsage () {
 function captureUptime () {
   // WARNING: lastTime must be updated in the same interval before this function is called!
   // This is a faster `process.uptime()`.
-  client.gauge('runtime.node.process.uptime', Number((lastTime - startTime) / 1_000_000_000n))
+  client.gauge('runtime.node.process.uptime', Math.round((lastTime + 499) / 1000))
 }
 
 function captureEventLoopDelay () {
@@ -286,8 +278,8 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
   const stats = nativeMetrics.stats()
   const spaces = stats.heap.spaces
 
-  const currentTime = process.hrtime.bigint() // Nanoseconds
-  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n)
+  const currentTime = performance.now() // Milliseconds with decimal places
+  const elapsedUsDividedBy100 = (currentTime - lastTime) * 10
   lastTime = currentTime
 
   const userPercent = stats.cpu.user / elapsedUsDividedBy100

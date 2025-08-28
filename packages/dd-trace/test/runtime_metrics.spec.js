@@ -437,6 +437,7 @@ suiteDescribe('runtimeMetrics', () => {
     it('should report CPU percentages within valid ranges', () => {
       const startCpuUsage = process.cpuUsage()
       const startTime = Date.now()
+      const startPerformanceNow = performance.now()
       let iterations = 0
       let ticks = 0
       while (Date.now() - startTime < 100) {
@@ -448,7 +449,9 @@ suiteDescribe('runtimeMetrics', () => {
       }
       const cpuUsage = process.cpuUsage()
       sinon.stub(process, 'cpuUsage').returns(cpuUsage)
+      sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
       clock.tick(10000 - ticks)
+      performance.now.restore()
 
       const timeDivisor = 100_000 // Microseconds * 100 for percent
 
@@ -492,7 +495,7 @@ suiteDescribe('runtimeMetrics', () => {
             )
             totalPercent = number
           }
-          assert(number - expected < 0.5)
+          assert(number - expected < 0.5, `${metric} sanity check failed: ${number} ${expected}`)
         }
       }
 
@@ -533,12 +536,16 @@ suiteDescribe('runtimeMetrics', () => {
     })
 
     it('should show increasing uptime over time', () => {
+      const startPerformanceNow = performance.now()
       clock.tick(10000)
+      sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
       const firstUptimeCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
       const firstUptime = firstUptimeCalls[0].args[1]
 
       client.gauge.resetHistory()
       clock.tick(10000) // Advance another 10 seconds
+      performance.now.restore()
+      sinon.stub(performance, 'now').returns(startPerformanceNow + 20001)
 
       let nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
       assert.strictEqual(nextUptimeCall.length, 1)
@@ -549,6 +556,8 @@ suiteDescribe('runtimeMetrics', () => {
       client.gauge.resetHistory()
 
       clock.tick(10000) // Advance another 10 seconds
+      performance.now.restore()
+      sinon.stub(performance, 'now').returns(startPerformanceNow + 30003)
 
       nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
       assert.strictEqual(nextUptimeCall.length, 1)
@@ -556,6 +565,7 @@ suiteDescribe('runtimeMetrics', () => {
 
       // Uptime should be 10 seconds more
       assert.strictEqual(nextUptime - firstUptime, 20)
+      performance.now.restore()
     })
   })
 
