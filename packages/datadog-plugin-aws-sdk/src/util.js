@@ -113,15 +113,20 @@ const extractQueueMetadata = queueURL => {
   }
 
   const parts = queueURL.split('/').filter(Boolean)
-  if (parts.length < 3) return null
+
+  // Check if URL has scheme
+  const hasScheme = parts[0] && parts[0].startsWith('http')
+  const minParts = hasScheme ? 4 : 3
+
+  if (parts.length < minParts) return null
 
   const accountId = parts[parts.length - 2]
   const queueName = parts[parts.length - 1]
-  const host = parts[0].startsWith('http') ? parts[1] : parts[0]
+  const host = hasScheme ? parts[1] : parts[0]
 
   let region = 'us-east-1' // Default region if not found in URL
   const hostParts = host.split('.')
-  if (host.includes('amazon') && hostParts.length === 4) {
+  if (host.includes('amazon') && hostParts.length > 3) {
     // sqs.{region}.amazonaws.com or {region}.queue.amazonaws.com
     region = hostParts[0] === 'sqs' ? hostParts[1] : hostParts[0]
   }
