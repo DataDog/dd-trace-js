@@ -8,7 +8,7 @@ const Axios = require('axios')
 const { withVersions } = require('../../setup/mocha')
 const { assert } = require('chai')
 const { json: blockedJson } = require('../../../src/appsec/blocked_templates')
-const { checkRaspExecutedAndHasThreat } = require('./utils')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
   withVersions('fastify', 'fastify', '>=2', (version) => {
@@ -50,12 +50,16 @@ describe('RASP - fastify blocking', () => {
       })
       const http = require('http')
 
+      app.get('/error', async (request, reply) => {
+        throw new Error('loul')
+      })
+
       app.get('/cmdi', async (request, reply) => {
         return childProcess.execFileSync('sh', ['-c', request.query.payload]).toString()
       })
 
       app.get('/shi', async (request, reply) => {
-        return childProcess.execSync(`ls ${request.query.payload}`).toString()
+        return childProcess.execSync(`ls ${request.query.payload ?? ''}`).toString()
       })
 
       app.get('/lfi', async (request, reply) => {
@@ -91,6 +95,29 @@ describe('RASP - fastify blocking', () => {
       await app.server.close()
       appsec.disable()
       await agent.close({ ritmReset: false })
+    })
+
+    it('should not block on user error', async () => {
+      const res = await axios('/error')
+
+      sinon.assert.calledOnce(hooks.onSend)
+      sinon.assert.calledOnce(hooks.onResponse)
+      sinon.assert.calledOnce(hooks.onError)
+      assert.strictEqual(res.status, 500)
+      assert.notStrictEqual(res.data, blockedJson)
+      assert(res.data.includes('loul'))
+      await checkRaspExecutedAndNotThreat(agent, false)
+    })
+
+    it('should not block without attack', async () => {
+      const res = await axios('/shi')
+
+      sinon.assert.calledOnce(hooks.onSend)
+      sinon.assert.calledOnce(hooks.onResponse)
+      sinon.assert.notCalled(hooks.onError)
+      assert.strictEqual(res.status, 200)
+      assert.notStrictEqual(res.data, blockedJson)
+      await checkRaspExecutedAndNotThreat(agent, true)
     })
 
     it('should block with CMDI', async () => {
