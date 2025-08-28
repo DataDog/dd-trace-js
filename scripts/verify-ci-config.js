@@ -5,9 +5,9 @@
 
 const fs = require('fs')
 const path = require('path')
-const util = require('util')
+// const util = require('util')
 const yaml = require('yaml')
-const semver = require('semver')
+// const semver = require('semver')
 const { execSync } = require('child_process')
 const Module = require('module')
 const { getAllInstrumentations } = require('../packages/dd-trace/test/setup/helpers/load-inst')
@@ -29,13 +29,27 @@ if (!Module.isBuiltin) {
   Module.isBuiltin = mod => Module.builtinModules.includes(mod)
 }
 
-const nodeMajor = Number(process.versions.node.split('.')[0])
+// const nodeMajor = Number(process.versions.node.split('.')[0])
 
 const instrumentations = getAllInstrumentations()
 
-const versions = {}
+// const versions = {}
 
 const allTestedPlugins = new Set()
+const appsecTestedPlugins = new Set()
+
+function getStrayPluginFiles (folder) {
+  const pluginFiles = execSync(`find ${folder} -type f -name "*.plugin.spec.js"`)
+    .toString()
+    .split('\n')
+    .slice(0, -1)
+    .map(filepath => {
+      const split = path.basename(filepath).split('.')
+      return split[split.length - 4]
+    })
+
+  return new Set(pluginFiles)
+}
 
 function checkPlugins (yamlPath) {
   const yamlContent = yaml.parse(fs.readFileSync(yamlPath, 'utf8'))
@@ -47,9 +61,12 @@ function checkPlugins (yamlPath) {
     if (!job.env || !job.env.PLUGINS) continue
 
     const pluginName = job.env.PLUGINS
-    if (!yamlPath.includes('appsec')) { // appsec has their own plugin tests yes i know i know
+    if (yamlPath.includes('appsec')) {
+      pluginName.split('|').forEach(plugin => appsecTestedPlugins.add(plugin))
+    } else {
       pluginName.split('|').forEach(plugin => allTestedPlugins.add(plugin))
     }
+
     if (Module.isBuiltin(pluginName)) continue
     const rangesFromYaml = getRangesFromYaml(job)
     if (rangesFromYaml) {
@@ -63,27 +80,26 @@ function checkPlugins (yamlPath) {
     }
   }
 
-// DISABLED FOR NOW BECAUSE NPM SHOW GETS RATE LIMITED
-//   for (const pluginName in rangesPerPluginFromYaml) {
-//     const yamlRanges = Array.from(rangesPerPluginFromYaml[pluginName])
-//     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
-//     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
-//     const instVersions = getMatchingVersions(pluginName, instRanges)
-//     if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
-//       const opts = { colors: true }
-//       const colors = x => util.inspect(x, opts)
-//       pluginErrorMsg(pluginName, 'Mismatch', `
-// Valid version ranges from YAML: ${colors(yamlRanges)}
-// Valid version ranges from INST: ${colors(instRanges)}
-// ${mismatching(yamlVersions, instVersions)}
-// Note that versions may be dependent on Node.js version. This is Node.js v${colors(nodeMajor)}
-
-// > These don't match the same sets of versions in npm.
-// >
-// > Please check ${yamlPath} and the instrumentations
-// > for ${pluginName} to see that the version ranges match.`.trim())
-//     }
-//   }
+  // DISABLED FOR NOW BECAUSE NPM SHOW GETS RATE LIMITED
+  //   for (const pluginName in rangesPerPluginFromYaml) {
+  //     const yamlRanges = Array.from(rangesPerPluginFromYaml[pluginName])
+  //     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
+  //     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
+  //     const instVersions = getMatchingVersions(pluginName, instRanges)
+  //     if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
+  //       const opts = { colors: true }
+  //       const colors = x => util.inspect(x, opts)
+  //       pluginErrorMsg(pluginName, 'Mismatch', `
+  // Valid version ranges from YAML: ${colors(yamlRanges)}
+  // Valid version ranges from INST: ${colors(instRanges)}
+  // ${mismatching(yamlVersions, instVersions)}
+  // Note that versions may be dependent on Node.js version. This is Node.js v${colors(nodeMajor)}
+  // > These don't match the same sets of versions in npm.
+  // >
+  // > Please check ${yamlPath} and the instrumentations
+  // > for ${pluginName} to see that the version ranges match.`.trim())
+  //     }
+  //   }
 }
 
 function getRangesFromYaml (job) {
@@ -105,26 +121,26 @@ function getRangesFromYaml (job) {
   return null
 }
 
-function getMatchingVersions (name, ranges) {
-  if (!versions[name]) {
-    versions[name] = JSON.parse(execSync('npm show ' + name + ' versions --json').toString())
-  }
-  return versions[name].filter(version => ranges.some(range => semver.satisfies(version, range)))
-}
+// function getMatchingVersions (name, ranges) {
+//   if (!versions[name]) {
+//     versions[name] = JSON.parse(execSync('npm show ' + name + ' versions --json').toString())
+//   }
+//   return versions[name].filter(version => ranges.some(range => semver.satisfies(version, range)))
+// }
 
-function mismatching (yamlVersions, instVersions) {
-  const yamlSet = new Set(yamlVersions)
-  const instSet = new Set(instVersions)
+// function mismatching (yamlVersions, instVersions) {
+//   const yamlSet = new Set(yamlVersions)
+//   const instSet = new Set(instVersions)
 
-  const onlyInYaml = yamlVersions.filter(v => !instSet.has(v))
-  const onlyInInst = instVersions.filter(v => !yamlSet.has(v))
+//   const onlyInYaml = yamlVersions.filter(v => !instSet.has(v))
+//   const onlyInInst = instVersions.filter(v => !yamlSet.has(v))
 
-  const opts = { colors: true }
-  return [
-    `Versions only in YAML: ${util.inspect(onlyInYaml, opts)}`,
-    `Versions only in INST: ${util.inspect(onlyInInst, opts)}`
-  ].join('\n')
-}
+//   const opts = { colors: true }
+//   return [
+//     `Versions only in YAML: ${util.inspect(onlyInYaml, opts)}`,
+//     `Versions only in INST: ${util.inspect(onlyInInst, opts)}`
+//   ].join('\n')
+// }
 
 function pluginErrorMsg (pluginName, title, message) {
   errorMsg(title + ' for ' + pluginName, message)
@@ -156,6 +172,14 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'serverless.yml'
       pluginErrorMsg(plugin, 'ERROR', 'Plugin is tested but not in at least one GitHub workflow')
     }
   }
+
+  for (const plugin of getStrayPluginFiles(path.join(__dirname, '..', 'packages', 'dd-trace', 'test', 'appsec'))) {
+    if (!appsecTestedPlugins.has(plugin)) {
+      pluginErrorMsg(plugin, 'ERROR', 'Appsec plugin is tested but not in at least one GitHub workflow')
+    }
+  }
+  // TODO: do this with all jobs that have excludes in package.json
+
 }
 
 /// /
