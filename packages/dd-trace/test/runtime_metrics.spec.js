@@ -7,10 +7,25 @@ const assert = require('node:assert')
 const os = require('node:os')
 const performance = require('node:perf_hooks').performance
 const { setImmediate, setTimeout } = require('node:timers/promises')
+const util = require('node:util')
 
 const isWindows = os.platform() === 'win32'
 
 const suiteDescribe = isWindows ? describe.skip : describe
+
+function createGarbage (count = 50) {
+  let last = {}
+  let obj = last
+
+  for (let i = 0; i < count; i++) {
+    last.next = { circular: obj, last, obj: { a: 1, b: 2, c: true } }
+    last = last.next
+    last.map = new Map([['a', 1], ['b', 2], ['c', true]])
+    obj[i] = last
+  }
+
+  return util.inspect(obj, { depth: Infinity })
+}
 
 suiteDescribe('runtimeMetrics (proxy)', () => {
   let runtimeMetrics
@@ -223,10 +238,9 @@ suiteDescribe('runtimeMetrics', () => {
 
       global.gc()
 
-      // Wait for GC observer to trigger.
-      await setImmediate()
-      await setImmediate()
+      createGarbage()
 
+      // Wait for GC observer to trigger.
       const startTime = Date.now()
       const waitTime = 100
       while (Date.now() - startTime < waitTime) {
@@ -238,7 +252,7 @@ suiteDescribe('runtimeMetrics', () => {
       clock.tick(10000 - waitTime)
 
       const isFiniteNumber = sinon.match((value) => {
-        return value >= 0 && Number.isFinite(value)
+        return value > 0 && Number.isFinite(value)
       })
 
       const isIntegerNumber = sinon.match((value) => {
@@ -267,7 +281,9 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory', isFiniteNumber)
 
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', isFiniteNumber)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', sinon.match((value) => {
+        return value >= 0 && Number.isFinite(value)
+      }))
       expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', isFiniteNumber)
       if (nativeMetrics) {
@@ -291,7 +307,9 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', isFiniteNumber)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', isFiniteNumber)
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', sinon.match((value) => {
+        return value >= 4e5 && value < 1e8 // In Nanoseconds. 0.4ms to 100ms.
+      }))
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', isIntegerNumber)
       expect(client.increment).to.have.been.calledWith(
         'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
@@ -329,18 +347,28 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.increment.callCount).to.be.lt(60000)
     })
 
-    it('should handle configuration changes correctly', () => {
+    it('should handle configuration changes correctly', async () => {
       // Test with GC disabled
       const configWithoutGC = { ...config, runtimeMetrics: { ...config.runtimeMetrics, gc: false } }
       runtimeMetrics.stop()
       runtimeMetrics.start(configWithoutGC)
 
-      clock.tick(10000)
+      createGarbage()
 
+      // Wait for event loop delay observer to trigger.
+      let startTime = Date.now()
+      let waitTime = 10
+      while (Date.now() - startTime < waitTime) {
+        // Need ticks for the event loop delay
+        await setTimeout(1)
+        clock.tick(1)
+      }
+      clock.tick(10000 - waitTime)
       // Should still collect basic metrics
       expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-      // expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
       expect(client.gauge).to.not.have.been.calledWith('runtime.node.gc.pause.95percentile')
 
       // Test with event loop disabled
@@ -349,12 +377,23 @@ suiteDescribe('runtimeMetrics', () => {
       runtimeMetrics.start(configWithoutEL)
       client.gauge.resetHistory()
 
-      clock.tick(10000)
+      createGarbage()
+
+      // Wait for GC observer to trigger.
+      startTime = Date.now()
+      waitTime = 10
+      while (Date.now() - startTime < waitTime) {
+        // Need ticks for the event loop delay
+        await setTimeout(1)
+        clock.tick(1)
+      }
+      clock.tick(10000 - waitTime)
 
       // Should still collect other metrics
       expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-      // expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
+      expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.utilization')
       expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
     })
   })
@@ -535,9 +574,10 @@ suiteDescribe('runtimeMetrics', () => {
           return acc
         }, new Set())
 
-        assert.strictEqual(metrics.size, nativeMetrics ? 32 : 26)
+        // If event loop count or gc count is zero, the metrics are not reported.
+        assert.strictEqual(metrics.size, nativeMetrics ? 27 : 22)
         assert.strictEqual(client.histogram.getCalls().length, 0)
-        assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 6 : 3)
+        assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 3 : 0)
       }
     })
 

@@ -16,7 +16,7 @@ const { NODE_MAJOR } = require('../../../../version')
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
-const eventLoopDelayResolution = 20
+const eventLoopDelayResolution = 1
 
 let startTime = 0n
 let nativeMetrics = null
@@ -49,6 +49,11 @@ module.exports = {
 
     if (trackEventLoop) {
       watchers.push('loop')
+    } else {
+      // Prevent the native gc metrics from being tracked. Not passing any
+      // options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
+      watchers.push('no-gc')
     }
 
     try {
@@ -82,6 +87,11 @@ module.exports = {
         captureCommonMetrics(trackEventLoop)
         captureHeapSpace()
         if (trackEventLoop) {
+          // Experimental: The Node.js implementation deviates from the native metrics.
+          // We normalize the metrics to the same format but the Node.js values
+          // are that way lower than they should be, while they are still nearer
+          // to the native ones that way.
+          // We use these only as fallback values.
           captureEventLoopDelay()
         }
         client.flush()
@@ -149,13 +159,12 @@ module.exports = {
 }
 
 function captureCpuUsage () {
-  const currentTime = process.hrtime.bigint() // Nanoseconds
   const currentCpuUsage = process.cpuUsage()
-
   const elapsedUsageUser = currentCpuUsage.user - lastCpuUsage.user
   const elapsedUsageSystem = currentCpuUsage.system - lastCpuUsage.system
 
-  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n) // Microseconds * 100 for percent
+  const currentTime = process.hrtime.bigint() // Nanoseconds
+  const elapsedUsDividedBy100 = Number((currentTime - lastTime) / 100_000n)
   const userPercent = elapsedUsageUser / elapsedUsDividedBy100
   const systemPercent = elapsedUsageSystem / elapsedUsDividedBy100
   const totalPercent = userPercent + systemPercent
@@ -191,7 +200,24 @@ function captureUptime () {
 
 function captureEventLoopDelay () {
   eventLoopDelayObserver.disable()
-  histogram('runtime.node.event_loop.delay', eventLoopDelayObserver)
+
+  if (eventLoopDelayObserver.count !== 0) {
+    const minimum = eventLoopDelayResolution * 1e6
+    let avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
+
+    const sum = Math.round(avg * eventLoopDelayObserver.count)
+    // Normalize the metrics to the same format as the native metrics.
+    const stats = {
+      min: Math.max(eventLoopDelayObserver.min - minimum, 0),
+      max: Math.max(eventLoopDelayObserver.max - minimum, 0),
+      sum,
+      total: sum,
+      avg,
+      count: eventLoopDelayObserver.count,
+      p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+    }
+    histogram('runtime.node.event_loop.delay', stats)
+  }
   eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
   eventLoopDelayObserver.enable()
 }
@@ -272,7 +298,7 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  if (trackEventLoop) {
+  if (trackEventLoop && stats.eventLoop.count !== 0) {
     histogram('runtime.node.event_loop.delay', stats.eventLoop)
   }
 
@@ -299,16 +325,15 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
 function histogram (name, stats, tag) {
   client.gauge(`${name}.min`, stats.min, tag)
   client.gauge(`${name}.max`, stats.max, tag)
-  const sum = stats.sum ?? stats.mean * stats.count
-  client.increment(`${name}.sum`, sum, tag)
-  client.increment(`${name}.total`, sum, tag)
-  client.gauge(`${name}.avg`, stats.avg ?? stats.mean, tag)
+  client.increment(`${name}.sum`, stats.sum, tag)
+  client.increment(`${name}.total`, stats.sum, tag)
+  client.gauge(`${name}.avg`, stats.avg, tag)
   client.increment(`${name}.count`, stats.count, tag)
   if (stats.median !== undefined) {
-    // TODO: Consider adding the median to the Node.js histogram.
+    // TODO: Consider adding the median to the Node.js histogram/adding stddev to native metrics.
     client.gauge(`${name}.median`, stats.median, tag)
   }
-  client.gauge(`${name}.95percentile`, stats.p95 ?? stats.percentile(95), tag)
+  client.gauge(`${name}.95percentile`, stats.p95, tag)
 }
 
 function startGCObserver () {
