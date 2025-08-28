@@ -15,7 +15,7 @@ const suiteDescribe = isWindows ? describe.skip : describe
 
 function createGarbage (count = 50) {
   let last = {}
-  let obj = last
+  const obj = last
 
   for (let i = 0; i < count; i++) {
     last.next = { circular: obj, last, obj: { a: 1, b: 2, c: true } }
@@ -258,6 +258,9 @@ suiteDescribe('runtimeMetrics', () => {
       const isIntegerNumber = sinon.match((value) => {
         return value > 0 && Number.isInteger(value)
       })
+      const isGC95Percentile = sinon.match((value) => {
+        return value >= 4e5 && value < 1e8 // In Nanoseconds. 0.4ms to 100ms.
+      })
 
       // These return percentages as strings and are tested later.
       expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
@@ -307,9 +310,7 @@ suiteDescribe('runtimeMetrics', () => {
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', isFiniteNumber)
       expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', isFiniteNumber)
-      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', sinon.match((value) => {
-        return value >= 4e5 && value < 1e8 // In Nanoseconds. 0.4ms to 100ms.
-      }))
+      expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', isGC95Percentile)
       expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', isIntegerNumber)
       expect(client.increment).to.have.been.calledWith(
         'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {

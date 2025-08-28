@@ -203,7 +203,7 @@ function captureEventLoopDelay () {
 
   if (eventLoopDelayObserver.count !== 0) {
     const minimum = eventLoopDelayResolution * 1e6
-    let avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
+    const avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
 
     const sum = Math.round(avg * eventLoopDelayObserver.count)
     // Normalize the metrics to the same format as the native metrics.
