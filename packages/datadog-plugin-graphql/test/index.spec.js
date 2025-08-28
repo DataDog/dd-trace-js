@@ -853,16 +853,12 @@ describe('Plugin', () => {
           graphql.execute({ schema, document })
         })
 
-        it('should not re-execute thenables from resolvers', done => {
+        it('should not re-execute thenables from resolvers', async () => {
           const source = '{ human { oneTime } }'
 
-          graphql.graphql({ schema, source })
-            .then(result => {
-              expect(result).to.not.have.property('errors')
-              expect(result.data.human.oneTime).to.equal('one-time result')
-              done()
-            })
-            .catch(done)
+          const result = await graphql.graphql({ schema, source })
+          expect(result).to.not.have.property('errors')
+          expect(result.data.human.oneTime).to.equal('one-time result')
         })
 
         it('should handle Source objects', done => {
