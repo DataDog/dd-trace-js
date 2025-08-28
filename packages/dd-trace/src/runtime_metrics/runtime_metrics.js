@@ -16,7 +16,7 @@ const { NODE_MAJOR } = require('../../../../version')
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
-const eventLoopDelayResolution = 1
+const eventLoopDelayResolution = 5
 
 let nativeMetrics = null
 let gcObserver = null
