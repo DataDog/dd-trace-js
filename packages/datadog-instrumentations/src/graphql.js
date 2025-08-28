@@ -235,18 +235,16 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   try {
     const result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
-      return new Promise((resolve, reject) => {
-        result.then(
-          res => {
-            cb(null, res)
-            resolve(res)
-          },
-          err => {
-            cb(err)
-            reject(err)
-          }
-        )
-      })
+      return result.then(
+        res => {
+          cb(null, res)
+          return res
+        },
+        err => {
+          cb(err)
+          throw err
+        }
+      )
     }
     cb(null, result)
     return result
