@@ -169,6 +169,10 @@
     {
       "name": "@fastify/multipart",
       "versions": [">=6"]
+    },
+    {
+      "name": "pg",
+      "versions": ["8.7.3"]
     }
   ],
   "generic-pool": [
