@@ -93,7 +93,7 @@ class Sqs extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || (!params.QueueName && !params.QueueUrl)) return {}
 
-    const queueMetadata = params.QueueUrl && this.extractQueueMetadata(params.QueueUrl)
+    const queueMetadata = this.extractQueueMetadata(params.QueueUrl)
     const queueName = queueMetadata?.queueName || params.QueueName
 
     const tags = {
@@ -102,12 +102,8 @@ class Sqs extends BaseAwsSdkPlugin {
       queuename: queueName,
     }
 
-    if (queueMetadata?.accountId && queueName && response?.request) {
-      const region = this.requestTags.get(response.request)?.['aws.region']
-      if (region) {
-        const partition = this.getAwsPartition(region)
-        tags['cloud.resource_id'] = `arn:${partition}:sqs:${region}:${queueMetadata.accountId}:${queueName}`
-      }
+    if (queueMetadata?.arn) {
+      tags['cloud.resource_id'] = queueMetadata.arn
     }
 
     switch (operation) {
@@ -122,20 +118,6 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     return tags
-  }
-
-  extractQueueMetadata (queueUrl) {
-    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
-    const parts = queueUrl.split('/')
-    if (parts.length < 5) return null
-
-    return { queueName: parts[4], accountId: parts[3] }
-  }
-
-  getAwsPartition (region) {
-    if (region.startsWith('cn-')) return 'aws-cn'
-    if (region.startsWith('us-gov-')) return 'aws-us-gov'
-    return 'aws'
   }
 
   responseExtract (params, operation, response) {

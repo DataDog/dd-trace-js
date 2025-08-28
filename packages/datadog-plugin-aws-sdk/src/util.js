@@ -84,8 +84,62 @@ const extractPrimaryKeys = (keyNames, keyValuePairs) => {
   }
 }
 
+/**
+ * Extracts queue metadata from an SQS queue URL for span tagging.
+ * Handles modern and legacy AWS endpoint formats, with or without schemes.
+ * Automatically detects AWS partitions (standard, China, GovCloud) from region.
+ *
+ * @param {string} queueURL - SQS queue URL in any supported format
+ * @returns {Object|null} Object with queueName and arn, or null if URL format is invalid
+ *
+ * @example
+ * // Modern AWS SQS URLs
+ * extractQueueMetadata('https://sqs.us-east-1.amazonaws.com/123456789012/my-queue')
+ * // Returns { queueName: 'my-queue', arn: 'arn:aws:sqs:us-east-1:123456789012:my-queue' }
+ *
+ * extractQueueMetadata('sqs.eu-west-1.amazonaws.com/123456789012/my-queue') // no scheme
+ * // Returns { queueName: 'my-queue', arn: 'arn:aws:sqs:eu-west-1:123456789012:my-queue' }
+ *
+ * // Legacy AWS SQS URLs
+ * extractQueueMetadata('https://us-west-2.queue.amazonaws.com/123456789012/legacy-queue')
+ * // Returns { queueName: 'legacy-queue', arn: 'arn:aws:sqs:us-west-2:123456789012:legacy-queue' }
+ *
+ * extractQueueMetadata('https://queue.amazonaws.com/123456789012/global-legacy-queue')
+ * // Returns { queueName: 'global-legacy-queue', arn: 'arn:aws:sqs:us-east-1:123456789012:global-legacy-queue' }
+ */
+const extractQueueMetadata = queueURL => {
+  if (!queueURL) {
+    return null
+  }
+
+  const parts = queueURL.split('/').filter(Boolean)
+  if (parts.length < 3) return null
+
+  const accountId = parts[parts.length - 2]
+  const queueName = parts[parts.length - 1]
+  const host = parts[0].startsWith('http') ? parts[1] : parts[0]
+
+  let region = 'us-east-1' // Default region if not found in URL
+  const hostParts = host.split('.')
+  if (host.includes('amazon') && hostParts.length === 4) {
+    // sqs.{region}.amazonaws.com or {region}.queue.amazonaws.com
+    region = hostParts[0] === 'sqs' ? hostParts[1] : hostParts[0]
+  }
+
+  let partition = 'aws'
+  if (region.startsWith('cn-')) {
+    partition = 'aws-cn'
+  } else if (region.startsWith('us-gov')) {
+    partition = 'aws-us-gov'
+  }
+
+  const arn = `arn:${partition}:sqs:${region}:${accountId}:${queueName}`
+  return { queueName, arn }
+}
+
 module.exports = {
   generatePointerHash,
   encodeValue,
-  extractPrimaryKeys
+  extractPrimaryKeys,
+  extractQueueMetadata
 }
