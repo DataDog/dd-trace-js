@@ -3,6 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const { extractQueueMetadata } = require('../util')
 
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
@@ -93,7 +94,7 @@ class Sqs extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params || (!params.QueueName && !params.QueueUrl)) return {}
 
-    const queueMetadata = this.extractQueueMetadata(params.QueueUrl)
+    const queueMetadata = extractQueueMetadata(params.QueueUrl)
     const queueName = queueMetadata?.queueName || params.QueueName
 
     const tags = {
