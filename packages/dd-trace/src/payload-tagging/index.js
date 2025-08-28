@@ -1,7 +1,7 @@
 'use strict'
 
 const rfdc = require('rfdc')({ proto: false, circles: false })
-
+const log = require('../log')
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX
@@ -17,7 +17,7 @@ const { tagsFromObject } = require('./tagging')
  * @param {any} value
  * @returns {any} the parsed object if parsing was successful, the input if not
  */
-function maybeJSONParseValue (value) {
+function maybeJSONParseValue(value) {
   if (typeof value !== 'string' || value[0] !== '{') {
     return value
   }
@@ -35,11 +35,15 @@ function maybeJSONParseValue (value) {
  * @param {Object} object
  * @param {[String]} expansionRules list of JSONPath queries
  */
-function expand (object, expansionRules) {
+function expand(object, expansionRules) {
   for (const rule of expansionRules) {
-    jsonpath(rule, object, (value, _type, desc) => {
-      desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
-    })
+    try {
+      jsonpath(rule, object, (value, _type, desc) => {
+        desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
+      })
+    } catch (error) {
+      log.error(`An error occured creating jsonpath from rule: ${rule}`, error)
+    }
   }
 }
 
@@ -49,11 +53,15 @@ function expand (object, expansionRules) {
  * @param {Object} object
  * @param {[String]} redactionRules
  */
-function redact (object, redactionRules) {
+function redact(object, redactionRules) {
   for (const rule of redactionRules) {
-    jsonpath(rule, object, (_value, _type, desc) => {
-      desc.parent[desc.parentProperty] = 'redacted'
-    })
+    try {
+      jsonpath(rule, object, (_value, _type, desc) => {
+        desc.parent[desc.parentProperty] = 'redacted'
+      })
+    } catch (error) {
+      log.error(`An error occured creating jsonpath from rule: ${rule}`, error)
+    }
   }
 }
 
@@ -75,7 +83,7 @@ function redact (object, redactionRules) {
  * @param {number} opts.maxDepth maximum depth to traverse the object
  * @returns
  */
-function computeTags (config, object, opts) {
+function computeTags(config, object, opts) {
   const payload = rfdc(object)
   const redactionRules = opts.prefix === PAYLOAD_TAG_REQUEST_PREFIX ? config.request : config.response
   const expansionRules = config.expand
@@ -84,11 +92,11 @@ function computeTags (config, object, opts) {
   return tagsFromObject(payload, opts)
 }
 
-function tagsFromRequest (config, object, opts) {
+function tagsFromRequest(config, object, opts) {
   return computeTags(config, object, { ...opts, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
 }
 
-function tagsFromResponse (config, object, opts) {
+function tagsFromResponse(config, object, opts) {
   return computeTags(config, object, { ...opts, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
 }
 
