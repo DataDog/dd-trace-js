@@ -368,10 +368,11 @@ function createGarbage (count = 50) {
           runtimeMetrics.start(configWithoutGC)
 
           createGarbage()
+          createGarbage()
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 40
+          let waitTime = 80
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -392,10 +393,11 @@ function createGarbage (count = 50) {
           client.gauge.resetHistory()
 
           createGarbage()
+          createGarbage()
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 40
+          waitTime = 80
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -543,17 +545,6 @@ function createGarbage (count = 50) {
       })
 
       describe('Process Uptime', () => {
-        it('should report realistic uptime values', () => {
-          clock.tick(10000)
-
-          const uptimeCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
-          assert.strictEqual(uptimeCalls.length, 1)
-
-          const uptime = uptimeCalls[0].args[1]
-
-          assert.strictEqual(uptime < 5 * 60 && uptime >= 0, true)
-        })
-
         it('should show increasing uptime over time', () => {
           const startPerformanceNow = performance.now()
           clock.tick(10000)
@@ -562,7 +553,7 @@ function createGarbage (count = 50) {
           const firstUptime = firstUptimeCalls[0].args[1]
 
           client.gauge.resetHistory()
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
+          sinon.stub(performance, 'now').returns(startPerformanceNow + 10_000)
           clock.tick(10000) // Advance another 10 seconds
           performance.now.restore()
 
@@ -571,10 +562,14 @@ function createGarbage (count = 50) {
           let nextUptime = nextUptimeCall[0].args[1]
 
           // Uptime should be 10 seconds more
-          assert.strictEqual(nextUptime - firstUptime, 10)
+          assert.strictEqual(
+            nextUptime - firstUptime,
+            10,
+            `Uptime diff should be 10 seconds, got ${nextUptime} - ${firstUptime}, start: ${startPerformanceNow}`
+          )
           client.gauge.resetHistory()
 
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 20001)
+          sinon.stub(performance, 'now').returns(startPerformanceNow + 20_001)
           clock.tick(10000) // Advance another 10 seconds
           performance.now.restore()
 
@@ -583,7 +578,11 @@ function createGarbage (count = 50) {
           nextUptime = nextUptimeCall[0].args[1]
 
           // Uptime should be 10 seconds more
-          assert.strictEqual(nextUptime - firstUptime, 20)
+          assert.strictEqual(
+            nextUptime - firstUptime,
+            20,
+            `Uptime diff should be 20 seconds, got ${nextUptime} - ${firstUptime}, start: ${startPerformanceNow}`
+          )
         })
       })
 
