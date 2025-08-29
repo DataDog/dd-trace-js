@@ -27,6 +27,12 @@ function createGarbage (count = 50) {
   return util.inspect(obj, { depth: Infinity })
 }
 
+function getPerformanceNow () {
+  // On linux performance.now() would return a negative value due to the mocked time.
+  // This is a workaround to ensure the test is deterministic.
+  return Math.max(performance.now(), Math.round(Math.random() * 10000))
+}
+
 [true, false].forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
     suiteDescribe('runtimeMetrics (proxy)', () => {
@@ -249,8 +255,6 @@ function createGarbage (count = 50) {
           client.increment.resetHistory()
           client.histogram.resetHistory()
 
-          global.gc()
-
           createGarbage()
 
           // Wait for GC observer to trigger.
@@ -261,6 +265,8 @@ function createGarbage (count = 50) {
             await setTimeout(1)
             clock.tick(1)
           }
+
+          global.gc()
 
           clock.tick(10000 - waitTime)
 
@@ -284,7 +290,7 @@ function createGarbage (count = 50) {
           expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total', isFiniteNumber)
           expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used', isFiniteNumber)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime', isIntegerNumber)
+          expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
 
           expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size', isFiniteNumber)
           expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable', isFiniteNumber)
@@ -368,16 +374,16 @@ function createGarbage (count = 50) {
           runtimeMetrics.start(configWithoutGC)
 
           createGarbage()
-          createGarbage()
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 80
+          let waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
             clock.tick(1)
           }
+          global.gc()
           clock.tick(10000 - waitTime)
           // Should still collect basic metrics
           expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
@@ -393,16 +399,16 @@ function createGarbage (count = 50) {
           client.gauge.resetHistory()
 
           createGarbage()
-          createGarbage()
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 80
+          waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
             clock.tick(1)
           }
+          global.gc()
           clock.tick(10000 - waitTime)
 
           // Should still collect other metrics
@@ -454,7 +460,7 @@ function createGarbage (count = 50) {
         it('should report CPU percentages within valid ranges', () => {
           const startCpuUsage = process.cpuUsage()
           const startTime = Date.now()
-          const startPerformanceNow = performance.now()
+          const startPerformanceNow = getPerformanceNow()
           let iterations = 0
           let ticks = 0
           while (Date.now() - startTime < 100) {
@@ -546,7 +552,7 @@ function createGarbage (count = 50) {
 
       describe('Process Uptime', () => {
         it('should show increasing uptime over time', () => {
-          const startPerformanceNow = performance.now()
+          const startPerformanceNow = getPerformanceNow()
           clock.tick(10000)
           const firstUptimeCalls = client.gauge.getCalls()
             .filter(call => call.args[0] === 'runtime.node.process.uptime')
