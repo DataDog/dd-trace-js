@@ -27,12 +27,6 @@ function createGarbage (count = 50) {
   return util.inspect(obj, { depth: Infinity })
 }
 
-function getPerformanceNow () {
-  // On linux performance.now() would return a negative value due to the mocked time.
-  // This is a workaround to ensure the test is deterministic.
-  return Math.max(performance.now(), Math.round(Math.random() * 10000))
-}
-
 [true, false].forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
     suiteDescribe('runtimeMetrics (proxy)', () => {
@@ -460,7 +454,7 @@ function getPerformanceNow () {
         it('should report CPU percentages within valid ranges', () => {
           const startCpuUsage = process.cpuUsage()
           const startTime = Date.now()
-          const startPerformanceNow = getPerformanceNow()
+          const startPerformanceNow = performance.now()
           let iterations = 0
           let ticks = 0
           while (Date.now() - startTime < 100) {
@@ -552,8 +546,12 @@ function getPerformanceNow () {
 
       describe('Process Uptime', () => {
         it('should show increasing uptime over time', () => {
-          const startPerformanceNow = getPerformanceNow()
+          // On linux performance.now() would return a negative value due to the mocked time.
+          // This is a workaround to ensure the test is deterministic.
+          const startPerformanceNow = Math.max(performance.now(), Math.random() * 1_000_000)
+          sinon.stub(performance, 'now').returns(startPerformanceNow)
           clock.tick(10000)
+          performance.now.restore()
           const firstUptimeCalls = client.gauge.getCalls()
             .filter(call => call.args[0] === 'runtime.node.process.uptime')
           const firstUptime = firstUptimeCalls[0].args[1]
