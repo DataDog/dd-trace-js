@@ -184,6 +184,8 @@
     "workerpool": "9.3.3",
     "ws": "8.18.3",
     "yarn": "1.22.22",
-    "zod": "4.1.5"
+    "zod": "4.1.5",
+    "@openai/agents": "0.1.0",
+    "@openai/agents-core": "0.1.0"
   }
 }
