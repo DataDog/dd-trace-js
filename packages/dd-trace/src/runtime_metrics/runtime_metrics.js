@@ -16,7 +16,7 @@ const { NODE_MAJOR } = require('../../../../version')
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
-const eventLoopDelayResolution = 5
+const eventLoopDelayResolution = 4
 
 let nativeMetrics = null
 let gcObserver = null
@@ -196,19 +196,22 @@ function captureEventLoopDelay () {
   if (eventLoopDelayObserver.count !== 0) {
     const minimum = eventLoopDelayResolution * 1e6
     const avg = Math.max(eventLoopDelayObserver.mean - minimum, 0)
-
     const sum = Math.round(avg * eventLoopDelayObserver.count)
-    // Normalize the metrics to the same format as the native metrics.
-    const stats = {
-      min: Math.max(eventLoopDelayObserver.min - minimum, 0),
-      max: Math.max(eventLoopDelayObserver.max - minimum, 0),
-      sum,
-      total: sum,
-      avg,
-      count: eventLoopDelayObserver.count,
-      p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+
+    if (sum !== 0) {
+      // Normalize the metrics to the same format as the native metrics.
+      const stats = {
+        min: Math.max(eventLoopDelayObserver.min - minimum, 0),
+        max: Math.max(eventLoopDelayObserver.max - minimum, 0),
+        sum,
+        total: sum,
+        avg,
+        count: eventLoopDelayObserver.count,
+        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+      }
+
+      histogram('runtime.node.event_loop.delay', stats)
     }
-    histogram('runtime.node.event_loop.delay', stats)
   }
   eventLoopDelayObserver = monitorEventLoopDelay({ resolution: eventLoopDelayResolution })
   eventLoopDelayObserver.enable()
@@ -290,7 +293,7 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
   client.gauge('runtime.node.cpu.user', userPercent.toFixed(2))
   client.gauge('runtime.node.cpu.total', totalPercent.toFixed(2))
 
-  if (trackEventLoop && stats.eventLoop.count !== 0) {
+  if (trackEventLoop) {
     histogram('runtime.node.event_loop.delay', stats.eventLoop)
   }
 
@@ -315,6 +318,9 @@ function captureNativeMetrics (trackEventLoop, trackGc) {
 }
 
 function histogram (name, stats, tag) {
+  if (stats.count === 0) {
+    return
+  }
   client.gauge(`${name}.min`, stats.min, tag)
   client.gauge(`${name}.max`, stats.max, tag)
   client.increment(`${name}.sum`, stats.sum, tag)

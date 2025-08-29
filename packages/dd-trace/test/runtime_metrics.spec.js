@@ -29,7 +29,6 @@ function createGarbage (count = 50) {
 
 [true, false].forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
-
     suiteDescribe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
       let proxy
@@ -54,18 +53,9 @@ function createGarbage (count = 50) {
           decrement () {}
         })
 
-        const proxiedObject = {
+        proxy = proxyquire('../src/runtime_metrics', {
           './runtime_metrics': runtimeMetrics
-        }
-        if (!nativeMetrics) {
-          proxiedObject['@datadog/native-metrics'] = {
-            start () {
-              throw new Error('Native metrics are not supported in this environment')
-            },
-          }
-        }
-
-        proxy = proxyquire('../src/runtime_metrics', proxiedObject)
+        })
       })
 
       it('should be noop when disabled', () => {
@@ -381,7 +371,7 @@ function createGarbage (count = 50) {
 
           // Wait for event loop delay observer to trigger.
           let startTime = Date.now()
-          let waitTime = 10
+          let waitTime = 40
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -405,7 +395,7 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           startTime = Date.now()
-          waitTime = 10
+          waitTime = 40
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             await setTimeout(1)
@@ -444,6 +434,8 @@ function createGarbage (count = 50) {
           clock.tick(10000) // First collection
           clock.tick(10000) // Second collection with delta
           clock.tick(10000) // Second collection with delta
+
+          performance.eventLoopUtilization.restore()
 
           const eluCalls = client.gauge.getCalls().filter(call =>
             call.args[0] === 'runtime.node.event_loop.utilization'
@@ -505,7 +497,10 @@ function createGarbage (count = 50) {
               assert.match(stringValue, /^\d+(\.\d{1,2})?$/)
               const number = Number(stringValue)
               if (metric === 'runtime.node.cpu.user') {
-                assert(number >= 1, `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`)
+                assert(
+                  number >= 1,
+                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`
+                )
                 userPercent = number
               }
               if (metric === 'runtime.node.cpu.system') {
@@ -562,14 +557,14 @@ function createGarbage (count = 50) {
         it('should show increasing uptime over time', () => {
           const startPerformanceNow = performance.now()
           clock.tick(10000)
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
-          const firstUptimeCalls = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
+          const firstUptimeCalls = client.gauge.getCalls()
+            .filter(call => call.args[0] === 'runtime.node.process.uptime')
           const firstUptime = firstUptimeCalls[0].args[1]
 
           client.gauge.resetHistory()
+          sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
           clock.tick(10000) // Advance another 10 seconds
           performance.now.restore()
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 20001)
 
           let nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
           assert.strictEqual(nextUptimeCall.length, 1)
@@ -579,9 +574,9 @@ function createGarbage (count = 50) {
           assert.strictEqual(nextUptime - firstUptime, 10)
           client.gauge.resetHistory()
 
+          sinon.stub(performance, 'now').returns(startPerformanceNow + 20001)
           clock.tick(10000) // Advance another 10 seconds
           performance.now.restore()
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 30003)
 
           nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
           assert.strictEqual(nextUptimeCall.length, 1)
@@ -589,7 +584,6 @@ function createGarbage (count = 50) {
 
           // Uptime should be 10 seconds more
           assert.strictEqual(nextUptime - firstUptime, 20)
-          performance.now.restore()
         })
       })
 
@@ -607,14 +601,14 @@ function createGarbage (count = 50) {
             clock.tick(10000)
 
             const metrics = client.gauge.getCalls().reduce((acc, call) => {
-              acc.add(call.args[0])
+              acc.set(call.args[0], call.args[1])
               return acc
-            }, new Set())
+            }, new Map())
 
             // If event loop count or gc count is zero, the metrics are not reported.
-            assert.strictEqual(metrics.size, nativeMetrics ? 27 : 22)
+            assert.strictEqual(metrics.size, 22)
             assert.strictEqual(client.histogram.getCalls().length, 0)
-            assert.strictEqual(client.increment.getCalls().length, nativeMetrics ? 3 : 0)
+            assert.strictEqual(client.increment.getCalls().length, 0)
           }
         })
 
@@ -629,6 +623,10 @@ function createGarbage (count = 50) {
 
           clock.tick(10000)
 
+          process.memoryUsage.restore()
+          os.totalmem.restore()
+          os.freemem.restore()
+
           const metrics = client.gauge.getCalls().reduce((acc, call) => {
             acc[call.args[0]] = call.args[1]
             return acc
@@ -637,13 +635,9 @@ function createGarbage (count = 50) {
           assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
           assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
           assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], os.totalmem())
-          assert.strictEqual(metrics['runtime.node.mem.free'], os.freemem())
+          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
+          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
           assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
-
-          process.memoryUsage.restore()
-          os.totalmem.restore()
-          os.freemem.restore()
         })
       })
 
