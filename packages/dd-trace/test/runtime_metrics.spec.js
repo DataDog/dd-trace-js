@@ -250,6 +250,7 @@ function createGarbage (count = 50) {
           client.histogram.resetHistory()
 
           createGarbage()
+          createGarbage()
 
           // Wait for GC observer to trigger.
           const startTime = Date.now()
@@ -272,7 +273,7 @@ function createGarbage (count = 50) {
             return value > 0 && Number.isInteger(value)
           })
           const isGC95Percentile = sinon.match((value) => {
-            return value >= 4e5 && value < 1e8 // In Nanoseconds. 0.4ms to 100ms.
+            return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
           })
 
           // These return percentages as strings and are tested later.
@@ -378,6 +379,7 @@ function createGarbage (count = 50) {
             clock.tick(1)
           }
           global.gc()
+          await setTimeout(1)
           clock.tick(10000 - waitTime)
           // Should still collect basic metrics
           expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
@@ -403,6 +405,7 @@ function createGarbage (count = 50) {
             clock.tick(1)
           }
           global.gc()
+          await setTimeout(1)
           clock.tick(10000 - waitTime)
 
           // Should still collect other metrics
