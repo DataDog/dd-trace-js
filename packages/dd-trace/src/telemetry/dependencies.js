@@ -12,6 +12,7 @@ const { isTrue } = require('../../src/util')
 const savedDependenciesToSend = new Set()
 const detectedDependencyKeys = new Set()
 const detectedDependencyVersions = new Set()
+const detectedDependencyToVersion = {}
 
 const FILE_URI_START = 'file://'
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -119,6 +120,7 @@ function onModuleLoad (data) {
             if (!detectedDependencyVersions.has(dependencyAndVersion)) {
               savedDependenciesToSend.add(`${dependencyAndVersion} ${initialLoad}`)
               detectedDependencyVersions.add(dependencyAndVersion)
+              detectedDependencyToVersion[name] = version
 
               waitAndSend(config, application, host)
             }
@@ -171,4 +173,4 @@ function stop () {
     moduleLoadStartChannel.unsubscribe(onModuleLoad)
   }
 }
-module.exports = { start, stop }
+module.exports = { start, stop, detectedDependencyToVersion }
