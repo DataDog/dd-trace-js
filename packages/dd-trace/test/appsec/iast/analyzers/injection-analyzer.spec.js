@@ -1,7 +1,10 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { HTTP_REQUEST_PARAMETER, SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { SQL_INJECTION } = require('../../../../src/appsec/iast/vulnerabilities')
 const { COMMAND_INJECTION_MARK, SQL_INJECTION_MARK } =
@@ -40,27 +43,27 @@ describe('InjectionAnalyzer', () => {
   describe('_isVulnerable', () => {
     it('should return true if no secureMarks', () => {
       ranges = getRanges('tainted')
-      assert.isTrue(analyzer._isVulnerable('tainted'))
+      assert.strictEqual(analyzer._isVulnerable('tainted'), true)
     })
 
     it('should return true if secureMarks but no SQL_INJECTION_MARK', () => {
       ranges = getRanges('tainted', COMMAND_INJECTION_MARK)
-      assert.isTrue(analyzer._isVulnerable('tainted'))
+      assert.strictEqual(analyzer._isVulnerable('tainted'), true)
     })
 
     it('should return true if some range has secureMarks but no SQL_INJECTION_MARK', () => {
       ranges = [...getRanges('tainted', SQL_INJECTION), ...getRanges('tainted', COMMAND_INJECTION_MARK)]
-      assert.isTrue(analyzer._isVulnerable('tainted'))
+      assert.strictEqual(analyzer._isVulnerable('tainted'), true)
     })
 
     it('should return false if SQL_INJECTION_MARK', () => {
       ranges = getRanges('tainted', SQL_INJECTION_MARK)
-      assert.isFalse(analyzer._isVulnerable('tainted'))
+      assert.strictEqual(analyzer._isVulnerable('tainted'), false)
     })
 
     it('should return false if combined secureMarks with SQL_INJECTION_MARK', () => {
       ranges = getRanges('tainted', COMMAND_INJECTION_MARK | SQL_INJECTION_MARK)
-      assert.isFalse(analyzer._isVulnerable('tained'))
+      assert.strictEqual(analyzer._isVulnerable('tained'), false)
     })
 
     describe('suppressed vulnerabilities metric', () => {
@@ -88,12 +91,12 @@ describe('InjectionAnalyzer', () => {
     describe('with a range of SQL_ROW_VALUE input type', () => {
       it('should return false if SQL_ROW_VALUE type', () => {
         ranges = getRanges('tainted', undefined, SQL_ROW_VALUE)
-        assert.isFalse(analyzer._isVulnerable('tainted'))
+        assert.strictEqual(analyzer._isVulnerable('tainted'), false)
       })
 
       it('should return true if one different from SQL_ROW_VALUE type', () => {
         ranges = [...getRanges('tainted', undefined, SQL_ROW_VALUE), ...getRanges('tainted')]
-        assert.isTrue(analyzer._isVulnerable(ranges))
+        assert.strictEqual(analyzer._isVulnerable(ranges), true)
       })
     })
   })

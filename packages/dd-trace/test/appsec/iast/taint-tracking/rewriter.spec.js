@@ -1,9 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-const proxyquire = require('proxyquire')
-const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 
 const iastEnabledConfig = {
   iast: {

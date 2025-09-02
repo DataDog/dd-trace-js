@@ -1,8 +1,10 @@
 'use strict'
 
-const { assert } = require('chai')
-const fs = require('fs')
-const path = require('path')
+const { expect, assert } = require('chai')
+const sinon = require('sinon')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
