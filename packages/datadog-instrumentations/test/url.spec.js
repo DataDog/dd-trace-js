@@ -1,7 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../dd-trace/test/plugins/agent')
-const { assert } = require('chai')
 const { channel } = require('../src/helpers/instrument')
 const names = ['url', 'node:url']
 
@@ -72,7 +75,7 @@ names.forEach(name => {
           const OriginalUrl = Object.getPrototypeOf(url.URL)
           const originalUrl = new OriginalUrl('https://www.datadoghq.com')
 
-          assert.isTrue(originalUrl instanceof url.URL)
+          assert.strictEqual(originalUrl instanceof url.URL, true)
         })
 
         ;['host', 'origin', 'hostname'].forEach(property => {
