@@ -1,9 +1,15 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const opentracing = require('opentracing')
+const proxyquire = require('proxyquire')
+
+const os = require('node:os')
+
 require('../setup/tap')
 
-const opentracing = require('opentracing')
-const os = require('os')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
 const Reference = opentracing.Reference
@@ -85,7 +91,7 @@ describe('Tracer', () => {
 
     exporter = sinon.stub().returns(AgentExporter)
 
-    Tracer = proxyquire('../src/opentracing/tracer', {
+    Tracer = proxyquire('../../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,

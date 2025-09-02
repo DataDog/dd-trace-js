@@ -1,5 +1,6 @@
 'use strict'
 
+require('tap').mochaGlobals()
 require('../setup/tap')
 
 const apiCompatibilityChecks = require('opentracing/lib/test/api_compatibility').default

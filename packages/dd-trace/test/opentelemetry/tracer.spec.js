@@ -1,15 +1,15 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
-
-require('../../').init()
-
+const { describe, it } = require('tap').mocha
+const sinon = require('sinon')
 const { performance } = require('perf_hooks')
-
 const api = require('@opentelemetry/api')
 const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
+
+require('../setup/tap')
+
+require('../../').init()
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')

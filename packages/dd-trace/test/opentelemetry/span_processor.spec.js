@@ -1,8 +1,10 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/tap')
 
 const {
   MultiSpanProcessor,

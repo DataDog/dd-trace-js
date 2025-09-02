@@ -1,8 +1,9 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
+require('../../setup/tap')
 
 describe('TraceState', () => {
   let TraceState
