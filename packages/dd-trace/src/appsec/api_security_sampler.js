@@ -1,7 +1,7 @@
 'use strict'
 
 const TTLCache = require('@isaacs/ttlcache')
-const web = require('../plugins/util/web')
+const web = require('../../../datadog-plugin-web/src/utils')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const { keepTrace } = require('../priority_sampler')

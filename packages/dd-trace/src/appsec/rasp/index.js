@@ -1,6 +1,6 @@
 'use strict'
 
-const web = require('../../plugins/util/web')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { setUncaughtExceptionCaptureCallbackStart, expressMiddlewareError } = require('../channels')
 const { block, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')

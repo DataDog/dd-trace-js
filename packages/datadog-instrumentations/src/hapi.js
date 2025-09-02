@@ -108,7 +108,7 @@ function onPreResponse (request, h) {
   const req = request.raw.req
 
   if (request.response instanceof Error) {
-    errorChannel.publish(request.response)
+    errorChannel.publish({ req, error: request.response })
   }
 
   if (request.route) {

@@ -9,10 +9,6 @@ class FastifyTracingPlugin extends RouterPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:fastify:request:handle', ({ req }) => {
-      this.setFramework(req, 'fastify', this.config)
-    })
-
     this.addBind('datadog:fastify:pre-parsing:start', getParentStore)
     this.addBind('datadog:fastify:pre-validation:start', getParentStore)
 

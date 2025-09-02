@@ -1,8 +1,7 @@
 'use strict'
 
+const web = require('../../datadog-plugin-web/src/utils')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const serverless = require('../../dd-trace/src/plugins/util/serverless')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -51,13 +50,13 @@ class AzureFunctionsPlugin extends TracingPlugin {
         headers: Object.fromEntries(httpRequest.headers),
         url: path
       }
-      const context = web.patch(req)
+      const context = web.patch(req, this.config)
       context.config = this.config
       context.paths = [path]
       context.res = { statusCode: result.status }
       context.span = ctx.currentStore.span
 
-      serverless.finishSpan(context)
+      web.finishSpan(context)
     // Fallback for other trigger types
     } else {
       super.finish()

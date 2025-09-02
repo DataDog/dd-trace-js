@@ -6,7 +6,7 @@ const Reporter = require('../reporter')
 const Limiter = require('../../rate_limiter')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
-const web = require('../../plugins/util/web')
+const web = require('../../../../datadog-plugin-web/src/utils')
 const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
