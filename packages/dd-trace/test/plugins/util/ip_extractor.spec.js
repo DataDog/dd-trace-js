@@ -25,7 +25,8 @@ describe('ip extractor', () => {
   after(() => {
     appListener && appListener.close()
   })
-  const ipHeaderList = [
+
+  [
     'x-forwarded-for',
     'x-real-ip',
     'true-client-ip',
@@ -35,8 +36,7 @@ describe('ip extractor', () => {
     'fastly-client-ip',
     'cf-connecting-ip',
     'cf-connecting-ipv6'
-  ]
-  ipHeaderList.forEach(ipHeader => {
+  ].forEach(ipHeader => {
     it(`should detect ip in header '${ipHeader}'`, (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
@@ -310,8 +310,8 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it('should detect ip in header \'Forwarded\' in by', (done) => {
-      const expectedIp = '1.2.3.4'
+    it('should not detect ip in header \'Forwarded\' in by', (done) => {
+      const expectedIp = '127.0.0.1'
       controller = function (req) {
         const ip = extractIp({}, req)
         try {
@@ -323,7 +323,7 @@ describe('ip extractor', () => {
       }
       axios.get(`http://localhost:${port}/`, {
         headers: {
-          Forwarded: `by=${expectedIp}`
+          Forwarded: 'by=1.2.3.4'
         }
       }).catch(done)
     })
@@ -359,12 +359,12 @@ describe('ip extractor', () => {
       }
       axios.get(`http://localhost:${port}/`, {
         headers: {
-          Forwarded: `by="[${expectedIp}]"`
+          Forwarded: `by="8.8.8.8";for=[${${expectedIp}}]`
         }
       }).catch(done)
     })
 
-    it('should detect ip in header \'Forwarded\' in by when for is private', (done) => {
+    it('should not detect ip in header \'Forwarded\' in by when for is private', (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
         const ip = extractIp({}, req)

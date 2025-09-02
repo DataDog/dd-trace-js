@@ -65,7 +65,7 @@ function extractIp (config, req) {
   return firstPrivateIp || req.socket?.remoteAddress
 }
 
-const forwardedForRegexp = /for="?\[?(([0-9]+\.)+[0-9]+|[0-9a-f:]*:[0-9a-f]*)/i
+const forwardedForRegexp = /for="?(([0-9]+\.)+[0-9]+|\[[0-9a-f:]*:[0-9a-f]*\])/i
 
 function findFirstIp (str, isForwardedHeader) {
   const result = {}
