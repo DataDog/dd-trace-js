@@ -235,7 +235,17 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   try {
     const result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
-      return result.then(
+      let promise = result
+
+      // Mongoose queries are thenable, but not true promises. They can't be
+      // resolved multiple times. `.exec()` returns a true promise. We can
+      // identify a mongoose query by the presence of an `exec` function and
+      // its constructor name.
+      if (typeof result.exec === 'function' && result.constructor.name === 'Query') {
+        promise = result.exec()
+      }
+
+      return promise.then(
         res => {
           cb(null, res)
           return res

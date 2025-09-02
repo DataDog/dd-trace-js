@@ -23,8 +23,8 @@ describe('Plugin', () => {
   let markSlow
   let markSync
 
-  // Mock "thenable" that throws if .then() is called more than once.
-  class OneTimeThenable {
+  // Mock Mongoose Query that throws if .then() or .exec() is called more than once.
+  class Query {
     constructor (value) {
       this._value = value
       this._called = false
@@ -36,6 +36,14 @@ describe('Plugin', () => {
       }
       this._called = true
       return Promise.resolve(this._value).then(onFulfilled, onRejected)
+    }
+
+    exec () {
+      if (this._called) {
+        return Promise.reject(new Error('This thenable has already been executed.'))
+      }
+      this._called = true
+      return Promise.resolve(this._value)
     }
   }
 
@@ -130,7 +138,7 @@ describe('Plugin', () => {
         },
         oneTime: {
           type: graphql.GraphQLString,
-          resolve: () => new OneTimeThenable('one-time result')
+          resolve: () => new Query('one-time result')
         }
       }
     })
