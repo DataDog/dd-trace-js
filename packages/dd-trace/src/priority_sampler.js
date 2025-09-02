@@ -110,7 +110,7 @@ class PrioritySampler {
     const tag = this._getPriorityFromTags(context._tags, context)
 
     // if the sampling priority is already set from a tag, do not override it
-    if (context._sampling.priority === tag) return
+    if (tag && context._sampling.priority === tag) return
 
     log.trace(span, auto)
 
