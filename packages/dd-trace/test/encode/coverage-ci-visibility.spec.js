@@ -1,9 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/tap')
 
 const id = require('../../src/id')
 
@@ -16,7 +19,7 @@ describe('coverage-ci-visibility', () => {
     logger = {
       debug: sinon.stub()
     }
-    const { CoverageCIVisibilityEncoder } = proxyquire('../src/encode/coverage-ci-visibility', {
+    const { CoverageCIVisibilityEncoder } = proxyquire('../../src/encode/coverage-ci-visibility', {
       '../log': logger
     })
     encoder = new CoverageCIVisibilityEncoder()

@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, context } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/tap')
 
 const URL = require('url').URL
 
@@ -48,7 +51,7 @@ function describeWriter (protocolVersion) {
       return encoder
     }
 
-    Writer = proxyquire('../src/exporters/agent/writer', {
+    Writer = proxyquire('../../../src/exporters/agent/writer', {
       '../common/request': request,
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
