@@ -125,15 +125,15 @@ describe('PrioritySampler', () => {
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
     })
 
-    it('should freeze the sampling priority once set', () => {
+    it('should not freeze the sampling priority once set', () => {
       prioritySampler.sample(span)
 
       context._tags[SAMPLING_PRIORITY] = `${USER_KEEP}`
 
       prioritySampler.sample(span)
 
-      expect(context._sampling.priority).to.equal(AUTO_KEEP)
-      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_DEFAULT)
+      expect(context._sampling.priority).to.equal(USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_MANUAL)
     })
 
     it('should accept a span context', () => {
