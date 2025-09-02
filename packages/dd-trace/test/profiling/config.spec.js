@@ -1,10 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
-const os = require('os')
-const path = require('path')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const os = require('node:os')
+const path = require('node:path')
+
+require('../setup/tap')
 
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')

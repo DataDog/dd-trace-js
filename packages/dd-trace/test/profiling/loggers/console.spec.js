@@ -1,10 +1,11 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
 require('../../setup/tap')
 
 /* eslint-disable no-console */
-
-const sinon = require('sinon')
 
 describe('loggers/console', () => {
   let ConsoleLogger

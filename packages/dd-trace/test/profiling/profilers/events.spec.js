@@ -1,14 +1,17 @@
 'use strict'
 
+const assert = require('node:assert')
+const { describe, it } = require('tap').mocha
+const dc = require('dc-polyfill')
+
 require('../../setup/tap')
 
-const assert = require('assert')
-const dc = require('dc-polyfill')
-const startCh = dc.channel('apm:dns:lookup:start')
-const finishCh = dc.channel('apm:dns:lookup:finish')
 const { storage } = require('../../../../datadog-core')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')
 const EventsProfiler = require('../../../src/profiling/profilers/events')
+
+const startCh = dc.channel('apm:dns:lookup:start')
+const finishCh = dc.channel('apm:dns:lookup:finish')
 
 describe('profilers/events', () => {
   it('should limit the number of events', async () => {

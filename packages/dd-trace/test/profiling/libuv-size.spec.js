@@ -1,8 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
 require('../setup/tap')
 
-const { expect } = require('chai')
 const libuvSize = require('../../src/profiling/libuv-size')
 
 describe('libuv-size', function () {

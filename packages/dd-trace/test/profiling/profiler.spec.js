@@ -1,14 +1,18 @@
 'use strict'
 
-require('../setup/tap')
-
-const expect = require('chai').expect
+const { expect } = require('chai')
+// const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+const { setTimeout } = require('node:timers/promises')
+
+require('tap').mochaGlobals()
+require('../setup/tap')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const EventsProfiler = require('../../src/profiling/profilers/events')
-const { setTimeout } = require('node:timers/promises')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 
@@ -84,7 +88,7 @@ describe('profiler', function () {
 
   describe('not serverless', function () {
     function initProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate
@@ -403,7 +407,7 @@ describe('profiler', function () {
     const flushAfterIntervals = 65
 
     function initServerlessProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate

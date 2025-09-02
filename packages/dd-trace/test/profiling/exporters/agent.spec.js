@@ -1,20 +1,22 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
+const { Profile } = require('pprof-format')
+const os = require('node:os')
+const path = require('node:path')
+const { request } = require('node:http')
+
 require('../../setup/tap')
 
 const tracer = require('../../../../../init')
-const expect = require('chai').expect
-const sinon = require('sinon')
-const express = require('express')
-const upload = require('multer')()
-const os = require('os')
-const path = require('path')
-const { request } = require('http')
-const proxyquire = require('proxyquire')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
-const { Profile } = require('pprof-format')
 const version = require('../../../../../package.json').version
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
