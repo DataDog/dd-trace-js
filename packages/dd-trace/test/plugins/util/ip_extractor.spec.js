@@ -1,10 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const axios = require('axios')
+const http = require('node:http')
+
 require('../../setup/tap')
 
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
-const http = require('http')
-const axios = require('axios')
 
 describe('ip extractor', () => {
   let port, appListener, controller

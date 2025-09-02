@@ -1,11 +1,15 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
+
 require('../setup/tap')
 
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
-const { channel } = require('dc-polyfill')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {

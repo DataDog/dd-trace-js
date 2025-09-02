@@ -1,11 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, afterEach } = require('tap').mocha
+const axios = require('axios')
+const { Agent } = require('node:http')
+
 require('../../setup/tap')
 
 const agent = require('../agent')
-const { expect } = require('chai')
-const axios = require('axios')
-const { Agent } = require('http')
 
 // Create axios instance with no connection pooling
 const httpClient = axios.create({

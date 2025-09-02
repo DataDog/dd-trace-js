@@ -1,9 +1,13 @@
 'use strict'
 
-require('../../setup/tap')
-
-const path = require('path')
+const { expect } = require('chai')
+const { describe, it, beforeEach, context } = require('tap').mocha
+const path = require('node:path')
 const istanbul = require('istanbul-lib-coverage')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/tap')
 
 const {
   getTestParametersString,
@@ -21,7 +25,6 @@ const {
   isModifiedTest
 } = require('../../../src/plugins/util/test')
 
-const proxyquire = require('proxyquire')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,

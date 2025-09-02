@@ -1,10 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, after } = require('tap').mocha
+const { channel } = require('dc-polyfill')
+
 require('../setup/tap')
 
 const Plugin = require('../../src/plugins/plugin')
 const { storage } = require('../../../datadog-core')
-const { channel } = require('dc-polyfill')
 
 describe('Plugin', () => {
   let plugin

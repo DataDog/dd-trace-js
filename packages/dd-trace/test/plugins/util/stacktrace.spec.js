@@ -1,5 +1,6 @@
 'use strict'
 
+const { describe, it } = require('tap').mocha
 const assert = require('node:assert')
 const { join } = require('node:path')
 
