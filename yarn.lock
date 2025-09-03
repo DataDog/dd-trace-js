@@ -217,10 +217,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.7.0.tgz#81e07d3040c628892db697ccd01ae3c4d2a76315"
   integrity sha512-VVZLspzQcfEU47gmGCVoRkngn7RgFRR4CHjw4YaX8eWT+xz4Q4l6PvA45b7CMk9nlt3MNN5MtGdYttYMIpo6Sg==
 
-"@datadog/native-appsec@10.2.0":
-  version "10.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-10.2.0.tgz#4ae6cdb0e195196ed12f33e243b695c1a43ca58b"
-  integrity sha512-5NKlESVEs66LPwqh69PR8AiTnZV6zMFiUEEKlEh1vrCSgsaYyWA6Z70XpiIXN1gMqPxDj+lp8o8LeMa89RyiIQ==
+"@datadog/native-appsec@10.2.1":
+  version "10.2.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-10.2.1.tgz#1f62ceefb8e1686b202703ee6c3f245f4dff2d70"
+  integrity sha512-FwRVo+otgNaz6vN74XVrBT8GdLwxPwAqOjH4Y9VQJaC1RiHmzRCMr77AhHFme1xi7zPG2LQqQN/cmOzG+sbrtQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
