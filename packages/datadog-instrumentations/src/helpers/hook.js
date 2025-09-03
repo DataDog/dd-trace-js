@@ -40,7 +40,6 @@ function Hook (modules, hookOptions, onrequire) {
     // `default` anyway.
     if (moduleExports && moduleExports.default) {
       moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-      return moduleExports
     }
     return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
