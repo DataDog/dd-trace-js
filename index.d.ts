@@ -712,6 +712,16 @@ declare namespace tracer {
          * @default true
          */
         enabled?: boolean,
+
+        /** Whether to enable endpoint collection for API Security.
+         * @default true
+         */
+        endpointCollectionEnabled?: boolean,
+
+        /** Maximum number of endpoints that can be serialized per message.
+         * @default 300
+         */
+        endpointCollectionMessageLimit?: number,
       },
       /**
        * Configuration for RASP
