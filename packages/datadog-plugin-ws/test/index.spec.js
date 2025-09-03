@@ -302,7 +302,7 @@ describe('Plugin', () => {
           let firstTraceId
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              // expect(data.toS tring()).to.equal('With a great big hug...')
+              expect(data.toString()).to.equal('With a great big hug...')
             })
             ws.send('We are a happy family!')
           })
