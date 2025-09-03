@@ -12,6 +12,7 @@ const skipMethods = new Set([
 const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
+const wrappedObjects = new WeakSet()
 
 /**
  * Copies properties from the original function to the wrapped function.
@@ -125,16 +126,16 @@ function wrap (target, name, wrapper, options) {
 
   const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
 
-  if (original[Symbol('__wrapped__')]) {
-    return target
-  }
-
   assertMethod(target, name, original)
 
   const wrapped = wrapper(original)
 
+  if (wrappedObjects.has(wrapped)) {
+    return target
+  }
+
   // prevent double wrapping
-  wrapped[Symbol('__wrapped__')] = true
+  wrappedObjects.add(wrapped)
 
   copyProperties(original, wrapped)
 
