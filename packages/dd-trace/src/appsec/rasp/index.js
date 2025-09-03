@@ -97,7 +97,7 @@ function blockOnDatadogRaspAbortError ({ error, isTopLevel }) {
       // block() returns a bool, and registerBlockDelegation() returns a promise
       // we use Promise.resolve() to handle both cases
       Promise.resolve(blocked).then(blocked => {
-        // TODO: bug: this should probably be called for each match even without block
+        // TODO: bug: this metric is not called when the raspAbortError is caught by user, or on subsequent blockDelegations
         updateRaspRuleMatchMetricTags(req, raspRule, true, blocked)
       })
     }
