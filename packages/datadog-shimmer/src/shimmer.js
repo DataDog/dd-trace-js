@@ -126,13 +126,13 @@ function wrap (target, name, wrapper, options) {
 
   const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
 
+  if (wrappedObjects.has(original)) {
+    return target
+  }
+
   assertMethod(target, name, original)
 
   const wrapped = wrapper(original)
-
-  if (wrappedObjects.has(wrapped)) {
-    return target
-  }
 
   // prevent double wrapping
   wrappedObjects.add(wrapped)

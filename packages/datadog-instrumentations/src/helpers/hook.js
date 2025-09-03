@@ -34,7 +34,7 @@ function Hook (modules, hookOptions, onrequire) {
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
     if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
+      moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
     }
 
     return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
