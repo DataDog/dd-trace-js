@@ -50,21 +50,30 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  /** @type {import('../config')} */
+  #config
+
+  /** @type {((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)} */
+  #processor
+
+  /** @type {import('./writers/spans')} */
+  #writer
+
   constructor (config) {
-    this._config = config
+    this.#config = config
   }
 
   registerProcessor (processor) {
-    this._processor = processor
+    this.#processor = processor
   }
 
   setWriter (writer) {
-    this._writer = writer
+    this.#writer = writer
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process ({ span }) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
@@ -73,7 +82,7 @@ class LLMObsSpanProcessor {
       telemetry.incrementLLMObsSpanFinishedCount(span)
       if (formattedEvent == null) return
 
-      this._writer.append(formattedEvent)
+      this.#writer.append(formattedEvent)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -227,10 +236,10 @@ class LLMObsSpanProcessor {
 
   #getTags (span, mlApp, sessionId, error) {
     let tags = {
-      ...this._config.parsedDdTags,
-      version: this._config.version,
-      env: this._config.env,
-      service: this._config.service,
+      ...this.#config.parsedDdTags,
+      version: this.#config.version,
+      env: this.#config.env,
+      service: this.#config.service,
       source: 'integration',
       ml_app: mlApp,
       'ddtrace.version': tracerVersion,
@@ -256,8 +265,13 @@ class LLMObsSpanProcessor {
     return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
   }
 
+  /**
+   * Runs the user span processor, emitting telemetry and adding some guardrails against invalid return types
+   * @param {LLMObservabilitySpan} span
+   * @returns {LLMObservabilitySpan | null}
+   */
   #runProcessor (span) {
-    const processor = this._processor
+    const processor = this.#processor
     if (!processor) return span
 
     let error = false
