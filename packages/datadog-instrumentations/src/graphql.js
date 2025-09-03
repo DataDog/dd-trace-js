@@ -5,6 +5,9 @@ const {
   channel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const {
+  wrapQueryThenable
+} = require('./mongoose')
 
 /** cached objects */
 
@@ -235,17 +238,14 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   try {
     const result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
-      let promise = result
-
-      // Mongoose queries are thenable, but not true promises. They can't be
-      // resolved multiple times. `.exec()` returns a true promise. We can
+      // Mongoose queries are thenable, but not true promises. We can
       // identify a mongoose query by the presence of an `exec` function and
-      // its constructor name.
+      // its constructor name, then wrap it.
       if (typeof result.exec === 'function' && result.constructor.name === 'Query') {
-        promise = result.exec()
+        return wrapQueryThenable(result, cb)
       }
 
-      return promise.then(
+      return result.then(
         res => {
           cb(null, res)
           return res
