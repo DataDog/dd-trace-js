@@ -21,20 +21,7 @@ function Hook (modules, hookOptions, onrequire) {
 
   this._patched = Object.create(null)
 
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isDefault) => {
-    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
-  }
-
-  this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
-    // modules and not ESM. In the meantime, all the modules we instrument are
-    // CommonJS modules for which the default export is always moved to
-    // `default` anyway.
-    if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-    }
-
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
@@ -42,6 +29,19 @@ function Hook (modules, hookOptions, onrequire) {
 
     this._patched[filename] = true
 
+    // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
+    // modules and not ESM. In the meantime, all the modules we instrument are
+    // CommonJS modules for which the default export is always moved to
+    // `default` anyway.
+    if (moduleExports && moduleExports.default) {
+      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
+    }
+
+    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+  }
+
+  this._ritmHook = ritm(modules, {}, safeHook)
+  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
 }
