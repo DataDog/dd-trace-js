@@ -16,6 +16,7 @@ const DD_INJECT_FORCE = 'true'
 const DD_TRACE_DEBUG = 'true'
 
 const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime', '']
+const telemetryInstrumented = ['abort', 'reason:already_instrumented', 'abort.runtime', '']
 const telemetryForced = ['complete', 'injection_forced:true']
 const telemetryGood = ['complete', 'injection_forced:false']
 
@@ -47,9 +48,9 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
-        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n', []))
-        it('should not initialize instrumentation', () => doTest('init/instrument.js', 'false\n', []))
-        it('should not initialize ESM instrumentation', () => doTest('init/instrument.mjs', 'false\n', []))
+        it('should not initialize the tracer', () => doTest('init/trace.js', 'false\n', telemetryInstrumented))
+        it('should not initialize', () => doTest('init/instrument.js', 'false\n', telemetryInstrumented))
+        it('should not initialize', () => doTest('init/instrument.mjs', 'false\n', telemetryInstrumented))
       })
     })
     context('when dd-trace in the app dir', () => {
