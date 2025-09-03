@@ -26,7 +26,6 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { ns, ops, options = {}, name } = ctx
-
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -90,11 +89,28 @@ function sanitizeBigInt (data) {
   return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
 }
 
+function extractQuery (statements) {
+  if (statements.length === 1) return statements[0].q
+
+  const extractedQueries = []
+  for (let i = 0; i < statements.length; i++) {
+    const statement = statements[i]
+    extractedQueries.push(statement.q)
+  }
+
+  return extractedQueries
+}
+
 function getQuery (cmd) {
-  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
+  if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
+  if (Array.isArray(cmd)) {
+    return sanitizeBigInt(limitDepth(extractQuery(cmd)))
+  }
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
   if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
+  if (cmd.deletes) return sanitizeBigInt(limitDepth(extractQuery(cmd.deletes)))
+  if (cmd.updates) return sanitizeBigInt(limitDepth(extractQuery(cmd.updates)))
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -120,6 +136,13 @@ function shouldHide (input) {
 }
 
 function limitDepth (input) {
+  if (Array.isArray(input) && input.length > 0) {
+    for (let i = 0; i < input.length; i++) {
+      const child = input[i]
+      input[i] = limitDepth(child)
+    }
+  }
+
   if (isBSON(input)) {
     input = input.toJSON()
   }
