@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
 require('./setup/tap')
 
 const { isTrue, isFalse, globMatch } = require('../src/util')

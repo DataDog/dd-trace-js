@@ -1,8 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-const { encodeVarint, decodeVarint } = require('../../src/datastreams/encoding')
 const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../setup/tap')
+
+const { encodeVarint, decodeVarint } = require('../../src/datastreams/encoding')
 
 describe('encoding', () => {
   describe('encodeVarInt', () => {

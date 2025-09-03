@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
 require('../../../../dd-trace/test/setup/tap')
 
 const parseTags = require('../../../src/utils/src/parse-tags')

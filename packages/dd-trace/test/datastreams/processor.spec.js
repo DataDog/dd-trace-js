@@ -1,8 +1,12 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const { hostname } = require('node:os')
+const proxyquire = require('proxyquire')
 
-const { hostname } = require('os')
+require('../setup/tap')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 
@@ -29,7 +33,7 @@ const {
   getHeadersSize,
   getMessageSize,
   getSizeOrZero
-} = proxyquire('../src/datastreams/processor', {
+} = proxyquire('../../src/datastreams/processor', {
   './writer': { DataStreamsWriter }
 })
 

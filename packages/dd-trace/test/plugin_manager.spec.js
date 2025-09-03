@@ -1,9 +1,12 @@
 'use strict'
 
-require('./setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
+
+require('./setup/tap')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 const nomenclature = require('../../dd-trace/src/service-naming')

@@ -1,9 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
+
+require('../setup/tap')
 
 const originalSetImmediate = global.setImmediate
 

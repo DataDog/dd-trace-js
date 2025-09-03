@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
 require('../setup/tap')
 
 describe('config/disabled_instrumentations', () => {

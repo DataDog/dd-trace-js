@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, context } = require('tap').mocha
+const sinon = require('sinon')
 const nock = require('nock')
+
+require('../../../../../dd-trace/test/setup/tap')
 
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')

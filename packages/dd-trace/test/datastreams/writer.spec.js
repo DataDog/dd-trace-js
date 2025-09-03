@@ -1,8 +1,15 @@
 'use strict'
+
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const sinon = require('sinon')
+const msgpack = require('@msgpack/msgpack')
+const proxyquire = require('proxyquire')
+
 require('../setup/tap')
+
 const pkg = require('../../../../package.json')
 const stubRequest = sinon.stub()
-const msgpack = require('@msgpack/msgpack')
 
 const stubZlib = {
   gzip: (payload, _opts, fn) => {
@@ -11,7 +18,7 @@ const stubZlib = {
 }
 
 const { DataStreamsWriter } = proxyquire(
-  '../src/datastreams/writer', {
+  '../../src/datastreams/writer', {
     '../exporters/common/request': stubRequest,
     zlib: stubZlib
   })

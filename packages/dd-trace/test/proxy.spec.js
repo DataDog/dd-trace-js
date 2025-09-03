@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('./setup/tap')
 
 describe('TracerProxy', () => {

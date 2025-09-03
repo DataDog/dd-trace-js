@@ -1,13 +1,19 @@
 'use strict'
 
-require('./setup/tap')
-const { DogStatsDClient } = require('../src/dogstatsd')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 const assert = require('node:assert')
 const os = require('node:os')
 const performance = require('node:perf_hooks').performance
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
+
+require('./setup/tap')
+
+const { DogStatsDClient } = require('../src/dogstatsd')
 
 const isWindows = os.platform() === 'win32'
 

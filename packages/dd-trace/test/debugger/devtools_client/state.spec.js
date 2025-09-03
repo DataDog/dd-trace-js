@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const { describe, it, before } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('../../setup/mocha')
 

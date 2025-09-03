@@ -3,10 +3,9 @@
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 require('../../setup/mocha')
-
-const proxyquire = require('proxyquire')
 
 const breakpoint = { file: 'file.js', line: 1 }
 const breakpointId = 'breakpoint-id'

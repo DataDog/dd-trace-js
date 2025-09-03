@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
+const sinon = require('sinon')
+
 require('../../../../../dd-trace/test/setup/tap')
 
 const TestWorkerCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/test-worker')

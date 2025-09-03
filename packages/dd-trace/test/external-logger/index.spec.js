@@ -1,11 +1,14 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
-const proxyquire = require('proxyquire')
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const nock = require('nock')
 
-const tracerLogger = require('../../log')
+require('../setup/tap')
+
+const tracerLogger = require('../../src/log')
 
 describe('External Logger', () => {
   let externalLogger
@@ -15,7 +18,7 @@ describe('External Logger', () => {
   beforeEach(() => {
     errorLog = sinon.spy(tracerLogger, 'error')
 
-    const { ExternalLogger } = proxyquire('../src', {
+    const { ExternalLogger } = proxyquire('../../src/external-logger/src', {
       '../../log': {
         error: errorLog
       }

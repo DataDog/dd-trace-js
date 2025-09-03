@@ -2,12 +2,15 @@
 
 /* eslint-disable no-console */
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
-const http = require('http')
-const path = require('path')
-const os = require('os')
-const { exec } = require('child_process')
+const http = require('node:http')
+const path = require('node:path')
+const os = require('node:os')
+const { exec } = require('node:child_process')
+
+require('./setup/tap')
 
 describe('Custom Metrics', () => {
   let httpServer

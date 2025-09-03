@@ -1,12 +1,17 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const path = require('node:path')
+const dc = require('dc-polyfill')
+
 require('../setup/tap')
 
-const proxyquire = require('proxyquire')
-const path = require('path')
-const dc = require('dc-polyfill')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
+
 describe('dependencies', () => {
   describe('start', () => {
     it('should subscribe', () => {

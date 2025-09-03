@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
 require('./setup/tap')
 
 const SpanContext = require('../src/opentracing/span_context')

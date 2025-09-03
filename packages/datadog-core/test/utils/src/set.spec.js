@@ -1,8 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
 require('../../../../dd-trace/test/setup/tap')
 
-const { expect } = require('chai')
 const set = require('../../../src/utils/src/set')
 
 describe('set', () => {

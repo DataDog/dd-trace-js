@@ -1,10 +1,12 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
+
+require('../../../../../dd-trace/test/setup/tap')
+
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const log = require('../../../../src/log')
 

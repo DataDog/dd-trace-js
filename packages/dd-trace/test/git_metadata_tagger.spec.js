@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
 require('./setup/tap')
 
 const agent = require('./plugins/agent')

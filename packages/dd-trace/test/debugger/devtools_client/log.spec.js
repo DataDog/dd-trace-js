@@ -1,5 +1,8 @@
 'use strict'
 
+const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+
 require('../../setup/mocha')
 
 const proxyquire = require('proxyquire')

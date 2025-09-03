@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
 const constants = require('../src/constants')
 require('./setup/tap')
 const ERROR_MESSAGE = constants.ERROR_MESSAGE

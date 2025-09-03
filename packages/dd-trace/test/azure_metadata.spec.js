@@ -1,8 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const os = require('node:os')
+
 require('./setup/tap')
 
-const os = require('os')
 const { getAzureAppMetadata, getAzureTagsFromMetadata } = require('../src/azure_metadata')
 
 describe('Azure metadata', () => {

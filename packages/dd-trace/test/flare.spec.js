@@ -1,13 +1,17 @@
 'use strict'
 
-const Config = require('../src/config')
+const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const express = require('express')
-const http = require('http')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
 
+const http = require('node:http')
+
 require('./setup/tap')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const Config = require('../src/config')
 
 const debugChannel = channel('datadog:log:debug')
 

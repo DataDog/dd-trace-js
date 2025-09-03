@@ -1,10 +1,13 @@
 'use strict'
 
-require('./setup/tap')
-
+const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { assert } = require('chai')
-const Module = require('module')
+const assert = require('node:assert')
+const Module = require('node:module')
+
+require('./setup/tap')
+const { describe, it, before, beforeEach, afterEach } = require('tap').mocha
+
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
@@ -93,7 +96,7 @@ describe('Ritm', () => {
 
     assert.throws(
       () => require('package-does-not-exist'),
-      'Cannot find module \'package-does-not-exist\'',
+      /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'
     )
   })

@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, afterEach } = require('tap').mocha
+
 require('../../setup/tap')
 
 const { ddBasePath } = require('../../../src/util')

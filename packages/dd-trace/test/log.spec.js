@@ -1,8 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('./setup/tap')
 
-const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 
 /* eslint-disable no-console */

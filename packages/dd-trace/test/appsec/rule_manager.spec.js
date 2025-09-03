@@ -1,7 +1,9 @@
 'use strict'
 
 const { expect, assert } = require('chai')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -147,7 +149,7 @@ describe('AppSec Rule Manager', () => {
       reportWafUpdate = sinon.stub()
       setDefaultBlockingActionParameters = sinon.stub()
 
-      RuleManager = proxyquire('../src/appsec/rule_manager', {
+      RuleManager = proxyquire('../../src/appsec/rule_manager', {
         './reporter': {
           reportWafUpdate
         },

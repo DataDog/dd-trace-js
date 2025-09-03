@@ -1,12 +1,16 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
-const nock = require('nock')
-const os = require('os')
-const fs = require('fs')
-const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
+const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
+const nock = require('nock')
+const fs = require('node:fs')
+const os = require('node:os')
+
+require('../../../../../dd-trace/test/setup/tap')
+
+const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 describe('git_metadata', () => {
   let gitMetadata

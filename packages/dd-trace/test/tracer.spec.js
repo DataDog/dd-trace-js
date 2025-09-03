@@ -1,12 +1,16 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('./setup/tap')
 
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
-const { expect } = require('chai')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const SPAN_TYPE = tags.SPAN_TYPE

@@ -1,9 +1,14 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+const { match } = sinon
+
 require('../../setup/tap')
 
-const { match } = require('sinon')
-const proxyquire = require('proxyquire')
 const { Log } = require('../../../src/log/log')
 
 describe('telemetry logs', () => {

@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
 require('../../../../dd-trace/test/setup/tap')
 
 const { JSONEncoder } = require('../../../src/ci-visibility/encode/json-encoder')

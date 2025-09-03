@@ -1,9 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const msgpack = require('@msgpack/msgpack')
+
 require('../setup/tap')
 
-const { expect } = require('chai')
-const msgpack = require('@msgpack/msgpack')
 const { MsgpackEncoder } = require('../../src/msgpack/encoder')
 
 function randString (length) {
