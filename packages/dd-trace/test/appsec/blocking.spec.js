@@ -16,7 +16,7 @@ describe('blocking', () => {
   }
 
   let log, telemetry
-  let block, setTemplates
+  let block, registerBlockDelegation, callBlockDelegation, setTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -35,6 +35,8 @@ describe('blocking', () => {
     })
 
     block = blocking.block
+    registerBlockDelegation = blocking.registerBlockDelegation
+    callBlockDelegation = blocking.callBlockDelegation
     setTemplates = blocking.setTemplates
 
     req = {
@@ -148,6 +150,102 @@ describe('blocking', () => {
       })
       expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
       expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+    })
+  })
+
+  describe('block delegation', () => {
+    it('should delegate block', (done) => {
+      setTemplates(config)
+
+      const abortController = new AbortController()
+      const promise = registerBlockDelegation(req, res, rootSpan, abortController)
+
+      expect(rootSpan.setTag).to.not.have.been.called
+      expect(res.writeHead).to.not.have.been.called
+      expect(res.constructor.prototype.end).to.not.have.been.called
+      expect(abortController.signal.aborted).to.be.false
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+
+      const blocked = callBlockDelegation(res)
+
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'application/json',
+        'Content-Length': 8
+      })
+      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
+      expect(abortController.signal.aborted).to.be.true
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+
+      promise.then(blocked => {
+        expect(blocked).to.be.true
+        done()
+      })
+    })
+
+    it('should only resolve the first blocking delegation per request', (done) => {
+      const firstPromise = registerBlockDelegation(req, res, rootSpan)
+      const secondPromise = sinon.stub()
+      const thirdPromise = sinon.stub()
+      registerBlockDelegation(req, res, rootSpan).then(secondPromise)
+      registerBlockDelegation(req, res, rootSpan).then(thirdPromise)
+
+      const blocked = callBlockDelegation(res)
+
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnce
+      expect(res.writeHead).to.have.been.calledOnce
+      expect(res.constructor.prototype.end).to.have.been.calledOnce
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+
+      firstPromise.then((blocked) => {
+        expect(blocked).to.be.true
+
+        setTimeout(() => {
+          expect(secondPromise).to.not.have.been.called
+          expect(thirdPromise).to.not.have.been.called
+          done()
+        }, 100)
+      })
+    })
+
+    it('should do nothing if no blocking delegation exists', () => {
+      const blocked = callBlockDelegation(res)
+
+      expect(blocked).to.not.be.ok
+      expect(log.warn).to.not.have.been.called
+      expect(rootSpan.setTag).to.not.have.been.called
+      expect(res.writeHead).to.not.have.been.called
+      expect(res.constructor.prototype.end).to.not.have.been.called
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+    })
+
+    it('should cancel block delegations when block is called', (done) => {
+      const promise = sinon.stub()
+
+      registerBlockDelegation(req, res, rootSpan).then(promise)
+
+      const blocked = block(req, res, rootSpan)
+
+      expect(blocked).to.be.true
+      expect(rootSpan.setTag).to.have.been.calledOnce
+      expect(res.writeHead).to.have.been.calledOnce
+      expect(res.constructor.prototype.end).to.have.been.calledOnce
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+
+      const result = callBlockDelegation(res)
+
+      expect(result).to.not.be.ok
+      expect(rootSpan.setTag).to.have.been.calledOnce
+      expect(res.writeHead).to.have.been.calledOnce
+      expect(res.constructor.prototype.end).to.have.been.calledOnce
+      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+
+      setTimeout(() => {
+        expect(promise).to.not.have.been.called
+        done()
+      }, 100)
     })
   })
 

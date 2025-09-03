@@ -98,7 +98,8 @@ describe('AppSec Index', function () {
     }
 
     blocking = {
-      setTemplates: sinon.stub()
+      setTemplates: sinon.stub(),
+      callBlockDelegation: sinon.stub()
     }
 
     UserTracking = {
@@ -1122,6 +1123,7 @@ describe('AppSec Index', function () {
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
         expect(res.constructor.prototype.end).to.have.been.calledOnce
+        expect(blocking.callBlockDelegation).to.have.been.calledOnce
 
         abortController.abort.resetHistory()
 
@@ -1130,6 +1132,17 @@ describe('AppSec Index', function () {
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.been.calledOnce
         expect(res.constructor.prototype.end).to.have.been.calledOnce
+        expect(blocking.callBlockDelegation).to.have.been.calledOnce
+      })
+
+      it('should call abortController if blocking delegate is successful', () => {
+        blocking.callBlockDelegation.returns(true)
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders: {} })
+
+        expect(blocking.callBlockDelegation).to.have.been.calledOnceWithExactly(res)
+        expect(abortController.abort).to.have.been.calledOnce
+        expect(waf.run).to.not.have.been.called
       })
 
       it('should not call the WAF if response was already analyzed', () => {
