@@ -227,6 +227,7 @@ class LLMObsSpanProcessor {
 
   #getTags (span, mlApp, sessionId, error) {
     let tags = {
+      ...this._config.parsedDdTags,
       version: this._config.version,
       env: this._config.env,
       service: this._config.service,

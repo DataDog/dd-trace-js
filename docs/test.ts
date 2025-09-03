@@ -121,6 +121,8 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
+      endpointCollectionEnabled: true,
+      endpointCollectionMessageLimit: 300
     },
     rasp: {
       enabled: true,

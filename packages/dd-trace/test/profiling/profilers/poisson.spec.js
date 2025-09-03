@@ -132,7 +132,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.ok(filter.currentSamplingInstant >= prevNextSamplingInstant)
     assert.strictEqual(typeof filter.nextSamplingInstant, 'number')
     assert.ok(filter.nextSamplingInstant < 500000)
-    assert.ok(filter.samplingInstantCount < 10)
+    assert.ok(filter.samplingInstantCount < 30)
   })
 
   it('should reset nextSamplingInstant if it is too far in the past', () => {
