@@ -157,6 +157,7 @@
     "playwright": "1.55.0",
     "playwright-core": "1.55.0",
     "pnpm": "10.15.0",
+    "prisma": "6.14.0",
     "promise": "8.3.0",
     "promise-js": "0.0.7",
     "protobufjs": "7.5.4",
