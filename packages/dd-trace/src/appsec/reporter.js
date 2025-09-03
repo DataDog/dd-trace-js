@@ -142,6 +142,11 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   return result
 }
 
+// TODO remove when libddwaf start returning non string data in actions
+const isTrue = (val) => {
+  return typeof val === 'string' ? val.toLowerCase() === 'true' : val
+}
+
 function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}, extendedDataCollection) {
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
@@ -158,15 +163,11 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 
   // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to deleted in next major
 
-  // TODO remove when libddwaf start returning non string data in actions
-  const isTrue = (val) => {
-    return typeof val === 'string' ? val.toLowerCase() === 'true' : val
-  }
-
   // should be standard if !redaction and no headers enabled
   if (
     (!config.headersExtendedCollectionEnabled || config.headersRedaction) &&
-    (!extendedDataCollection || isTrue(extendedDataCollection.headers_redaction))
+    // TODO header_redaction is temporal name, tbd in the spec
+    (!extendedDataCollection || isTrue(extendedDataCollection.header_redaction))
   ) {
     // Standard collection
     return Object.assign(
@@ -178,10 +179,12 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 
   let maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
   // TODO remove when libddwaf start returning non string data in actions
-  maxHeadersCollected = parseInt(maxHeadersCollected)
+  maxHeadersCollected = Number.parseInt(maxHeadersCollected)
 
   // Extended collection
-  const collectedHeaders = new Set(Object.keys(mandatoryCollectedHeaders).concat(Object.keys(requestEventCollectedHeaders)))
+  const collectedHeaders = new Set(
+    ...Object.keys(mandatoryCollectedHeaders), ...Object.keys(requestEventCollectedHeaders)
+  )
 
   const requestExtendedHeadersAvailableCount =
     maxHeadersCollected -
