@@ -71,7 +71,7 @@ describe('sendTelemetry', () => {
     })
   })
 
-  describe('Error scenarios and metadata', () => {
+  describe('Result metadata parameter', () => {
     let mockProc, telemetryModule, capturedStdinData
 
     function createMockProcess () {
@@ -89,28 +89,6 @@ describe('sendTelemetry', () => {
       })
     }
 
-    function runTelemetry (eventType, value) {
-      const originalStringify = JSON.stringify
-      JSON.stringify = function (obj) {
-        if (obj && obj.metadata && obj.points) {
-          if (eventType === 'spawn-error') {
-            mockProc.emit('error', new Error(value))
-          } else if (eventType === 'exit') {
-            mockProc.emit('exit', value)
-          } else if (eventType === 'stdin-error') {
-            mockProc.stdin.emit('error', new Error(value))
-          }
-        }
-        return originalStringify.apply(this, arguments)
-      }
-
-      try {
-        telemetryModule([{ name: 'test', tags: [] }])
-      } finally {
-        JSON.stringify = originalStringify
-      }
-    }
-
     function assertStdinMetadata (expected) {
       expect(capturedStdinData).to.exist
       const parsed = JSON.parse(capturedStdinData)
@@ -125,43 +103,54 @@ describe('sendTelemetry', () => {
       telemetryModule = loadTelemetryModuleWithMockProc()
     })
 
-    it('should set error metadata when telemetry forwarder fails to spawn', () => {
-      runTelemetry('spawn-error', 'Spawn failed')
+    it('should use provided result metadata', () => {
+      telemetryModule([{ name: 'error', tags: ['integration:express'] }], undefined, {
+        result: 'error',
+        result_class: 'internal_error',
+        result_reason: 'Error during instrumentation of express@4.18.0: TypeError'
+      })
 
       assertStdinMetadata({
         result: 'error',
         result_class: 'internal_error',
-        result_reason: 'Failed to spawn telemetry forwarder'
+        result_reason: 'Error during instrumentation of express@4.18.0: TypeError'
       })
     })
 
-    it('should set error metadata when telemetry forwarder exits with non-zero code', () => {
-      runTelemetry('exit', 1)
+    it('should use provided result metadata for abort scenarios', () => {
+      telemetryModule('abort.integration', ['integration:redis'], {
+        result: 'abort',
+        result_class: 'incompatible_library',
+        result_reason: 'Incompatible integration version: redis@2.8.0'
+      })
+
+      assertStdinMetadata({
+        result: 'abort',
+        result_class: 'incompatible_library',
+        result_reason: 'Incompatible integration version: redis@2.8.0'
+      })
+    })
+
+    it('should default to unknown values when no metadata provided', () => {
+      telemetryModule([{ name: 'test', tags: [] }])
+
+      assertStdinMetadata({
+        result: 'unknown',
+        result_class: 'unknown',
+        result_reason: 'unknown'
+      })
+    })
+
+    it('should partially override default metadata', () => {
+      telemetryModule('error', ['integration:mongodb'], {
+        result: 'error',
+        result_reason: 'Connection failed'
+      })
 
       assertStdinMetadata({
         result: 'error',
-        result_class: 'internal_error',
-        result_reason: 'Telemetry forwarder exited with code 1'
-      })
-    })
-
-    it('should set error metadata when writing to telemetry forwarder fails', () => {
-      runTelemetry('stdin-error', 'Write failed')
-
-      assertStdinMetadata({
-        result: 'error',
-        result_class: 'internal_error',
-        result_reason: 'Failed to write telemetry data to telemetry forwarder'
-      })
-    })
-
-    it('should set success metadata when telemetry forwarder exits successfully', () => {
-      runTelemetry('exit', 0)
-
-      assertStdinMetadata({
-        result: 'success',
-        result_class: 'success',
-        result_reason: 'Successfully configured ddtrace package'
+        result_class: 'unknown',
+        result_reason: 'Connection failed'
       })
     })
   })
