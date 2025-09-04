@@ -2,8 +2,14 @@
 
 require('../../../setup/mocha')
 
-const { session, getTargetCodePath, enable, teardown, setAndTriggerBreakpoint } = require('./utils')
-const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
+const {
+  session,
+  getTargetCodePath,
+  enable,
+  teardown,
+  setAndTriggerBreakpoint,
+  getLocalStateForCallFrame
+} = require('./utils')
 
 const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
 const target = getTargetCodePath(__filename)
