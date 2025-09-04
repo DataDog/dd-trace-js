@@ -239,15 +239,15 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@5.9.0":
-  version "5.9.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.9.0.tgz#beacd1507304e3490900ff39ea108e7ea772921b"
-  integrity sha512-7KretVkHUANWe31u9cGJpxmUkyrXsCD+fmlZQUz/zk9mtQNC4uBIKX53VUFfrVj/bxAhEEIPw5XTYiMc5RJLsw==
+"@datadog/pprof@5.10.0":
+  version "5.10.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.10.0.tgz#47e9589c6d9c423470e312e00def06e249672571"
+  integrity sha512-tEMhLeOM78FHC/rTltDd7pQN8WPAUZ1b0BPadYsKWqo/v6jWTbF6xeIMojdJa5yIW2vHjDU4LFJpkFFNacHpQw==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
     p-limit "^3.1.0"
-    pprof-format "^2.1.0"
+    pprof-format "^2.2.1"
     source-map "^0.7.4"
 
 "@datadog/sketches-js@2.1.1":
@@ -3793,10 +3793,10 @@ possible-typed-array-names@^1.0.0:
   resolved "https://registry.yarnpkg.com/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz#93e3582bc0e5426586d9d07b79ee40fc841de4ae"
   integrity sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==
 
-pprof-format@^2.1.0:
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.1.0.tgz#acc8d7773bcf4faf0a3d3df11bceefba7ac06664"
-  integrity sha512-0+G5bHH0RNr8E5hoZo/zJYsL92MhkZjwrHp3O2IxmY8RJL9ooKeuZ8Tm0ZNBw5sGZ9TiM71sthTjWoR2Vf5/xw==
+pprof-format@^2.1.1, pprof-format@^2.2.1:
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/pprof-format/-/pprof-format-2.2.1.tgz#64d32207fb46990349eb52825defb449d6ccc9b4"
+  integrity sha512-p4tVN7iK19ccDqQv8heyobzUmbHyds4N2FI6aBMcXz6y99MglTWDxIyhFkNaLeEXs6IFUEzT0zya0icbSLLY0g==
 
 prelude-ls@^1.2.1:
   version "1.2.1"
