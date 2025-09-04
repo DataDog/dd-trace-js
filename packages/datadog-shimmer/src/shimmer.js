@@ -78,12 +78,13 @@ function wrapFunction (original, wrapper) {
 
   if (typeof original === 'function') {
     const wrapper2 = shimmered.get(original)
-    if (wrapper === wrapper2) {
-      return original
+    if (wrapper.toString() === wrapper2) {
+      // return original
+      console.log('shimmered.has(original)', original, wrapper2)
     }
     assertNotClass(original)
     copyProperties(original, wrapped)
-    shimmered.set(wrapped, wrapper)
+    shimmered.set(wrapped, wrapper.toString())
   }
 
   return wrapped
@@ -129,8 +130,9 @@ function wrap (target, name, wrapper, options) {
   }
 
   const wrapper2 = shimmered.get(descriptor.value ?? descriptor.get)
-  if (wrapper === wrapper2) {
-    return target
+  if (wrapper.toString() === wrapper2) {
+    // return target
+    console.log('shimmered.has(target)', descriptor.value ?? descriptor.get, name, wrapper2)
   }
 
   if (descriptor.set && (!descriptor.get || options?.replaceGetter)) {
@@ -212,7 +214,7 @@ function wrap (target, name, wrapper, options) {
 
   Object.defineProperty(target, name, descriptor)
 
-  shimmered.set(descriptor.value ?? descriptor.get, wrapper)
+  shimmered.set(descriptor.value ?? descriptor.get, wrapper.toString())
 
   return target
 }
