@@ -38,9 +38,12 @@ function Hook (modules, hookOptions, onrequire) {
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
-    if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-      return moduleExports
+    if (moduleExports?.default) {
+      if (typeof moduleExports.default === 'function') {
+        moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
+        return moduleExports
+      }
+      moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir)
     }
     return safeHook(moduleExports, moduleName, moduleBaseDir)
   })

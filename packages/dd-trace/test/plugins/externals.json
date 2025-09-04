@@ -11,6 +11,14 @@
     {
       "name": "zod",
       "versions": [">=3.25.75"]
+    },
+    {
+      "name": "@openai/agents",
+      "versions": ["0.1.0"]
+    },
+    {
+      "name": "@openai/agents-core",
+      "versions": ["0.1.0"]
     }
   ],
   "apollo": [

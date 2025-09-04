@@ -1,12 +1,16 @@
 'use strict'
 
+const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
+
+const assert = require('node:assert')
+const http2 = require('node:http2')
+
 const {
+  assertObjectContains,
   FakeAgent,
   createSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-const http2 = require('http2')
 
 describe('esm', () => {
   let agent
@@ -33,17 +37,32 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('http2', () => {
-    it('is instrumented', async () => {
+  describe('http2', () => {
+    it('is instrumented without default', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
       const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
+        assertObjectContains(
+          payload,
+          [[{ name: 'web.request', resource: 'GET', meta: { component: 'http2' } }]]
+        )
         assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
         assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'web.request')
-        assert.propertyVal(payload[0][0].meta, 'component', 'http2')
+      })
+      await curl(proc)
+      return resultPromise
+    }).timeout(50000)
+
+    it('is instrumented with default export', async () => {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server-default-export.mjs', agent.port)
+      const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
+        assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
+        assertObjectContains(
+          payload,
+          [[{ name: 'web.request', resource: 'GET', meta: { component: 'http2' } }]]
+        )
+        assert.strictEqual(payload.length, 1)
+        assert.strictEqual(payload[0].length, 1)
       })
       await curl(proc)
       return resultPromise
