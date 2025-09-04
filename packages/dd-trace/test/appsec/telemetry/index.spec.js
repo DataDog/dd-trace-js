@@ -1,6 +1,9 @@
 'use strict'
 
 const { assert } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
 const Config = require('../../../src/config')
 const appsecTelemetry = require('../../../src/appsec/telemetry')
 const telemetryMetrics = require('../../../src/telemetry/metrics')

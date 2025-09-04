@@ -1,16 +1,20 @@
 'use strict'
 
-const { execSync } = require('child_process')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const chai = require('chai')
+const path = require('node:path')
+const { execSync } = require('node:child_process')
+
 const {
   FakeAgent,
   createSandbox,
   spawnProc
 } = require('../../../../../../integration-tests/helpers')
-const chai = require('chai')
-const path = require('path')
 const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+
+const { expect } = chai
 
 function check (expected, actual) {
   for (const expectedLLMObsSpanIdx in expected) {

@@ -1,10 +1,13 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
+const sinon = require('sinon')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const proxyquire = require('proxyquire').noPreserveCache()
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {

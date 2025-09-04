@@ -1,7 +1,11 @@
 'use strict'
 
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
+const { expect } = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
 const chai = require('chai')
+
+const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
