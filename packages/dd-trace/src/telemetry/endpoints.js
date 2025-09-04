@@ -44,7 +44,6 @@ function onFastifyRoute (routeData) {
   if (!routeOptions?.path) return
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
-
   for (const method of methods) {
     recordEndpoint(method, routeOptions.path)
   }
