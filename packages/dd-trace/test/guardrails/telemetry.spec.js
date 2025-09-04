@@ -1,16 +1,18 @@
 'use strict'
 
-process.env.DD_INJECTION_ENABLED = 'true'
-
-const proxyquire = require('proxyquire')
+const { expect } = require('chai')
+const { describe, it, beforeEach, before } = require('mocha')
 const { EventEmitter } = require('events')
+const proxyquire = require('proxyquire')
 const { telemetryForwarder, assertTelemetryPoints } = require('../../../../integration-tests/helpers')
+
+process.env.DD_INJECTION_ENABLED = 'true'
 
 describe('sendTelemetry', () => {
   let cleanup, sendTelemetry
 
   before(function () {
-    if (['1', 'true', 'True'].includes(process.env.DD_INJECT_FORCE)) {
+    if (['1', 'true', 'True'].includes(process.env.DD_INJECT_FORCE ?? '')) {
       // When DD_INJECT_FORCE is set, only telemetry with the name `error` or `complete` is sent
       this.skip()
     }

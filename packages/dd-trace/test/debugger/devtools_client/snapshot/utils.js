@@ -1,6 +1,7 @@
 'use strict'
 
-const { join, basename } = require('path')
+const assert = require('node:assert')
+const { join, basename } = require('node:path')
 
 const session = require('./stub-session')
 const proxyquire = require('proxyquire')
@@ -96,7 +97,7 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   }
 
   session.once('Debugger.paused', ({ params }) => {
-    expect(params.hitBreakpoints.length).to.eq(1)
+    assert.strictEqual(params.hitBreakpoints.length, 1)
 
     getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
       callback(process())

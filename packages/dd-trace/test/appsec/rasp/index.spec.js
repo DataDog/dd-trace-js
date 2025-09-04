@@ -1,6 +1,9 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {

@@ -1,9 +1,13 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const sinon = require('sinon')
+const nock = require('nock')
+
+require('../../setup/core')
 
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
-const nock = require('nock')
 
 describe('AgentInfoExporter', () => {
   const writer = {

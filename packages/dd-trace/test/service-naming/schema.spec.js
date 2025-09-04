@@ -1,8 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
+
 const SchemaDefinition = require('../../src/service-naming/schemas/definition')
 
 describe('Service naming', () => {

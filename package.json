@@ -25,7 +25,7 @@
     "test:debugger": "mocha -r 'packages/dd-trace/test/setup/mocha.js' 'packages/dd-trace/test/debugger/**/*.spec.js'",
     "test:debugger:ci": "nyc --no-clean --include 'packages/dd-trace/src/debugger/**/*.js' -- npm run test:debugger",
     "test:eslint-rules": "node eslint-rules/*.test.mjs",
-    "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,remote_config,service-naming,standalone,telemetry}/**/*.spec.js\"",
+    "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,remote_config,service-naming,standalone,telemetry,external-logger}/**/*.spec.js\"",
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:trace:guardrails": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/guardrails/**/*.spec.js\"",
     "test:trace:guardrails:ci": "nyc --no-clean --include \"packages/dd-trace/src/guardrails/**/*.js\" -- npm run test:trace:guardrails",

@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 require('../../setup/mocha')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')

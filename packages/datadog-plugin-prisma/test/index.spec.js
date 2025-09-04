@@ -1,10 +1,14 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { execSync } = require('node:child_process')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { execSync } = require('node:child_process')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')

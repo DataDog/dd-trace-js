@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')
 const { storage } = require('../../../datadog-core')

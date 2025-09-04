@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../setup/mocha')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+require('../../setup/mocha')
 
 describe('breakpoints', function () {
   let breakpoints
