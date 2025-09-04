@@ -15,9 +15,6 @@ const ddpv = require('mocha/package.json').version
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
     describe('using the default topology', () => {
-      before(() => {
-        global.currentMongoVersion = version
-      })
       fn(async () => {
         const { MongoClient } = require(`../../../versions/${moduleName}@${version}`).get()
         const client = new MongoClient('mongodb://127.0.0.1:27017')
@@ -25,7 +22,7 @@ const withTopologies = fn => {
         await client.connect()
 
         return client
-      })
+      }, version)
     })
 
     // unified topology is now the only topology and thus the default since 4.x
@@ -54,13 +51,14 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let usesDelete
 
   describe('mongodb-core', () => {
-    withTopologies(createClient => {
+    withTopologies((createClient, version) => {
       beforeEach(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
-
+        usesDelete = version ? semver.intersects(version, '>=4') : false
         collectionName = id().toString()
 
         BSON = require('../../../versions/bson@4.0.0').get()
@@ -115,120 +113,95 @@ describe('Plugin', () => {
             collection.insertOne({ a: 1 }, {}, () => {})
           })
 
-          it('should have the statement tag when doing a single delete operation', done => {
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const query = '{"a":1}'
-              const recentResource = `delete test.${collectionName}`
-              const oldResource = `remove test.${collectionName}`
-
-              expect(span.meta).to.have.property('mongodb.query', query)
-              if (semver.intersects(global.currentMongoVersion, '>=4')) {
-                expect(span).to.have.property('resource', recentResource)
-              } else {
-                expect(span).to.have.property('resource', oldResource)
-              }
-            })
-              .then(done)
-              .catch(done)
-
+          it('should have the statement tag when doing a single delete operation', async () => {
             collection.deleteOne({ a: 1 }, {}, () => {})
+
+            await agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '{"a":1}'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
           })
 
-          it('should have the statement tag when doing a single deleteMany operation', done => {
+          it('should have the statement tag when doing a single deleteMany operation', async () => {
             //  deleteMany and delete run the same command under the hood, they should have the same output
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const query = '{"a":1}'
-              const recentResource = `delete test.${collectionName}`
-              const oldResource = `remove test.${collectionName}`
-
-              expect(span.meta).to.have.property('mongodb.query', query)
-              if (semver.intersects(global.currentMongoVersion, '>=4')) {
-                expect(span).to.have.property('resource', recentResource)
-              } else {
-                expect(span).to.have.property('resource', oldResource)
-              }
-            })
-              .then(done)
-              .catch(done)
-
             collection.deleteMany({ a: 1 }, {}, () => {})
+
+            await agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '{"a":1}'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
           })
 
-          it('should have the statement tag when doing a single update operation', done => {
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const resource = `update test.${collectionName}`
-              const query = '{"a":1}'
-
-              expect(span).to.have.property('resource', resource)
-              if (semver.intersects(global.currentMongoVersion, '>=4')) {
-                expect(span.meta).to.have.property('mongodb.query', query)
-              }
-            })
-              .then(done)
-              .catch(done)
+          it('should have the statement tag when doing a single update operation', async () => {
             collection.updateOne({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
-          })
 
-          it('should have the statement tag when doing a single updateMany operation', done => {
-            agent.assertSomeTraces(traces => {
+            await agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const resource = `update test.${collectionName}`
               const query = '{"a":1}'
-              expect(span).to.have.property('resource', resource)
-              if (semver.intersects(global.currentMongoVersion, '>=4')) {
-                expect(span.meta).to.have.property('mongodb.query', query)
-              }
-            })
-              .then(done)
-              .catch(done)
-
-            collection.updateMany({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
-          })
-
-          it('should have the statement tag when doing a multi statement update', done => {
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const query = '[{"a":1},{"b":2}]'
-              const resource = `update test.${collectionName}`
 
               expect(span).to.have.property('resource', resource)
               expect(span.meta).to.have.property('mongodb.query', query)
             })
-              .then(done)
-              .catch(done)
+          })
+
+          it('should have the statement tag when doing a single updateMany operation', async () => {
+            collection.updateMany({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
+
+            await agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName}`
+              const query = '{"a":1}'
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a multi statement update', async () => {
             const bulkOps = [
               { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
               { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } }
             ]
             collection.bulkWrite(bulkOps)
-          })
 
-          it('should have the statement tag when doing a multi statement delete', done => {
-            agent.assertSomeTraces(traces => {
+            await agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const query = '[{"a":1},{"b":2}]'
-              const recentResource = `delete test.${collectionName}`
-              const oldResource = `remove test.${collectionName}`
+              const resource = `update test.${collectionName}`
 
+              expect(span).to.have.property('resource', resource)
               expect(span.meta).to.have.property('mongodb.query', query)
-              if (semver.intersects(global.currentMongoVersion, '>=4')) {
-                expect(span).to.have.property('resource', recentResource)
-              } else {
-                expect(span).to.have.property('resource', oldResource)
-              }
             })
-              .then(done)
-              .catch(done)
-
-            const bulkOps = [{ deleteOne: { filter: { a: 1 } } }, { deleteOne: { filter: { b: 2 } } }]
-            collection.bulkWrite(bulkOps)
           })
 
-          it('should sanitize buffers as values and not as objects when doing multi statement operations', done => {
-            agent
+          it('should have the statement tag when doing a multi statement delete', async () => {
+            const bulkOps = [{ deleteOne: { filter: { a: 1 } } }, { deleteOne: { filter: { b: 2 } } }]
+            collection.bulkWrite(bulkOps)
+            await agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '[{"a":1},{"b":2}]'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
+            const bulkOps = [
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+            ]
+            collection.bulkWrite(bulkOps)
+            await agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const resource = `update test.${collectionName}`
@@ -237,14 +210,6 @@ describe('Plugin', () => {
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
               })
-              .then(done)
-              .catch(done)
-
-            const bulkOps = [
-              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
-              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
-            ]
-            collection.bulkWrite(bulkOps)
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -482,21 +447,18 @@ describe('Plugin', () => {
           }).toArray()
         })
 
-        it('should include sanitized query in resource when configured and doing a multi statement update', done => {
-          agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-              const resource = `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`
-              expect(span).to.have.property('resource', resource)
-            })
-            .then(done)
-            .catch(done)
-
+        it('should sanitize query in resource when configured and doing a multi statement update', async () => {
           const bulkOps = [
             { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
             { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
           ]
           collection.bulkWrite(bulkOps)
+          await agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`
+              expect(span).to.have.property('resource', resource)
+            })
         })
 
         withNamingSchema(
