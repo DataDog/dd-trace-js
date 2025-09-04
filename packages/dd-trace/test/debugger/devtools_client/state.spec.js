@@ -1,8 +1,10 @@
 'use strict'
 
-require('../../setup/mocha')
-
+const { expect } = require('chai')
+const { describe, it, before } = require('mocha')
 const proxyquire = require('proxyquire')
+
+require('../../setup/mocha')
 
 describe('findScriptFromPartialPath', function () {
   let state

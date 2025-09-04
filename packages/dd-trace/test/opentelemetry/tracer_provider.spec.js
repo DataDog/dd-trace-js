@@ -1,10 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
-
+const { describe, it } = require('tap').mocha
+const sinon = require('sinon')
 const { trace } = require('@opentelemetry/api')
+
+require('../setup/core')
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')

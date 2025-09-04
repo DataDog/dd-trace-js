@@ -2,6 +2,9 @@
 
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { csiMethods } = require('../../../../src/appsec/iast/taint-tracking/csi-methods')
 const iastTelemetry = require('../../../../src/appsec/iast/telemetry')
