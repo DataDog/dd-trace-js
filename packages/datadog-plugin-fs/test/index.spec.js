@@ -1,15 +1,19 @@
 'use strict'
 
+const { expect } = require('chai')
+const { channel } = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const rimraf = require('rimraf')
+
+const util = require('node:util')
+const os = require('node:os')
+const path = require('node:path')
+const realFS = Object.assign({}, require('node:fs'))
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
-const realFS = Object.assign({}, require('fs'))
-const os = require('os')
-const path = require('path')
-const rimraf = require('rimraf')
-const util = require('util')
 const plugins = require('../../dd-trace/src/plugins')
-const { channel } = require('dc-polyfill')
 
 const hasOSymlink = realFS.constants.O_SYMLINK
 
@@ -22,7 +26,7 @@ describe('Plugin', () => {
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
-      fs = require('fs')
+      fs = require('node:fs')
     }))
 
     describe('with parent span', () => {

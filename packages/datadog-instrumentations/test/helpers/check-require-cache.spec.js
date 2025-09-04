@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const { exec } = require('node:child_process')
 
 describe('check-require-cache', () => {
@@ -18,14 +21,11 @@ describe('check-require-cache', () => {
     })
   })
 
-  // stderr is empty on Windows
-  if (process.platform !== 'windows') {
-    it('should find warnings when tracer loaded late', (done) => {
-      exec(`${process.execPath} ./check-require-cache/bad-order.js`, opts, (error, stdout, stderr) => {
-        expect(error).to.be.null
-        expect(stderr).to.include("Package 'express' was loaded")
-        done()
-      })
+  it('should find warnings when tracer loaded late', (done) => {
+    exec(`${process.execPath} ./check-require-cache/bad-order.js`, opts, (error, stdout, stderr) => {
+      expect(error).to.be.null
+      expect(stderr).to.include("Package 'express' was loaded")
+      done()
     })
-  }
+  })
 })

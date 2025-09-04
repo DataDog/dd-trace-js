@@ -19,6 +19,9 @@ class GraphQLPlugin extends CompositePlugin {
     }
   }
 
+  /**
+   * @override
+   */
   configure (config) {
     return super.configure(validateConfig(config))
   }

@@ -1,8 +1,10 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../setup/core')
+
 const SpanContext = require('../../src/opentelemetry/span_context')
 const DDSpanContext = require('../../src/opentracing/span_context')
 const id = require('../../src/id')

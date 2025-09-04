@@ -1,11 +1,14 @@
 'use strict'
 
-require('../../setup/tap')
-
-const fs = require('fs')
-const path = require('path')
-
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const fs = require('node:fs')
+const path = require('node:path')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+require('../../setup/core')
+
 const execFileSyncStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
