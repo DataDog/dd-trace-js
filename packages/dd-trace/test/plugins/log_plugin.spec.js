@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const { channel } = require('dc-polyfill')
 
-require('../setup/tap')
+require('../setup/core')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')

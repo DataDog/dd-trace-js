@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
 
-require('../setup/tap')
+require('../setup/core')
 
 const originalSetImmediate = global.setImmediate
 

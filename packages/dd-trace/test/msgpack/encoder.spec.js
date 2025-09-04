@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
 
-require('../setup/tap')
+require('../setup/core')
 
 const { MsgpackEncoder } = require('../../src/msgpack/encoder')
 

@@ -5,7 +5,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-require('../../../../../dd-trace/test/setup/tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const id = require('../../../../src/id')
 

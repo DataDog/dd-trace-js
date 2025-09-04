@@ -10,7 +10,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { exec } = require('node:child_process')
 
-require('./setup/tap')
+require('./setup/core')
 
 describe('Custom Metrics', () => {
   let httpServer

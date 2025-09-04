@@ -5,7 +5,7 @@ const { describe, it, beforeEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
 
-require('../../../../../dd-trace/test/setup/tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')

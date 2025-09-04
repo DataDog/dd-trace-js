@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
-require('../setup/tap')
+require('../setup/core')
 
 describe('tagger', () => {
   let tagger

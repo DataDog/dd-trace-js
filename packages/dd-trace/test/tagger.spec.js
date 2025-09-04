@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 const constants = require('../src/constants')
-require('./setup/tap')
+require('./setup/core')
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE

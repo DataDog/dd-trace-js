@@ -8,7 +8,7 @@ const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
-require('../setup/tap')
+require('../setup/core')
 
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version

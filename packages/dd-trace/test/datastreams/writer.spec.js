@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 
-require('../setup/tap')
+require('../setup/core')
 
 const pkg = require('../../../../package.json')
 const stubRequest = sinon.stub()

@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
-require('./setup/tap')
+require('./setup/core')
 
 const MEASURED = require('../../../ext/tags').MEASURED
 

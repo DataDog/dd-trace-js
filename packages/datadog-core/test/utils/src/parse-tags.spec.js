@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
-require('../../../../dd-trace/test/setup/tap')
+require('../../../../dd-trace/test/setup/core')
 
 const parseTags = require('../../../src/utils/src/parse-tags')
 

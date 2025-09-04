@@ -7,7 +7,7 @@ const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { threadId } = require('node:worker_threads')
 
-require('./setup/tap')
+require('./setup/core')
 
 const { start } = require('../src/heap_snapshots')
 

@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire').noCallThru()
 
 const http = require('node:http')
 
-require('./setup/tap')
+require('./setup/core')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 const Config = require('../src/config')

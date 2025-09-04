@@ -3,7 +3,7 @@
 const { describe, it, beforeEach } = require('tap').mocha
 const assert = require('node:assert')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const PoissonProcessSamplingFilter = require('../../../src/profiling/profilers/poisson')
 

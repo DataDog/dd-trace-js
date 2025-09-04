@@ -9,7 +9,7 @@ const { readFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
-require('./setup/tap')
+require('./setup/core')
 
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')

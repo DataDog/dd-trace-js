@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 
 const { match } = sinon
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const { Log } = require('../../../src/log/log')
 

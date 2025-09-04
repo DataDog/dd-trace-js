@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const { executionAsyncResource } = require('async_hooks')
 
-require('../../dd-trace/test/setup/tap')
+require('../../dd-trace/test/setup/core')
 
 const { storage } = require('../src/storage')
 

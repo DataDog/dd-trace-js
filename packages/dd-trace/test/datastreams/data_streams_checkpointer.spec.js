@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
 
-require('../setup/tap')
+require('../setup/core')
 
 const agent = require('../plugins/agent')
 

@@ -5,7 +5,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 
-require('../setup/tap')
+require('../setup/core')
 
 const id = require('../../src/id')
 

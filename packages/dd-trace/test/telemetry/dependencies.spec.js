@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 const path = require('node:path')
 const dc = require('dc-polyfill')
 
-require('../setup/tap')
+require('../setup/core')
 
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate

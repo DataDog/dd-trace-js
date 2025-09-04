@@ -5,7 +5,7 @@ const { describe, it, before } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
 
-require('../setup/tap')
+require('../setup/core')
 
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 

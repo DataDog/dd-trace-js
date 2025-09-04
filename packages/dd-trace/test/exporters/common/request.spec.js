@@ -8,7 +8,7 @@ const http = require('node:http')
 const zlib = require('node:zlib')
 const proxyquire = require('proxyquire')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const FormData = require('../../../src/exporters/common/form-data')
 

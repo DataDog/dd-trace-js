@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const { SchemaSampler } = require('../../../src/datastreams/schemas/schema_sampler')
 

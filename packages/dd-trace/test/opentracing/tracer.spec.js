@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 
 const os = require('node:os')
 
-require('../setup/tap')
+require('../setup/core')
 
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')

@@ -5,7 +5,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const { Span } = require('opentracing')
 
-require('./setup/tap')
+require('./setup/core')
 
 const Scope = require('../src/scope')
 

@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
-require('../setup/tap')
+require('../setup/core')
 
 const SpanContext = require('../../src/opentelemetry/span_context')
 const DDSpanContext = require('../../src/opentracing/span_context')

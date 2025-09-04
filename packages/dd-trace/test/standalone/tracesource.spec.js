@@ -3,7 +3,7 @@
 const { assert } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
-require('../setup/tap')
+require('../setup/core')
 
 const { ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')

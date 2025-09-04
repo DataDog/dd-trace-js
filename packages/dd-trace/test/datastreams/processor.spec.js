@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const { hostname } = require('node:os')
 const proxyquire = require('proxyquire')
 
-require('../setup/tap')
+require('../setup/core')
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 

@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { channel } = require('dc-polyfill')
 
-require('../setup/tap')
+require('../setup/core')
 
 const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')

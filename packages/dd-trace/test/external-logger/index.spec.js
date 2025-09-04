@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const nock = require('nock')
 
-require('../setup/tap')
+require('../setup/core')
 
 const tracerLogger = require('../../src/log')
 

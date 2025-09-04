@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const os = require('node:os')
 
-require('./setup/tap')
+require('./setup/core')
 
 const { getAzureAppMetadata, getAzureTagsFromMetadata } = require('../src/azure_metadata')
 

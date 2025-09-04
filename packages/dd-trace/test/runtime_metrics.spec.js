@@ -11,7 +11,7 @@ const performance = require('node:perf_hooks').performance
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
 
-require('./setup/tap')
+require('./setup/core')
 
 const { DogStatsDClient } = require('../src/dogstatsd')
 

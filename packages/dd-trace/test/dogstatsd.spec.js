@@ -9,7 +9,7 @@ const http = require('node:http')
 const path = require('node:path')
 const os = require('node:os')
 
-require('./setup/tap')
+require('./setup/core')
 
 describe('dogstatsd', () => {
   let client

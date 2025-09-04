@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
-require('../setup/tap')
+require('../setup/core')
 
 describe('config/disabled_instrumentations', () => {
   it('should disable loading instrumentations completely', () => {

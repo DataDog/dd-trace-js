@@ -9,7 +9,7 @@ const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
 const execFileSyncStub = sinon.stub().returns('')

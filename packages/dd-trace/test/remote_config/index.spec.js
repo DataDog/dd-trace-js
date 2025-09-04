@@ -5,7 +5,7 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-require('../setup/tap')
+require('../setup/core')
 
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')

@@ -5,7 +5,7 @@ const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
 
-require('../../../../../dd-trace/test/setup/tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const log = require('../../../../src/log')

@@ -5,7 +5,7 @@ const { describe, it, beforeEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const URL = require('url').URL
 

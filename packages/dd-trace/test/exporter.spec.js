@@ -5,7 +5,7 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const fs = require('node:fs')
 
-require('./setup/tap')
+require('./setup/core')
 
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')

@@ -5,7 +5,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
 
-require('../setup/tap')
+require('../setup/core')
 
 const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')

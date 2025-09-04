@@ -6,7 +6,7 @@ const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-require('../setup/tap')
+require('../setup/core')
 
 const id = require('../../src/id')
 

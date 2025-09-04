@@ -5,7 +5,7 @@ const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const AgentInfoExporter = require('../../../src/exporters/common/agent-info-exporter')
 

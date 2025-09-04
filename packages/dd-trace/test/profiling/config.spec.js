@@ -5,7 +5,7 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const os = require('node:os')
 const path = require('node:path')
 
-require('../setup/tap')
+require('../setup/core')
 
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')

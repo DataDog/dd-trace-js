@@ -8,7 +8,7 @@ const cp = require('node:child_process')
 const fs = require('node:fs')
 const zlib = require('node:zlib')
 
-require('../../../../dd-trace/test/setup/tap')
+require('../../../../dd-trace/test/setup/core')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 

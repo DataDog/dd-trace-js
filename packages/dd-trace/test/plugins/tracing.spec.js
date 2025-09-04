@@ -5,7 +5,7 @@ const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 
-require('../setup/tap')
+require('../setup/core')
 
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')

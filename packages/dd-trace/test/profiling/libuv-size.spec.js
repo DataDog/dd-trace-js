@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
-require('../setup/tap')
+require('../setup/core')
 
 const libuvSize = require('../../src/profiling/libuv-size')
 

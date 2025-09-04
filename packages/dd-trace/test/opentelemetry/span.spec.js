@@ -7,7 +7,7 @@ const { performance } = require('perf_hooks')
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('@opentelemetry/core')
 
-require('../setup/tap')
+require('../setup/core')
 
 const tracer = require('../../').init()
 

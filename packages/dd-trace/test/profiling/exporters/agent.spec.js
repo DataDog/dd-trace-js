@@ -11,7 +11,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')

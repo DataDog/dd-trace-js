@@ -7,7 +7,7 @@ const { performance } = require('perf_hooks')
 const api = require('@opentelemetry/api')
 const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
 
-require('../setup/tap')
+require('../setup/core')
 
 require('../../').init()
 

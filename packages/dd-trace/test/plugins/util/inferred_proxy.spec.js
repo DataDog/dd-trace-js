@@ -5,7 +5,7 @@ const { describe, it, afterEach } = require('tap').mocha
 const axios = require('axios')
 const { Agent } = require('node:http')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const agent = require('../agent')
 

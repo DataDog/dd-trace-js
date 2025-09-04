@@ -7,7 +7,7 @@ const path = require('node:path')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const execFileSyncStub = sinon.stub().returns('')
 

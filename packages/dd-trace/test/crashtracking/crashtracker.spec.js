@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-require('../setup/tap')
+require('../setup/core')
 
 describe('crashtracking', () => {
   describe('crashtracker', () => {

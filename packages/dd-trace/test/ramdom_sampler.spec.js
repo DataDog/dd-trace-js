@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
-require('./setup/tap')
+require('./setup/core')
 
 describe('RandomSampler', () => {
   let RandomSampler

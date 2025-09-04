@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 
-require('../setup/tap')
+require('../setup/core')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')

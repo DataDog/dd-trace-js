@@ -6,7 +6,7 @@ const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 
-require('./setup/tap')
+require('./setup/core')
 
 describe('iitm.js', () => {
   let hookFn

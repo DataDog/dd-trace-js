@@ -8,7 +8,7 @@ const nock = require('nock')
 const fs = require('node:fs')
 const os = require('node:os')
 
-require('../../../../../dd-trace/test/setup/tap')
+require('../../../../../dd-trace/test/setup/core')
 
 const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 

@@ -4,7 +4,7 @@ const assert = require('node:assert')
 const { describe, it } = require('tap').mocha
 const dc = require('dc-polyfill')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const { storage } = require('../../../../datadog-core')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')

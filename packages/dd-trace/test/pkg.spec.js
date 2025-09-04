@@ -6,7 +6,7 @@ const os = require('node:os')
 const { execSync } = require('node:child_process')
 const proxyquire = require('proxyquire').noPreserveCache()
 
-require('./setup/tap')
+require('./setup/core')
 
 describe('pkg', () => {
   let pkg

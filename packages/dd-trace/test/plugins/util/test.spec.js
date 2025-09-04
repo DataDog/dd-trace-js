@@ -7,7 +7,7 @@ const istanbul = require('istanbul-lib-coverage')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-require('../../setup/tap')
+require('../../setup/core')
 
 const {
   getTestParametersString,

@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 const { setTimeout } = require('node:timers/promises')
 
 require('tap').mochaGlobals()
-require('../setup/tap')
+require('../setup/core')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
