@@ -104,6 +104,8 @@ function wrap (target, name, wrapper, options) {
   }
 
   if (target == null) {
+    console.error(new Error('Target is null'))
+    process.exit(1)
     // TODO: Add logging. This is an indicator that the part of a module that we
     // try to instrument changed.
     // Accessing the properties directly is in itself also unsafe, so we could just
