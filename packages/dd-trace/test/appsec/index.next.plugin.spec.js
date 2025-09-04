@@ -9,6 +9,7 @@ const path = require('path')
 
 const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
+const { withVersions } = require('../setup/mocha')
 
 describe('test suite', () => {
   let server

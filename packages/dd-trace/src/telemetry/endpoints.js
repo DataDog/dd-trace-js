@@ -45,13 +45,8 @@ function onFastifyRoute (routeData) {
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
 
-  // Check if this is a wildcard route fastify.all()
-  if (methods.length === 8) {
-    recordEndpoint('*', routeOptions.path)
-  } else {
-    for (const method of methods) {
-      recordEndpoint(method, routeOptions.path)
-    }
+  for (const method of methods) {
+    recordEndpoint(method, routeOptions.path)
   }
 }
 
@@ -126,14 +121,14 @@ function flushAndSend () {
   if (pendingEndpoints.size) scheduleFlush()
 }
 
-function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
+function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDataFunction) {
   if (!_config?.appsec?.apiSecurity?.endpointCollectionEnabled) return
 
   config = _config
   application = _application
   host = _host
   getRetryData = getRetryDataFunction
-  updateRetryData = updateRetryDatafunction
+  updateRetryData = updateRetryDataFunction
 
   fastifyRouteCh.subscribe(onFastifyRoute)
   expressRouteCh.subscribe(onExpressRoute)

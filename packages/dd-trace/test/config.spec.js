@@ -357,6 +357,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 300, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -760,6 +764,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 500, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -1376,6 +1384,8 @@ describe('Config', () => {
   it('should give priority to the options', () => {
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '42'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
@@ -1448,6 +1458,7 @@ describe('Config', () => {
       appsec: {
         apiSecurity: {
           enabled: true,
+          endpointCollectionEnabled: true,
           endpointCollectionMessageLimit: 150
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
@@ -1633,7 +1644,9 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         apiSecurity: {
-          enabled: true
+          enabled: true,
+          endpointCollectionEnabled: true,
+          endpointCollectionMessageLimit: 500
         },
         blockedTemplateGraphql: undefined,
         blockedTemplateHtml: undefined,
@@ -1675,7 +1688,9 @@ describe('Config', () => {
       experimental: {
         appsec: {
           apiSecurity: {
-            enabled: false
+            enabled: false,
+            endpointCollectionEnabled: false,
+            endpointCollectionMessageLimit: 42
           },
           blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
@@ -1722,7 +1737,7 @@ describe('Config', () => {
         enabled: true,
         sampleDelay: 30,
         endpointCollectionEnabled: true,
-        endpointCollectionMessageLimit: 300
+        endpointCollectionMessageLimit: 500
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,

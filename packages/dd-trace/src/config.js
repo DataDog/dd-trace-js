@@ -252,6 +252,12 @@ const sourcesOrder = [
 ]
 
 class Config {
+  /**
+   * parsed DD_TAGS, usable as a standalone tag set across products
+   * @type {Record<string, string> | undefined}
+   */
+  #parsedDdTags = {}
+
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
@@ -314,12 +320,6 @@ class Config {
     if (typeof options.runtimeMetrics === 'boolean') {
       options.runtimeMetrics = {
         enabled: options.runtimeMetrics
-      }
-    }
-
-    if (typeof options.runtimeMetrics?.gc === 'boolean') {
-      options.runtimeMetrics.gc = {
-        enabled: options.runtimeMetrics.gc
       }
     }
 
@@ -429,6 +429,10 @@ class Config {
         }
       }
     }
+  }
+
+  get parsedDdTags () {
+    return this.#parsedDdTags
   }
 
   // Supports only a subset of options for now.
@@ -827,8 +831,10 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
+    tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
+
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
+    tagger.add(tags, this.#parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
@@ -1190,7 +1196,7 @@ class Config {
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
-    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))

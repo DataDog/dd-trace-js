@@ -15,20 +15,13 @@ describe('Span', () => {
   let processor
   let prioritySampler
   let now
-  let metrics
-  let handle
   let id
   let tagger
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
 
-    handle = { finish: sinon.spy() }
     now = sinon.stub().returns(0)
-
-    metrics = {
-      track: sinon.stub().returns(handle)
-    }
 
     id = sinon.stub()
     id.onFirstCall().returns('123')
@@ -55,8 +48,7 @@ describe('Span', () => {
         }
       },
       '../id': id,
-      '../tagger': tagger,
-      '../metrics': metrics
+      '../tagger': tagger
     })
   })
 

@@ -4,6 +4,7 @@ const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
@@ -115,14 +116,19 @@ describe('RASP - ssrf', () => {
         withVersions('express', 'axios', axiosVersion => {
           let axiosToTest
 
-          beforeEach(() => {
+          beforeEach((done) => {
             axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
+
+            // we preload axios because it's lazyloading a debug dependency
+            // that in turns trigger LFI
+            axiosToTest.get('http://preloadaxios').catch(noop).then(done)
           })
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axiosToTest.get(`https://${req.query.host}`).catch(noop) // swallow network error
-              res.end('end')
+              axiosToTest.get(`https://${req.query.host}`)
+                .catch(noop) // swallow network error
+                .then(() => res.end('end'))
             }
 
             await axios.get('/?host=www.datadoghq.com')

@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const semver = require('semver')
 const { storage } = require('../../../datadog-core')
 const agent = require('../../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 module.exports = (name, factory, versionRange) => {
   describe('Instrumentation', () => {

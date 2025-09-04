@@ -1,6 +1,7 @@
 'use strict'
 
 const { prepareTestServerForIast } = require('../../utils')
+const { withVersions } = require('../../../../setup/mocha')
 
 const connectionData = {
   host: '127.0.0.1',

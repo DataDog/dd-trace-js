@@ -3,6 +3,7 @@
 const axios = require('axios')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { AsyncLocalStorage } = require('async_hooks')
 

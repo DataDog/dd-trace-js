@@ -27,30 +27,56 @@ describe('Endpoints collection', () => {
       // Basic routes
       { method: 'GET', path: '/users' },
       { method: 'HEAD', path: '/users' },
-      { method: 'POST', path: '/users' },
+      { method: 'POST', path: '/users/' },
       { method: 'PUT', path: '/users/:id' },
       { method: 'DELETE', path: '/users/:id' },
-      { method: 'PATCH', path: '/users/:id' },
-      { method: 'OPTIONS', path: '/users' },
+      { method: 'PATCH', path: '/users/:id/:name' },
+      { method: 'OPTIONS', path: '/users/:id?' },
+
+      // Route with regex
+      { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
 
       // Additional methods
       { method: 'TRACE', path: '/trace-test' },
       { method: 'HEAD', path: '/head-test' },
 
+      // Custom method
+      { method: 'MKCOL', path: '/example/near/:lat-:lng/radius/:r' },
+
       // Using app.route()
       { method: 'POST', path: '/multi-method' },
+      { method: 'PUT', path: '/multi-method' },
+      { method: 'PATCH', path: '/multi-method' },
 
-      // Wildcard route
-      { method: '*', path: '/wildcard' },
+      // All supported methods route
+      { method: 'GET', path: '/all-methods' },
+      { method: 'HEAD', path: '/all-methods' },
+      { method: 'TRACE', path: '/all-methods' },
+      { method: 'DELETE', path: '/all-methods' },
+      { method: 'OPTIONS', path: '/all-methods' },
+      { method: 'PATCH', path: '/all-methods' },
+      { method: 'PUT', path: '/all-methods' },
+      { method: 'POST', path: '/all-methods' },
+      { method: 'MKCOL', path: '/all-methods' }, // Added with addHttpMethod
 
       // Nested routes with Router
       { method: 'PUT', path: '/v1/nested/:id' },
-      { method: '*', path: '/v1/nested' },
 
       // Deeply nested routes
+      { method: 'GET', path: '/api/nested' },
+      { method: 'HEAD', path: '/api/nested' },
       { method: 'GET', path: '/api/sub/deep' },
       { method: 'HEAD', path: '/api/sub/deep' },
       { method: 'POST', path: '/api/sub/deep/:id' },
+
+      // Wildcard routes
+      { method: 'GET', path: '/wildcard/*' },
+      { method: 'HEAD', path: '/wildcard/*' },
+      { method: 'GET', path: '*' },
+      { method: 'HEAD', path: '*' },
+
+      { method: 'GET', path: '/later' },
+      { method: 'HEAD', path: '/later' },
     ]
 
     if (framework === 'express') {
@@ -69,6 +95,30 @@ describe('Endpoints collection', () => {
 
     try {
       agent = await new FakeAgent().start()
+
+      const expectedEndpoints = getExpectedEndpoints(framework)
+      const endpointsFound = []
+      const isFirstFlags = []
+      // Express: 3 messages (adds routes at runtime)
+      // Fastify: 2 messages (routes at startup)
+      const expectedMessageCount = framework === 'express' ? 3 : 2
+
+      const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
+        isFirstFlags.push(Boolean(payload.payload.is_first))
+
+        if (payload.payload.endpoints) {
+          payload.payload.endpoints.forEach(endpoint => {
+            endpointsFound.push({
+              method: endpoint.method,
+              path: endpoint.path,
+              type: endpoint.type,
+              operation_name: endpoint.operation_name,
+              resource_name: endpoint.resource_name
+            })
+          })
+        }
+      }, 'app-endpoints', 10_000, expectedMessageCount)
+
       proc = await spawnProc(appFile, {
         cwd,
         env: {
@@ -78,31 +128,7 @@ describe('Endpoints collection', () => {
         }
       })
 
-      const expectedEndpoints = getExpectedEndpoints(framework)
-      const endpointsFound = []
-      const isFirstFlags = []
-      // Express: 3 messages (adds routes at runtime)
-      // Fastify: 2 messages (routes at startup)
-      const expectedMessageCount = framework === 'express' ? 3 : 2
-
-      await agent.assertTelemetryReceived(msg => {
-        const { payload } = msg
-        if (payload.request_type === 'app-endpoints') {
-          isFirstFlags.push(Boolean(payload.payload.is_first))
-
-          if (payload.payload.endpoints) {
-            payload.payload.endpoints.forEach(endpoint => {
-              endpointsFound.push({
-                method: endpoint.method,
-                path: endpoint.path,
-                type: endpoint.type,
-                operation_name: endpoint.operation_name,
-                resource_name: endpoint.resource_name
-              })
-            })
-          }
-        }
-      }, 'app-endpoints', 10_000, expectedMessageCount)
+      await telemetryPromise
 
       const trueCount = isFirstFlags.filter(v => v === true).length
       expect(trueCount).to.equal(1)
@@ -117,6 +143,9 @@ describe('Endpoints collection', () => {
         expect(found.operation_name).to.equal('http.request')
         expect(found.resource_name).to.equal(`${expected.method} ${expected.path}`)
       })
+
+      // check that no additional endpoints were found
+      expect(endpointsFound.length).to.equal(expectedEndpoints.length)
     } finally {
       proc?.kill()
       await agent?.stop()

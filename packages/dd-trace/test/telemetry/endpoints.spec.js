@@ -14,17 +14,28 @@ describe('endpoints telemetry', () => {
   const host = 'host'
 
   describe('start', () => {
-    it('should subscribe', () => {
-      const subscribe = sinon.stub()
-      const dc = { channel () { return { subscribe } } }
-      const endpoints = proxyquire('../../src/telemetry/endpoints', {
-        'dc-polyfill': dc
-      })
+    const subscribe = sinon.stub()
+    const dc = { channel () { return { subscribe } } }
+    const endpoints = proxyquire('../../src/telemetry/endpoints', {
+      'dc-polyfill': dc
+    })
 
+    beforeEach(() => {
+      sinon.reset()
+    })
+
+    it('should subscribe', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
       endpoints.start(config)
 
       expect(subscribe).to.have.been.calledTwice
+    })
+
+    it('should not subscribe', () => {
+      const config = { appsec: { apiSecurity: { endpointCollectionEnabled: false } } }
+      endpoints.start(config)
+
+      expect(subscribe).to.not.have.been.called
     })
   })
 
@@ -76,15 +87,38 @@ describe('endpoints telemetry', () => {
     })
 
     it('should record fastify methods array', () => {
-      fastifyRouteCh.publish({ routeOptions: { method: ['GET', 'POST'], path: '/api' } })
+      fastifyRouteCh.publish({ routeOptions: { method: ['GET', 'post'], path: '/api' } })
+      fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/api' } })
+      fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/api' } })
+      fastifyRouteCh.publish({ routeOptions: { method: 'PUT', path: '/api' } })
 
       scheduledCallbacks.forEach(cb => cb())
 
       expect(sendData).to.have.been.calledOnce
       const payload = sendData.firstCall.args[4]
-      const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.include('GET /api')
-      expect(resources).to.include('POST /api')
+      expect(payload.endpoints).to.have.deep.members([
+        {
+          type: 'REST',
+          method: 'GET',
+          path: '/api',
+          operation_name: 'http.request',
+          resource_name: 'GET /api'
+        },
+        {
+          type: 'REST',
+          method: 'POST',
+          path: '/api',
+          operation_name: 'http.request',
+          resource_name: 'POST /api'
+        },
+        {
+          type: 'REST',
+          method: 'PUT',
+          path: '/api',
+          operation_name: 'http.request',
+          resource_name: 'PUT /api'
+        }
+      ])
     })
 
     it('should set is_first=true only for the first payload', () => {
@@ -100,6 +134,22 @@ describe('endpoints telemetry', () => {
 
       expect(firstPayload).to.have.property('is_first', true)
       expect(Boolean(secondPayload.is_first)).to.equal(false)
+    })
+
+    it('should send large amount of endpoints in small batches', () => {
+      for (let i = 0; i < 150; i++) {
+        fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/' + i } })
+      }
+
+      scheduledCallbacks.forEach(cb => cb())
+      scheduledCallbacks.forEach(cb => cb())
+
+      expect(sendData.callCount).to.equal(2)
+      const firstPayload = sendData.firstCall.args[4]
+      const secondPayload = sendData.secondCall.args[4]
+
+      expect(firstPayload.endpoints).to.have.length(100)
+      expect(secondPayload.endpoints).to.have.length(50)
     })
 
     it('should record express route and add HEAD for GET', () => {
@@ -127,91 +177,47 @@ describe('endpoints telemetry', () => {
       expect(resources).to.deep.equal(['* /all'])
     })
 
-    it('should record fastify wildcard when all methods provided', () => {
-      fastifyRouteCh.publish({
-        routeOptions: {
-          method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS', 'TRACE'],
-          path: '/all'
-        }
+    describe('on failed request', () => {
+      let capturedRequestType
+
+      beforeEach(() => {
+        capturedRequestType = undefined
+
+        sendData.callsFake((config, application, host, reqType, payload, cb = () => {}) => {
+          capturedRequestType = reqType
+          cb(new Error('HTTP request error'), { payload, reqType })
+        })
       })
 
-      scheduledCallbacks.forEach(cb => cb())
+      it('should update retry data', () => {
+        fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/r' } })
 
-      expect(sendData).to.have.been.calledOnce
-      const payload = sendData.firstCall.args[4]
-      const resources = payload.endpoints.map(e => e.resource_name)
-      expect(resources).to.deep.equal(['* /all'])
-    })
-  })
+        scheduledCallbacks.forEach(cb => cb())
 
-  describe('on failed request', () => {
-    let endpoints
-    let getRetryData
-    let updateRetryData
-    let capturedRequestType
-    let scheduledCallbacks
-
-    beforeEach(() => {
-      capturedRequestType = undefined
-      const sendData = (config, application, host, reqType, payload, cb = () => {}) => {
-        capturedRequestType = reqType
-        cb(new Error('HTTP request error'), { payload, reqType })
-      }
-      getRetryData = sinon.stub()
-      updateRetryData = sinon.stub()
-
-      endpoints = proxyquire('../../src/telemetry/endpoints', {
-        './send-data': { sendData }
+        expect(getRetryData).to.have.been.calledOnce
+        expect(capturedRequestType).to.equal('app-endpoints')
+        expect(updateRetryData).to.have.been.calledOnce
       })
 
-      scheduledCallbacks = []
-      global.setImmediate = function (cb) {
-        scheduledCallbacks.push(cb)
-        return { unref () {} }
-      }
+      it('should create batch request when retry data exists', () => {
+        fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/first' } })
 
-      const config = {
-        appsec: {
-          apiSecurity: {
-            endpointCollectionEnabled: true,
-            endpointCollectionMessageLimit: 100
-          }
-        }
-      }
-      endpoints.start(config, application, host, getRetryData, updateRetryData)
-    })
+        scheduledCallbacks.forEach(cb => cb())
 
-    afterEach(() => {
-      endpoints.stop()
-      getRetryData.reset && getRetryData.reset()
-      updateRetryData.reset && updateRetryData.reset()
-      global.setImmediate = originalSetImmediate
-    })
+        expect(getRetryData).to.have.been.calledOnce
+        expect(capturedRequestType).to.equal('app-endpoints')
 
-    it('should update retry data', () => {
-      fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/r' } })
-      scheduledCallbacks.forEach(cb => cb())
-      expect(getRetryData).to.have.been.calledOnce
-      expect(capturedRequestType).to.equal('app-endpoints')
-      expect(updateRetryData).to.have.been.calledOnce
-    })
+        getRetryData.returns({
+          reqType: 'app-endpoints',
+          payload: { endpoints: [] }
+        })
 
-    it('should create batch request when retry data exists', () => {
-      fastifyRouteCh.publish({ routeOptions: { method: 'GET', path: '/first' } })
-      scheduledCallbacks.forEach(cb => cb())
-      expect(getRetryData).to.have.been.calledOnce
-      expect(capturedRequestType).to.equal('app-endpoints')
-
-      getRetryData.returns({
-        reqType: 'app-endpoints',
-        payload: { endpoints: [] }
+        fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/second' } })
+        scheduledCallbacks.forEach(cb => cb())
+        expect(getRetryData).to.have.been.calledTwice
+        expect(capturedRequestType).to.equal('message-batch')
+        expect(updateRetryData).to.have.been.calledTwice
       })
-
-      fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/second' } })
-      scheduledCallbacks.forEach(cb => cb())
-      expect(getRetryData).to.have.been.calledTwice
-      expect(capturedRequestType).to.equal('message-batch')
-      expect(updateRetryData).to.have.been.calledTwice
     })
   })
 })

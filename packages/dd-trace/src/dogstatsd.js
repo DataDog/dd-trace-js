@@ -156,23 +156,19 @@ class DogStatsDClient {
     return socket
   }
 
-  static generateClientConfig (config = {}) {
+  static generateClientConfig (config) {
     const tags = []
 
     if (config.tags) {
-      Object.keys(config.tags)
-        .filter(key => typeof config.tags[key] === 'string')
-        .filter(key => {
-          // Skip runtime-id unless enabled as cardinality may be too high
-          if (key !== 'runtime-id') return true
-          return config.runtimeMetricsRuntimeId
-        })
-        .forEach(key => {
+      for (const [key, value] of Object.entries(config.tags)) {
+        // Skip runtime-id unless enabled as cardinality may be too high
+        if (typeof value === 'string' && (key !== 'runtime-id' || config.runtimeMetricsRuntimeId)) {
           // https://docs.datadoghq.com/tagging/#defining-tags
-          const value = config.tags[key].replaceAll(/[^a-z0-9_:./-]/ig, '_')
+          const valueStripped = value.replaceAll(/[^a-z0-9_:./-]/ig, '_')
 
-          tags.push(`${key}:${value}`)
-        })
+          tags.push(`${key}:${valueStripped}`)
+        }
+      }
     }
 
     const clientConfig = {
@@ -216,7 +212,7 @@ class MetricsAggregationClient {
     this._histograms = new Map()
   }
 
-  // TODO: Aggerate with a histogram and send the buckets to the client.
+  // TODO: Aggregate with a histogram and send the buckets to the client.
   distribution (name, value, tags) {
     this._client.distribution(name, value, tags)
   }
@@ -352,9 +348,10 @@ class MetricsAggregationClient {
  * @implements {DogStatsD}
  */
 class CustomMetrics {
+  #client
   constructor (config) {
     const clientConfig = DogStatsDClient.generateClientConfig(config)
-    this._client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    this.#client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
 
     const flush = this.flush.bind(this)
 
@@ -365,27 +362,27 @@ class CustomMetrics {
   }
 
   increment (stat, value = 1, tags) {
-    this._client.increment(stat, value, CustomMetrics.tagTranslator(tags))
+    this.#client.increment(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   decrement (stat, value = 1, tags) {
-    this._client.decrement(stat, value, CustomMetrics.tagTranslator(tags))
+    this.#client.decrement(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   gauge (stat, value, tags) {
-    this._client.gauge(stat, value, CustomMetrics.tagTranslator(tags))
+    this.#client.gauge(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   distribution (stat, value, tags) {
-    this._client.distribution(stat, value, CustomMetrics.tagTranslator(tags))
+    this.#client.distribution(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   histogram (stat, value, tags) {
-    this._client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
+    this.#client.histogram(stat, value, CustomMetrics.tagTranslator(tags))
   }
 
   flush () {
-    return this._client.flush()
+    return this.#client.flush()
   }
 
   /**
