@@ -7,8 +7,6 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/mocha')
 
-const proxyquire = require('proxyquire')
-
 describe('breakpoints', function () {
   let breakpoints
   let sessionMock

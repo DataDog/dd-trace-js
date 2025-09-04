@@ -6,8 +6,6 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/mocha')
 
-const proxyquire = require('proxyquire')
-
 describe('findScriptFromPartialPath', function () {
   let state
 

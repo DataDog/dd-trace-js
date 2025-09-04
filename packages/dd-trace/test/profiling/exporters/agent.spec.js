@@ -51,8 +51,6 @@ async function createProfile (periodType) {
   return profiler.encode(profile)
 }
 
-const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
-
 describe('exporters/agent', function () {
   let AgentExporter
   let sockets
@@ -442,7 +440,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describeOnUnix('using UDS', () => {
+  describe('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -490,5 +488,5 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       })
     })
-  })
+  }, { skip: os.platform() === 'win32' })
 })

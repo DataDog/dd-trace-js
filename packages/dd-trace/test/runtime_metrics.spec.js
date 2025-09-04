@@ -17,8 +17,6 @@ const { DogStatsDClient } = require('../src/dogstatsd')
 
 const isWindows = os.platform() === 'win32'
 
-const suiteDescribe = isWindows ? describe.skip : describe
-
 function createGarbage (count = 50) {
   let last = {}
   const obj = last
@@ -35,7 +33,7 @@ function createGarbage (count = 50) {
 
 [true, false].forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
-    suiteDescribe('runtimeMetrics (proxy)', () => {
+    describe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
       let proxy
       let config
@@ -135,9 +133,9 @@ function createGarbage (count = 50) {
         expect(runtimeMetrics.decrement).to.not.have.been.called
         expect(runtimeMetrics.stop).to.have.been.calledOnce
       })
-    })
+    }, { skip: isWindows })
 
-    suiteDescribe('runtimeMetrics', () => {
+    describe('runtimeMetrics', () => {
       let runtimeMetrics
       let config
       let clock
@@ -784,6 +782,6 @@ function createGarbage (count = 50) {
           })
         })
       })
-    })
+    }, { skip: isWindows })
   })
 })

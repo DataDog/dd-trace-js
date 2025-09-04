@@ -7,8 +7,6 @@ const sinon = require('sinon')
 
 require('../../setup/mocha')
 
-const proxyquire = require('proxyquire')
-
 const parsedSourceMap = {
   version: 3,
   file: 'index.js',
