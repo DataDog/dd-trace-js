@@ -42,12 +42,14 @@ function guard (fn) {
   // should not initialize the tracer.
   if (!clobberBailout && NODE_MAJOR < minMajor) {
     initBailout = true
-    telemetry('abort', ['reason:incompatible_runtime'], {
+    telemetry([
+      { name: 'abort', tags: ['reason:incompatible_runtime'] },
+      { name: 'abort.runtime', tags: [] }
+    ], undefined, {
       result: 'abort',
       result_class: 'incompatible_runtime',
       result_reason: 'Incompatible runtime nodejs ' + version + ', supported runtimes: nodejs ' + engines.node
     })
-    telemetry('abort.runtime', [])
     log.info('Aborting application instrumentation due to incompatible_runtime.')
     log.info('Found incompatible runtime nodejs %s, Supported runtimes: nodejs %s.', version, engines.node)
     if (forced) {
