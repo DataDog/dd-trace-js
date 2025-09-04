@@ -12,7 +12,7 @@ const skipMethods = new Set([
 const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
-const shimmered = new WeakSet()
+const shimmered = new WeakMap()
 
 /**
  * Copies properties from the original function to the wrapped function.
@@ -77,12 +77,13 @@ function wrapFunction (original, wrapper) {
   const wrapped = wrapper(original)
 
   if (typeof original === 'function') {
-    if (shimmered.has(original)) {
+    const wrapper2 = shimmered.get(original)
+    if (wrapper === wrapper2) {
       return original
     }
     assertNotClass(original)
     copyProperties(original, wrapped)
-    shimmered.add(wrapped)
+    shimmered.set(wrapped, wrapper)
   }
 
   return wrapped
@@ -127,7 +128,8 @@ function wrap (target, name, wrapper, options) {
     enumerable: false
   }
 
-  if (shimmered.has(descriptor.value ?? descriptor.get)) {
+  const wrapper2 = shimmered.get(descriptor.value ?? descriptor.get)
+  if (wrapper === wrapper2) {
     return target
   }
 
@@ -210,7 +212,7 @@ function wrap (target, name, wrapper, options) {
 
   Object.defineProperty(target, name, descriptor)
 
-  shimmered.add(descriptor.value ?? descriptor.get)
+  shimmered.set(descriptor.value ?? descriptor.get, wrapper)
 
   return target
 }
