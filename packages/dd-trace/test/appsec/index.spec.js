@@ -34,9 +34,9 @@ const addresses = require('../../src/appsec/addresses')
 const resultActions = {
   actions: {
     block_request: {
-      status_code: '401',
+      status_code: 401,
       type: 'auto',
-      grpc_status_code: '10'
+      grpc_status_code: 10
     }
   }
 }
@@ -54,7 +54,6 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
-  let standalone
   let serverless
 
   const RULES = { rules: [{ a: 1 }] }
@@ -134,11 +133,6 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
-    standalone = {
-      configure: sinon.stub(),
-      disable: sinon.stub()
-    }
-
     serverless = {
       isInServerlessEnvironment: sinon.stub()
     }
@@ -153,7 +147,6 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      './standalone': standalone,
       '../serverless': serverless
     })
 

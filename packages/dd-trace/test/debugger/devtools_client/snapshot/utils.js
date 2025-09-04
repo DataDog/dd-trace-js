@@ -3,7 +3,28 @@
 const { join, basename } = require('path')
 
 const session = require('./stub-session')
-const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
+const proxyquire = require('proxyquire')
+
+const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
+  '../session': session
+})
+const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
+  '../config': {
+    dynamicInstrumentation: {
+      redactedIdentifiers: [],
+      redactionExcludedIdentifiers: []
+    },
+  }
+})
+
+const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
+  './redaction': redactionWithStub
+})
+
+const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
+  './collector': collectorWithStub,
+  './processor': processorWithStub
+})
 
 module.exports = {
   session,
@@ -11,7 +32,8 @@ module.exports = {
   enable,
   teardown,
   setAndTriggerBreakpoint,
-  assertOnBreakpoint
+  assertOnBreakpoint,
+  getLocalStateForCallFrame
 }
 
 /**

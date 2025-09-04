@@ -182,8 +182,16 @@ describe('tagger', () => {
           expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
         })
 
-        it('throws an error if no mlApp is provided and no propagated mlApp is provided', () => {
+        it('throws an error if no mlApp is provided and no propagated mlApp is provided and no service', () => {
           expect(() => tagger.registerLLMObsSpan(span, { kind: 'llm' })).to.throw()
+        })
+
+        it('uses the service name if no mlApp is provided and no propagated mlApp is provided', () => {
+          tagger = new Tagger({ llmobs: { enabled: true }, service: 'my-service' })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-service')
         })
       })
     })
