@@ -4,7 +4,8 @@ const web = require('../../plugins/util/web')
 const {
   setUncaughtExceptionCaptureCallbackStart,
   expressMiddlewareError,
-  fastifyMiddlewareError
+  fastifyMiddlewareError,
+  routerMiddlewareError
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
@@ -117,6 +118,7 @@ function enable (config) {
 
   expressMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
+  routerMiddlewareError.subscribe(blockOnDatadogRaspAbortError)
 }
 
 function disable () {

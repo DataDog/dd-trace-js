@@ -11,7 +11,7 @@ describe('RASP - lfi - integration - sync', () => {
   before(async function () {
     this.timeout(60000)
     sandbox = await createSandbox(
-      ['express', 'fs'],
+      ['express', 'fs', 'router'],
       false,
       [path.join(__dirname, 'resources')])
 
