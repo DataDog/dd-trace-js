@@ -145,7 +145,9 @@ describe('PoissonProcessSamplingFilter', () => {
     nowValue = event.startTime + event.duration
     filter.filter(event)
     assert.ok(filter.nextSamplingInstant > nowValue)
-    assert.ok(filter.samplingInstantCount < 10)
+    // With the feature, the expected value is 2. Without it, the expected value
+    // would be 1000. 100 should be enough not to be flaky.
+    assert.ok(filter.samplingInstantCount < 100)
   })
 
   it('should return true if event.startTime < currentSamplingInstant', () => {
