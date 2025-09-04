@@ -115,7 +115,7 @@ const extractQueueMetadata = queueURL => {
   const parts = queueURL.split('/').filter(Boolean)
 
   // Check if URL has scheme
-  const hasScheme = parts[0] && parts[0].startsWith('http')
+  const hasScheme = Boolean(parts[0]?.startsWith('http'))
   const minParts = hasScheme ? 4 : 3
 
   if (parts.length < minParts) return null
