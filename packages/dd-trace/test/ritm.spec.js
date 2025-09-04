@@ -2,11 +2,12 @@
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
+const { describe, it, before, beforeEach, afterEach } = require('tap').mocha
+
 const assert = require('node:assert')
 const Module = require('node:module')
 
 require('./setup/core')
-const { describe, it, before, beforeEach, afterEach } = require('tap').mocha
 
 const Hook = require('../src/ritm')
 

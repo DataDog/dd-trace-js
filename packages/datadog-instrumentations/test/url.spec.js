@@ -75,7 +75,7 @@ names.forEach(name => {
           const OriginalUrl = Object.getPrototypeOf(url.URL)
           const originalUrl = new OriginalUrl('https://www.datadoghq.com')
 
-          assert.strictEqual(originalUrl instanceof url.URL, true)
+          assert(originalUrl instanceof url.URL)
         })
 
         ;['host', 'origin', 'hostname'].forEach(property => {

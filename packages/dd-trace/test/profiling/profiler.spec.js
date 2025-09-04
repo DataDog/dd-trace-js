@@ -1,13 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-// const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { setTimeout } = require('node:timers/promises')
 
-require('tap').mochaGlobals()
 require('../setup/core')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
