@@ -125,7 +125,7 @@ const extractQueueMetadata = queueURL => {
   const host = hasScheme ? parts[1] : parts[0]
 
   let region = 'us-east-1' // Default region if not found in URL
-  if (host.includes('.amazonaws.com')) {
+  if (host.includes('.amazonaws.com') && !host.startsWith('queue')) {
     // sqs.{region}.amazonaws.com or {region}.queue.amazonaws.com
     const startFrom = host.startsWith('sqs.') ? 4 : 0
     const nextDot = host.indexOf('.', startFrom)
