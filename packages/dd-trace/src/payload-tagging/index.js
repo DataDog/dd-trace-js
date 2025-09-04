@@ -37,13 +37,10 @@ function maybeJSONParseValue (value) {
  */
 function expand (object, expansionRules) {
   for (const rule of expansionRules) {
-    try {
       jsonpath(rule, object, (value, _type, desc) => {
-        desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
+        if(desc.parent &&  desc.parentProperty)
+          desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
       })
-    } catch (error) {
-      log.error(`An error occured creating jsonpath from rule: ${rule}`, error)
-    }
   }
 }
 
@@ -55,13 +52,10 @@ function expand (object, expansionRules) {
  */
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
-    try {
       jsonpath(rule, object, (_value, _type, desc) => {
-        desc.parent[desc.parentProperty] = 'redacted'
+        if(desc.parent && desc.parentProperty)
+          desc.parent[desc.parentProperty] = 'redacted'
       })
-    } catch (error) {
-      log.error(`An error occured creating jsonpath from rule: ${rule}`, error)
-    }
   }
 }
 

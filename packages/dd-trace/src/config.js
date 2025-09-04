@@ -20,6 +20,7 @@ const {
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
+const { JSONPath } = require('jsonpath-plus')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -189,9 +190,9 @@ function validateNamingVersion (versionString) {
  * @param {string | string[]} input
  */
 function splitJSONPathRules (input) {
-  if (!input || input.toLowerCase() === 'false' || input === '$') return
+  if (!input || input === '$') return
   if (Array.isArray(input)) return input
-  if (input === 'all' || input.toLowerCase() === 'true') return []
+  if (input === 'all') return []
   return input.split(',')
 }
 
