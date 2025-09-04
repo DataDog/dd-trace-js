@@ -2,6 +2,8 @@
 
 require('../../setup/mocha')
 
+const proxyquire = require('proxyquire')
+
 describe('breakpoints', function () {
   let breakpoints
   let sessionMock
@@ -37,7 +39,7 @@ describe('breakpoints', function () {
       '@noCallThru': true
     }
 
-    breakpoints = proxyquire('../src/debugger/devtools_client/breakpoints', {
+    breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
       './state': stateMock
     })

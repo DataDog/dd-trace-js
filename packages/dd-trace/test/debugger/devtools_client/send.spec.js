@@ -2,6 +2,8 @@
 
 require('../../setup/mocha')
 
+const proxyquire = require('proxyquire')
+
 const { hostname: getHostname } = require('os')
 const sinon = require('sinon')
 const { getRequestOptions } = require('./utils')
@@ -38,7 +40,7 @@ describe('input message http requests', function () {
       }
     }
 
-    send = proxyquire('../src/debugger/devtools_client/send', {
+    send = proxyquire('../../../src/debugger/devtools_client/send', {
       './config': {
         service,
         commitSHA,
