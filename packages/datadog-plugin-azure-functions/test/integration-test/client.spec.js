@@ -11,6 +11,9 @@ const { spawn } = require('child_process')
 const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
 
+const util = require('node:util')
+util.inspect.defaultOptions.depth = Infinity
+
 describe('esm', () => {
   let agent
   let proc
@@ -50,6 +53,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
+        console.log('payload', payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(payload.length, 1)
@@ -66,6 +70,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
+        console.log('payload', payload)
         assert.strictEqual(payload.length, 2)
         assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
       })
@@ -78,6 +83,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
+        console.log('payload', payload)
         assert.strictEqual(payload.length, 3)
         assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
         assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
@@ -96,6 +102,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
+        console.log('payload', payload)
         assert.strictEqual(payload.length, 3)
         assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
         assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
