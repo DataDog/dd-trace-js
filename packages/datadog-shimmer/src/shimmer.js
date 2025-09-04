@@ -12,7 +12,7 @@ const skipMethods = new Set([
 const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
-// const wrappedFns = new WeakMap()
+const wrappedFns = new WeakMap()
 
 /**
  * Copies properties from the original function to the wrapped function.
@@ -134,26 +134,25 @@ function wrap (target, name, wrapper, options) {
   }
 
   const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
-  // const wrappers = wrappedFns.get(original)
+  const wrappers = wrappedFns.get(original)
 
   // if this function has already been wrapped, ensure we don't wrap again with the same wrapper
   // Allows for wrapping the same function multiple times with different wrappers, which may be
   // needed to empower different products, ie: tracing and ASM
-  // if (wrappers && wrappers.has(wrapper)) {
-  //   console.log(original.toString())
-  //   return target
-  // }
+  if (wrappers && wrappers.has(wrapper)) {
+    return target
+  }
 
   assertMethod(target, name, original)
 
   const wrapped = wrapper(original)
 
   // store the wrapper and original function in the map for future reference
-  // if (wrappers) {
-  //   wrappers.add(wrapper)
-  // } else {
-  //   wrappedFns.set(original, new WeakSet([wrapper]))
-  // }
+  if (wrappers) {
+    wrappers.add(wrapper)
+  } else {
+    wrappedFns.set(original, new WeakSet([wrapper]))
+  }
 
   copyProperties(original, wrapped)
 
