@@ -2,6 +2,8 @@
 
 require('../../setup/mocha')
 
+const proxyquire = require('proxyquire')
+
 const parsedSourceMap = {
   version: 3,
   file: 'index.js',
@@ -23,7 +25,7 @@ describe('source map utils', function () {
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
-      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
+      const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
         'fs/promises': { readFile }
       })
@@ -102,7 +104,7 @@ describe('source map utils', function () {
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
-      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
+      const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
         'fs/promises': { readFile }
       })
