@@ -1,14 +1,17 @@
 'use strict'
 
-const { assert } = require('chai')
-const agent = require('../plugins/agent')
 const Axios = require('axios')
+const { assert } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const path = require('node:path')
+const fs = require('node:fs')
+
+const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const path = require('path')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
-const fs = require('fs')
 
 describe('HTTP Response Blocking', () => {
   let server

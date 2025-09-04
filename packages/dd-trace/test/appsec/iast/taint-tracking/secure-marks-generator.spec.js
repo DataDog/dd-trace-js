@@ -1,6 +1,9 @@
 'use strict'
 
 const { getNextSecureMark, reset } = require('../../../../src/appsec/iast/taint-tracking/secure-marks-generator')
+const assert = require('node:assert')
+const { describe, it, beforeEach } = require('mocha')
+
 describe('test secure marks generator', () => {
   beforeEach(() => {
     reset()
@@ -12,7 +15,7 @@ describe('test secure marks generator', () => {
 
   it('should generate numbers in order', () => {
     for (let i = 0; i < 100; i++) {
-      expect(getNextSecureMark()).to.be.equal((1 << i) >>> 0)
+      assert.strictEqual(getNextSecureMark(), (1 << i) >>> 0)
     }
   })
 })

@@ -86,7 +86,8 @@ function shouldTestsRun (type) {
       return version === '6.7.0' && type === 'commonJS'
     }
     if (NODE_MAJOR > 16) {
-      return version === 'latest'
+      // Cypress 15.0.0 has removed support for Node 18
+      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
     }
   }
   if (DD_MAJOR === 6) {
@@ -94,7 +95,11 @@ function shouldTestsRun (type) {
       return false
     }
     if (NODE_MAJOR > 16) {
-      return version === '10.2.0' || version === 'latest'
+      // Cypress 15.0.0 has removed support for Node 18
+      if (NODE_MAJOR <= 18) {
+        return version === '10.2.0' || version === '14.5.4'
+      }
+      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false

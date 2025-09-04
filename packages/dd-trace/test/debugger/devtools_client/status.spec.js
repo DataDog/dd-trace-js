@@ -1,8 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 require('../../setup/mocha')
 
-const sinon = require('sinon')
 const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 
@@ -34,7 +38,7 @@ describe('diagnostic message http requests', function () {
       }
     }
 
-    statusproxy = proxyquire('../src/debugger/devtools_client/status', {
+    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
       './config': {
         service,
         runtimeId,

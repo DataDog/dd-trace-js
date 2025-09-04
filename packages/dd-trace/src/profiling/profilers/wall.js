@@ -13,6 +13,7 @@ const {
   getThreadLabels,
   encodeProfileAsync
 } = require('./shared')
+const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
@@ -251,7 +252,12 @@ class NativeWallProfiler {
       this._enter()
       this._lastSampleCount = 0
     }
-    const profile = this._pprof.time.stop(restart, this._generateLabels)
+
+    // Mark thread labels and trace endpoint label as good deduplication candidates
+    const lowCardinalityLabels = Object.keys(getThreadLabels())
+    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
+
+    const profile = this._pprof.time.stop(restart, this._generateLabels, lowCardinalityLabels)
 
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -312,10 +318,10 @@ class NativeWallProfiler {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
     }
     if (webTags !== undefined && Object.keys(webTags).length !== 0) {
-      labels['trace endpoint'] = endpointNameFromTags(webTags)
+      labels[TRACE_ENDPOINT_LABEL] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken
-      labels['trace endpoint'] = endpoint
+      labels[TRACE_ENDPOINT_LABEL] = endpoint
     }
 
     return labels

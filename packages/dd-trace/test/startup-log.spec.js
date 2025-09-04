@@ -1,9 +1,12 @@
 'use strict'
 
-require('./setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, before } = require('tap').mocha
+const sinon = require('sinon')
 const assert = require('node:assert')
 const os = require('node:os')
+
+require('./setup/core')
 
 const Config = require('../src/config')
 const SamplingRule = require('../src/sampling_rule')
@@ -102,7 +105,7 @@ describe('startup logging', () => {
 describe('profiling_enabled', () => {
   it('should be correctly logged', () => {
     [
-      [undefined, false],
+      ['undefined', false],
       ['false', false],
       ['FileNotFound', false],
       ['auto', true],

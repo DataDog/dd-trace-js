@@ -1,13 +1,18 @@
 'use strict'
 
+const chai = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 
 const nock = require('nock')
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
-const chai = require('chai')
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
+
+const { expect } = chai
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 

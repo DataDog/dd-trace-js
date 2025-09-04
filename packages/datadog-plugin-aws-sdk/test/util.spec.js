@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
+const { Buffer } = require('node:buffer')
+
 const { generatePointerHash, encodeValue, extractPrimaryKeys, extractQueueMetadata } = require('../src/util')
 
 describe('generatePointerHash', () => {
