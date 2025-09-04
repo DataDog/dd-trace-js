@@ -321,7 +321,7 @@ describe('Plugin', () => {
             const spanId = Number(BigInt('0x' + metaData[0].span_id))
             expect(spanId).to.equal(firstTraceId)
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
+            expect(traces[0][0]).to.have.property('name', 'websocket.send')
             expect(traces[0][0]).to.have.property('type', 'websocket')
           })
         })
