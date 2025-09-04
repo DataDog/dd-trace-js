@@ -387,7 +387,7 @@ const web = {
 
     return function (statusCode, statusMessage, headers) {
       headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = Object.assign(res.getHeaders(), headers)
+      headers = Object.assign({}, res.getHeaders(), headers)
 
       if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
         addAllowHeaders(req, res, headers)
