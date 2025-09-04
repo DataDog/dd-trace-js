@@ -149,12 +149,24 @@ function extractRequestParams (params, provider) {
       })
     }
     case PROVIDER.ANTHROPIC: {
-      const prompt = requestBody.prompt || requestBody.messages
+      let prompt = requestBody.prompt
+      if (Array.isArray(requestBody.messages)) { // newer claude models
+        for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
+          const message = requestBody.messages[idx]
+          if (message.role === 'user') {
+            prompt = message.content
+              .filter(block => block.type === 'text')
+              .map(block => block.text)
+              .join('')
+          }
+        }
+      }
+
       return new RequestParams({
         prompt,
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
-        maxTokens: requestBody.max_tokens_to_sample,
+        maxTokens: requestBody.max_tokens_to_sample ?? requestBody.max_tokens,
         stopSequences: requestBody.stop_sequences
       })
     }
@@ -253,7 +265,13 @@ function extractTextAndResponseReason (response, provider, modelName) {
         break
       }
       case PROVIDER.ANTHROPIC: {
-        return new Generation({ message: body.completion || body.content, finishReason: body.stop_reason })
+        let message = body.completion
+        if (Array.isArray(body.content)) { // newer claude models
+          message = body.content.find(item => item.type === 'text')?.text ?? body.content
+        } else if (body.content) {
+          message = body.content
+        }
+        return new Generation({ message, finishReason: body.stop_reason })
       }
       case PROVIDER.COHERE: {
         if (modelName.includes('embed')) {
@@ -262,6 +280,15 @@ function extractTextAndResponseReason (response, provider, modelName) {
             return new Generation({ message: embeddings[0] })
           }
         }
+
+        if (body.text) {
+          return new Generation({
+            message: body.text,
+            finishReason: body.finish_reason,
+            choiceId: shouldSetChoiceIds ? body.response_id : undefined
+          })
+        }
+
         const generations = body.generations || []
         if (generations.length > 0) {
           const generation = generations[0]

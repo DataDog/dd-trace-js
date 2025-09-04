@@ -3,7 +3,6 @@
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 
-const nock = require('nock')
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const chai = require('chai')
@@ -48,7 +47,7 @@ describe('Plugin', () => {
           })
         })
 
-        before(done => {
+        before(() => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
@@ -57,13 +56,16 @@ describe('Plugin', () => {
               .NodeHttpHandler
 
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
-            { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', ServiceId: serviceName, requestHandler: new NodeHttpHandler() }
+            {
+              endpoint: { url: 'http://127.0.0.1:9126/vcr/bedrock-runtime' },
+              region: 'us-east-1',
+              ServiceId: serviceName,
+              requestHandler: new NodeHttpHandler()
+            }
           )
-          done()
         })
 
         afterEach(() => {
-          nock.cleanAll()
           LLMObsSpanWriter.prototype.append.reset()
         })
 
@@ -73,7 +75,7 @@ describe('Plugin', () => {
         })
 
         models.forEach(model => {
-          it(`should invoke model for provider:${model.provider}`, done => {
+          it(`should invoke model for provider: ${model.provider} (ModelId: ${model.modelId})`, async () => {
             const request = {
               body: JSON.stringify(model.requestBody),
               contentType: 'application/json',
@@ -81,22 +83,12 @@ describe('Plugin', () => {
               modelId: model.modelId
             }
 
-            const response = JSON.stringify(model.response)
-
-            nock('http://127.0.0.1:4566')
-              .post(`/model/${model.modelId}/invoke`)
-              .reply(200, response, {
-                'x-amzn-bedrock-input-token-count': 50,
-                'x-amzn-bedrock-output-token-count': 70,
-                'x-amzn-requestid': Date.now().toString()
-              })
-
             const command = new AWS.InvokeModelCommand(request)
 
-            const expectedOutput = { content: model.output }
+            const expectedOutput = { content: model.response.text }
             if (model.outputRole) expectedOutput.role = model.outputRole
 
-            agent.assertSomeTraces(traces => {
+            const tracesPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
               const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
               const expected = expectedLLMObsLLMSpanEvent({
@@ -106,9 +98,9 @@ describe('Plugin', () => {
                 inputMessages: [{ content: model.userPrompt }],
                 outputMessages: [expectedOutput],
                 tokenMetrics: {
-                  input_tokens: model.usage?.inputTokens ?? 50,
-                  output_tokens: model.usage?.outputTokens ?? 70,
-                  total_tokens: model.usage?.totalTokens ?? 120
+                  input_tokens: model.response.inputTokens,
+                  output_tokens: model.response.outputTokens,
+                  total_tokens: model.response.inputTokens + model.response.outputTokens
                 },
                 modelName: model.modelId.split('.')[1].toLowerCase(),
                 modelProvider: model.provider.toLowerCase(),
@@ -120,11 +112,10 @@ describe('Plugin', () => {
               })
 
               expect(spanEvent).to.deepEqualWithMockValues(expected)
-            }).then(done).catch(done)
-
-            bedrockRuntimeClient.send(command, (err) => {
-              if (err) return done(err)
             })
+
+            await bedrockRuntimeClient.send(command)
+            await tracesPromise
           })
         })
       })
