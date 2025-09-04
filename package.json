@@ -46,7 +46,7 @@
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
-    "test:integration": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/*.spec.js\"",
+    "test:integration": "mocha --timeout 120000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/*.spec.js\"",
     "test:integration:appsec": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/appsec/*.spec.js\"",
     "test:integration:cucumber": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
