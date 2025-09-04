@@ -131,7 +131,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     const validResultClasses = ['success', 'incompatible_runtime', 'incompatible_library', 'internal_error', 'unknown']
 
     assert(validResults.includes(actualMetadata.result), `Invalid result: ${actualMetadata.result}`)
-    assert(validResultClasses.includes(actualMetadata.result_class), 
+    assert(validResultClasses.includes(actualMetadata.result_class),
       `Invalid result_class: ${actualMetadata.result_class}`)
     assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
   }
