@@ -527,5 +527,11 @@
       "name": "sqlite3",
       "versions": ["^5.0.8"]
     }
+  ],
+  "ws": [
+    {
+      "name":"ws",
+      "versions": [">=8.0.0"]
+    }
   ]
 }
