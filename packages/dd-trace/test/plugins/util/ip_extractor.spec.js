@@ -227,7 +227,7 @@ describe('ip extractor', () => {
         'x-forwarded-for': 'bonjour',
         'x-client-ip': '[::1',
         'true-client-ip': '256.256.256.256',
-        'forwarded': 'by=1.1.1.1;proto=https'
+        forwarded: 'by=1.1.1.1;proto=https'
       }
     }).catch(done)
   })
