@@ -27,7 +27,7 @@ describe('Plugin', () => {
         const config = { codeOriginForSpans: { enabled: false } }
 
         describe(`with tracer config ${JSON.stringify(config)}`, () => {
-          before(() => agent.load(['express', 'http'], [{}, {}, { client: false }], config))
+          before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
           after(() => agent.close({ ritmReset: false, wipe: true }))
 
@@ -55,7 +55,7 @@ describe('Plugin', () => {
 
         for (const config of configs) {
           describe(`with tracer config ${JSON.stringify(config)}`, () => {
-            before(() => agent.load(['express', 'http'], [{}, {}, { client: false }], config))
+            before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
             after(() => agent.close({ ritmReset: false, wipe: true }))
 
