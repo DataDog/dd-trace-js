@@ -33,6 +33,7 @@ const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
 const fs = require('fs')
+const { execSync } = require('child_process')
 
 const builtins = new Set()
 
@@ -61,6 +62,39 @@ function isESMBuild (build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
+function getGitMetadata () {
+  const gitMetadata = {
+    repositoryURL: null,
+    commitSHA: null
+  }
+
+  try {
+    gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      cwd: process.cwd()
+    }).trim()
+  } catch (e) {
+    if (DEBUG) {
+      console.warn('Warning: failed to get git repository URL:', e.message)
+    }
+  }
+
+  try {
+    gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      cwd: process.cwd()
+    }).trim()
+  } catch (e) {
+    if (DEBUG) {
+      console.warn('Warning: failed to get git commit SHA:', e.message)
+    }
+  }
+
+  return gitMetadata
+}
+
 module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   if (isESMBuild(build)) {
@@ -75,6 +109,27 @@ globalThis.__filename ??= $dd_fileURLToPath(import.meta.url);
 globalThis.__dirname ??= $dd_dirname(globalThis.__filename);
 ${build.initialOptions.banner.js}`
     }
+  }
+
+  // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
+  const gitMetadata = getGitMetadata()
+  if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+    build.initialOptions.banner ??= {}
+    build.initialOptions.banner.js ??= ''
+
+    build.initialOptions.banner.js = `if (typeof process !== 'undefined' && process.env) {
+  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
+  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
+}
+${build.initialOptions.banner.js}`
+
+    if (DEBUG) {
+      console.log('Info: automatically injected git metadata:')
+      console.log(`DD_GIT_REPOSITORY_URL: ${gitMetadata.repositoryURL || 'not available'}`)
+      console.log(`DD_GIT_COMMIT_SHA: ${gitMetadata.commitSHA || 'not available'}`)
+    }
+  } else if (DEBUG) {
+    console.warn('Warning: No git metadata available - skipping injection')
   }
 
   build.onResolve({ filter: /.*/ }, args => {
