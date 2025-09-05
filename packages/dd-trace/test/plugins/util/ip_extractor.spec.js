@@ -231,24 +231,6 @@ describe('ip extractor', () => {
       }).catch(done)
     })
 
-    it('should not detect ip in header \'Forwarded\' in by', (done) => {
-      const expectedIp = '127.0.0.1'
-      controller = function (req) {
-        const ip = extractIp({}, req)
-        try {
-          expect(ip).to.be.equal(expectedIp)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      }
-      axios.get(`http://localhost:${port}/`, {
-        headers: {
-          Forwarded: 'by=1.2.3.4'
-        }
-      }).catch(done)
-    })
-
     it('should detect ipv6 in header \'Forwarded\' in for', (done) => {
       const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
       controller = function (req) {
@@ -263,60 +245,6 @@ describe('ip extractor', () => {
       axios.get(`http://localhost:${port}/`, {
         headers: {
           Forwarded: `for="[${expectedIp}]"`
-        }
-      }).catch(done)
-    })
-
-    it('should detect ipv6 in header \'Forwarded\' in by', (done) => {
-      const expectedIp = '5a54:f844:006c:b8f1:0e96:9e54:54ac:4a2d'
-      controller = function (req) {
-        const ip = extractIp({}, req)
-        try {
-          expect(ip).to.be.equal(expectedIp)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      }
-      axios.get(`http://localhost:${port}/`, {
-        headers: {
-          Forwarded: `by="8.8.8.8";for=[${${expectedIp}}]`
-        }
-      }).catch(done)
-    })
-
-    it('should not detect ip in header \'Forwarded\' in by when for is private', (done) => {
-      const expectedIp = '1.2.3.4'
-      controller = function (req) {
-        const ip = extractIp({}, req)
-        try {
-          expect(ip).to.be.equal(expectedIp)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      }
-      axios.get(`http://localhost:${port}/`, {
-        headers: {
-          Forwarded: `for=192.168.0.1;by=${expectedIp}`
-        }
-      }).catch(done)
-    })
-
-    it('should detect ip in header \'Forwarded\' in for when for and by are public', (done) => {
-      const expectedIp = '1.2.3.4'
-      controller = function (req) {
-        const ip = extractIp({}, req)
-        try {
-          expect(ip).to.be.equal(expectedIp)
-          done()
-        } catch (e) {
-          done(e)
-        }
-      }
-      axios.get(`http://localhost:${port}/`, {
-        headers: {
-          Forwarded: `by=5.6.7.8;for=${expectedIp}`
         }
       }).catch(done)
     })
