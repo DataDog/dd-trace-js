@@ -387,7 +387,14 @@ const web = {
 
     return function (statusCode, statusMessage, headers) {
       headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = Object.assign({}, res.getHeaders(), headers)
+
+      const existingHeaders = res.getHeaders()
+
+      // This optimization prevents unnecessary object copying when both are empty
+      // Note: Bun's getHeaders() returns a frozen object, so Object.assign would fail
+      headers = (Object.keys(existingHeaders).length > 0 || (headers && Object.keys(headers).length > 0))
+        ? { ...existingHeaders, ...headers }
+        : {}
 
       if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
         addAllowHeaders(req, res, headers)
