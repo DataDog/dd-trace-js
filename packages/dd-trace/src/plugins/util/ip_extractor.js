@@ -117,18 +117,19 @@ function findFirstIp (str, isForwardedHeader) {
 }
 
 function cleanIp (input) {
-  if (input.includes('.')) {
-    // treat it as ipv4
-    return input.split(':', 1)[0].trim()
+  const colonIndex = input.indexOf(':')
+  if (colonIndex !== -1 && input.includes('.')) {
+    // treat it as ipv4 with port
+    return input.slice(0, colonIndex).trim()
   }
 
   const closeBracketIndex = input.indexOf(']')
-
   if (closeBracketIndex !== -1 && input.startsWith('[')) {
-    // treat as ipv6
-    input = input.slice(1, closeBracketIndex).trim()
+    // treat as ipv6 with brackets
+    return input.slice(1, closeBracketIndex).trim()
   }
 
+  // no need to clean it
   return input
 }
 
