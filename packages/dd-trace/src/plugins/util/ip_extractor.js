@@ -44,7 +44,11 @@ function extractIp (config, req) {
   if (config.clientIpHeader) {
     if (!headers) return
 
-    const ip = findFirstIp(headers[config.clientIpHeader])
+    const ipHeaderName = config.clientIpHeader
+    const header = headers[ipHeaderName]
+    if (typeof header !== 'string') return
+
+    const ip = findFirstIp(header, ipHeaderName === FORWARED_HEADER_NAME)
     return ip.public || ip.private
   }
 
@@ -52,12 +56,14 @@ function extractIp (config, req) {
   if (headers) {
     for (const ipHeaderName of ipHeaderList) {
       const header = headers[ipHeaderName]
-      const firstIp = findFirstIp(header, ipHeaderName === FORWARED_HEADER_NAME)
+      if (typeof header !== 'string') continue
 
-      if (firstIp.public) {
-        return firstIp.public
-      } else if (!firstPrivateIp && firstIp.private) {
-        firstPrivateIp = firstIp.private
+      const ip = findFirstIp(header, ipHeaderName === FORWARED_HEADER_NAME)
+
+      if (ip.public) {
+        return ip.public
+      } else if (!firstPrivateIp && ip.private) {
+        firstPrivateIp = ip.private
       }
     }
   }
@@ -65,22 +71,34 @@ function extractIp (config, req) {
   return firstPrivateIp || req.socket?.remoteAddress
 }
 
-const forwardedForRegexp = /for="?(([0-9]+\.)+[0-9]+|\[[0-9a-f:]*:[0-9a-f]*\])/i
-
 function findFirstIp (str, isForwardedHeader) {
   const result = {}
   if (!str) return result
 
   const splitted = str.split(',')
 
-  for (const part of splitted) {
-    let chunk = part.trim()
-
+  for (let chunk of splitted) {
     if (isForwardedHeader) {
-      chunk = forwardedForRegexp.exec(chunk)?.[1] || chunk
+      // find for directive
+      const forDirective = chunk.split(';').find(subchunk => subchunk.trim().toLowerCase().startsWith('for='))
+
+      // if found remove the "for=" prefix
+      // else keep going as is
+      if (forDirective) {
+        chunk = forDirective.slice(4)
+      }
     }
 
-    // TODO: strip port and interface data ?
+    chunk = chunk.trim()
+
+    // trim potential double quotes
+    if (chunk.startsWith('"') && chunk.endsWith('"')) {
+      chunk = chunk.slice(1, -1).trim()
+    }
+
+    // TODO: when min node support is v24 we can instead use net.SocketAddress.parse()
+    chunk = cleanIp(chunk)
+    if (!chunk) continue
 
     const type = net.isIP(chunk)
     if (!type) continue
@@ -96,6 +114,22 @@ function findFirstIp (str, isForwardedHeader) {
   }
 
   return result
+}
+
+function cleanIp (input) {
+  if (input.includes('.')) {
+    // treat it as ipv4
+    return input.split(':', 1)[0].trim()
+  }
+
+  const closeBracketIndex = input.indexOf(']')
+
+  if (closeBracketIndex !== -1 && input.startsWith('[')) {
+    // treat as ipv6
+    input = input.slice(1, closeBracketIndex).trim()
+  }
+
+  return input
 }
 
 module.exports = {
