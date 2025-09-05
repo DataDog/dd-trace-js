@@ -26,7 +26,7 @@ describe('ip extractor', () => {
     appListener && appListener.close()
   })
 
-  [
+  const ipHeaderList = [
     'x-forwarded-for',
     'x-real-ip',
     'true-client-ip',
@@ -36,7 +36,8 @@ describe('ip extractor', () => {
     'fastly-client-ip',
     'cf-connecting-ip',
     'cf-connecting-ipv6'
-  ].forEach(ipHeader => {
+  ]
+  ipHeaderList.forEach(ipHeader => {
     it(`should detect ip in header '${ipHeader}'`, (done) => {
       const expectedIp = '1.2.3.4'
       controller = function (req) {
