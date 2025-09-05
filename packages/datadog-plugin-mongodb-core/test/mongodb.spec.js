@@ -22,7 +22,7 @@ const withTopologies = fn => {
         await client.connect()
 
         return client
-      })
+      }, version)
     })
 
     // unified topology is now the only topology and thus the default since 4.x
@@ -51,13 +51,14 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let usesDelete
 
   describe('mongodb-core', () => {
-    withTopologies(createClient => {
+    withTopologies((createClient, version) => {
       beforeEach(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
-
+        usesDelete = version ? semver.intersects(version, '>=4') : false
         collectionName = id().toString()
 
         BSON = require('../../../versions/bson@4.0.0').get()
@@ -110,6 +111,165 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.insertOne({ a: 1 }, {}, () => {})
+          })
+
+          it('should have the statement tag when doing a single delete operation', async () => {
+            collection.deleteOne({ a: 1 }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '{"a":1}'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a single deleteMany operation', async () => {
+            //  deleteMany and delete run the same command under the hood, they should have the same output
+            collection.deleteMany({ a: 1 }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '{"a":1}'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a single update operation', async () => {
+            collection.updateOne({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName}`
+              const query = '{"a":1}'
+
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a single updateMany operation', async () => {
+            collection.updateMany({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName}`
+              const query = '{"a":1}'
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a multi statement update', async () => {
+            const bulkOps = [
+              { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } }
+            ]
+            collection.bulkWrite(bulkOps)
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '[{"a":1},{"b":2}]'
+              const resource = `update test.${collectionName}`
+
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should have the statement tag when doing a multi statement delete', async () => {
+            const bulkOps = [{ deleteOne: { filter: { a: 1 } } }, { deleteOne: { filter: { b: 2 } } }]
+            collection.bulkWrite(bulkOps)
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '[{"a":1},{"b":2}]'
+              const resource = usesDelete ? 'delete' : 'remove'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
+            const bulkOps = [
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+            ]
+            collection.bulkWrite(bulkOps)
+            return agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const resource = `update test.${collectionName}`
+                const query = '[{"_id":"?"},{"_id":"?"}]'
+
+                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
+              })
+          })
+
+          it('should sanitize BigInts when doing a single delete operation', async () => {
+            collection.deleteOne({ _id: 9999999999999999999999n }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = usesDelete ? 'delete' : 'remove'
+              const query = '{"_id":"9999999999999999999999"}'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should sanitize BigInts when doing a single update operation', async () => {
+            collection.updateOne({ _id: 9999999999999999999999n }, { $set: { a: 2 } }, {}, () => {})
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName}`
+              const query = '{"_id":"9999999999999999999999"}'
+
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+            const bulkOps = [
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
+            ]
+            const resource = `update test.${collectionName}`
+            collection.bulkWrite(bulkOps)
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
+
+              expect(span).to.have.property('resource', resource)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
+          })
+
+          it('should sanitize BigInts when doing a multi delete operation', async () => {
+            const bulkOps = [
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } },
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } }
+            ]
+            collection.bulkWrite(bulkOps)
+            const resource = usesDelete ? 'delete' : 'remove'
+
+            return agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const query = '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
+
+              expect(span).to.have.property('resource', resource + ` test.${collectionName}`)
+              expect(span.meta).to.have.property('mongodb.query', query)
+            })
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -345,6 +505,20 @@ describe('Plugin', () => {
           collection.find({
             _bin: new BSON.Binary()
           }).toArray()
+        })
+
+        it('should sanitize query in resource when configured and doing a multi statement update', async () => {
+          const bulkOps = [
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+          ]
+          collection.bulkWrite(bulkOps)
+          return agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const resource = `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`
+              expect(span).to.have.property('resource', resource)
+            })
         })
 
         withNamingSchema(
