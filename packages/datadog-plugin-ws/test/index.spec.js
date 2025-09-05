@@ -43,7 +43,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('name', 'web.request')
           })
         })
 
@@ -147,7 +147,7 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('name', 'web.request')
             expect(traces[0][0]).to.have.property('type', 'websocket')
           })
         })
@@ -242,7 +242,7 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('name', 'web.request')
             expect(traces[0][0]).to.have.property('type', 'websocket')
           })
         })
@@ -254,7 +254,7 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.request')
+            expect(traces[0][0]).to.have.property('name', 'web.request')
             expect(traces[0][0]).to.have.property('type', 'websocket')
           })
         })

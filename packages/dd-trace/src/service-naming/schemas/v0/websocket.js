@@ -3,7 +3,7 @@
 const websocket = {
   request: {
     ws: {
-      opName: () => 'websocket.request',
+      opName: () => 'web.request',
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
     }
   },
