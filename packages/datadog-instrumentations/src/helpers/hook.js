@@ -29,19 +29,30 @@ function Hook (modules, hookOptions, onrequire) {
 
     this._patched[filename] = true
 
-    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
-  }
-
-  this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
     if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-      return moduleExports
+      const newDefault = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion)
+      if (newDefault !== moduleExports.default) {
+        try {
+          moduleExports.default = newDefault
+        } catch {
+          // default was a getter so the assignment failed. In those cases, we can't
+          // replace the default, but that's fine since we only need to do that when
+          // we're replacing the default itself, which is rare. Cases where we need
+          // to replace the default _and_ it's not assignable should be so rare as
+          // to not exist. I hope.
+        }
+      }
     }
+
+    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+  }
+
+  this._ritmHook = ritm(modules, {}, safeHook)
+  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
 }
