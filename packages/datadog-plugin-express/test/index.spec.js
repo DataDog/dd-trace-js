@@ -230,9 +230,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
                 const isExpress4 = semver.intersects(version, '<5.0.0')
                 let index = 0
-                const whichMiddleware = semver.intersects(version, '<5.0.0')
-                  ? 'express'
-                  : 'router'
+                const whichMiddleware = isExpress4 ? 'express' : 'router'
 
                 const rootSpan = spans[index++]
                 expect(rootSpan).to.have.property('resource', 'GET /app/user/:id')
