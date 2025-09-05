@@ -186,7 +186,7 @@ describe('ip extractor', () => {
     }, expectedIp, done)
   })
 
-  it('should detect ::1 or 127.0.0.1 (socket address in test) if nothing is configured', (done) => {
+  it('should detect socket address if nothing is configured', (done) => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
@@ -210,6 +210,58 @@ describe('ip extractor', () => {
       'x-client-ip': ip2,
       'true-client-ip': ip3
     }, ip3Public, done)
+  })
+
+  it('should detect socket address when no valid ip in headers', (done) => {
+    controller = function (req) {
+      const ip = extractIp({}, req)
+      try {
+        expect(['::1', '127.0.0.1']).to.include(ip)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    }
+    axios.get(`http://localhost:${port}/`, {
+      headers: {
+        'x-forwarded-for': 'bonjour',
+        'x-client-ip': '[::1',
+        'true-client-ip': '256.256.256.256',
+        'forwarded': 'by=1.1.1.1;proto=https'
+      }
+    }).catch(done)
+  })
+
+  it('should detect ipv4 with double-quotes', (done) => {
+    const expectedIp = '1.2.3.4'
+
+    testIp({
+      'x-forwarded-for': `"${expectedIp}  ",1.1.1.1`
+    }, expectedIp, done)
+  })
+
+  it('should detect ipv4 with port', (done) => {
+    const expectedIp = '1.2.3.4'
+
+    testIp({
+      'x-forwarded-for': `${expectedIp}  :1234,1.1.1.1`
+    }, expectedIp, done)
+  })
+
+  it('should detect ipv6 with brackets', (done) => {
+    const expectedIp = '9f7b:5e67:5472:4464:90b0:6b0a:9aa6:f9dc'
+
+    testIp({
+      'x-forwarded-for': `[ ${expectedIp} ]`
+    }, expectedIp, done)
+  })
+
+  it('should detect ipv6 with double-quotes and port', (done) => {
+    const expectedIp = '9f7b:5e67:5472:4464:90b0:6b0a:9aa6:f9dc'
+
+    testIp({
+      'x-forwarded-for': `"[${expectedIp}]:4485"`
+    }, expectedIp, done)
   })
 
   describe('Forwarded header', () => {
