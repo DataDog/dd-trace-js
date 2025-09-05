@@ -1,6 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const Config = require('../../../src/config')
 const id = require('../../../src/id')
@@ -11,7 +16,6 @@ const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItem
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
-const { expect } = require('chai')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -55,7 +59,7 @@ describe('TextMapPropagator', () => {
         })
       }
     }
-    TextMapPropagator = proxyquire('../src/opentracing/propagation/text_map', {
+    TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
       '../../log': log,
       '../../telemetry/metrics': telemetryMetrics
     })

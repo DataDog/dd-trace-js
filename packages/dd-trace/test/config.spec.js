@@ -1,15 +1,18 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { it, describe, beforeEach, afterEach, context } = require('tap').mocha
+const proxyquire = require('proxyquire')
+
+const { readFileSync } = require('node:fs')
+const assert = require('node:assert/strict')
+const { once } = require('node:events')
+
+require('./setup/core')
+
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { it, describe } = require('tap/lib/mocha.js')
-const assert = require('assert/strict')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { once } = require('events')
 
 describe('Config', () => {
   let Config

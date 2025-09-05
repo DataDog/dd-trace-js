@@ -1,11 +1,15 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
+
+const { randomUUID } = require('node:crypto')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
