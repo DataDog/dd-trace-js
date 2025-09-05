@@ -22,6 +22,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
       if (layerTags.has(layer)) return
       layerTags.set(layer, entryTags(topOfStackFunc))
     })
+
     this.addSub('apm:router:middleware:enter', ({ req, layer }) => {
       const tags = layerTags.get(layer)
       if (!tags) return
