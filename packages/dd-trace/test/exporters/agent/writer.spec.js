@@ -161,7 +161,8 @@ function describeWriter (protocolVersion) {
 
       setTimeout(() => {
         expect(log.error)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)', error.status, error)
+          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
+            error.status, error, log.NO_TELEMETRY)
         done()
       })
     })
