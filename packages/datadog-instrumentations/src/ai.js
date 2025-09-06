@@ -1,5 +1,7 @@
 'use strict'
 
+console.log('adding hooks for ai instrumentation')
+
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -59,6 +61,7 @@ function wrapTracer (tracer) {
         return function (span) {
           shimmer.wrap(span, 'end', function (spanEnd) {
             return function () {
+              console.log('publishing end for', ctx.name)
               vercelAiTracingChannel.asyncEnd.publish(ctx)
               return spanEnd.apply(this, arguments)
             }
@@ -66,6 +69,7 @@ function wrapTracer (tracer) {
 
           shimmer.wrap(span, 'setAttributes', function (setAttributes) {
             return function (attributes) {
+              console.log('publishing setAttributes for', ctx.name)
               vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
               return setAttributes.apply(this, arguments)
             }
@@ -73,6 +77,7 @@ function wrapTracer (tracer) {
 
           shimmer.wrap(span, 'recordException', function (recordException) {
             return function (exception) {
+              console.log('publishing error for', ctx.name)
               ctx.error = exception
               vercelAiTracingChannel.error.publish(ctx)
               return recordException.apply(this, arguments)
@@ -83,8 +88,12 @@ function wrapTracer (tracer) {
         }
       })
 
+      console.log('how many start subscribers are there?', vercelAiTracingChannel.start._subscribers?.length, '**')
+
       return vercelAiTracingChannel.start.runStores(ctx, () => {
+        console.log('running start subscribers')
         const result = startActiveSpan.apply(this, arguments)
+        console.log('publishing end for', ctx.name)
         vercelAiTracingChannel.end.publish(ctx)
         return result
       })
@@ -130,6 +139,7 @@ addHook({
   name: 'ai',
   versions: ['>=4.0.0'],
 }, exports => {
+  console.log('patching ai functions')
   for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
     exports = shimmer.wrap(exports, fnName, patchingFn, { replaceGetter: true })
   }

@@ -8,6 +8,7 @@ class VercelAITracingPlugin extends TracingPlugin {
   static prefix = 'tracing:dd-trace:vercel-ai'
 
   bindStart (ctx) {
+    console.log('starting vercel ai span for', ctx.name)
     const attributes = ctx.attributes
 
     const model = attributes['ai.model.id']
@@ -25,6 +26,7 @@ class VercelAITracingPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
+    console.log('finishing vercel ai span for', ctx.name)
     const span = ctx.currentStore?.span
     span?.finish()
   }
