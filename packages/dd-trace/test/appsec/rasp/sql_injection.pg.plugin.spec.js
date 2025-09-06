@@ -1,14 +1,17 @@
 'use strict'
 
+const Axios = require('axios')
+const assert = require('node:assert')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const path = require('node:path')
+
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const Axios = require('axios')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {

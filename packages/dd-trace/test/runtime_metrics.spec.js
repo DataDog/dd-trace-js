@@ -1,7 +1,9 @@
 'use strict'
 
-require('./setup/tap')
-const { DogStatsDClient } = require('../src/dogstatsd')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
 const assert = require('node:assert')
 const os = require('node:os')
@@ -9,9 +11,11 @@ const performance = require('node:perf_hooks').performance
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
 
-const isWindows = os.platform() === 'win32'
+require('./setup/core')
 
-const suiteDescribe = isWindows ? describe.skip : describe
+const { DogStatsDClient } = require('../src/dogstatsd')
+
+const isWindows = os.platform() === 'win32'
 
 function createGarbage (count = 50) {
   let last = {}
@@ -29,7 +33,7 @@ function createGarbage (count = 50) {
 
 [true, false].forEach((nativeMetrics) => {
   describe(`runtimeMetrics ${nativeMetrics ? 'with' : 'without'} native metrics`, () => {
-    suiteDescribe('runtimeMetrics (proxy)', () => {
+    describe('runtimeMetrics (proxy)', () => {
       let runtimeMetrics
       let proxy
       let config
@@ -129,9 +133,9 @@ function createGarbage (count = 50) {
         expect(runtimeMetrics.decrement).to.not.have.been.called
         expect(runtimeMetrics.stop).to.have.been.calledOnce
       })
-    })
+    }, { skip: isWindows })
 
-    suiteDescribe('runtimeMetrics', () => {
+    describe('runtimeMetrics', () => {
       let runtimeMetrics
       let config
       let clock
@@ -778,6 +782,6 @@ function createGarbage (count = 50) {
           })
         })
       })
-    })
+    }, { skip: isWindows })
   })
 })

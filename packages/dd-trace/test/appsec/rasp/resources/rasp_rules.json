@@ -205,6 +205,59 @@
         "block",
         "stack_trace"
       ]
+    },
+    {
+      "id": "rasp-lfi-rule-id-5",
+      "name": "Local file inclusion exploit",
+      "enabled": true,
+      "tags": {
+        "type": "lfi",
+        "category": "vulnerability_trigger",
+        "cwe": "22",
+        "capec": "1000/255/153/126",
+        "confidence": "0",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "resource": [
+              {
+                "address": "server.io.fs.file"
+              }
+            ],
+            "params": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ]
+          },
+          "operator": "lfi_detector"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block",
+        "stack_trace"
+      ]
     }
   ]
 }

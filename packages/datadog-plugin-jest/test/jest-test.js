@@ -1,6 +1,7 @@
 'use strict'
 
 const http = require('http')
+
 const tracer = require('dd-trace')
 
 describe('jest-test-suite', () => {

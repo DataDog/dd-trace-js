@@ -1,6 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 describe('LogExporter', () => {
   let Exporter
@@ -11,7 +16,7 @@ describe('LogExporter', () => {
   beforeEach(() => {
     span = { tag: 'test' }
 
-    Exporter = proxyquire('../src/exporters/log', {})
+    Exporter = proxyquire('../../../src/exporters/log', {})
     exporter = new Exporter()
   })
 

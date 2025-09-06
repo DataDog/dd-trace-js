@@ -1,14 +1,18 @@
 'use strict'
 
+const axios = require('axios')
 const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const http = require('node:http')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const axios = require('axios')
-const http = require('http')
-const dc = require('dc-polyfill')
 const plugin = require('../src')
 
 const { performance } = require('perf_hooks')

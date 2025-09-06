@@ -1,9 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
 const dc = require('dc-polyfill')
+const { describe, it, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const assert = require('node:assert')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const assert = require('assert')
 
 const SELF = Symbol('self')
 

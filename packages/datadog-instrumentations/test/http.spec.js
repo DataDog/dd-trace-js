@@ -1,9 +1,13 @@
 'use strict'
 
-const { assert } = require('chai')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const assert = require('node:assert')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+
 describe('client', () => {
   let url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
 
@@ -77,8 +81,8 @@ describe('client', () => {
 
           sinon.assert.called(startChannelCb)
           const ctx = getContextFromStubByUrl(url, startChannelCb)
-          assert.isNotNull(ctx)
-          assert.instanceOf(ctx.abortController, AbortController)
+          assert(ctx !== null)
+          assert(ctx.abortController instanceof AbortController)
         })
 
         it('Request is aborted', (done) => {
@@ -108,7 +112,7 @@ describe('client', () => {
 
           cr.on('error', (e) => {
             try {
-              assert.instanceOf(e, CustomError)
+              assert(e instanceof CustomError)
               assert.strictEqual(e.message, 'Custom error')
 
               done()
@@ -128,7 +132,7 @@ describe('client', () => {
           cr.on('error', () => {
             try {
               sinon.assert.calledOnce(errorChannelCb)
-              assert.instanceOf(errorChannelCb.firstCall.args[0].error, Error)
+              assert(errorChannelCb.firstCall.args[0].error instanceof Error)
 
               done()
             } catch (e) {
@@ -169,12 +173,12 @@ describe('client', () => {
               // Necessary because the tracer makes extra requests to the agent
               if (asyncStartChannelCb.called) {
                 const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
-                assert.isNull(ctx)
+                assert(ctx === null)
               }
 
               done()
             } catch (e) {
-              done(e.message)
+              done(e)
             }
           })
         })

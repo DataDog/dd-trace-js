@@ -1,9 +1,10 @@
 'use strict'
 
-require('../../setup/tap')
-
-const proxyquire = require('proxyquire')
+const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 describe('exporters/file', () => {
   let FileExporter

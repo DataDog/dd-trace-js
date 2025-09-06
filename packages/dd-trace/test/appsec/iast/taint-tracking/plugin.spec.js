@@ -1,9 +1,13 @@
 'use strict'
 
+const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
-const dc = require('dc-polyfill')
 const {
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_HEADER_VALUE,

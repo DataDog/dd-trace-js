@@ -1,12 +1,16 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
+const sinon = require('sinon')
+
+const http = require('node:http')
+const { inspect } = require('node:util')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const http = require('http')
-const { expect } = require('chai')
-const proxyquire = require('proxyquire').noPreserveCache()
-const { inspect } = require('util')
 
 function createLogServer () {
   return new Promise((resolve, reject) => {

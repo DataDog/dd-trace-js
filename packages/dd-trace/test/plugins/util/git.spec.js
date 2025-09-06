@@ -1,14 +1,17 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, afterEach, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const { execSync } = require('node:child_process')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
 
-const { execSync } = require('child_process')
-const os = require('os')
-const fs = require('fs')
-const path = require('path')
+require('../../setup/core')
 
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
-const proxyquire = require('proxyquire')
 const execFileSyncStub = sinon.stub().returns('')
 
 const {
@@ -239,7 +242,12 @@ describe('generatePackFilesForCommits', () => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
-    statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
+    const realStatSync = fs.statSync
+    statSyncStub = sinon.stub(fs, 'statSync').callsFake((p, ...args) =>
+      p === fakeDirectory || p === 'cwd'
+        ? { isDirectory: () => true }
+        : realStatSync(p, ...args)
+    )
   })
 
   afterEach(() => {

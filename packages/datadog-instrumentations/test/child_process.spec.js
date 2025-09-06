@@ -1,8 +1,13 @@
 'use strict'
 
-const { promisify } = require('util')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const { promisify } = require('node:util')
+
+const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']

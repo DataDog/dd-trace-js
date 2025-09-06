@@ -1,9 +1,31 @@
 'use strict'
 
-const { join, basename } = require('path')
+const assert = require('node:assert')
+const { join, basename } = require('node:path')
 
 const session = require('./stub-session')
-const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
+const proxyquire = require('proxyquire')
+
+const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
+  '../session': session
+})
+const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
+  '../config': {
+    dynamicInstrumentation: {
+      redactedIdentifiers: [],
+      redactionExcludedIdentifiers: []
+    },
+  }
+})
+
+const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
+  './redaction': redactionWithStub
+})
+
+const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
+  './collector': collectorWithStub,
+  './processor': processorWithStub
+})
 
 module.exports = {
   session,
@@ -11,7 +33,8 @@ module.exports = {
   enable,
   teardown,
   setAndTriggerBreakpoint,
-  assertOnBreakpoint
+  assertOnBreakpoint,
+  getLocalStateForCallFrame
 }
 
 /**
@@ -74,7 +97,7 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   }
 
   session.once('Debugger.paused', ({ params }) => {
-    expect(params.hitBreakpoints.length).to.eq(1)
+    assert.strictEqual(params.hitBreakpoints.length, 1)
 
     getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
       callback(process())

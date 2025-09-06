@@ -1,11 +1,15 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const semver = require('semver')
 const sinon = require('sinon')
+
+const { randomUUID } = require('node:crypto')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -146,7 +150,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -196,7 +201,8 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
             expect(span.meta).to.include({
-              queuename: queueName
+              queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`
             })
 
             parentId = span.span_id.toString()
@@ -369,6 +375,7 @@ describe('Plugin', () => {
 
             expect(span.meta).to.include({
               queuename: queueName,
+              'cloud.resource_id': `arn:aws:sqs:us-east-1:00000000000000000000:${queueName}`,
               aws_service: 'SQS',
               region: 'us-east-1'
             })

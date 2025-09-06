@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before } = require('mocha')
+
 describe('noop', () => {
   let tracer
   let llmobs

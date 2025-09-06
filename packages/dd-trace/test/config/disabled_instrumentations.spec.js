@@ -1,6 +1,9 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../setup/core')
 
 describe('config/disabled_instrumentations', () => {
   it('should disable loading instrumentations completely', () => {

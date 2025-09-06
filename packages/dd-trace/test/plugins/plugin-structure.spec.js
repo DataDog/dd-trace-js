@@ -1,11 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, before } = require('tap').mocha
+const fs = require('node:fs')
+const path = require('node:path')
 
-const fs = require('fs')
-const path = require('path')
+require('../setup/core')
 
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 

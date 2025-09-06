@@ -1,10 +1,15 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
-const http = require('http')
-const path = require('path')
-const os = require('os')
+const http = require('node:http')
+const path = require('node:path')
+const os = require('node:os')
+
+require('./setup/core')
 
 describe('dogstatsd', () => {
   let client

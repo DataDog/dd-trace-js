@@ -1,6 +1,9 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { assert } = require('chai')
 const { performance } = require('node:perf_hooks')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')

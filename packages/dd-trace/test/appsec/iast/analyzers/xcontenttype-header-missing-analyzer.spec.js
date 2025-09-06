@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const { prepareTestServerForIast } = require('../utils')
 const Analyzer = require('../../../../src/appsec/iast/analyzers/vulnerability-analyzer')
 const { XCONTENTTYPE_HEADER_MISSING } = require('../../../../src/appsec/iast/vulnerabilities')

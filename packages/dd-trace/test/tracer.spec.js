@@ -1,11 +1,15 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 
+require('./setup/core')
+
+const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const Config = require('../src/config')
 const tags = require('../../../ext/tags')
-const { expect } = require('chai')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -15,36 +19,11 @@ const EXPORT_SERVICE_NAME = 'service'
 const BASE_SERVICE = tags.BASE_SERVICE
 
 describe('Tracer', () => {
-  let Tracer
   let tracer
   let config
-  let instrumenter
-  let Instrumenter
-  let tracerConfigureCh
 
   beforeEach(() => {
     config = new Config({ service: 'service' })
-
-    instrumenter = {
-      use: sinon.spy(),
-      patch: sinon.spy()
-    }
-    Instrumenter = sinon.stub().returns(instrumenter)
-
-    tracerConfigureCh = {
-      publish: sinon.stub()
-    }
-
-    const channels = {
-      'datadog:tracer:configure': tracerConfigureCh
-    }
-
-    Tracer = proxyquire('../src/tracer', {
-      'dc-polyfill': {
-        channel: (name) => channels[name]
-      },
-      './instrumenter': Instrumenter
-    })
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()

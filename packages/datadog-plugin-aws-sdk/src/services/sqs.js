@@ -3,6 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const { extractQueueMetadata } = require('../util')
 
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
@@ -92,16 +93,18 @@ class Sqs extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params || (!params.QueueName && !params.QueueUrl)) return {}
-    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
-    let queueName = params.QueueName
-    if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/').at(-1)
-    }
+
+    const queueMetadata = extractQueueMetadata(params.QueueUrl)
+    const queueName = queueMetadata?.queueName || params.QueueName
 
     const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      queuename: queueName
+      queuename: queueName,
+    }
+
+    if (queueMetadata?.arn) {
+      tags['cloud.resource_id'] = queueMetadata.arn
     }
 
     switch (operation) {

@@ -1,6 +1,8 @@
 'use strict'
 
-const path = require('path')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const path = require('node:path')
 
 const agent = require('../plugins/agent')
 

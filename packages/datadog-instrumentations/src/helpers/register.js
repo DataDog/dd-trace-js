@@ -146,7 +146,11 @@ for (const packageName of names) {
               `error_type:${e.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
-            ])
+            ], {
+              result: 'error',
+              result_class: 'internal_error',
+              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
+            })
           }
           namesAndSuccesses[`${name}@${version}`] = true
         }
@@ -160,7 +164,11 @@ for (const packageName of names) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
-        ])
+        ], {
+          result: 'abort',
+          result_class: 'incompatible_library',
+          result_reason: `Incompatible integration version: ${name}@${version}`
+        })
         log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }

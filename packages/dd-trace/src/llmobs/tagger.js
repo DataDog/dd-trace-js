@@ -65,7 +65,8 @@ class LLMObsTagger {
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp
+      this._config.llmobs.mlApp ||
+      this._config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(

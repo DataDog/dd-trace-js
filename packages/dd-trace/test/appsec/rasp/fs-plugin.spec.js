@@ -1,9 +1,12 @@
 'use strict'
 
-const proxyquire = require('proxyquire')
 const { assert } = require('chai')
-const path = require('path')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
+const path = require('node:path')
+
 const { storage } = require('../../../../datadog-core')
 const { AppsecFsPlugin } = require('../../../src/appsec/rasp/fs-plugin')
 const agent = require('../../plugins/agent')

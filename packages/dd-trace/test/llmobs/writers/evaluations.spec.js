@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
 describe('LLMObsEvalMetricsWriter', () => {
   let LLMObsEvalMetricsWriter
   let writer

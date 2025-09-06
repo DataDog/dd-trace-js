@@ -1,8 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
+
 const { getNextLineNumber } = require('./helpers')
 const OutboundPlugin = require('../../src/plugins/outbound')
 const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')

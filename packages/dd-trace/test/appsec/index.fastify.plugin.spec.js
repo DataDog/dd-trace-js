@@ -2,10 +2,12 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const path = require('path')
-const zlib = require('zlib')
-const fs = require('node:fs')
 const semver = require('semver')
+const sinon = require('sinon')
+const path = require('node:path')
+const zlib = require('node:zlib')
+const fs = require('node:fs')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')

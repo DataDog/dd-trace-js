@@ -1,7 +1,10 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
 const nock = require('nock')
+
+const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

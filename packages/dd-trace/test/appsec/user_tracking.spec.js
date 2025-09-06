@@ -1,6 +1,8 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const telemetry = require('../../src/appsec/telemetry')

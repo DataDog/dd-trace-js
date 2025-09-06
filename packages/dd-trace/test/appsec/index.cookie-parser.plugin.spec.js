@@ -1,8 +1,10 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert')
+const path = require('node:path')
 const axios = require('axios')
-const path = require('path')
+const sinon = require('sinon')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')

@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+
 require('..')
+
 const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 

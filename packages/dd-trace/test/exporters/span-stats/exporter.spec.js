@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const URL = require('url').URL
 
@@ -21,7 +24,7 @@ describe('span-stats exporter', () => {
     }
     Writer = sinon.stub().returns(writer)
 
-    Exporter = proxyquire('../src/exporters/span-stats', {
+    Exporter = proxyquire('../../../src/exporters/span-stats', {
       './writer': { Writer }
     }).SpanStatsExporter
   })

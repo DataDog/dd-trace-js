@@ -1,9 +1,13 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
+
 const id = require('../../src/id')
 const {
   MAX_META_KEY_LENGTH,
@@ -29,7 +33,7 @@ describe('agentless-ci-visibility-encode', () => {
     logger = {
       debug: sinon.stub()
     }
-    const { AgentlessCiVisibilityEncoder } = proxyquire('../src/encode/agentless-ci-visibility', {
+    const { AgentlessCiVisibilityEncoder } = proxyquire('../../src/encode/agentless-ci-visibility', {
       '../log': logger
     })
     writer = { flush: sinon.spy() }

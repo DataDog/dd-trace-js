@@ -1,9 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
 const { assert } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+require('../setup/core')
+
 const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')

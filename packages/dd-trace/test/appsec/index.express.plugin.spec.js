@@ -1,11 +1,13 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../version')
 const semver = require('semver')
 const Axios = require('axios')
 const { assert } = require('chai')
-const path = require('path')
+const sinon = require('sinon')
+const path = require('node:path')
 const zlib = require('node:zlib')
+
+const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')

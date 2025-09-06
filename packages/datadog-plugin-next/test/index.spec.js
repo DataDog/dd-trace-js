@@ -2,13 +2,17 @@
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('node:path')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+const { satisfies } = require('semver')
+
+const path = require('node:path')
 const { execSync, spawn } = require('node:child_process')
+const { writeFileSync, readdirSync } = require('node:fs')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync, readdirSync } = require('node:fs')
-const { satisfies } = require('semver')
 const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', function () {

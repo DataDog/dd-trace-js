@@ -1,12 +1,13 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
-const proxyquire = require('proxyquire').noCallThru()
+const proxyquire = require('proxyquire')
 const path = require('node:path')
 const { Worker } = require('node:worker_threads')
 
-require('../setup/tap')
+require('../setup/core')
 
 describe('crashtracking', () => {
   let crashtracking

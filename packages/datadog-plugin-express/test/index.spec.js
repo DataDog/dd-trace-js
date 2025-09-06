@@ -1,9 +1,14 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../version')
-const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
+const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')

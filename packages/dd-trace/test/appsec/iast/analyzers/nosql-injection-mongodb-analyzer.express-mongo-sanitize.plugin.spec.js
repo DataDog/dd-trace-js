@@ -1,9 +1,12 @@
 'use strict'
 
 const axios = require('axios')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const { expect } = require('chai')
+const { describe } = require('mocha')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')

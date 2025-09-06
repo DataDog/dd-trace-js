@@ -1,9 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+const semver = require('semver')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, sort } = require('./spec_helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {

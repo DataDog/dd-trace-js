@@ -1,6 +1,11 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
@@ -48,7 +53,7 @@ describe('Remote Config index', () => {
       disable: sinon.spy()
     }
 
-    remoteConfig = proxyquire('../src/remote_config', {
+    remoteConfig = proxyquire('../../src/remote_config', {
       './manager': RemoteConfigManager,
       '../appsec/user_tracking': UserTracking,
       '../log': log,

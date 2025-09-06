@@ -1,6 +1,9 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
+require('../../setup/core')
 
 const makeUtilities = require('../../../src/plugins/util/llm')
 const SpanContext = require('../../../src/opentracing/span_context')

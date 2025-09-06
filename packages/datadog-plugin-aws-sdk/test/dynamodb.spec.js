@@ -1,14 +1,18 @@
 'use strict'
 
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
+const util = require('node:util')
+const { setTimeout: wait } = require('node:timers/promises')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup } = require('./spec_helpers')
-const axios = require('axios')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
-const util = require('node:util')
-const { setTimeout: wait } = require('node:timers/promises')
 
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {

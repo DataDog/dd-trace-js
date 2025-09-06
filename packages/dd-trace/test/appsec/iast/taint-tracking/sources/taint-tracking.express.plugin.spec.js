@@ -1,8 +1,10 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../../../../version')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+const { NODE_MAJOR } = require('../../../../../../../version')
 const agent = require('../../../../plugins/agent')
 const Config = require('../../../../../src/config')
 const { storage } = require('../../../../../../datadog-core')

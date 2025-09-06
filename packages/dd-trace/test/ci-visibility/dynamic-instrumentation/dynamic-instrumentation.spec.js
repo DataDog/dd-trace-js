@@ -1,11 +1,11 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
-
-const { fork } = require('child_process')
-const path = require('path')
-
 const { assert } = require('chai')
+const { describe, it, afterEach } = require('tap').mocha
+const { fork } = require('node:child_process')
+const path = require('node:path')
+
+require('../../../../dd-trace/test/setup/core')
 
 describe('test visibility with dynamic instrumentation', () => {
   // Dynamic Instrumentation - Test Visibility not currently supported for windows

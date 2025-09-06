@@ -1,9 +1,11 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+require('./setup/core')
 
 const agent = require('./plugins/agent')
-
 const { SAMPLING_PRIORITY_KEY, DECISION_MAKER_KEY } = require('../src/constants')
 
 describe('dd-trace', () => {

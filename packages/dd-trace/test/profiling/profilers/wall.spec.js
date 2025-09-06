@@ -1,10 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+require('../../setup/core')
 
 describe('profilers/native/wall', () => {
   let NativeWallProfiler

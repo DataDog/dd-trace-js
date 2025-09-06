@@ -1,9 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const log = require('../../../../src/log')
-const dc = require('dc-polyfill')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
  require('../../../../src/appsec/iast/taint-tracking/secure-marks')
