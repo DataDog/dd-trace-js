@@ -105,12 +105,14 @@ class PrioritySampler {
     const root = context._trace.started[0]
 
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
-    if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    log.trace(span, auto)
-
     const tag = this._getPriorityFromTags(context._tags, context)
+
+    // if the sampling priority is already set from a tag, do not override it
+    if (tag && context._sampling.priority === tag) return
+
+    log.trace(span, auto)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
