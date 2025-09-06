@@ -31,4 +31,5 @@ module.exports = {
   ASM_RASP_CMDI: 1n << 37n,
   ASM_DD_MULTICONFIG: 1n << 42n,
   ASM_TRACE_TAGGING_RULES: 1n << 43n,
+  ASM_EXTENDED_DATA_COLLECTION: 1n << 44n,
 }
