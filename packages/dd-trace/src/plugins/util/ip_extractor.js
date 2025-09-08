@@ -123,10 +123,10 @@ function cleanIp (input) {
     return input.slice(0, colonIndex).trim()
   }
 
-  const closeBracketIndex = input.indexOf(']')
-  if (closeBracketIndex !== -1 && input.startsWith('[')) {
+  const closingBracketIndex = input.indexOf(']')
+  if (closingBracketIndex !== -1 && input.startsWith('[')) {
     // treat as ipv6 with brackets
-    return input.slice(1, closeBracketIndex).trim()
+    return input.slice(1, closingBracketIndex).trim()
   }
 
   // no need to clean it
