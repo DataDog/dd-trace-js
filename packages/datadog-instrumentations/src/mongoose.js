@@ -176,32 +176,3 @@ addHook({
     return sanitizedObject
   })
 })
-
-function wrapQueryThenable (original, cb) {
-  shimmer.wrap(original, 'then', then => {
-    return function (onFulfilled, onRejected) {
-      return then.call(
-        this,
-        res => {
-          cb(null, res)
-          if (onFulfilled) {
-            return onFulfilled(res)
-          }
-          return res
-        },
-        err => {
-          cb(err)
-          if (onRejected) {
-            return onRejected(err)
-          }
-          throw err
-        }
-      )
-    }
-  })
-  return original
-}
-
-module.exports = {
-  wrapQueryThenable
-}
