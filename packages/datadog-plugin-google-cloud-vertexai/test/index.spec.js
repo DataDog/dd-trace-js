@@ -1,18 +1,24 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
+
 const fs = require('node:fs')
 const path = require('node:path')
+
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 /**
  * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
- * @param {string} scenario the scenario to load
- * @param {number} statusCode the status code to return. defaults to 200
+ * @param {object} options The options for the scenario
+ * @param {string} options.scenario The scenario to load
+ * @param {number} [options.statusCode] The status code to return. defaults to 200
+ * @param {boolean} [options.stream] whether to stream the response
  */
 function useScenario ({ scenario, statusCode = 200, stream = false }) {
   let originalFetch

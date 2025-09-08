@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const scrubCmdParams = require('../src/scrub-cmd-params')
 
 describe('scrub cmds', () => {

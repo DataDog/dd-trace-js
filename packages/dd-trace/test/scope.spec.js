@@ -1,8 +1,12 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const { Span } = require('opentracing')
 
-const Span = require('opentracing').Span
+require('./setup/core')
+
 const Scope = require('../src/scope')
 
 describe('Scope', () => {
