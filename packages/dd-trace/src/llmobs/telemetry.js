@@ -155,7 +155,7 @@ function recordSubmitEvaluation (options, err, value = 1) {
 }
 
 function recordLLMObsUserProcessorCalled (error, value = 1) {
-  const tags = { error: Number(!!error) }
+  const tags = { error: error ? 1 : 0 }
   llmobsMetrics.count('user_processor_called', tags).inc(value)
 }
 

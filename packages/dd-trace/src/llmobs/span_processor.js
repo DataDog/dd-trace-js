@@ -281,9 +281,9 @@ class LLMObsSpanProcessor {
       if (!processedLLMObsSpan) return null
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
-        throw new TypeError(
-          'User span processor must return an instance of an LLMObservabilitySpan or null'
-        )
+        error = true
+        logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null')
+        return null
       }
 
       return processedLLMObsSpan
