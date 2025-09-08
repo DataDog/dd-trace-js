@@ -70,7 +70,7 @@ function wrapConnect (connect) {
 
 addHook({ name: names }, http2 => {
   shimmer.wrap(http2, 'connect', wrapConnect)
-  if (http2.default) http2.default.connet = http2.connect
+  if (http2.default) http2.default.connect = http2.connect
 
   return http2
 })
