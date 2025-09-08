@@ -79,7 +79,7 @@ function findFirstIp (str, isForwardedHeader) {
 
   for (let chunk of splitted) {
     if (isForwardedHeader) {
-      // find for directive
+      // find "for" directive
       const forDirective = chunk.split(';').find(subchunk => subchunk.trim().toLowerCase().startsWith('for='))
 
       // if found remove the "for=" prefix
