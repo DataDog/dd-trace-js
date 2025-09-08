@@ -177,7 +177,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.0
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
       - "127.0.0.1:9126:9126"
     environment:
