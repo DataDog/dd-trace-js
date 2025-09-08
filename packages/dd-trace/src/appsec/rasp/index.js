@@ -131,6 +131,7 @@ function disable () {
 
   expressMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
   fastifyMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
+  routerMiddlewareError.unsubscribe(blockOnDatadogRaspAbortError)
 }
 
 module.exports = {
