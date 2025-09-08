@@ -64,6 +64,11 @@ let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
+function getTestFullyQualifiedName (test) {
+  const fullname = getTestFullname(test)
+  return `${test._requireFile} ${fullname}`
+}
+
 function getTestProperties (test) {
   const testName = getTestFullname(test)
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
@@ -328,8 +333,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     return
   }
 
-  const testFullName = getTestFullname(test)
-  const testFqn = `${testSuiteAbsolutePath} ${testFullName}`
+  const testFqn = getTestFullyQualifiedName(test)
   const testStatuses = testsToTestStatuses.get(testFqn) || []
 
   if (testStatuses.length === 0) {
@@ -630,9 +634,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
-        const fullname = getTestFullname(test)
-        const fqn = `${test._requireFile} ${fullname}`
-        const testStatuses = testsToTestStatuses.get(fqn)
+        const testFqn = getTestFullyQualifiedName(test)
+        const testStatuses = testsToTestStatuses.get(testFqn)
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
@@ -789,9 +792,8 @@ addHook({
           test.expectedStatus = 'skipped'
         } else if (testProperties.quarantined) {
           // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
-          const fullname = getTestFullname(test)
-          const fqn = `${test._requireFile} ${fullname}`
-          quarantinedButNotAttemptToFixFqns.add(fqn)
+          const testFqn = getTestFullyQualifiedName(test)
+          quarantinedButNotAttemptToFixFqns.add(testFqn)
         }
       }
     }
