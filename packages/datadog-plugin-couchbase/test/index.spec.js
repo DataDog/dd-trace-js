@@ -26,7 +26,7 @@ describe('Plugin', () => {
     withVersions('couchbase', 'couchbase', '<3.0.0', version => {
       let N1qlQuery
       // skipping tests due to bug with couchbase integration that is blocking CI.
-      // TODO: diagnose and fix failures.
+      // TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
       describe.skip('without configuration', () => {
         beforeEach(done => {
           agent.load('couchbase').then(() => {
