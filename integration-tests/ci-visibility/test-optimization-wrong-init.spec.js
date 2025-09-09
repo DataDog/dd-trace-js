@@ -7,74 +7,110 @@ const { assert } = require('chai')
 const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
-describe('test optimization wrong init', () => {
-  let sandbox, cwd, receiver, childProcess, processOutput
+// no playwright because it has no programmatic API
+// no cypress because it's not a proper dd-trace plugin
+const testFrameworks = [
+  {
+    testFramework: 'mocha',
+    command: 'node ./ci-visibility/test-optimization-wrong-init/run-mocha.js',
+    expectedOutput: '1 passing'
+  },
+  {
+    testFramework: 'jest',
+    command: 'node ./ci-visibility/test-optimization-wrong-init/run-jest.js',
+    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js'
+  },
+  {
+    testFramework: 'vitest',
+    command: 'node ./ci-visibility/test-optimization-wrong-init/run-vitest.js',
+    expectedOutput: '1 passed',
+    extraTestContext: {
+      TEST_DIR: 'ci-visibility/test-optimization-wrong-init/vitest-sum-wrong-init*',
+      NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/init'
+    }
+  },
+  {
+    testFramework: 'cucumber',
+    command: './node_modules/.bin/cucumber-js ci-visibility/test-optimization-wrong-init-cucumber/*.feature',
+    expectedOutput: '1 passed',
+    extraTestContext: {
+      NODE_OPTIONS: '-r dd-trace/init'
+    }
+  }
+]
 
-  before(async () => {
-    sandbox = await createSandbox(['jest'], true)
-    cwd = sandbox.folder
-  })
+testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestContext }) => {
+  describe(`test optimization wrong init for ${testFramework}`, () => {
+    let sandbox, cwd, receiver, childProcess, processOutput
 
-  after(async () => {
-    await sandbox.remove()
-  })
-
-  beforeEach(async function () {
-    processOutput = ''
-    receiver = await new FakeCiVisIntake().start()
-  })
-
-  afterEach(async () => {
-    childProcess.kill()
-    await receiver.stop()
-  })
-
-  it('does not initialize test optimization plugins if Test Optimization mode is not enabled', (done) => {
-    const eventsPromise = receiver
-      .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (tracesRequests) => {
-        const spans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
-        const includesTestOptimizationSpans = spans.some(span => span.name.includes('jest'))
-        if (spans.length === 0) {
-          throw new Error('No spans were sent')
-        }
-        if (includesTestOptimizationSpans) {
-          throw new Error('Test Optimization spans should not be sent')
-        }
-      }, 5000)
-
-    const envVars = getCiVisAgentlessConfig(receiver.port)
-
-    const {
-      NODE_OPTIONS, // we don't want to initialize dd-trace in Test Optimization mode
-      ...restEnvVars
-    } = envVars
-
-    childProcess = exec('node ./ci-visibility/test-optimization-wrong-init/test-optimization-wrong-init.js',
-      {
-        cwd,
-        env: {
-          ...process.env,
-          ...restEnvVars,
-          DD_TRACE_DEBUG: '1'
-        },
-        stdio: 'pipe'
-      }
-    )
-
-    childProcess.stderr.on('data', (chunk) => {
-      processOutput += chunk.toString()
+    before(async () => {
+      sandbox = await createSandbox(['jest', 'mocha', 'chai@v4', 'vitest', '@cucumber/cucumber'], true)
+      cwd = sandbox.folder
     })
 
-    childProcess.stdout.on('data', (chunk) => {
-      processOutput += chunk.toString()
+    after(async () => {
+      await sandbox.remove()
     })
 
-    childProcess.on('exit', () => {
-      assert.include(processOutput, 'Plugin "jest" is not initialized because Test Optimization mode is not enabled.')
-      assert.include(processOutput, 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js')
-      eventsPromise.then(() => {
-        done()
-      }).catch(done)
+    beforeEach(async function () {
+      processOutput = ''
+      receiver = await new FakeCiVisIntake().start()
+    })
+
+    afterEach(async () => {
+      childProcess.kill()
+      await receiver.stop()
+    })
+
+    it('does not initialize test optimization plugins if Test Optimization mode is not enabled', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (tracesRequests) => {
+          const spans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
+          const includesTestOptimizationSpans = spans.some(span => span.name.includes(testFramework))
+          if (spans.length === 0) {
+            throw new Error('No spans were sent')
+          }
+          if (includesTestOptimizationSpans) {
+            throw new Error('Test Optimization spans should not be sent')
+          }
+        }, 10000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      const {
+        NODE_OPTIONS, // we don't want to initialize dd-trace in Test Optimization mode
+        ...restEnvVars
+      } = envVars
+
+      childProcess = exec(command,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            ...restEnvVars,
+            DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
+            DD_TRACE_DEBUG: '1',
+            ...extraTestContext
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.stderr.on('data', (chunk) => {
+        processOutput += chunk.toString()
+      })
+
+      childProcess.stdout.on('data', (chunk) => {
+        processOutput += chunk.toString()
+      })
+
+      childProcess.on('exit', () => {
+        assert.include(processOutput, `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`)
+        assert.include(processOutput, expectedOutput)
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
     })
   })
 })
