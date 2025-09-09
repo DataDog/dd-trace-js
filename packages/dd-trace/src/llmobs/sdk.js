@@ -23,7 +23,7 @@ const LLMObsTagger = require('./tagger')
 const { channel } = require('dc-polyfill')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
-const registerProcessorCh = channel('llmobs:register-processor')
+const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 const NoopLLMObs = require('./noop')
 
 class LLMObs extends NoopLLMObs {
@@ -311,11 +311,11 @@ class LLMObs extends NoopLLMObs {
   }
 
   registerProcessor (processor) {
-    registerProcessorCh.publish(processor)
+    registerUserSpanProcessorCh.publish(processor)
   }
 
   deregisterProcessor () {
-    registerProcessorCh.publish(null)
+    registerUserSpanProcessorCh.publish(null)
   }
 
   submitEvaluation (llmobsSpanContext, options = {}) {

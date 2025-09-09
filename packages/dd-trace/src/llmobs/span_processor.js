@@ -53,8 +53,8 @@ class LLMObsSpanProcessor {
   /** @type {import('../config')} */
   #config
 
-  /** @type {((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)} */
-  #processor
+  /** @type {((span: LLMObservabilitySpan) => LLMObservabilitySpan | null) | null} */
+  #userSpanProcessor
 
   /** @type {import('./writers/spans')} */
   #writer
@@ -63,12 +63,12 @@ class LLMObsSpanProcessor {
     this.#config = config
   }
 
-  registerProcessor (processor) {
-    if (processor !== null && this.#processor) {
+  setUserSpanProcessor (userSpanProcessor) {
+    if (userSpanProcessor !== null && this.#userSpanProcessor) {
       throw new Error('[LLMObs] Only one user span processor can be registered.')
     }
 
-    this.#processor = processor
+    this.#userSpanProcessor = userSpanProcessor
   }
 
   setWriter (writer) {
@@ -275,7 +275,7 @@ class LLMObsSpanProcessor {
    * @returns {LLMObservabilitySpan | null}
    */
   #runProcessor (span) {
-    const processor = this.#processor
+    const processor = this.#userSpanProcessor
     if (!processor) return span
 
     let error = false
@@ -292,7 +292,7 @@ class LLMObsSpanProcessor {
 
       return processedLLMObsSpan
     } catch (e) {
-      logger.error(`[LLMObs] Error in LLMObs span processor (${util.inspect(processor)}): ${e.message}`)
+      logger.error(`[LLMObs] Error in LLMObs span processor (${util.inspect(processor)}): ${util.inspect(e)}`)
       error = true
     } finally {
       telemetry.recordLLMObsUserProcessorCalled(error)

@@ -2576,7 +2576,7 @@ declare namespace tracer {
        * @param processor A function that will be called for each span.
        * @throws {Error} If a processor is already registered.
        */
-      registerProcessor (processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null) | null): void
+      registerProcessor (processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)): void
 
       /**
        * Deregister a processor.
