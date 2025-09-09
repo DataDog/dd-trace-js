@@ -1,10 +1,12 @@
 'use strict'
 
-const path = require('path')
-const fs = require('fs')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
 const semver = require('semver')
+
+const path = require('node:path')
+const fs = require('node:fs')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
