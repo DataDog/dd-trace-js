@@ -158,6 +158,7 @@ function extractRequestParams (params, provider) {
               .filter(block => block.type === 'text')
               .map(block => block.text)
               .join('')
+            break
           }
         }
       }
