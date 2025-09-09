@@ -154,8 +154,7 @@ function extractRequestParams (params, provider) {
         for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
           const message = requestBody.messages[idx]
           if (message.role === 'user') {
-            prompt = message.content
-              .filter(block => block.type === 'text')
+            prompt = message.content?.filter(block => block.type === 'text')
               .map(block => block.text)
               .join('')
             break
