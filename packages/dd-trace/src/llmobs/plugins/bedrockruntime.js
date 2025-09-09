@@ -9,7 +9,7 @@ const {
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
-  coerceResponseChunks
+  extractTextAndResponseReasonFromStream
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
@@ -35,7 +35,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         return
       }
       const span = ctx.currentStore?.span
-      this.setLLMObsTags({ request, span, response, modelProvider, modelName })
+      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName })
     })
 
     this.addSub('apm:aws:response:deserialize:bedrockruntime', ({ headers }) => {
@@ -49,24 +49,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       }
     })
 
-    this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk, done }) => {
+    this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
       if (!ctx.chunks) ctx.chunks = []
 
       if (chunk) ctx.chunks.push(chunk)
-      if (!done) return
-
-      const chunks = ctx.chunks
-      if (chunks.length === 0) return
-
-      const modelId = ctx.request.params.modelId
-      const { modelProvider, modelName } = parseModelId(modelId)
-
-      const response = coerceResponseChunks(chunks, modelProvider, modelName)
-      ctx.response.body = response
     })
   }
 
-  setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
+  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
     const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
@@ -83,7 +73,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     const requestParams = extractRequestParams(request.params, modelProvider)
     // for streamed responses, we'll use the coerced response object we formed in the stream handler
     const textAndResponseReason = isStream
-      ? response.body
+      ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
     // add metadata tags

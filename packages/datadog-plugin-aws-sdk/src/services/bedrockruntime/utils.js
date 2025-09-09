@@ -30,13 +30,12 @@ const PROVIDER = {
  * @param {string} provider
  * @returns {Object}
  */
-function coerceResponseChunks (chunks, provider, modelId) {
-  // streaming unsupported for AI21, AMAZON embedding models, COHERE embedding models, STABILITY
+function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
+  // streaming unsupported for AMAZON embedding models, COHERE embedding models, STABILITY
   if (
-    provider.toUpperCase() === PROVIDER.AI21 ||
-    (provider.toUpperCase() === PROVIDER.AMAZON && modelId.includes('embed')) ||
-    (provider.toUpperCase() === PROVIDER.COHERE && modelId.includes('embed')) ||
-    provider.toUpperCase() === PROVIDER.STABILITY
+    (modelProvider.toUpperCase() === PROVIDER.AMAZON && modelName.includes('embed')) ||
+    (modelProvider.toUpperCase() === PROVIDER.COHERE && modelName.includes('embed')) ||
+    modelProvider.toUpperCase() === PROVIDER.STABILITY
   ) {
     return {}
   }
@@ -51,25 +50,30 @@ function coerceResponseChunks (chunks, provider, modelId) {
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
 
-    if (provider.toUpperCase() === PROVIDER.AMAZON) {
+    if (modelProvider.toUpperCase() === PROVIDER.AMAZON) {
       message += body?.outputText
 
       inputTokens = body?.inputTextTokenCount
       outputTokens = body?.totalOutputTextTokenCount
-    } else if (provider.toUpperCase() === PROVIDER.ANTHROPIC) {
+    } else if (modelProvider.toUpperCase() === PROVIDER.AI21) {
+      const content = body?.choices?.[0]?.delta?.content
+      if (content) {
+        message += content
+      }
+    } else if (modelProvider.toUpperCase() === PROVIDER.ANTHROPIC) {
       if (body.completion) {
         message += body.completion
-      } else if (body.delta) {
+      } else if (body.delta?.text) {
         message += body.delta.text
       }
 
       if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
       if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
-    } else if (provider.toUpperCase() === PROVIDER.COHERE && body?.event_type === 'stream-end') {
-      message = body.response
-    } else if (provider.toUpperCase() === PROVIDER.META) {
+    } else if (modelProvider.toUpperCase() === PROVIDER.COHERE && body?.event_type === 'stream-end') {
+      message = body.response?.text
+    } else if (modelProvider.toUpperCase() === PROVIDER.META) {
       message += body?.generation
-    } else if (provider.toUpperCase() === PROVIDER.MISTRAL) {
+    } else if (modelProvider.toUpperCase() === PROVIDER.MISTRAL) {
       message += body?.outputs?.[0]?.text
     }
 
@@ -282,7 +286,7 @@ function extractRequestParams (params, provider) {
 }
 
 function extractTextAndResponseReason (response, provider, modelName) {
-  const body = Buffer.isBuffer(response.body) ? JSON.parse(Buffer.from(response.body).toString('utf8')) : response.body
+  const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
   const shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
     switch (provider.toUpperCase()) {
@@ -400,7 +404,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
 module.exports = {
   Generation,
   RequestParams,
-  coerceResponseChunks,
+  extractTextAndResponseReasonFromStream,
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,
