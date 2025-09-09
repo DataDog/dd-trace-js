@@ -84,7 +84,7 @@ module.exports = class PluginManager {
     if (!Plugin) return
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
-    // Check if this is a CI visibility plugin and CI visibility is not enabled
+    // Check if this is a Test Optimization plugin and Test Optimization is not enabled
     if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
       log.debug('Plugin "%s" is not initialized because Test Optimization mode is not enabled.', name)
       return
