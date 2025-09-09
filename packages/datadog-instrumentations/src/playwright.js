@@ -60,8 +60,14 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
+let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+
+function getTestFullyQualifiedName (test) {
+  const fullname = getTestFullname(test)
+  return `${test._requireFile} ${fullname}`
+}
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -327,8 +333,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     return
   }
 
-  const testFullName = getTestFullname(test)
-  const testFqn = `${testSuiteAbsolutePath} ${testFullName}`
+  const testFqn = getTestFullyQualifiedName(test)
   const testStatuses = testsToTestStatuses.get(testFqn) || []
 
   if (testStatuses.length === 0) {
@@ -618,19 +623,25 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
       let totalFailedTestCount = 0
       let totalAttemptToFixFailedTestCount = 0
+      let totalPureQuarantinedFailedTestCount = 0
 
-      for (const testStatuses of testsToTestStatuses.values()) {
-        totalFailedTestCount += testStatuses.filter(status => status === 'fail').length
+      for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
+        const failedCount = testStatuses.filter(status => status === 'fail').length
+        totalFailedTestCount += failedCount
+        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+          totalPureQuarantinedFailedTestCount += failedCount
+        }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
-        const fullname = getTestFullname(test)
-        const fqn = `${test._requireFile} ${fullname}`
-        const testStatuses = testsToTestStatuses.get(fqn)
+        const testFqn = getTestFullyQualifiedName(test)
+        const testStatuses = testsToTestStatuses.get(testFqn)
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount > 0 && totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
+
+      if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
       }
     }
@@ -648,6 +659,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
+    quarantinedButNotAttemptToFixFqns = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
@@ -776,8 +788,12 @@ addHook({
           if (testProperties.disabled || testProperties.quarantined) {
             quarantinedOrDisabledTestsAttemptToFix.push(test)
           }
-        } else if (testProperties.disabled || testProperties.quarantined) {
+        } else if (testProperties.disabled) {
           test.expectedStatus = 'skipped'
+        } else if (testProperties.quarantined) {
+          // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
+          const testFqn = getTestFullyQualifiedName(test)
+          quarantinedButNotAttemptToFixFqns.add(testFqn)
         }
       }
     }

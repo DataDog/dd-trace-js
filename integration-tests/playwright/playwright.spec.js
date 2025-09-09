@@ -1288,20 +1288,14 @@ versions.forEach((version) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
+              const failedTest = events.find(event => event.type === 'test').content
+              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
               if (isQuarantining) {
                 assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-              } else {
-                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-              }
-
-              const failedTest = events.find(event => event.type === 'test').content
-
-              if (isQuarantining) {
-                // TODO: manage to run the test
-                assert.equal(failedTest.meta[TEST_STATUS], 'skip')
                 assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
               } else {
-                assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+                assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
             })
