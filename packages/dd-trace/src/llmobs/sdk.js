@@ -314,6 +314,10 @@ class LLMObs extends NoopLLMObs {
     registerProcessorCh.publish(processor)
   }
 
+  deregisterProcessor () {
+    registerProcessorCh.publish(null)
+  }
+
   submitEvaluation (llmobsSpanContext, options = {}) {
     if (!this.enabled) return
 
