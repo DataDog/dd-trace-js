@@ -1,0 +1,52 @@
+interactions:
+- request:
+    body: '{"inputText":"What is the capital of France?","textGenerationConfig":{"temperature":0.5,"maxTokenCount":512}}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '109'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.titan-text-lite-v1/invoke
+  response:
+    body:
+      string: '{"inputTextTokenCount":7,"results":[{"tokenCount":98,"outputText":"\nParis
+        is the capital of France. France is a country in Western Europe, and Paris
+        is its capital. Paris is one of the most populous cities in the European Union,
+        with a population of more than 2 million people. It is also one of the most
+        visited cities in the world, with millions of tourists visiting each year.
+        Paris is known for its rich history, culture, and architecture, including
+        the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. ","completionReason":"FINISH"}]}'
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '550'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 03 Sep 2025 17:53:48 GMT
+      X-Amzn-Bedrock-Input-Token-Count:
+      - '7'
+      X-Amzn-Bedrock-Invocation-Latency:
+      - '3452'
+      X-Amzn-Bedrock-Output-Token-Count:
+      - '98'
+      x-amzn-RequestId:
+      - 43c4c259-e70a-4d21-bb89-bec0ac1743f2
+    status:
+      code: 200
+      message: OK
+version: 1
