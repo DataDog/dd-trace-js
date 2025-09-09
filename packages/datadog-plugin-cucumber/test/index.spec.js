@@ -70,7 +70,7 @@ describe('Plugin', function () {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['cucumber', 'http']).then(() => {
+      return agent.load(['cucumber', 'http'], { isCiVisibility: true }).then(() => {
         Cucumber = proxyquire(`../../../versions/@cucumber/cucumber@${version}`, {}).get()
       })
     })

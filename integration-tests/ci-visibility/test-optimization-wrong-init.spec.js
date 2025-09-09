@@ -6,6 +6,7 @@ const { assert } = require('chai')
 
 const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { NODE_MAJOR } = require('../../version')
 
 // no playwright because it has no programmatic API
 // no cypress because it's not a proper dd-trace plugin
@@ -43,8 +44,18 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
   describe(`test optimization wrong init for ${testFramework}`, () => {
     let sandbox, cwd, receiver, childProcess, processOutput
 
+    // cucumber does not support Node.js@18 anymore
+    if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
+
     before(async () => {
-      sandbox = await createSandbox(['jest', 'mocha', 'chai@v4', 'vitest', '@cucumber/cucumber'], true)
+      const testFrameworks = ['jest', 'mocha', 'chai@v4', 'vitest']
+
+      // Remove once we drop support for Node.js@18
+      if (NODE_MAJOR > 18) {
+        testFrameworks.push('@cucumber/cucumber')
+      }
+
+      sandbox = await createSandbox(testFrameworks, true)
       cwd = sandbox.folder
     })
 

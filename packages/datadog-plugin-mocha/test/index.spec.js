@@ -109,9 +109,13 @@ describe('Plugin', () => {
       if (!isEvpProxyTest) {
         agent.setAvailableEndpoints([])
       }
-      return agent.load(['mocha', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
-        Mocha = require(`../../../versions/mocha@${version}`).get()
-      })
+      return agent.load(
+        ['mocha', 'http'],
+        { service: 'test' },
+        { isCiVisibility: true, experimental: { exporter } })
+        .then(() => {
+          Mocha = require(`../../../versions/mocha@${version}`).get()
+        })
     })
     describe('mocha', () => {
       it('works with passing tests', (done) => {

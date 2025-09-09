@@ -1,8 +1,6 @@
-'use strict'
 import { startVitest } from 'vitest/node'
 
 async function main () {
-
   return startVitest(
     'test',
     [],
