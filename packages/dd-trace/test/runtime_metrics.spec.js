@@ -258,11 +258,14 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           const startTime = Date.now()
-          const waitTime = 100
+          const waitTime = 200
+          let iterations = 0
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
-            await setTimeout(1)
-            clock.tick(1)
+            if (iterations++ % 10000 === 0) {
+              await setTimeout(1)
+              clock.tick(1)
+            }
           }
 
           global.gc()
