@@ -40,9 +40,6 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     return {}
   }
 
-  // const choices = new Map() // map choice indices to choice objects
-  // const usage = {}
-
   let message = ''
   let inputTokens = 0
   let outputTokens = 0
