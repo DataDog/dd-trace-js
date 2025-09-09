@@ -1,8 +1,14 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
+const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -17,6 +23,12 @@ describe('Plugin', () => {
 
   describe('express', () => {
     withVersions('express', 'express', version => {
+    // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
+      if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+        describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+        return
+      }
+
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -28,7 +40,7 @@ describe('Plugin', () => {
 
       describe('without http', () => {
         before(() => {
-          return agent.load('express', { client: false })
+          return agent.load(['express', 'router'], [{ client: false }, {}])
         })
 
         after(() => {
@@ -82,7 +94,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          return agent.load(['express', 'http'], [{}, { client: false }])
+          return agent.load(['express', 'http', 'router'], [{}, { client: false }, {}])
         })
 
         after(() => {
@@ -218,6 +230,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
                 const isExpress4 = semver.intersects(version, '<5.0.0')
                 let index = 0
+                const whichMiddleware = isExpress4 ? 'express' : 'router'
 
                 const rootSpan = spans[index++]
                 expect(rootSpan).to.have.property('resource', 'GET /app/user/:id')
@@ -239,15 +252,15 @@ describe('Plugin', () => {
                 }
 
                 expect(spans[index]).to.have.property('resource', 'named')
-                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
                 expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                expect(spans[index].meta).to.have.property('component', 'express')
+                expect(spans[index].meta).to.have.property('component', whichMiddleware)
                 index++
 
                 expect(spans[index]).to.have.property('resource', 'router')
-                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
                 expect(spans[index].parent_id.toString()).to.equal(rootSpan.span_id.toString())
-                expect(spans[index].meta).to.have.property('component', 'express')
+                expect(spans[index].meta).to.have.property('component', whichMiddleware)
                 index++
 
                 if (isExpress4) {
@@ -255,15 +268,15 @@ describe('Plugin', () => {
                 } else {
                   expect(spans[index]).to.have.property('resource', 'handle')
                 }
-                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
                 expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
-                expect(spans[index].meta).to.have.property('component', 'express')
+                expect(spans[index].meta).to.have.property('component', whichMiddleware)
                 index++
 
                 expect(spans[index]).to.have.property('resource', '<anonymous>')
-                expect(spans[index]).to.have.property('name', 'express.middleware')
+                expect(spans[index]).to.have.property('name', `${whichMiddleware}.middleware`)
                 expect(spans[index].parent_id.toString()).to.equal(spans[index - 1].span_id.toString())
-                expect(spans[index].meta).to.have.property('component', 'express')
+                expect(spans[index].meta).to.have.property('component', whichMiddleware)
 
                 expect(index).to.equal(spans.length - 1)
               })
@@ -302,13 +315,16 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 const breakingSpanIndex = semver.intersects(version, '<5.0.0') ? 3 : 1
+                const whichMiddleware = semver.intersects(version, '<5.0.0')
+                  ? 'express'
+                  : 'router'
 
                 expect(spans[0]).to.have.property('resource', 'GET /user/:id')
                 expect(spans[0]).to.have.property('name', 'express.request')
                 expect(spans[0].meta).to.have.property('component', 'express')
                 expect(spans[breakingSpanIndex]).to.have.property('resource', 'breaking')
-                expect(spans[breakingSpanIndex]).to.have.property('name', 'express.middleware')
-                expect(spans[breakingSpanIndex].meta).to.have.property('component', 'express')
+                expect(spans[breakingSpanIndex]).to.have.property('name', `${whichMiddleware}.middleware`)
+                expect(spans[breakingSpanIndex].meta).to.have.property('component', whichMiddleware)
               })
               .then(done)
               .catch(done)
@@ -347,12 +363,15 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 const errorSpanIndex = semver.intersects(version, '<5.0.0') ? 4 : 2
+                const whichMiddleware = semver.intersects(version, '<5.0.0')
+                  ? 'express'
+                  : 'router'
 
                 expect(spans[0]).to.have.property('name', 'express.request')
-                expect(spans[errorSpanIndex]).to.have.property('name', 'express.middleware')
+                expect(spans[errorSpanIndex]).to.have.property('name', `${whichMiddleware}.middleware`)
                 expect(spans[errorSpanIndex].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(spans[0].meta).to.have.property('component', 'express')
-                expect(spans[errorSpanIndex].meta).to.have.property('component', 'express')
+                expect(spans[errorSpanIndex].meta).to.have.property('component', whichMiddleware)
               })
               .then(done)
               .catch(done)
@@ -1164,6 +1183,9 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
                 const secondErrorIndex = spans.length - 2
+                const whichMiddleware = semver.intersects(version, '<5.0.0')
+                  ? 'express'
+                  : 'router'
 
                 expect(spans[0]).to.have.property('error', 1)
                 expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
@@ -1174,7 +1196,7 @@ describe('Plugin', () => {
                 expect(spans[secondErrorIndex].meta).to.have.property(ERROR_TYPE, error.name)
                 expect(spans[secondErrorIndex].meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(spans[secondErrorIndex].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(spans[secondErrorIndex].meta).to.have.property('component', 'express')
+                expect(spans[secondErrorIndex].meta).to.have.property('component', whichMiddleware)
               })
               .then(done)
               .catch(done)
@@ -1436,12 +1458,12 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => {
-          return agent.load(['express', 'http'], [{
+          return agent.load(['express', 'http', 'router'], [{
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent'],
             blocklist: ['/health']
-          }, { client: false }])
+          }, { client: false }, {}])
         })
 
         after(() => {
@@ -1564,9 +1586,9 @@ describe('Plugin', () => {
 
       describe('with configuration for middleware disabled', () => {
         before(() => {
-          return agent.load(['express', 'http'], [{
+          return agent.load(['express', 'http', 'router'], [{
             middleware: false
-          }, { client: false }])
+          }, { client: false }, { middleware: false }])
         })
 
         after(() => {
@@ -1582,8 +1604,8 @@ describe('Plugin', () => {
 
           let span
 
-          app.use((req, res, next) => {
-            span = tracer.scope().active()
+          app.use(async (req, res, next) => {
+            span = await tracer.scope().active()
             next()
           })
 

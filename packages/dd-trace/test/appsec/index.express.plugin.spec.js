@@ -1,9 +1,13 @@
 'use strict'
 
+const semver = require('semver')
 const Axios = require('axios')
 const { assert } = require('chai')
-const path = require('path')
+const sinon = require('sinon')
+const path = require('node:path')
 const zlib = require('node:zlib')
+
+const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -11,6 +15,11 @@ const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
+  if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+    describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+    return
+  }
+
   describe('Suspicious request blocking - path parameters', () => {
     let server, paramCallbackSpy, axios
 

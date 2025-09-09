@@ -1,8 +1,11 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const fs = require('node:fs')
 
-const fs = require('fs')
+require('./setup/core')
 
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')
