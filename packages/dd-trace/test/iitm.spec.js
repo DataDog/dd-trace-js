@@ -17,7 +17,7 @@ describe('iitm.js', () => {
   }
   let iitmjs
 
-  describe('with a supported nodejs version', () => {
+  describe('with a supported Node.js version', () => {
     let listener
     const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
