@@ -11,11 +11,13 @@ const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
 const tracerVersion = require('../../../../../package.json').version
 
 const { channel } = require('dc-polyfill')
+const agent = require('../../plugins/agent')
 const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
   let LLMObsSDK
   let llmobs
+  let llmobsModule
   let tracer
   let clock
 
@@ -29,6 +31,8 @@ describe('sdk', () => {
       }
     })
     llmobs = tracer.llmobs
+
+    llmobsModule = require('../../../../dd-trace/src/llmobs')
 
     // spy on properties
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
@@ -65,7 +69,8 @@ describe('sdk', () => {
 
   after(() => {
     sinon.restore()
-    llmobs.disable()
+    llmobsModule.disable()
+    agent.wipe() // clear the require cache
   })
 
   describe('enabled', () => {

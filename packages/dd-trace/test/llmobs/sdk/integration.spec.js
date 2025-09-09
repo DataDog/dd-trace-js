@@ -12,6 +12,7 @@ const tags = {
 
 const SpanWriter = require('../../../src/llmobs/writers/spans')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
+const agent = require('../../plugins/agent')
 
 const tracerVersion = require('../../../../../package.json').version
 
@@ -22,6 +23,7 @@ function getTag (llmobsSpan, tagName) {
 
 describe('end to end sdk integration tests', () => {
   let tracer
+  let llmobsModule
   let llmobs
   let payloadGenerator
 
@@ -51,17 +53,8 @@ describe('end to end sdk integration tests', () => {
       }
     })
 
-    // another test suite may have disabled LLMObs
-    // to clear the intervals and unsubscribe
-    // in that case, the `init` call above won't have re-enabled it
-    // we'll re-enable it here
+    llmobsModule = require('../../../../dd-trace/src/llmobs')
     llmobs = tracer.llmobs
-    if (!llmobs.enabled) {
-      llmobs.enable({
-        mlApp: 'test',
-        agentlessEnabled: false
-      })
-    }
 
     tracer._tracer._config.apiKey = 'test'
 
@@ -76,16 +69,12 @@ describe('end to end sdk integration tests', () => {
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')
-
-    llmobs.disable()
-    llmobs.enable({ mlApp: 'test', apiKey: 'test' })
   })
 
   after(() => {
     sinon.restore()
-    llmobs.disable()
-    delete global._ddtrace
-    delete require.cache[require.resolve('../../../../dd-trace')]
+    llmobsModule.disable()
+    agent.wipe() // clear the require cache
   })
 
   it('uses trace correctly', () => {
@@ -326,7 +315,7 @@ describe('end to end sdk integration tests', () => {
 
   describe('with user span processor', () => {
     afterEach(() => {
-      llmobs.registerProcessor(null)
+      llmobs.deregisterProcessor()
     })
 
     describe('with a processor that returns null', () => {
