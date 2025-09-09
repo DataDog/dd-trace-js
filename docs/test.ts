@@ -622,7 +622,7 @@ llmobs.registerProcessor((llmobsSpan) => {
   return llmobsSpan
 })
 
-llmobs.registerProcessor(null)
+llmobs.deregisterProcessor()
 
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
