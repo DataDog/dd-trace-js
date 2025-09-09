@@ -6,7 +6,7 @@ require('dd-trace').init({
 
 const Mocha = require('mocha')
 
-async function main() {
+async function main () {
   const mocha = new Mocha()
 
   mocha.addFile(require.resolve('./sum-wrong-init-test.js'))
@@ -22,7 +22,6 @@ async function main() {
   })
 }
 
-main().catch(err => {
-  console.error(err)
+main().catch(() => {
   process.exit(1)
 })

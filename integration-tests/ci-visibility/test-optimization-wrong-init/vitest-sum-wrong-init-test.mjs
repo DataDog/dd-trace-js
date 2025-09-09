@@ -1,5 +1,3 @@
-'use strict'
-
 import tracer from 'dd-trace'
 import { describe, it, expect } from 'vitest'
 

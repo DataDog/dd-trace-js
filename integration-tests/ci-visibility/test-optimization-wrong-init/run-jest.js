@@ -4,9 +4,9 @@ require('dd-trace').init({
   service: 'sum-service-tests',
 })
 
-const {runCLI} = require('jest')
+const { runCLI } = require('jest')
 
-async function main() {
+async function main () {
   const projectRoot = process.cwd()
 
   await runCLI(

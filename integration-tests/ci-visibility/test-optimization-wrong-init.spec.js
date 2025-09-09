@@ -22,7 +22,7 @@ const testFrameworks = [
   },
   {
     testFramework: 'vitest',
-    command: 'node ./ci-visibility/test-optimization-wrong-init/run-vitest.js',
+    command: 'node ./ci-visibility/test-optimization-wrong-init/run-vitest.mjs',
     expectedOutput: '1 passed',
     extraTestContext: {
       TEST_DIR: 'ci-visibility/test-optimization-wrong-init/vitest-sum-wrong-init*',
@@ -105,7 +105,9 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
       })
 
       childProcess.on('exit', () => {
-        assert.include(processOutput, `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`)
+        assert.include(processOutput,
+          `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
+        )
         assert.include(processOutput, expectedOutput)
         eventsPromise.then(() => {
           done()

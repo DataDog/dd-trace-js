@@ -1,7 +1,7 @@
 'use strict'
+import { startVitest } from 'vitest/node'
 
-async function main() {
-  const { startVitest } = await import('vitest/node')
+async function main () {
 
   return startVitest(
     'test',
@@ -12,7 +12,6 @@ async function main() {
   )
 }
 
-main().catch(err => {
-  console.error(err)
+main().catch(() => {
   process.exit(1)
 })
