@@ -88,6 +88,7 @@ function disable () {
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanProcessCh.hasSubscribers) spanProcessCh.unsubscribe(handleSpanProcess)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
+  if (registerProcessorCh.hasSubscribers) registerProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
   evalWriter?.destroy()
