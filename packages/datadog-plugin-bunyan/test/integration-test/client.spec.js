@@ -31,16 +31,18 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(
-        sandbox.folder,
-        'server.mjs',
-        agent.port,
-        (data) => {
-          const jsonObject = JSON.parse(data.toString())
-          expect(jsonObject).to.have.property('dd')
-        }
-      )
-    }).timeout(20000)
+    for (const variant of ['default', 'destructure', 'star']) {
+      it(`is instrumented (${variant})`, async () => {
+        proc = await spawnPluginIntegrationTestProc(
+          sandbox.folder,
+          `server-${variant}.mjs`,
+          agent.port,
+          (data) => {
+            const jsonObject = JSON.parse(data.toString())
+            expect(jsonObject).to.have.property('dd')
+          }
+        )
+      }).timeout(20000)
+    }
   })
 })
