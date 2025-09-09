@@ -64,6 +64,10 @@ class LLMObsSpanProcessor {
   }
 
   registerProcessor (processor) {
+    if (processor !== null && this.#processor) {
+      throw new Error('[LLMObs] Only one user span processor can be registered.')
+    }
+
     this.#processor = processor
   }
 
