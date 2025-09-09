@@ -34,16 +34,18 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'amqp.command'), true)
-      })
+    for (const variant of ['default', 'destructure', 'star']) {
+      it('is instrumented', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(checkSpansForServiceName(payload, 'amqp.command'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, `server-${variant}.mjs`, agent.port)
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })
