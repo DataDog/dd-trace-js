@@ -57,7 +57,7 @@ describe('RASP - command_injection', () => {
     }
 
     before(() => {
-      return agent.load(['express', 'http', 'child_process'], { client: false })
+      return agent.load(['express', 'http', 'child_process', 'router'], { client: false })
     })
 
     before((done) => {
