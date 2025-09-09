@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   createSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const http2 = require('http2')
@@ -12,11 +13,17 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  let variants
 
   before(async function () {
     this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
+    variants = varySandbox(sandbox, 'server.mjs', {
+      default: `import http2 from 'http2'`,
+      star: `import * as http2 from 'http2'`,
+      destructure: `import { createServer } from 'http2'; const http2 = { createServer }`
+    })
   })
 
   after(async function () {
@@ -36,7 +43,7 @@ describe('esm', () => {
   context('http2', () => {
     for (const variant of ['default', 'destructure', 'star']) {
       it(`is instrumented (${variant})`, async () => {
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, `server-${variant}.mjs`, agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)

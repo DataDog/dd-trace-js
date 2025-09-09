@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   createSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { expect } = require('chai')
@@ -12,11 +13,18 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  let variants
+
   withVersions('bunyan', 'bunyan', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
+      variants = varySandbox(sandbox, 'server.mjs', {
+        default: `import bunyan from 'bunyan'`,
+        star: `import * as bunyan from 'bunyan'`,
+        destructure: `import { default as bunyan } from 'bunyan'`
+      })
     })
 
     after(async () => {
@@ -35,7 +43,7 @@ describe('esm', () => {
       it(`is instrumented (${variant})`, async () => {
         proc = await spawnPluginIntegrationTestProc(
           sandbox.folder,
-          `server-${variant}.mjs`,
+          variants[variant],
           agent.port,
           (data) => {
             const jsonObject = JSON.parse(data.toString())

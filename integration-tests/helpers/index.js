@@ -273,6 +273,35 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 }
 
+/**
+ * Creates a bunch of files based on an original file in sandbox. Useful for varying test files
+ * without having to create a bunch of them yourself.
+ *
+ * The variants object should have keys that are named variants, and values that are the text
+ * in the file that's different in each variant. There must always be a "default" variant,
+ * whose value is the original text within the file that will be replaced.
+ *
+ * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {object} variants - The variants.
+ * @returns {object} A map from variant names to resulting filenames
+ */
+function varySandbox(sandbox, filename, variants) {
+  const origFileData = fs.readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const [prefix, suffix] = filename.split('.')
+  const variantFilenames = {}
+  for (const variant in variants) {
+    const variantFilename = `${prefix}-${variant}.${suffix}`
+    variantFilenames[variant] = variantFilename
+    let newFileData = origFileData
+    if (variant !== 'default') {
+      newFileData = origFileData.replace(variants.default, `${variants[variant]}`)
+    }
+    fs.writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
+  }
+  return variantFilenames
+}
+
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
@@ -487,5 +516,6 @@ module.exports = {
   useEnv,
   useSandbox,
   sandboxCwd,
-  setShouldKill
+  setShouldKill,
+  varySandbox
 }
