@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
 const addresses = require('../../../src/appsec/addresses')

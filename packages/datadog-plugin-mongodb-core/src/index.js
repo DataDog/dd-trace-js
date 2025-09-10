@@ -26,7 +26,6 @@ class MongodbCorePlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { ns, ops, options = {}, name } = ctx
-
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -90,11 +89,28 @@ function sanitizeBigInt (data) {
   return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
 }
 
+function extractQuery (statements) {
+  if (statements.length === 1 && statements[0].q) return statements[0].q
+
+  const extractedQueries = []
+  for (let i = 0; i < statements.length; i++) {
+    if (statements[i].q) {
+      extractedQueries.push(limitDepth(statements[i].q))
+    }
+  }
+
+  return extractedQueries
+}
+
 function getQuery (cmd) {
-  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
+  if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
+
+  if (Array.isArray(cmd)) return sanitizeBigInt(extractQuery(cmd))
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
   if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
+  if (cmd.deletes) return sanitizeBigInt(extractQuery(cmd.deletes))
+  if (cmd.updates) return sanitizeBigInt(extractQuery(cmd.updates))
 }
 
 function getResource (plugin, ns, query, operationName) {

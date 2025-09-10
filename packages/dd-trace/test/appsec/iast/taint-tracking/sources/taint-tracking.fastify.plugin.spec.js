@@ -1,6 +1,9 @@
 'use strict'
 
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
 const agent = require('../../../../plugins/agent')
 const Config = require('../../../../../src/config')
 const { storage } = require('../../../../../../datadog-core')

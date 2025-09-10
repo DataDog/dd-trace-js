@@ -1,9 +1,13 @@
 'use strict'
 
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const Config = require('../../../src/config')
 const agent = require('../../plugins/agent')
-const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')

@@ -1,6 +1,9 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
@@ -27,7 +30,12 @@ describe('RASP', () => {
         subscribe: sinon.stub(),
         unsubscribe: sinon.stub(),
         hasSubscribers: true
-      }
+      },
+      routerMiddlewareError: {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        hasSubscribers: true
+      },
     }
 
     blocked = false
@@ -69,6 +77,7 @@ describe('RASP', () => {
     it('should subscribe to error channels', () => {
       sinon.assert.calledOnce(channels.expressMiddlewareError.subscribe)
       sinon.assert.calledOnce(channels.fastifyMiddlewareError.subscribe)
+      sinon.assert.calledOnce(channels.routerMiddlewareError.subscribe)
     })
 
     it('should unsubscribe from error channels', () => {
@@ -76,6 +85,7 @@ describe('RASP', () => {
 
       sinon.assert.calledOnce(channels.expressMiddlewareError.unsubscribe)
       sinon.assert.calledOnce(channels.fastifyMiddlewareError.unsubscribe)
+      sinon.assert.calledOnce(channels.routerMiddlewareError.unsubscribe)
     })
   })
 
