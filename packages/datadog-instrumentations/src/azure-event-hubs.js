@@ -30,10 +30,11 @@ addHook({
   const eventDataBatchImpl = obj.EventDataBatchImpl
   shimmer.wrap(eventDataBatchImpl.prototype, 'tryAdd', tryAdd =>
     function (eventData, options) {
+      const config = this._context.config
       const functionName = tryAdd.name
       return producerCh.tracePromise(
         tryAdd,
-        { functionName, eventData, options },
+        { functionName, eventData, config },
         this, ...arguments)
     })
   return obj

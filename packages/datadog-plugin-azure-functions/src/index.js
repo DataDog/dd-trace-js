@@ -13,7 +13,7 @@ const triggerMap = {
   put: 'Http',
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
-  eventHub: 'EventHub',
+  eventHub: 'EventHubs',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -26,12 +26,18 @@ class AzureFunctionsPlugin extends TracingPlugin {
   bindStart (ctx) {
     const childOf = extractTraceContext(this._tracer, ctx)
     const meta = getMetaForTrigger(ctx)
+    const triggerType = triggerMap[ctx.methodName]
+    const isMessagingService = (triggerType === 'ServiceBus' || triggerType === 'EventHubs')
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
       meta,
     }, ctx)
+
+    if (isMessagingService) {
+      setSpanLinks(this.tracer, span, ctx)
+    }
 
     ctx.span = span
     return ctx.currentStore
@@ -112,9 +118,23 @@ function extractTraceContext (tracer, ctx) {
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
     case 'ServiceBus':
       return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
-    case 'EventHub':
-      return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.properties)
     default:
+      null
+  }
+}
+
+function setSpanLinks (tracer, span, ctx) {
+  const cardinality = ctx.invocationContext.options.trigger.cardinality
+  const triggerMetadata = ctx.invocationContext.triggerMetadata
+  if (cardinality === 'many' && triggerMetadata.propertiesArray.length > 0) {
+    triggerMetadata.propertiesArray.forEach(eventData => {
+      span.addLink(tracer.extract('text_map', eventData))
+    })
+  } else if (cardinality === 'one') {
+    const spanContext = tracer.extract('text_map', triggerMetadata.properties)
+    if (spanContext) {
+      span.addLink(spanContext)
+    }
   }
 }
 
