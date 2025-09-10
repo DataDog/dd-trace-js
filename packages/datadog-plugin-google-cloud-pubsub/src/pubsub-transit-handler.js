@@ -207,7 +207,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     return { projectId, topicName }
   }
 
-  // Create synthetic delivery span
+  // Create synthetic delivery span for GCP PubSub push subscriptions
   createDeliverySpan (messageData, isCloudEvent) {
     const { attrs, topicName, projectId, subscription } = messageData
     const deliveryTraceId = attrs['x-dd-delivery-trace-id']
