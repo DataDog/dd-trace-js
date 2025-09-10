@@ -73,27 +73,24 @@ function wrapEmitForInterception (emit) {
     }
 
     // Check if any plugin wants to intercept this request
-    if (requestInterceptCh.hasSubscribers) {
-      const interceptData = {
-        req,
-        res,
-        emit,
-        server: this,
-        originalArgs: arguments,
-        handled: false // Plugin sets this to true if it handles the request
-      }
-
-      // Publish to generic intercept channel - any plugin can subscribe
-      requestInterceptCh.publish(interceptData)
-
-      // If a plugin handled it, don't continue with normal processing
-      if (interceptData.handled) {
-        return true
-      }
+    if (!requestInterceptCh.hasSubscribers) {
+      return emit.apply(this, arguments)
     }
 
-    // No plugin intercepted, continue with normal HTTP processing
-    return emit.apply(this, arguments)
+    const interceptData = {
+      req,
+      res,
+      emit,
+      server: this,
+      originalArgs: arguments,
+      handled: false // Plugin sets this to true if it handles the request
+    }
+
+    // Publish to generic intercept channel - any plugin can subscribe
+    requestInterceptCh.publish(interceptData)
+
+    // If a plugin handled it, don't continue with normal processing
+    return interceptData.handled ? true : emit.apply(this, arguments)
   }
 }
 

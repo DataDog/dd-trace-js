@@ -13,7 +13,11 @@ const GoogleCloudPubsubTransitHandlerPlugin = require(
 const mockTracer = {
   startSpan: () => ({ setTag: () => {}, finish: () => {} }),
   extract: () => null,
-  scope: () => ({ activate: (span, cb) => cb() })
+  scope: () => ({ activate: (span, cb) => cb() }),
+  _log: {
+    warn: () => {},
+    error: () => {}
+  }
 }
 const pluginInstance = new GoogleCloudPubsubTransitHandlerPlugin(mockTracer)
 const isPubSubRequest = pluginInstance.isPubSubRequest.bind(pluginInstance)
@@ -38,7 +42,7 @@ describe('server', () => {
     startServerCh.subscribe(startServerSpy)
 
     // Mock global tracer for server-side handling
-    global._ddtrace = require('../../dd-trace')
+    global._ddtrace = mockTracer
   })
 
   afterEach((done) => {
