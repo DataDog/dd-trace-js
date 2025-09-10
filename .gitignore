@@ -125,6 +125,3 @@ packages/dd-trace/test/plugins/versions/node_modules
 packages/dd-trace/test/plugins/versions/yarn.lock
 !packages/dd-trace/**/telemetry/logs
 packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
-
-# Local documentation files
-docs/pubsub-transit-handler.md
