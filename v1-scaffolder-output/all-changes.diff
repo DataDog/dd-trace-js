@@ -1,0 +1,189 @@
+diff --git a/.github/workflows/apm-integrations.yml b/.github/workflows/apm-integrations.yml
+index c783c6c05..cfd30a428 100644
+--- a/.github/workflows/apm-integrations.yml
++++ b/.github/workflows/apm-integrations.yml
+@@ -129,6 +129,20 @@ jobs:
+       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+       - uses: ./.github/actions/plugins/upstream
+ 
++  bullmq:
++    runs-on: ubuntu-latest
++    env:
++      PLUGINS: bullmq
++      SERVICES: redis
++    services:
++      redis:
++        image: redis:6.2-alpine
++        ports:
++          - 6379:6379
++    steps:
++      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
++      - uses: ./.github/actions/plugins/test
++
+   bunyan:
+     runs-on: ubuntu-latest
+     env:
+diff --git a/.gitignore b/.gitignore
+index f4df9e1b4..4987b6322 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,6 +5,8 @@
+ *.DS_Store
+ .AppleDouble
+ .LSOverride
++mcp/
++mcp.json
+ 
+ # Icon must end with two \r
+ Icon
+diff --git a/docs/API.md b/docs/API.md
+index ed5ffe5c8..536783f0a 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -29,6 +29,7 @@ tracer.use('pg', {
+ <h5 id="aws-sdk-tags"></h5>
+ <h5 id="aws-sdk-config"></h5>
+ <h5 id="azure-functions"></h5>
++<h5 id="bullmq"></h5>
+ <h5 id="bunyan"></h5>
+ <h5 id="confluentinc-kafka-javascript"></h5>
+ <h5 id="couchbase"></h5>
+@@ -110,12 +111,13 @@ tracer.use('pg', {
+ * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+ * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
+ * [bluebird](./interfaces/export_.plugins.bluebird.html)
+-* [couchbase](./interfaces/export_.plugins.couchbase.html)
+-* [cucumber](./interfaces/export_.plugins.cucumber.html)
++* [bullmq](./interfaces/export_.plugins.bullmq.html)
+ * [bunyan](./interfaces/export_.plugins.bunyan.html)
+-* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
+ * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
++* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
+ * [connect](./interfaces/export_.plugins.connect.html)
++* [couchbase](./interfaces/export_.plugins.couchbase.html)
++* [cucumber](./interfaces/export_.plugins.cucumber.html)
+ * [dns](./interfaces/export_.plugins.dns.html)
+ * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
+ * [express](./interfaces/export_.plugins.express.html)
+@@ -143,14 +145,14 @@ tracer.use('pg', {
+ * [mysql2](./interfaces/export_.plugins.mysql2.html)
+ * [net](./interfaces/export_.plugins.net.html)
+ * [next](./interfaces/export_.plugins.next.html)
+-* [opensearch](./interfaces/export_.plugins.opensearch.html)
+ * [openai](./interfaces/export_.plugins.openai.html)
++* [opensearch](./interfaces/export_.plugins.opensearch.html)
+ * [oracledb](./interfaces/export_.plugins.oracledb.html)
+-* [pino](./interfaces/export_.plugins.pino.html)
+ * [pg](./interfaces/export_.plugins.pg.html)
++* [pino](./interfaces/export_.plugins.pino.html)
+ * [prisma](./interfaces/export_.plugins.prisma.html)
+-* [promise](./interfaces/export_.plugins.promise.html)
+ * [promise-js](./interfaces/export_.plugins.promise_js.html)
++* [promise](./interfaces/export_.plugins.promise.html)
+ * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
+ * [q](./interfaces/export_.plugins.q.html)
+ * [redis](./interfaces/export_.plugins.redis.html)
+diff --git a/docs/add-redirects.sh b/docs/add-redirects.sh
+index 8a7119a2a..f43e08c36 100755
+--- a/docs/add-redirects.sh
++++ b/docs/add-redirects.sh
+@@ -17,12 +17,13 @@ declare -a plugins=(
+   "avsc"
+   "aws_sdk"
+   "bluebird"
+-  "couchbase"
+-  "cucumber"
++  "bullmq"
+   "bunyan"
+   "cassandra_driver"
+   "confluentinc_kafka_javascript"
+   "connect"
++  "couchbase"
++  "cucumber"
+   "dns"
+   "elasticsearch"
+   "express"
+@@ -50,11 +51,11 @@ declare -a plugins=(
+   "mysql2"
+   "net"
+   "next"
+-  "opensearch"
+   "openai"
++  "opensearch"
+   "oracledb"
+-  "pino"
+   "pg"
++  "pino"
+   "prisma"
+   "promise"
+   "promise_js"
+diff --git a/docs/test.ts b/docs/test.ts
+index 027f49936..0ac570cfe 100644
+--- a/docs/test.ts
++++ b/docs/test.ts
+@@ -309,6 +309,7 @@ tracer.use('avsc');
+ tracer.use('aws-sdk');
+ tracer.use('aws-sdk', awsSdkOptions);
+ tracer.use('azure-functions');
++tracer.use('bullmq');
+ tracer.use('bunyan');
+ tracer.use('couchbase');
+ tracer.use('cassandra-driver');
+diff --git a/index.d.ts b/index.d.ts
+index 441c09148..ec1957ff0 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -168,6 +168,7 @@ interface Plugins {
+   "aws-sdk": tracer.plugins.aws_sdk;
+   "azure-functions": tracer.plugins.azure_functions;
+   "azure-service-bus": tracer.plugins.azure_service_bus;
++  "bullmq": tracer.plugins.bullmq;
+   "bunyan": tracer.plugins.bunyan;
+   "cassandra-driver": tracer.plugins.cassandra_driver;
+   "child_process": tracer.plugins.child_process;
+@@ -2105,7 +2106,8 @@ declare namespace tracer {
+      * on the tracer.
+      */
+     interface winston extends Integration {}
+-  }
++  
++    interface bullmq extends Instrumentation {}}
+ 
+   export namespace opentelemetry {
+     /**
+@@ -2801,3 +2803,10 @@ declare namespace tracer {
+ declare const tracer: Tracer;
+ 
+ export = tracer;
++
++
++    /**
++     * This plugin automatically instruments the
++     * [bullmq](https://npmjs.com/package/bullmq) module.
++     */
++    interface bullmq extends Instrumentation {}
+\ No newline at end of file
+diff --git a/packages/datadog-instrumentations/src/helpers/hooks.js b/packages/datadog-instrumentations/src/helpers/hooks.js
+index 80561a3e2..b461e6f39 100644
+--- a/packages/datadog-instrumentations/src/helpers/hooks.js
++++ b/packages/datadog-instrumentations/src/helpers/hooks.js
+@@ -37,6 +37,7 @@ module.exports = {
+   'aws-sdk': () => require('../aws-sdk'),
+   bluebird: () => require('../bluebird'),
+   'body-parser': () => require('../body-parser'),
++  bullmq: () => require('../bullmq'),
+   bunyan: () => require('../bunyan'),
+   'cassandra-driver': () => require('../cassandra-driver'),
+   child_process: () => require('../child_process'),
+diff --git a/packages/dd-trace/src/plugins/index.js b/packages/dd-trace/src/plugins/index.js
+index 10e1105df..2b36623ed 100644
+--- a/packages/dd-trace/src/plugins/index.js
++++ b/packages/dd-trace/src/plugins/index.js
+@@ -31,6 +31,7 @@ module.exports = {
+   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
+   get avsc () { return require('../../../datadog-plugin-avsc/src') },
+   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
++  get 'bullmq' () { return require('../../../datadog-plugin-bullmq/src') },
+   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
+   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
+   get child_process () { return require('../../../datadog-plugin-child_process/src') },
