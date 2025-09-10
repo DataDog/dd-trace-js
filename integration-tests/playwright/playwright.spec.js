@@ -538,7 +538,9 @@ versions.forEach((version) => {
         })
 
         receiver.setKnownTestsResponseCode(500)
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          playwright: {}
+        })
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1760,7 +1762,9 @@ versions.forEach((version) => {
 
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            playwright: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
