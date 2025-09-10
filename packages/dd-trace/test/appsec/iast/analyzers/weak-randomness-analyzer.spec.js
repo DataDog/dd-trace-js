@@ -1,9 +1,12 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { prepareTestServerForIast } = require('../utils')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')

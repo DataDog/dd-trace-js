@@ -60,8 +60,14 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedTests = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
+let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+
+function getTestFullyQualifiedName (test) {
+  const fullname = getTestFullname(test)
+  return `${test._requireFile} ${fullname}`
+}
 
 function getTestProperties (test) {
   const testName = getTestFullname(test)
@@ -148,8 +154,8 @@ function getPlaywrightConfig (playwrightRunner) {
   }
 }
 
-function getRootDir (playwrightRunner) {
-  const config = getPlaywrightConfig(playwrightRunner)
+function getRootDir (playwrightRunner, configArg) {
+  const config = configArg?.config || getPlaywrightConfig(playwrightRunner)
   if (config.rootDir) {
     return config.rootDir
   }
@@ -162,8 +168,8 @@ function getRootDir (playwrightRunner) {
   return process.cwd()
 }
 
-function getProjectsFromRunner (runner) {
-  const config = getPlaywrightConfig(runner)
+function getProjectsFromRunner (runner, configArg) {
+  const config = configArg?.projects ? configArg : getPlaywrightConfig(runner)
   return config.projects?.map((project) => {
     if (project.project) {
       return project.project
@@ -327,8 +333,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
     return
   }
 
-  const testFullName = getTestFullname(test)
-  const testFqn = `${testSuiteAbsolutePath} ${testFullName}`
+  const testFqn = getTestFullyQualifiedName(test)
   const testStatuses = testsToTestStatuses.get(testFqn) || []
 
   if (testStatuses.length === 0) {
@@ -509,11 +514,12 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   return dispatcherExport
 }
 
-function runnerHook (runnerExport, playwrightVersion) {
-  shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
+function runAllTestsWrapper (runAllTests, playwrightVersion) {
+  // Config parameter is only available from >=1.55.0
+  return async function (config) {
     let onDone
 
-    rootDir = getRootDir(this)
+    rootDir = getRootDir(this, config)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -586,7 +592,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       }
     }
 
-    const projects = getProjectsFromRunner(this)
+    const projects = getProjectsFromRunner(this, config)
 
     const shouldSetRetries = isFlakyTestRetriesEnabled &&
       flakyTestRetriesCount > 0 &&
@@ -617,19 +623,25 @@ function runnerHook (runnerExport, playwrightVersion) {
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
       let totalFailedTestCount = 0
       let totalAttemptToFixFailedTestCount = 0
+      let totalPureQuarantinedFailedTestCount = 0
 
-      for (const testStatuses of testsToTestStatuses.values()) {
-        totalFailedTestCount += testStatuses.filter(status => status === 'fail').length
+      for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
+        const failedCount = testStatuses.filter(status => status === 'fail').length
+        totalFailedTestCount += failedCount
+        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+          totalPureQuarantinedFailedTestCount += failedCount
+        }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
-        const fullname = getTestFullname(test)
-        const fqn = `${test._requireFile} ${fullname}`
-        const testStatuses = testsToTestStatuses.get(fqn)
+        const testFqn = getTestFullyQualifiedName(test)
+        const testStatuses = testsToTestStatuses.get(testFqn)
         totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
       }
 
-      if (totalFailedTestCount > 0 && totalFailedTestCount === totalAttemptToFixFailedTestCount) {
+      const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
+
+      if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
       }
     }
@@ -647,10 +659,28 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     startedSuites = []
     remainingTestsByFile = {}
+    quarantinedButNotAttemptToFixFqns = new Set()
 
     // TODO: we can trick playwright into thinking the session passed by returning
     // 'passed' here. We might be able to use this for both EFD and Test Management tests.
     return runAllTestsReturn
+  }
+}
+
+function runnerHook (runnerExport, playwrightVersion) {
+  shimmer.wrap(
+    runnerExport.Runner.prototype,
+    'runAllTests',
+    runAllTests => runAllTestsWrapper(runAllTests, playwrightVersion)
+  )
+}
+
+function runnerHookNew (runnerExport, playwrightVersion) {
+  runnerExport = shimmer.wrap(runnerExport, 'runAllTestsWithConfig', function (originalGetter) {
+    const originalFunction = originalGetter.call(this)
+    return function () {
+      return runAllTestsWrapper(originalFunction, playwrightVersion)
+    }
   })
 
   return runnerExport
@@ -693,6 +723,12 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0']
 }, runnerHook)
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/testRunner.js',
+  versions: ['>=1.55.0']
+}, runnerHookNew)
 
 addHook({
   name: 'playwright',
@@ -752,8 +788,12 @@ addHook({
           if (testProperties.disabled || testProperties.quarantined) {
             quarantinedOrDisabledTestsAttemptToFix.push(test)
           }
-        } else if (testProperties.disabled || testProperties.quarantined) {
+        } else if (testProperties.disabled) {
           test.expectedStatus = 'skipped'
+        } else if (testProperties.quarantined) {
+          // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
+          const testFqn = getTestFullyQualifiedName(test)
+          quarantinedButNotAttemptToFixFqns.add(testFqn)
         }
       }
     }

@@ -323,12 +323,6 @@ class Config {
       }
     }
 
-    if (typeof options.runtimeMetrics?.gc === 'boolean') {
-      options.runtimeMetrics.gc = {
-        enabled: options.runtimeMetrics.gc
-      }
-    }
-
     const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
       getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
       null
@@ -493,6 +487,8 @@ class Config {
     defaults.apmTracingEnabled = true
     defaults['appsec.apiSecurity.enabled'] = true
     defaults['appsec.apiSecurity.sampleDelay'] = 30
+    defaults['appsec.apiSecurity.endpointCollectionEnabled'] = true
+    defaults['appsec.apiSecurity.endpointCollectionMessageLimit'] = 300
     defaults['appsec.blockedTemplateGraphql'] = undefined
     defaults['appsec.blockedTemplateHtml'] = undefined
     defaults['appsec.blockedTemplateJson'] = undefined
@@ -634,6 +630,9 @@ class Config {
     defaults['tracePropagationStyle.inject'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.extract'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.otelPropagators'] = false
+    defaults.traceWebsocketMessagesEnabled = true
+    defaults.traceWebsocketMessagesInheritSampling = true
+    defaults.traceWebsocketMessagesSeparateTraces = true
     defaults.tracing = true
     defaults.url = undefined
     defaults.version = pkg.version
@@ -690,6 +689,8 @@ class Config {
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
@@ -814,6 +815,9 @@ class Config {
       DD_TRACE_SPAN_LEAK_DEBUG,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
+      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,
+      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,
+      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
@@ -846,6 +850,10 @@ class Config {
     ))
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
+    this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED)
+    env['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+      maybeInt(DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT)
     env['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     env['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
@@ -1048,6 +1056,9 @@ class Config {
       DD_TRACE_PROPAGATION_STYLE_EXTRACT
         ? false
         : !!OTEL_PROPAGATORS)
+    this._setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
+    this._setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
+    this._setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
@@ -1073,6 +1084,10 @@ class Config {
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
+    this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
+      options.appsec?.apiSecurity?.endpointCollectionEnabled)
+    opts['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+      maybeInt(options.appsec?.apiSecurity?.endpointCollectionMessageLimit)
     opts['appsec.blockedTemplateGraphql'] = maybeFile(options.appsec?.blockedTemplateGraphql)
     opts['appsec.blockedTemplateHtml'] = maybeFile(options.appsec?.blockedTemplateHtml)
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
@@ -1190,7 +1205,7 @@ class Config {
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
-    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
@@ -1209,6 +1224,9 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesEnabled', options.traceWebsocketMessagesEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesInheritSampling', options.traceWebsocketMessagesInheritSampling)
+    this._setBoolean(opts, 'traceWebsocketMessagesSeparateTraces', options.traceWebsocketMessagesSeparateTraces)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)

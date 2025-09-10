@@ -1,9 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../../setup/core')
 
 const { SchemaSampler } = require('../../../src/datastreams/schemas/schema_sampler')
-const { expect } = require('chai')
 
 describe('SchemaSampler', () => {
   it('samples with correct weights', () => {

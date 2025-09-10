@@ -4,8 +4,7 @@ require('../../../setup/mocha')
 
 const assert = require('node:assert')
 
-require('./stub-session')
-const { getLocalStateForCallFrame } = require('../../../../src/debugger/devtools_client/snapshot')
+const { getLocalStateForCallFrame } = require('./utils')
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
   describe('error handling', function () {

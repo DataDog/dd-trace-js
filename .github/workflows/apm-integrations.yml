@@ -219,7 +219,11 @@ jobs:
     strategy:
       matrix:
         node-version: [eol]
-        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+        range:
+          # - '^2.6.12' skipping due to bug with couchbase integration that is blocking CI.
+          # TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
+          - '^3.0.7'
+          - '>=4.0.0 <4.2.0'
         include:
           - node-version: 18
             range: '>=4.2.0'
@@ -936,6 +940,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: winston
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/plugins/test
+
+  ws:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: ws
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test

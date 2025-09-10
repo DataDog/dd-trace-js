@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { SourceIastPlugin } = require('../../../../../src/appsec/iast/iast-plugin')
 const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 

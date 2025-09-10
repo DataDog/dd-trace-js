@@ -1,10 +1,15 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before } = require('mocha')
+const sinon = require('sinon')
+
+const { randomBytes } = require('node:crypto')
+
 const EventBridge = require('../src/services/eventbridge')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const tracer = require('../../dd-trace')
-const { randomBytes } = require('crypto')
 
 describe('EventBridge', () => {
   let span

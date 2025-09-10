@@ -515,9 +515,12 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       const { projectId, topicName } = pluginInstance.extractProjectAndTopic(attrs, json.subscription)
       const subscription = json.subscription
 
-      const deliverySpan = pluginInstance.createAndFinishDeliverySpan(
-        mockTracer, attrs, topicName, projectId, subscription, false
-      )
+      const deliverySpan = pluginInstance.createDeliverySpan({
+        attrs,
+        topicName,
+        projectId,
+        subscription
+      }, false)
 
       expect(deliverySpan).to.exist
       sinon.assert.calledWith(mockTracer.startSpan, 'pubsub.delivery', sinon.match.object)
@@ -545,9 +548,12 @@ describe('HTTP Server Google Cloud Pub/Sub Integration Tests', () => {
       const { projectId, topicName } = pluginInstance.extractProjectAndTopic(attrs, json.subscription)
       const subscription = json.subscription
 
-      const deliverySpan = pluginInstance.createAndFinishDeliverySpan(
-        mockTracer, attrs, topicName, projectId, subscription, true
-      )
+      const deliverySpan = pluginInstance.createDeliverySpan({
+        attrs,
+        topicName,
+        projectId,
+        subscription
+      }, true)
 
       expect(deliverySpan).to.exist
       sinon.assert.calledWith(mockTracer.startSpan, 'pubsub.delivery', sinon.match.object)

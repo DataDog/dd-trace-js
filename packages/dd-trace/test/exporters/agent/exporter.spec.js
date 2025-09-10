@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const URL = require('url').URL
 
@@ -28,7 +31,7 @@ describe('Exporter', () => {
     prioritySampler = {}
     Writer = sinon.stub().returns(writer)
 
-    Exporter = proxyquire('../src/exporters/agent', {
+    Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer
     })
   })
