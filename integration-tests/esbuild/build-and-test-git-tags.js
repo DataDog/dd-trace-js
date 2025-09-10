@@ -6,7 +6,7 @@ const fs = require('fs')
 const { spawnSync } = require('child_process')
 const assert = require('assert')
 
-const ddPlugin = require('../../esbuild') // dd-trace/esbuild
+const ddPlugin = require('../../esbuild')
 const esbuild = require('esbuild')
 
 const SCRIPT = './git-tags-out.js'
