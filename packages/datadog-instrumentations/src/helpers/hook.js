@@ -19,29 +19,33 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
-  this._patched = Object.create(null)
+  const patched = new WeakSet()
 
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
-    const parts = [moduleBaseDir, moduleName].filter(Boolean)
-    const filename = path.join(...parts)
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (patched.has(moduleExports)) return moduleExports
 
-    if (this._patched[filename]) return moduleExports
+    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
-    this._patched[filename] = true
+    if (isIitm && newExports.default && !patched.has(newExports.default) && (typeof newExports.default === 'object' || typeof newExports.default === 'function')) {
+      onrequire(newExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      patched.add(newExports.default)
+    }
 
-    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+    patched.add(newExports)
+    patched.add(moduleExports)
+
+    return newExports
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    return safeHook(moduleExports, moduleName, moduleBaseDir)
+    return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
 }
 
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
-  this._patched = Object.create(null)
 }
 
 module.exports = Hook
