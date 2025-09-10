@@ -32,6 +32,9 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       // Also inject project_id and topic for consumer correlation
       msg.attributes['gcloud.project_id'] = projectId
       msg.attributes['pubsub.topic'] = topic
+      
+      // Record publish start time for delivery duration measurement
+      msg.attributes['x-dd-publish-start-time'] ??= String(Date.now())
 
       if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(msg)
