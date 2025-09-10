@@ -75,11 +75,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     })
     try { httpSpan.setTag('service.name', this.tracer._service) } catch {}
 
-    // Create synthetic delivery span if message data is available
-    if (messageData) {
-      this.createDeliverySpan(messageData, isCloudEvent)
-    }
-
     const finish = () => {
       if (httpSpan && !httpSpan.finished) {
         httpSpan.setTag('http.status_code', res.statusCode)
@@ -207,56 +202,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     return { projectId, topicName }
   }
 
-  // Create synthetic delivery span
-  createDeliverySpan (messageData, isCloudEvent) {
-    const { attrs, topicName, projectId, subscription } = messageData
-    const deliveryTraceId = attrs['x-dd-delivery-trace-id']
-    const deliverySpanId = attrs['x-dd-delivery-span-id']
-    const deliveryStartTime = attrs['x-dd-delivery-start-time']
-
-    const spanTags = {
-      component: 'google-cloud-pubsub',
-      'span.kind': 'internal',
-      'span.type': 'pubsub',
-      'gcloud.project_id': projectId,
-      'pubsub.topic': topicName,
-      'pubsub.subscription': subscription,
-      'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
-      'pubsub.operation': 'delivery'
-    }
-
-    // Add CloudEvent tags if applicable
-    if (isCloudEvent) {
-      if (attrs['ce-source']) spanTags['cloudevents.source'] = attrs['ce-source']
-      if (attrs['ce-type']) spanTags['cloudevents.type'] = attrs['ce-type']
-      spanTags['eventarc.trigger'] = 'pubsub'
-    }
-
-    const spanOptions = {
-      resource: `${topicName} → ${subscription}`,
-      type: 'pubsub',
-      tags: spanTags
-    }
-
-    // Use synthetic timing if available
-    if (deliveryTraceId && deliverySpanId && deliveryStartTime) {
-      spanOptions.startTime = Number.parseInt(deliveryStartTime, 10)
-    }
-
-    const span = this.tracer.startSpan('pubsub.delivery', spanOptions)
-
-    // Set synthetic context if available
-    if (deliveryTraceId && deliverySpanId) {
-      const context = span.context()
-      context._traceId = deliveryTraceId
-      context._spanId = deliverySpanId
-    }
-
-    // Immediately finish the span (represents past infrastructure work)
-    span.finish(deliveryStartTime ? Date.now() : undefined)
-
-    return span
-  }
 }
 
 module.exports = GoogleCloudPubsubTransitHandlerPlugin
