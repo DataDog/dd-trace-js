@@ -34,13 +34,13 @@ esbuild.build({
     env: { ...process.env, DD_TRACE_DEBUG: 'true' }
   })
   if (stdout.length) {
-    console.log(stdout.toString())
     const output = stdout.toString()
+    console.log(output)
     const repositoryURL = output.match(/"_dd\.git\.repository_url":"([^"]+)"/)?.[1]
     const commitSha = output.match(/"_dd\.git\.commit\.sha":"([^"]+)"/)?.[1]
     assert.ok(repositoryURL, '_dd.git.repository_url should be present')
     assert.ok(commitSha, '_dd.git.commit.sha should be present')
-    assert.ok(commitSha.length === 40, 'Git commit sha tag should be valid')
+    assert.equal(commitSha.length, 40, 'Git commit sha tag should be valid')
   }
   if (stderr.length) {
     console.error(stderr.toString())
