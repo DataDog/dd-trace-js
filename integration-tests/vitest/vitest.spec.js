@@ -502,7 +502,7 @@ versions.forEach((version) => {
         )
       })
     }
-    // maybe only latest version?
+
     context('early flake detection', () => {
       it('retries new tests', (done) => {
         receiver.setSettings({
@@ -1057,6 +1057,55 @@ versions.forEach((version) => {
         childProcess.on('exit', (exitCode) => {
           eventsPromise.then(() => {
             assert.equal(exitCode, 1)
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('does not detect new tests if the response is invalid', (done) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          'not-vitest': {}
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 4)
+
+            const newTests = tests.filter(
+              test => test.meta[TEST_IS_NEW] === 'true'
+            )
+            // no new tests
+            assert.equal(newTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
             done()
           }).catch(done)
         })

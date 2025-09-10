@@ -55,8 +55,12 @@ class VitestPlugin extends CiPlugin {
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
+      if (!knownTests.vitest) {
+        return onDone(false)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testsForThisTestSuite = knownTests[testSuite] || []
+      const testsForThisTestSuite = knownTests.vitest[testSuite] || []
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
