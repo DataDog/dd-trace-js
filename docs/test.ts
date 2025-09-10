@@ -603,6 +603,27 @@ llmobs.enable({
 // manually disable
 llmobs.disable()
 
+// register a processor
+llmobs.registerProcessor((llmobsSpan) => {
+  const drop = llmobsSpan.getTag('drop')
+  if (drop) {
+    return null
+  }
+
+  const redactInput = llmobsSpan.getTag('redactInput')
+  if (redactInput) {
+    llmobsSpan.input = llmobsSpan.input.map(input => {
+      return {
+        ...input,
+      }
+    })
+  }
+
+  return llmobsSpan
+})
+
+llmobs.deregisterProcessor()
+
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
 llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
