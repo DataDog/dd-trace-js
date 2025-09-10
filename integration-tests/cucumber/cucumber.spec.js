@@ -997,7 +997,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
 
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1102,7 +1104,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             receiver.setKnownTestsResponseCode(500)
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1313,7 +1317,9 @@ versions.forEach(version => {
                   known_tests_enabled: true
                 })
                 // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-                receiver.setKnownTests({})
+                receiver.setKnownTests({
+                  cucumber: {}
+                })
 
                 const eventsPromise = receiver
                   .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1460,6 +1466,60 @@ versions.forEach(version => {
                     stdio: 'pipe'
                   }
                 )
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+
+              it('does not detect new tests if the response is invalid', (done) => {
+                const NUM_RETRIES_EFD = 3
+                receiver.setSettings({
+                  early_flake_detection: {
+                    enabled: true,
+                    slow_test_retries: {
+                      '5s': NUM_RETRIES_EFD
+                    },
+                    faulty_session_threshold: 0
+                  },
+                  known_tests_enabled: true
+                })
+                receiver.setKnownTests(
+                  {
+                    'not-cucumber': {
+                      'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                    }
+                  }
+                )
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const testSession = events.find(event => event.type === 'test_session_end').content
+                    assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                    assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+                    assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                    assert.equal(newTests.length, 0)
+
+                    const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  parallelModeCommand,
+                  {
+                    cwd,
+                    env: envVars,
+                    stdio: 'pipe'
+                  }
+                )
+
                 childProcess.on('exit', () => {
                   eventsPromise.then(() => {
                     done()
