@@ -16,6 +16,7 @@ const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
+const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsTagger = require('./tagger')
@@ -56,6 +57,7 @@ function enable (config) {
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
+  registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
 
   // span processing
   spanProcessor = new LLMObsSpanProcessor(config)
@@ -86,6 +88,7 @@ function disable () {
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanProcessCh.hasSubscribers) spanProcessCh.unsubscribe(handleSpanProcess)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
+  if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
   evalWriter?.destroy()
@@ -124,6 +127,10 @@ function handleFlush () {
     log.warn('Failed to flush LLMObs spans and evaluation metrics:', e.message)
   }
   telemetry.recordUserFlush(err)
+}
+
+function handleRegisterProcessor (userSpanProcessor) {
+  spanProcessor.setUserSpanProcessor(userSpanProcessor)
 }
 
 function handleSpanProcess (data) {
