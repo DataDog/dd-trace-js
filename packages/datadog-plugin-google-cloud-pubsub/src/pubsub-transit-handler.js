@@ -214,6 +214,16 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     const deliverySpanId = attrs['x-dd-delivery-span-id']
     const deliveryStartTime = attrs['x-dd-delivery-start-time']
 
+    // Compute pubsub scheduling duration (publish → HTTP receipt)
+    const publishStartTimeRaw = attrs['x-dd-publish-start-time']
+    let schedulingMs = null
+    if (publishStartTimeRaw) {
+      const t0 = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(t0) && t0 > 0) {
+        schedulingMs = Date.now() - t0
+      }
+    }
+
     const spanTags = {
       component: 'google-cloud-pubsub',
       'span.kind': 'internal',
@@ -223,6 +233,11 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       'pubsub.subscription': subscription,
       'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
       'pubsub.operation': 'delivery'
+    }
+
+    // Add scheduling duration if available
+    if (schedulingMs !== null) {
+      spanTags['pubsub.scheduling_duration_ms'] = schedulingMs
     }
 
     // Add CloudEvent tags if applicable
@@ -238,8 +253,14 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       tags: spanTags
     }
 
-    // Use synthetic timing if available
-    if (deliveryTraceId && deliverySpanId && deliveryStartTime) {
+    // Use publish start time for span timing if available
+    if (publishStartTimeRaw) {
+      const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+        spanOptions.startTime = publishStartTime
+      }
+    } else if (deliveryTraceId && deliverySpanId && deliveryStartTime) {
+      // Fallback to synthetic timing if available
       spanOptions.startTime = Number.parseInt(deliveryStartTime, 10)
     }
 
@@ -252,8 +273,16 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       context._spanId = deliverySpanId
     }
 
-    // Immediately finish the span (represents past infrastructure work)
-    span.finish(deliveryStartTime ? Date.now() : undefined)
+    // Calculate delivery duration and finish span
+    const deliveryEnd = Date.now()
+    if (publishStartTimeRaw) {
+      const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+        const deliveryDuration = deliveryEnd - publishStartTime
+        try { span.setTag('pubsub.delivery.duration_ms', deliveryDuration) } catch {}
+      }
+    }
+    span.finish(deliveryEnd)
 
     return span
   }
