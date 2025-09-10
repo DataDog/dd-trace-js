@@ -2766,7 +2766,9 @@ versions.forEach(version => {
 
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            cucumber: {}
+          })
 
           receiver.setSettings({
             impacted_tests_enabled: true,
