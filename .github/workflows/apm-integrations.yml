@@ -702,6 +702,7 @@ jobs:
       image: bengl/node-12-with-oracle-client
       volumes:
         - /node20217:/node20217:rw,rshared
+        - /node20217:/__e/node20:ro,rshared
         - /node20217:/__e/node24:ro,rshared
     services:
       oracledb:
