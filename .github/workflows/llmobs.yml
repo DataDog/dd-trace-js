@@ -21,7 +21,7 @@ jobs:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -32,14 +32,14 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}-${{ matrix.version }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   openai:
     runs-on: ubuntu-latest
     env:
       PLUGINS: openai
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -50,7 +50,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -61,7 +61,7 @@ jobs:
     env:
       PLUGINS: langchain
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -72,7 +72,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -83,7 +83,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -92,7 +92,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -103,7 +103,7 @@ jobs:
     env:
       PLUGINS: google-cloud-vertexai
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -114,7 +114,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -125,7 +125,7 @@ jobs:
     env:
       PLUGINS: ai
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -136,7 +136,7 @@ jobs:
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:

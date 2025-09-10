@@ -201,7 +201,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
 
     return { projectId, topicName }
   }
-
 }
 
 module.exports = GoogleCloudPubsubTransitHandlerPlugin
