@@ -1,10 +1,161 @@
 'use strict'
 
 const { expect } = require('chai')
-const sinon = require('sinon')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const assert = require('node:assert')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+
+describe('client', () => {
+  let url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
+
+  before(async () => {
+    await agent.load('http')
+  })
+
+  after(() => {
+    return agent.close()
+  })
+
+  beforeEach(() => {
+    http = require('http')
+    const startChannel = dc.channel('apm:http:client:request:start')
+    const endChannel = dc.channel('apm:http:client:request:end')
+    const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
+    const errorChannel = dc.channel('apm:http:client:request:error')
+
+    startChannelCb = sinon.stub()
+    endChannelCb = sinon.stub()
+    asyncStartChannelCb = sinon.stub()
+    errorChannelCb = sinon.stub()
+
+    startChannel.subscribe(startChannelCb)
+    endChannel.subscribe(endChannelCb)
+    asyncStartChannel.subscribe(asyncStartChannelCb)
+    errorChannel.subscribe(errorChannelCb)
+
+    url = `http://localhost:${agent.port}/test`
+  })
+
+  afterEach(() => {
+    const startChannel = dc.channel('apm:http:client:request:start')
+    const endChannel = dc.channel('apm:http:client:request:end')
+    const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
+    const errorChannel = dc.channel('apm:http:client:request:error')
+
+    startChannel.unsubscribe(startChannelCb)
+    endChannel.unsubscribe(endChannelCb)
+    asyncStartChannel.unsubscribe(asyncStartChannelCb)
+    errorChannel.unsubscribe(errorChannelCb)
+  })
+
+  describe('abort controller', () => {
+    const getContextFromStubByUrl = (url, stub) => {
+      const calls = stub.getCalls()
+      for (const call of calls) {
+        if (call.args[0].args.originalUrl === url) {
+          return call.args[0]
+        }
+      }
+      return null
+    }
+
+    const abortCallback = (ctx) => {
+      if (ctx.args.originalUrl === url) {
+        ctx.abortController.abort()
+      }
+    }
+
+    it('Request is aborted with custom error', (done) => {
+      class CustomError extends Error { }
+
+      startChannelCb.callsFake((ctx) => {
+        if (ctx.args.originalUrl === url) {
+          ctx.abortController.abort(new CustomError('Custom error'))
+        }
+      })
+
+      const cr = http.get(url, () => {
+        done(new Error('Request should be blocked'))
+      })
+
+      cr.on('error', (e) => {
+        try {
+          assert(e instanceof CustomError)
+          assert.strictEqual(e.message, 'Custom error')
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
+    })
+
+    it('Error is sent on errorChannel on abort', (done) => {
+      startChannelCb.callsFake(abortCallback)
+
+      const cr = http.get(url, () => {
+        done(new Error('Request should be blocked'))
+      })
+
+      cr.on('error', () => {
+        try {
+          sinon.assert.calledOnce(errorChannelCb)
+          assert(errorChannelCb.firstCall.args[0].error instanceof Error)
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
+    })
+
+    it('endChannel is called on abort', (done) => {
+      startChannelCb.callsFake(abortCallback)
+
+      const cr = http.get(url, () => {
+        done(new Error('Request should be blocked'))
+      })
+
+      cr.on('error', () => {
+        try {
+          sinon.assert.called(endChannelCb)
+          const ctx = getContextFromStubByUrl(url, endChannelCb)
+          assert.strictEqual(ctx.args.originalUrl, url)
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
+    })
+
+    it('asyncStartChannel is not called on abort', (done) => {
+      startChannelCb.callsFake(abortCallback)
+
+      const cr = http.get(url, () => {
+        done(new Error('Request should be blocked'))
+      })
+
+      cr.on('error', () => {
+        try {
+          // Necessary because the tracer makes extra requests to the agent
+          if (asyncStartChannelCb.called) {
+            const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
+            assert(ctx === null)
+          }
+
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
+    })
+  })
+})
 
 // Create plugin instance for testing PubSub detection functions
 const GoogleCloudPubsubTransitHandlerPlugin = require(

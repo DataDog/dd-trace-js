@@ -102,5 +102,6 @@ module.exports = {
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
-  get winston () { return require('../../../datadog-plugin-winston/src') }
+  get winston () { return require('../../../datadog-plugin-winston/src') },
+  get ws () { return require('../../../datadog-plugin-ws/src') }
 }

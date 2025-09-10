@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 describe('RASP - utils.js', () => {
@@ -42,6 +45,31 @@ describe('RASP - utils.js', () => {
       }
     }
   })
+
+  function testAbortErrorInFramework (framework) {
+    const rootSpan = {
+      context: sinon.stub().returns({ _name: framework })
+    }
+    const abortController = {
+      abort: sinon.stub(),
+      signal: {}
+    }
+    const result = {
+      actions: {
+        blocking_action: { type: 'block_request' }
+      }
+    }
+
+    web.root.returns(rootSpan)
+
+    utils.handleResult(result, req, res, abortController, config, raspRule)
+
+    sinon.assert.calledOnce(abortController.abort)
+    const abortError = abortController.abort.firstCall.args[0]
+    expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
+    expect(abortError.raspRule).to.equal(raspRule)
+    expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+  }
 
   describe('handleResult', () => {
     it('should report stack trace when generate_stack action is present in waf result', () => {
@@ -127,9 +155,17 @@ describe('RASP - utils.js', () => {
       sinon.assert.notCalled(stackTrace.reportStackTrace)
     })
 
-    it('should create DatadogRaspAbortError when blockingAction is present', () => {
+    it('should create DatadogRaspAbortError when blockingAction is present in express', () => {
+      testAbortErrorInFramework('express.request')
+    })
+
+    it('should create DatadogRaspAbortError when blockingAction is present in fastify', () => {
+      testAbortErrorInFramework('fastify.request')
+    })
+
+    it('should not create DatadogRaspAbortError when blockingAction is present in an unsupported framework', () => {
       const rootSpan = {
-        context: sinon.stub().returns({ _name: 'express.request' })
+        context: sinon.stub().returns({ _name: 'http.request' })
       }
       const abortController = {
         abort: sinon.stub(),
@@ -145,11 +181,7 @@ describe('RASP - utils.js', () => {
 
       utils.handleResult(result, req, res, abortController, config, raspRule)
 
-      sinon.assert.calledOnce(abortController.abort)
-      const abortError = abortController.abort.firstCall.args[0]
-      expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
-      expect(abortError.raspRule).to.equal(raspRule)
-      expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+      sinon.assert.notCalled(abortController.abort)
     })
 
     it('should call updateRaspRuleMatchMetricTags when no blockingAction is present', () => {
@@ -181,6 +213,9 @@ describe('RASP - utils.js', () => {
       expect(error.message).to.equal('DatadogRaspAbortError')
       expect(error.blockingAction).to.equal(blockingAction)
       expect(error.raspRule).to.equal(raspRule)
+      expect(error).to.have.property('req')
+      expect(error).to.have.property('res')
+      expect(Object.keys(error)).to.not.include.members(['req', 'res'])
     })
   })
 })

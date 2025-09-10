@@ -1,6 +1,10 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../../setup/core')
 
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')

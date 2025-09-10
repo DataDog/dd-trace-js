@@ -1,6 +1,5 @@
 'use strict'
 
-const { BlockList } = require('net')
 const net = require('net')
 
 const FORWARED_HEADER_NAME = 'forwarded'
@@ -32,7 +31,7 @@ const privateCIDRs = [
   'fd00::/8'
 ]
 
-const privateIPMatcher = new BlockList()
+const privateIPMatcher = new net.BlockList()
 
 for (const cidr of privateCIDRs) {
   const [address, prefix] = cidr.split('/')
@@ -45,7 +44,11 @@ function extractIp (config, req) {
   if (config.clientIpHeader) {
     if (!headers) return
 
-    const ip = findFirstIp(headers[config.clientIpHeader])
+    const ipHeaderName = config.clientIpHeader
+    const header = headers[ipHeaderName]
+    if (typeof header !== 'string') return
+
+    const ip = findFirstIp(header, ipHeaderName === FORWARED_HEADER_NAME)
     return ip.public || ip.private
   }
 
@@ -53,12 +56,14 @@ function extractIp (config, req) {
   if (headers) {
     for (const ipHeaderName of ipHeaderList) {
       const header = headers[ipHeaderName]
-      const firstIp = ipHeaderName === FORWARED_HEADER_NAME ? findFirstIpForwardedFormat(header) : findFirstIp(header)
+      if (typeof header !== 'string') continue
 
-      if (firstIp.public) {
-        return firstIp.public
-      } else if (!firstPrivateIp && firstIp.private) {
-        firstPrivateIp = firstIp.private
+      const ip = findFirstIp(header, ipHeaderName === FORWARED_HEADER_NAME)
+
+      if (ip.public) {
+        return ip.public
+      } else if (!firstPrivateIp && ip.private) {
+        firstPrivateIp = ip.private
       }
     }
   }
@@ -66,25 +71,39 @@ function extractIp (config, req) {
   return firstPrivateIp || req.socket?.remoteAddress
 }
 
-function isPublicIp (ip, type) {
-  return !privateIPMatcher.check(ip, type === 6 ? 'ipv6' : 'ipv4')
-}
-
-function findFirstIp (str) {
+function findFirstIp (str, isForwardedHeader) {
   const result = {}
   if (!str) return result
 
   const splitted = str.split(',')
 
-  for (const part of splitted) {
-    const chunk = part.trim()
+  for (let chunk of splitted) {
+    if (isForwardedHeader) {
+      // find "for" directive
+      const forDirective = chunk.split(';').find(subchunk => subchunk.trim().toLowerCase().startsWith('for='))
 
-    // TODO: strip port and interface data ?
+      // if found remove the "for=" prefix
+      // else keep going as is
+      if (forDirective) {
+        chunk = forDirective.slice(4)
+      }
+    }
+
+    chunk = chunk.trim()
+
+    // trim potential double quotes
+    if (chunk.startsWith('"') && chunk.endsWith('"')) {
+      chunk = chunk.slice(1, -1).trim()
+    }
+
+    // TODO: when min node support is v24 we can instead use net.SocketAddress.parse()
+    chunk = cleanIp(chunk)
+    if (!chunk) continue
 
     const type = net.isIP(chunk)
     if (!type) continue
 
-    if (isPublicIp(chunk, type)) {
+    if (!privateIPMatcher.check(chunk, type === 6 ? 'ipv6' : 'ipv4')) {
       // it's public, return it immediately
       result.public = chunk
       return result
@@ -97,37 +116,21 @@ function findFirstIp (str) {
   return result
 }
 
-const forwardedForRegexp = /for="?\[?(([0-9]+\.)+[0-9]+|[0-9a-f:]*:[0-9a-f]*)/i
-const forwardedByRegexp = /by="?\[?(([0-9]+\.)+[0-9]+|[0-9a-f:]*:[0-9a-f]*)/i
-const forwardedRegexps = [forwardedForRegexp, forwardedByRegexp]
-
-function findFirstIpForwardedFormat (str) {
-  const result = {}
-  if (!str) return result
-
-  const splitted = str.split(',')
-
-  for (const part of splitted) {
-    const chunk = part.trim()
-
-    for (const regex of forwardedRegexps) {
-      const ip = regex.exec(chunk)?.[1]
-
-      const type = net.isIP(ip)
-      if (!type) continue
-
-      if (isPublicIp(ip, type)) {
-        // it's public, return it immediately
-        result.public = ip
-        return result
-      }
-
-      // it's private, only save the first one found
-      if (!result.private) result.private = ip
-    }
+function cleanIp (input) {
+  const colonIndex = input.indexOf(':')
+  if (colonIndex !== -1 && input.includes('.')) {
+    // treat it as ipv4 with port
+    return input.slice(0, colonIndex).trim()
   }
 
-  return result
+  const closingBracketIndex = input.indexOf(']')
+  if (closingBracketIndex !== -1 && input.startsWith('[')) {
+    // treat as ipv6 with brackets
+    return input.slice(1, closingBracketIndex).trim()
+  }
+
+  // no need to clean it
+  return input
 }
 
 module.exports = {

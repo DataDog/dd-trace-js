@@ -1,9 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
 const { assert } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+require('../setup/core')
+
 const RateLimiter = require('../../src/rate_limiter')
 
 describe('Disabled APM Tracing or Standalone - Product', () => {

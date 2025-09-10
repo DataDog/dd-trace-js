@@ -1,10 +1,14 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const getPort = require('get-port')
+
+const Readable = require('node:stream').Readable
 const path = require('node:path')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
-const Readable = require('node:stream').Readable
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
