@@ -73,7 +73,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         'pubsub.delivery_method': deliveryMethod
       }
     })
-    try { httpSpan.setTag('service.name', this.tracer._service) } catch {}
+    httpSpan.setTag('service.name', this.tracer._service)
 
     // Create synthetic delivery span if message data is available
     if (messageData) {
@@ -209,10 +209,13 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
 
   // Create synthetic delivery span for GCP PubSub push subscriptions
   createDeliverySpan (messageData, isCloudEvent) {
-    const { attrs, topicName, projectId, subscription } = messageData
+    const { attrs, topicName, projectId, subscription, message } = messageData
     const deliveryTraceId = attrs['x-dd-delivery-trace-id']
     const deliverySpanId = attrs['x-dd-delivery-span-id']
     const deliveryStartTime = attrs['x-dd-delivery-start-time']
+
+    // Get message ID from message or CloudEvent headers
+    const messageId = (message && message.messageId) || attrs['ce-id']
 
     // Compute pubsub scheduling duration (publish → HTTP receipt)
     const publishStartTimeRaw = attrs['x-dd-publish-start-time']
@@ -231,6 +234,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       'gcloud.project_id': projectId,
       'pubsub.topic': topicName,
       'pubsub.subscription': subscription,
+      'pubsub.message_id': messageId,
       'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
       'pubsub.operation': 'delivery'
     }
@@ -244,6 +248,9 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     if (isCloudEvent) {
       if (attrs['ce-source']) spanTags['cloudevents.source'] = attrs['ce-source']
       if (attrs['ce-type']) spanTags['cloudevents.type'] = attrs['ce-type']
+      if (attrs['ce-id']) spanTags['cloudevents.id'] = attrs['ce-id']
+      if (attrs['ce-specversion']) spanTags['cloudevents.specversion'] = attrs['ce-specversion']
+      if (attrs['ce-time']) spanTags['cloudevents.time'] = attrs['ce-time']
       spanTags['eventarc.trigger'] = 'pubsub'
     }
 
@@ -279,7 +286,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
       if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
         const deliveryDuration = deliveryEnd - publishStartTime
-        try { span.setTag('pubsub.delivery.duration_ms', deliveryDuration) } catch {}
+        span.setTag('pubsub.delivery.duration_ms', deliveryDuration)
       }
     }
     span.finish(deliveryEnd)
