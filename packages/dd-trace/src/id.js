@@ -25,7 +25,12 @@ class Identifier {
       this.#buffer = value === '0' ? zeroId : Buffer.from(value.padStart(value.length > 16 ? 32 : 16, '0'), 'hex')
     } else {
       const buffer = Buffer.alloc(8)
-      buffer.writeBigUInt64BE(BigInt(value))
+      const bigint = BigInt(value)
+      if (value.startsWith('-')) {
+        buffer.writeBigInt64BE(bigint)
+      } else {
+        buffer.writeBigUInt64BE(bigint)
+      }
       this.#buffer = buffer
     }
   }

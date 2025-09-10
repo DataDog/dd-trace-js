@@ -205,7 +205,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
      * This is to avoid changing the span format in packages/dd-trace/src/format.js,
      * which can have undesired side effects in other products.
      * But `test_session_id` and `test_suite_id` are *not* supposed to be in `meta`,
-     * so we delete them before enconding the dictionary.
+     * so we delete them before encoding the dictionary.
      * TODO: find a better way to do this.
      */
     if (content.meta.test_session_id) {

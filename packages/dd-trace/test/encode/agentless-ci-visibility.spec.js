@@ -40,9 +40,9 @@ describe('agentless-ci-visibility-encode', () => {
     encoder = new AgentlessCiVisibilityEncoder(writer, {})
 
     trace = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
+      trace_id: id('1234567812345678'),
+      span_id: id('1234567812345678'),
+      parent_id: id('1234567812345678'),
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
@@ -128,9 +128,9 @@ describe('agentless-ci-visibility-encode', () => {
     const tooLongString = new Array(500).fill('a').join('')
     const resourceTooLongString = new Array(10000).fill('a').join('')
     const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
+      trace_id: id('1234567812345678'),
+      span_id: id('1234567812345678'),
+      parent_id: id('1234567812345678'),
       error: 0,
       meta: {
         bar: 'baz'
@@ -159,9 +159,9 @@ describe('agentless-ci-visibility-encode', () => {
 
   it('should fallback to a default name and service if they are not present', () => {
     const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
+      trace_id: id('1234567812345678'),
+      span_id: id('1234567812345678'),
+      parent_id: id('1234567812345678'),
       error: 0,
       meta: {
         bar: 'baz'
@@ -186,9 +186,9 @@ describe('agentless-ci-visibility-encode', () => {
     const tooLongKey = new Array(300).fill('a').join('')
     const tooLongValue = new Array(26000).fill('a').join('')
     const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
+      trace_id: id('1234567812345678'),
+      span_id: id('1234567812345678'),
+      parent_id: id('1234567812345678'),
       error: 0,
       meta: {
         [tooLongKey]: tooLongValue
@@ -219,9 +219,9 @@ describe('agentless-ci-visibility-encode', () => {
   it('should not encode events other than sessions and suites if the trace is a test session', () => {
     const traceToFilter = [
       {
-        trace_id: id('1234abcd1234abcd'),
-        span_id: id('1234abcd1234abcd'),
-        parent_id: id('1234abcd1234abcd'),
+        trace_id: id('1234567812345678'),
+        span_id: id('1234567812345678'),
+        parent_id: id('1234567812345678'),
         error: 0,
         meta: {},
         metrics: {},
@@ -233,9 +233,9 @@ describe('agentless-ci-visibility-encode', () => {
         service: ''
       },
       {
-        trace_id: id('1234abcd1234abcd'),
-        span_id: id('1234abcd1234abcd'),
-        parent_id: id('1234abcd1234abcd'),
+        trace_id: id('1234567812345678'),
+        span_id: id('1234567812345678'),
+        parent_id: id('1234567812345678'),
         error: 0,
         meta: {},
         metrics: {},
@@ -259,12 +259,12 @@ describe('agentless-ci-visibility-encode', () => {
 
   it('does not crash if test_session_id is in meta but not test_module_id', () => {
     const traceToTruncate = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      parent_id: id('1234abcd1234abcd'),
+      trace_id: id('1234567812345678'),
+      span_id: id('1234567812345678'),
+      parent_id: id('1234567812345678'),
       error: 0,
       meta: {
-        test_session_id: '1234abcd1234abcd'
+        test_session_id: '1234567812345678'
       },
       metrics: {},
       start: 123,
