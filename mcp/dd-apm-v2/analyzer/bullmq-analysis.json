@@ -1,0 +1,28 @@
+{
+  "package": {
+    "name": "bullmq",
+    "version": "5.58.5",
+    "main": "./dist/cjs/index.js",
+    "description": "Queue for messages and jobs based on Redis",
+    "keywords": [
+      "bull",
+      "bullmq",
+      "queues",
+      "jobs",
+      "redis"
+    ]
+  },
+  "category": "database",
+  "exports": [],
+  "methods": [],
+  "dependencies": [
+    "cron-parser",
+    "ioredis",
+    "msgpackr",
+    "node-abort-controller",
+    "semver",
+    "tslib",
+    "uuid"
+  ],
+  "metadata": {}
+}

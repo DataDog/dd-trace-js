@@ -1,0 +1,10 @@
+{
+    "name": "dd-apm-ai-implementer",
+    "version": "1.0.0",
+    "description": "AI-assisted implementation of APM instrumentation stubs",
+    "main": "src/index.js",
+    "bin": {
+        "dd-ai-implement": "bin/dd-ai-implement.js"
+    },
+    "dependencies": {}
+}

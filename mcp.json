@@ -1,0 +1,106 @@
+{
+    "mcpServers": {
+        "dd-apm-analyze": {
+            "command": "node",
+            "args": [
+                "/Users/william.conti/Documents/dd-trace/dd-trace-js/mcp/dd-apm-analyze/bin/dd-apm-analyze.js"
+            ],
+            "env": {},
+            "description": "APM Integration Analyzer - Analyzes npm packages to identify instrumentation targets, data requirements, and generates confidence scores for APM integration development",
+            "capabilities": [
+                "analyze - Analyze a package for APM integration opportunities",
+                "Multi-version analysis with --multi-version flag",
+                "LLM enhancement with --llm flag",
+                "Data requirements scoring with --enhance flag",
+                "Interactive assistance with --assist flag"
+            ],
+            "examples": [
+                "analyze axios --multi-version --llm --enhance --assist --output axios-analysis.json",
+                "analyze redis --multi-version --output redis-analysis.json",
+                "analyze @prisma/client --llm --enhance"
+            ]
+        },
+        "dd-apm-scaffold": {
+            "command": "node",
+            "args": [
+                "/Users/william.conti/Documents/dd-trace/dd-trace-js/mcp/dd-apm-scaffold/bin/dd-apm-scaffold.js"
+            ],
+            "env": {},
+            "description": "APM Integration Scaffolder - Generates complete APM integration packages including instrumentation, plugins, tests, and documentation from analysis reports",
+            "capabilities": [
+                "scaffold - Generate integration files from analysis report",
+                "Version-aware instrumentation generation",
+                "Data-driven plugin code generation",
+                "Automatic test scaffolding with realistic examples",
+                "CI/CD integration setup"
+            ],
+            "examples": [
+                "scaffold axios-analysis.json axios",
+                "scaffold redis-analysis.json redis-client",
+                "scaffold prisma-analysis.json prisma"
+            ]
+        },
+        "dd-apm-test-runner": {
+            "command": "node",
+            "args": [
+                "/Users/william.conti/Documents/dd-trace/dd-trace-js/mcp/dd-apm-test-runner/bin/dd-apm-test-runner.js"
+            ],
+            "env": {},
+            "description": "APM Test Runner - Runs integration tests for APM packages with optional service dependencies via Docker Compose, including APM test agent setup",
+            "capabilities": [
+                "test - Run tests for a specific plugin/integration",
+                "Docker service management for test dependencies",
+                "APM test agent integration with automatic health checks",
+                "Automatic cleanup and timeout handling",
+                "Verbose output for debugging"
+            ],
+            "examples": [
+                "test axios",
+                "test redis --service redis",
+                "test postgres --service postgres --timeout 600 --verbose",
+                "test mongodb --service mongodb --no-cleanup --no-test-agent"
+            ]
+        },
+        "vsc-mcp": {
+            "command": "npx",
+            "args": [
+                "vsc-mcp"
+            ],
+            "env": {},
+            "description": "VSCode MCP Server - Provides code analysis, file operations, and TypeScript/JavaScript language services via MCP",
+            "capabilities": [
+                "File operations (read, write, create, delete) with security restrictions",
+                "Symbol lookup and navigation",
+                "TypeScript/JavaScript AST parsing and analysis",
+                "Error checking and diagnostics",
+                "Code completion and refactoring support"
+            ],
+            "examples": [
+                "Read and analyze JavaScript/TypeScript files",
+                "Parse AST for method and export extraction",
+                "Perform secure file operations with path validation"
+            ]
+        },
+        "patch-file-mcp": {
+            "command": "python",
+            "args": [
+                "-m",
+                "patch_file_mcp"
+            ],
+            "env": {},
+            "description": "Patch File MCP - Precise file modifications using block-based patching without rewriting entire files",
+            "capabilities": [
+                "Locate and replace specific content blocks in files",
+                "Multi-block modifications in single operation",
+                "Security verification and path restrictions",
+                "Atomic file operations with rollback support",
+                "Content validation and integrity checks"
+            ],
+            "examples": [
+                "Replace specific code blocks in generated files",
+                "Update configuration files with precise modifications",
+                "Batch modify multiple files with validation"
+            ]
+        }
+    }
+}

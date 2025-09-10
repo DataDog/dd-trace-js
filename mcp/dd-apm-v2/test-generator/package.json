@@ -1,0 +1,10 @@
+{
+    "name": "dd-apm-test-generator",
+    "version": "1.0.0",
+    "description": "Generate realistic test scenarios for APM integrations",
+    "main": "src/index.js",
+    "bin": {
+        "dd-test-gen": "bin/dd-test-gen.js"
+    },
+    "dependencies": {}
+}

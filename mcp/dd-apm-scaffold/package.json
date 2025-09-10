@@ -1,0 +1,21 @@
+{
+  "name": "@datadog/dd-apm-scaffold",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A tool to scaffold new APM integration projects from analysis reports.",
+  "main": "src/index.js",
+  "bin": {
+    "dd-apm-scaffold": "bin/dd-apm-scaffold.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Datadog",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "yargs": "^17.7.2",
+    "fs-extra": "^11.2.0",
+    "path": "^0.12.7"
+  }
+}
