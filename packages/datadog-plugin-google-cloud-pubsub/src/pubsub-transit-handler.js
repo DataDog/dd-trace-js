@@ -73,7 +73,12 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         'pubsub.delivery_method': deliveryMethod
       }
     })
-    try { httpSpan.setTag('service.name', this.tracer._service) } catch {}
+    httpSpan.setTag('service.name', this.tracer._service)
+
+    // Create synthetic delivery span if message data is available
+    if (messageData) {
+      this.createDeliverySpan(messageData, isCloudEvent)
+    }
 
     const finish = () => {
       if (httpSpan && !httpSpan.finished) {
@@ -202,6 +207,93 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     return { projectId, topicName }
   }
 
+  // Create synthetic delivery span for GCP PubSub push subscriptions
+  // This method creates spans with scheduling duration, delivery duration, and CloudEvent metadata
+  createDeliverySpan (messageData, isCloudEvent) {
+    const { attrs, topicName, projectId, subscription, message } = messageData
+    const deliveryTraceId = attrs['x-dd-delivery-trace-id']
+    const deliverySpanId = attrs['x-dd-delivery-span-id']
+    const deliveryStartTime = attrs['x-dd-delivery-start-time']
+
+    // Get message ID from message or CloudEvent headers
+    const messageId = (message && message.messageId) || attrs['ce-id']
+
+    // Compute pubsub scheduling duration (publish → HTTP receipt)
+    const publishStartTimeRaw = attrs['x-dd-publish-start-time']
+    let schedulingMs = null
+    if (publishStartTimeRaw) {
+      const t0 = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(t0) && t0 > 0) {
+        schedulingMs = Date.now() - t0
+      }
+    }
+
+    const spanTags = {
+      component: 'google-cloud-pubsub',
+      'span.kind': 'internal',
+      'span.type': 'pubsub',
+      'gcloud.project_id': projectId,
+      'pubsub.topic': topicName,
+      'pubsub.subscription': subscription,
+      'pubsub.message_id': messageId,
+      'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push',
+      'pubsub.operation': 'delivery'
+    }
+
+    // Add scheduling duration if available
+    if (schedulingMs !== null) {
+      spanTags['pubsub.scheduling_duration_ms'] = schedulingMs
+    }
+
+    // Add CloudEvent tags if applicable
+    if (isCloudEvent) {
+      if (attrs['ce-source']) spanTags['cloudevents.source'] = attrs['ce-source']
+      if (attrs['ce-type']) spanTags['cloudevents.type'] = attrs['ce-type']
+      if (attrs['ce-id']) spanTags['cloudevents.id'] = attrs['ce-id']
+      if (attrs['ce-specversion']) spanTags['cloudevents.specversion'] = attrs['ce-specversion']
+      if (attrs['ce-time']) spanTags['cloudevents.time'] = attrs['ce-time']
+      spanTags['eventarc.trigger'] = 'pubsub'
+    }
+
+    const spanOptions = {
+      resource: `${topicName} → ${subscription}`,
+      type: 'pubsub',
+      tags: spanTags
+    }
+
+    // Use publish start time for span timing if available
+    if (publishStartTimeRaw) {
+      const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+        spanOptions.startTime = publishStartTime
+      }
+    } else if (deliveryTraceId && deliverySpanId && deliveryStartTime) {
+      // Fallback to synthetic timing if available
+      spanOptions.startTime = Number.parseInt(deliveryStartTime, 10)
+    }
+
+    const span = this.tracer.startSpan('pubsub.delivery', spanOptions)
+
+    // Set synthetic context if available
+    if (deliveryTraceId && deliverySpanId) {
+      const context = span.context()
+      context._traceId = deliveryTraceId
+      context._spanId = deliverySpanId
+    }
+
+    // Calculate delivery duration and finish span
+    const deliveryEnd = Date.now()
+    if (publishStartTimeRaw) {
+      const publishStartTime = Number.parseInt(publishStartTimeRaw, 10)
+      if (Number.isFinite(publishStartTime) && publishStartTime > 0) {
+        const deliveryDuration = deliveryEnd - publishStartTime
+        span.setTag('pubsub.delivery.duration_ms', deliveryDuration)
+      }
+    }
+    span.finish(deliveryEnd)
+
+    return span
+  }
 }
 
 module.exports = GoogleCloudPubsubTransitHandlerPlugin
