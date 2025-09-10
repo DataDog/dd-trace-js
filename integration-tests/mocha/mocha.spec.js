@@ -3512,7 +3512,9 @@ describe('mocha CommonJS', function () {
       })
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            mocha: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
