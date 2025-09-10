@@ -60,6 +60,36 @@ describe('id', () => {
     expect(json).to.equal('"7f00ff00ff00ff00"')
   })
 
+  it('should return false for is128bit() for 64 bit ID', () => {
+    const spanId = id()
+
+    expect(spanId.is128bit()).to.be.false
+  })
+
+  it('should return true for is128bit() for 128 bit ID', () => {
+    const spanId = id('1234567812345678abcdef', 16)
+
+    expect(spanId.is128bit()).to.be.true
+  })
+
+  it('should write 64 bits to a buffer with writeToLast64Bits() for 64 bit ID', () => {
+    Math.random.returns(0x0000FF00 / (0xFFFFFFFF + 1))
+
+    const buffer = Buffer.alloc(16)
+    const spanId = id()
+    spanId.writeToLast64Bits(buffer, 0)
+
+    expect(buffer).to.deep.equal(Buffer.from('cf7f00ff00ff00ff0000000000000000', 'hex'))
+  })
+
+  it('should write the last 64 bits to a buffer with writeToLast64Bits() for 128 bit ID', () => {
+    const buffer = Buffer.alloc(16)
+    const spanId = id('1a2b3c4d1a2b3c4d1234567812345678', 16)
+    spanId.writeToLast64Bits(buffer, 2)
+
+    expect(buffer).to.deep.equal(Buffer.from('0000cf12345678123456780000000000', 'hex'))
+  })
+
   it('should support small hex strings', () => {
     const spanId = id('abcd', 16)
 
@@ -95,7 +125,7 @@ describe('id', () => {
     for (const [tid, expected] of ids) {
       const spanId = id(tid, 10)
 
-      expect(spanId.toBigInt()).to.equal(expected)
+      expect(spanId.toFirst64BitsBigInt()).to.equal(expected)
     }
   })
 })

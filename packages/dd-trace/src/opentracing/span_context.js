@@ -45,7 +45,7 @@ class DatadogSpanContext {
 
   toTraceId (get128bitId = false) {
     if (get128bitId) {
-      return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
+      return !this._traceId.is128bit() && this._trace.tags[TRACE_ID_128]
         ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
         : this._traceId.toString(16).padStart(32, '0')
     }
@@ -60,7 +60,7 @@ class DatadogSpanContext {
   }
 
   toBigIntSpanId () {
-    return this._spanId.toBigInt()
+    return this._spanId.toFirst64BitsBigInt()
   }
 
   toTraceparent () {
