@@ -681,8 +681,8 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
 
       // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
-      const isFaulty = !knownTests?.jest
-        || getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+      const isFaulty = !knownTests?.jest ||
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
 
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
