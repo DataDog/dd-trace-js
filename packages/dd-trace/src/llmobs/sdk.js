@@ -27,6 +27,12 @@ const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 const NoopLLMObs = require('./noop')
 
 class LLMObs extends NoopLLMObs {
+  /**
+   * flag representing if a user span processor has been registered
+   * @type {boolean}
+   */
+  #hasUserSpanProcessor = false
+
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
@@ -311,10 +317,23 @@ class LLMObs extends NoopLLMObs {
   }
 
   registerProcessor (processor) {
+    if (!this.enabled) return
+
+    if (this.#hasUserSpanProcessor) {
+      throw new Error(
+        '[LLMObs] Only one user span processor can be registered. ' +
+        'To register a new processor, deregister the existing processor first using `llmobs.deregisterProcessor()`.'
+      )
+    }
+
+    this.#hasUserSpanProcessor = true
     registerUserSpanProcessorCh.publish(processor)
   }
 
   deregisterProcessor () {
+    if (!this.enabled) return
+
+    this.#hasUserSpanProcessor = false
     registerUserSpanProcessorCh.publish(null)
   }
 

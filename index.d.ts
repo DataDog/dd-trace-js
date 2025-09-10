@@ -2572,6 +2572,8 @@ declare namespace tracer {
        * This can be used to modify the span before it is sent to LLMObs. For example, you can modify the input/output.
        * You can also return `null` to omit the span entirely from being sent to LLM Observability.
        *
+       * If the return value from the processor is not an instance of `LLMObservabilitySpan` or null, the span will be dropped.
+       *
        * To deregister the processor, call `llmobs.deregisterProcessor()`
        * @param processor A function that will be called for each span.
        * @throws {Error} If a processor is already registered.

@@ -316,6 +316,17 @@ describe('end to end sdk integration tests', () => {
       llmobs.deregisterProcessor()
     })
 
+    describe('when a processor is registered twice', () => {
+      function processor (span) {
+        return span
+      }
+
+      it('throws', () => {
+        llmobs.registerProcessor(processor)
+        expect(() => llmobs.registerProcessor(processor)).to.throw()
+      })
+    })
+
     describe('with a processor that returns null', () => {
       function processor (span) {
         const dropSpan = span.getTag('drop_span')

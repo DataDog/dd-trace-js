@@ -64,10 +64,6 @@ class LLMObsSpanProcessor {
   }
 
   setUserSpanProcessor (userSpanProcessor) {
-    if (userSpanProcessor !== null && this.#userSpanProcessor) {
-      throw new Error('[LLMObs] Only one user span processor can be registered.')
-    }
-
     this.#userSpanProcessor = userSpanProcessor
   }
 
@@ -159,7 +155,7 @@ class LLMObsSpanProcessor {
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
-    if (processedSpan == null) return null
+    if (processedSpan === null) return null
 
     if (processedSpan.input) {
       if (inputType === 'messages') {
@@ -282,11 +278,11 @@ class LLMObsSpanProcessor {
 
     try {
       const processedLLMObsSpan = processor(span)
-      if (!processedLLMObsSpan) return null
+      if (processedLLMObsSpan === null) return null
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
         error = true
-        logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null')
+        logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null, dropping span.')
         return null
       }
 
