@@ -11,9 +11,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
   let pluginInstance
   let mockTracer
   let mockReq
-  let mockRes
-  let mockEmit
-  let mockServer
 
   beforeEach(() => {
     // Create comprehensive mock tracer
@@ -53,7 +50,7 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
       headers: {
         'content-type': 'application/json',
         'user-agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',
-        'host': 'localhost:3000',
+        host: 'localhost:3000',
         'x-forwarded-proto': 'http'
       },
       url: '/pubsub/push',
@@ -72,15 +69,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
         subscription: 'projects/test-project/subscriptions/test-subscription'
       }
     }
-
-    mockRes = {
-      statusCode: 200,
-      once: sinon.stub(),
-      on: sinon.stub()
-    }
-
-    mockEmit = sinon.stub()
-    mockServer = {}
   })
 
   afterEach(() => {
@@ -121,7 +109,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
   describe('Message Parsing', () => {
     it('should parse PubSub message data correctly', () => {
       const messageData = pluginInstance.parseMessageData(mockReq.body, mockReq, false)
-      
       expect(messageData).to.exist
       expect(messageData.message).to.deep.equal(mockReq.body.message)
       expect(messageData.subscription).to.equal('projects/test-project/subscriptions/test-subscription')
@@ -141,7 +128,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
         },
         subscription: 'projects/test-project/subscriptions/eventarc-sub'
       }
-      
       const cloudEventReq = {
         ...mockReq,
         body: cloudEventBody,
@@ -152,7 +138,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
       }
 
       const messageData = pluginInstance.parseCloudEventData(cloudEventBody, cloudEventReq)
-      
       expect(messageData).to.exist
       expect(messageData.attrs['ce-source']).to.equal('//pubsub.googleapis.com/projects/test-project/topics/test-topic')
       expect(messageData.attrs['ce-type']).to.equal('google.cloud.pubsub.topic.v1.messagePublished')
@@ -184,7 +169,7 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
           'x-datadog-parent-id': '1234567890123456'
         }
       }
-      
+
       const parent = pluginInstance.extractTracingContext(messageData, mockReq)
       expect(parent).to.exist
       expect(mockTracer.extract).to.have.been.calledWith('text_map', messageData.attrs)
@@ -194,8 +179,12 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
       // Reset the mock to return null for empty attrs
       mockTracer.extract.resetHistory()
       mockTracer.extract.onFirstCall().returns(null) // First call with empty attrs returns null
-      mockTracer.extract.onSecondCall().returns({ _traceId: '12345678901234567890123456789012', _spanId: '1234567890123456' }) // Second call with headers returns context
-      
+      // Second call with headers returns context
+      mockTracer.extract.onSecondCall().returns({
+        _traceId: '12345678901234567890123456789012',
+        _spanId: '1234567890123456'
+      })
+
       const messageData = { attrs: {} }
       const parent = pluginInstance.extractTracingContext(messageData, mockReq)
       expect(parent).to.exist
@@ -219,7 +208,7 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
       }
 
       const span = pluginInstance.createDeliverySpan(messageData, false)
-      
+
       expect(span).to.exist
       expect(mockTracer.startSpan).to.have.been.calledWith('pubsub.delivery', {
         resource: 'test-topic → projects/test-project/subscriptions/test-subscription',
@@ -252,7 +241,7 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
       }
 
       const span = pluginInstance.createDeliverySpan(messageData, true)
-      
+
       expect(span).to.exist
       expect(mockTracer.startSpan).to.have.been.calledWith('pubsub.delivery', sinon.match({
         tags: sinon.match({
@@ -279,7 +268,6 @@ describe('Google Cloud Pub/Sub Transit Handler Plugin', () => {
     it('should subscribe to HTTP intercept channel', () => {
       const { getSharedChannel } = require('../../datadog-instrumentations/src/shared-channels')
       const httpInterceptCh = getSharedChannel('apm:http:server:request:intercept')
-      
       expect(httpInterceptCh).to.exist
       expect(httpInterceptCh.hasSubscribers).to.be.true
     })

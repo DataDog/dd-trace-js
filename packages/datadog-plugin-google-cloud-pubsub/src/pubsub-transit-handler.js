@@ -111,7 +111,8 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     if (!body) {
       const tracer = this.tracer || global._ddtrace
       if (tracer && tracer._log) {
-        tracer._log.warn('req.body is not available. PubSub push requests require body parsing middleware (e.g., express.json())')
+        tracer._log.warn('req.body is not available. PubSub push requests require body parsing middleware ' +
+          '(e.g., express.json())')
       }
       return null
     }
@@ -143,20 +144,19 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
   // Build carrier from headers (W3C and Datadog)
   buildHeaderCarrier (req) {
     const carrier = {}
-    
+
     // W3C headers
-    if (req.headers['traceparent']) carrier.traceparent = req.headers['traceparent']
-    if (req.headers['tracestate']) carrier.tracestate = req.headers['tracestate']
-    
+    if (req.headers.traceparent) carrier.traceparent = req.headers.traceparent
+    if (req.headers.tracestate) carrier.tracestate = req.headers.tracestate
+
     // CloudEvent headers (fallback)
     if (req.headers['ce-traceparent'] && !carrier.traceparent) carrier.traceparent = req.headers['ce-traceparent']
     if (req.headers['ce-tracestate'] && !carrier.tracestate) carrier.tracestate = req.headers['ce-tracestate']
-    
     // Datadog headers
     for (const k of ['x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'x-datadog-tags']) {
       if (req.headers[k]) carrier[k] = req.headers[k]
     }
-    
+
     return carrier
   }
 
@@ -190,7 +190,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     const { projectId, topicName } = this.extractProjectAndTopic(attrs, subscription)
     return { message, subscription, attrs, projectId, topicName }
   }
-
 
   extractProjectAndTopic (attrs, subscription) {
     let projectId = attrs['gcloud.project_id']
