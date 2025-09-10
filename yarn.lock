@@ -448,7 +448,7 @@
   resolved "https://registry.yarnpkg.com/@msgpack/msgpack/-/msgpack-3.1.2.tgz#fdd25cc2202297519798bbaf4689152ad9609e19"
   integrity sha512-JEW4DEtBzfe8HvUYecLU9e6+XJnKDlUAIve8FvPzF3Kzs6Xo/KuZkZJsDH0wJXl/qEZbeeE7edxDNY3kMs39hQ==
 
-"@mswjs/interceptors@^0.39.5":
+"@mswjs/interceptors@^0.39.3":
   version "0.39.6"
   resolved "https://registry.yarnpkg.com/@mswjs/interceptors/-/interceptors-0.39.6.tgz#44094a578f20da4749d1a0eaf3cdb7973604004b"
   integrity sha512-bndDP83naYYkfayr/qhBHMhk0YGwS1iv6vaEGcr0SQbO0IZtbOPqjKjds/WcG+bJA+1T5vCx6kprKOzn5Bg+Vw==
@@ -3460,14 +3460,13 @@ nise@^6.0.0:
     just-extend "^6.2.0"
     path-to-regexp "^8.1.0"
 
-nock@^14.0.10:
-  version "14.0.10"
-  resolved "https://registry.yarnpkg.com/nock/-/nock-14.0.10.tgz#d6f4e73e1c6b4b7aa19d852176e68940e15cd19d"
-  integrity sha512-Q7HjkpyPeLa0ZVZC5qpxBt5EyLczFJ91MEewQiIi9taWuA0KB/MDJlUWtON+7dGouVdADTQsf9RA7TZk6D8VMw==
+nock@^15.0.0-beta.6:
+  version "15.0.0-beta.6"
+  resolved "https://registry.yarnpkg.com/nock/-/nock-15.0.0-beta.6.tgz#44d2699c9e19bb3d15639c5e6cc55165fd38042e"
+  integrity sha512-DEOrKwXXWKCocuA3AX2DWHGNQXZK7x72yahk3aBsUuSwEIlATKHZT7IMgrQJSobIGcG1yavBBvBf6XLUwfo4Kg==
   dependencies:
-    "@mswjs/interceptors" "^0.39.5"
+    "@mswjs/interceptors" "^0.39.3"
     json-stringify-safe "^5.0.1"
-    propagate "^2.0.0"
 
 node-addon-api@^6.1.0:
   version "6.1.0"
@@ -3854,11 +3853,6 @@ process-on-spawn@^1.0.0:
   integrity sha512-JOnOPQ/8TZgjs1JIH/m9ni7FfimjNa/PRx7y/Wb5qdItsnhO0jE4AT7fC0HjC28DUQWDr50dwSYZLdRMlqDq3Q==
   dependencies:
     fromentries "^1.2.0"
-
-propagate@^2.0.0:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/propagate/-/propagate-2.0.1.tgz#40cdedab18085c792334e64f0ac17256d38f9a45"
-  integrity sha512-vGrhOavPSTz4QVNuBNdcNXePNdNMaO1xj9yBeH1ScQPjk/rhg9sSlCXPhMkFuaNNW/syTvYqsnbIJxMBfRbbag==
 
 protobufjs@^7.5.3:
   version "7.5.4"

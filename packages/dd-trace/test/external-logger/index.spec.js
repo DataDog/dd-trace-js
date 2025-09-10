@@ -118,7 +118,7 @@ describe('External Logger', () => {
   it('tracer logger should handle simulated network error', (done) => {
     interceptor = nock('https://http-intake.logs.datadoghq.com:443')
       .post('/api/v2/logs')
-      .replyWithError('missing API key')
+      .replyWithError(new Error('missing API key'))
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
