@@ -120,37 +120,40 @@ function wrapSmithySend (send) {
 function handleCompletion (result, ctx, channelSuffix) {
   const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
   const streamedChunkChannel = channel(`apm:aws:response:streamed-chunk:${channelSuffix}`)
-  if (result?.body?.[Symbol.asyncIterator]) {
-    shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
-      return function () {
-        const iterator = asyncIterator.apply(this, arguments)
-        shimmer.wrap(iterator, 'next', function (next) {
-          return function () {
-            return next.apply(this, arguments)
-              .then(result => {
-                const { done, value: chunk } = result
-                streamedChunkChannel.publish({ ctx, chunk, done })
 
-                if (done) {
-                  completeChannel.publish(ctx)
-                }
-
-                return result
-              })
-              .catch(err => {
-                addResponse(ctx, err)
-                completeChannel.publish(ctx)
-                throw err
-              })
-          }
-        })
-
-        return iterator
-      }
-    })
-  } else {
+  const iterator = result?.body?.[Symbol.asyncIterator]
+  if (!iterator) {
     completeChannel.publish(ctx)
+    return
   }
+
+  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+    return function () {
+      const iterator = asyncIterator.apply(this, arguments)
+      shimmer.wrap(iterator, 'next', function (next) {
+        return function () {
+          return next.apply(this, arguments)
+            .then(result => {
+              const { done, value: chunk } = result
+              streamedChunkChannel.publish({ ctx, chunk, done })
+
+              if (done) {
+                completeChannel.publish(ctx)
+              }
+
+              return result
+            })
+            .catch(err => {
+              addResponse(ctx, err)
+              completeChannel.publish(ctx)
+              throw err
+            })
+        }
+      })
+
+      return iterator
+    }
+  })
 }
 
 function wrapCb (cb, serviceName, ctx) {
