@@ -19,20 +19,25 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
-  const patched = new WeakSet()
+  const patched = new WeakMap()
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    if (patched.has(moduleExports)) return moduleExports
+    if (patched.has(moduleExports)) {
+      return patched.get(moduleExports)
+    }
 
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
-    if (isIitm && newExports.default && !patched.has(newExports.default) && (typeof newExports.default === 'object' || typeof newExports.default === 'function')) {
-      onrequire(newExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
-      patched.add(newExports.default)
+    if (
+      isIitm &&
+      moduleExports.default &&
+      (typeof moduleExports.default === 'object' ||
+        typeof moduleExports.default === 'function')
+    ) {
+      newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    patched.add(newExports)
-    patched.add(moduleExports)
+    patched.set(moduleExports, newExports)
 
     return newExports
   }
