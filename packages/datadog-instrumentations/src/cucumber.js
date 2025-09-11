@@ -599,6 +599,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return runTestCaseFunction.apply(this, arguments)
+    }
     const pickle = isNewerCucumberVersion
       ? arguments[0].pickle
       : this.eventDataCollector.getPickle(arguments[0])
@@ -754,6 +757,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
   return function (worker, message) {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return parseWorkerMessageFunction.apply(this, arguments)
+    }
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
     // or cucumber will throw an error
     // TODO: identify the message better
