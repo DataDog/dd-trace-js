@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
@@ -1420,7 +1421,7 @@ moduleTypes.forEach(({
         })
       })
 
-      it('disables early flake detection if known tests response is invalid', (done) => {
+      it('disables early flake detection if known tests response is invalid', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1476,9 +1477,10 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
       })
     })
 
