@@ -1,8 +1,8 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 const fs = require('fs')
 const path = require('path')
@@ -55,6 +55,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -63,6 +64,7 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const versions = ['7.0.0', 'latest']
 
@@ -74,6 +76,8 @@ const featuresPath = 'ci-visibility/features/'
 const fileExtension = 'js'
 
 versions.forEach(version => {
+  if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && version === 'latest') return
+
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
     let sandbox, cwd, receiver, childProcess, testOutput
@@ -94,8 +98,7 @@ versions.forEach(version => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
@@ -995,7 +998,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
 
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1100,7 +1105,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             receiver.setKnownTestsResponseCode(500)
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1311,7 +1318,9 @@ versions.forEach(version => {
                   known_tests_enabled: true
                 })
                 // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-                receiver.setKnownTests({})
+                receiver.setKnownTests({
+                  cucumber: {}
+                })
 
                 const eventsPromise = receiver
                   .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1463,6 +1472,59 @@ versions.forEach(version => {
                     done()
                   }).catch(done)
                 })
+              })
+
+              it('does not detect new tests if the response is invalid', async () => {
+                const NUM_RETRIES_EFD = 3
+                receiver.setSettings({
+                  early_flake_detection: {
+                    enabled: true,
+                    slow_test_retries: {
+                      '5s': NUM_RETRIES_EFD
+                    },
+                    faulty_session_threshold: 0
+                  },
+                  known_tests_enabled: true
+                })
+                receiver.setKnownTests(
+                  {
+                    'not-cucumber': {
+                      'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                    }
+                  }
+                )
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const testSession = events.find(event => event.type === 'test_session_end').content
+                    assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                    assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+                    assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                    assert.equal(newTests.length, 0)
+
+                    const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  parallelModeCommand,
+                  {
+                    cwd,
+                    env: envVars,
+                    stdio: 'pipe'
+                  }
+                )
+
+                await Promise.all([
+                  once(childProcess, 'exit'),
+                  eventsPromise,
+                ])
               })
             })
           }
@@ -1742,7 +1804,7 @@ versions.forEach(version => {
                     retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
                       .endsWith('ci-visibility/features-di/support/sum.js')
                   )
-                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+                  assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
                   const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
                   assert.exists(retriedTest.meta[snapshotIdKey])
@@ -1760,7 +1822,7 @@ versions.forEach(version => {
                     level: 'error'
                   })
                   assert.equal(diLog.debugger.snapshot.language, 'javascript')
-                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+                  assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
                     a: {
                       type: 'number',
                       value: '11'
@@ -2510,7 +2572,8 @@ versions.forEach(version => {
                 assert.equal(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
                 assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+                assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
+                assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
                 assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
               })
@@ -2703,7 +2766,9 @@ versions.forEach(version => {
 
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            cucumber: {}
+          })
 
           receiver.setSettings({
             impacted_tests_enabled: true,

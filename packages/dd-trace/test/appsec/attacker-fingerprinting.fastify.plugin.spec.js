@@ -2,12 +2,12 @@
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
 const path = require('path')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('fastify', 'fastify', fastifyVersion => {
   describe('Attacker fingerprinting', () => {
@@ -26,13 +26,12 @@ withVersions('fastify', 'fastify', fastifyVersion => {
         reply.send('DONE')
       })
 
-      getPort().then((port) => {
-        app.listen({ port }, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
-        server = app.server
+      app.listen({ port: 0 }, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
+      server = app.server
     })
 
     after(() => {

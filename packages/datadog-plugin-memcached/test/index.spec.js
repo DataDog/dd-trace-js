@@ -1,7 +1,11 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -29,7 +33,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'memcached',
-          done => memcached.get('test', err => err && done(err)),
+          done => memcached.get('test', done),
           'localhost',
           'out.host'
         )

@@ -13,6 +13,7 @@ const {
   getThreadLabels,
   encodeProfileAsync
 } = require('./shared')
+const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
@@ -69,9 +70,13 @@ function ensureChannelsActivated () {
 }
 
 class NativeWallProfiler {
+  type = 'wall'
+  _mapper
+  _pprof
+  _started = false
+
   constructor (options = {}) {
-    this.type = 'wall'
-    this._samplingIntervalMicros = options.samplingInterval || 1e6 / 99 // 99hz
+    this._samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
@@ -86,8 +91,6 @@ class NativeWallProfiler {
     // cpu profiling is enabled.
     this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
-    this._mapper = undefined
-    this._pprof = undefined
 
     // Bind these to this so they can be used as callbacks
     if (this._withContexts && this._captureSpanData) {
@@ -97,7 +100,6 @@ class NativeWallProfiler {
     this._generateLabels = this._generateLabels.bind(this)
 
     this._logger = options.logger
-    this._started = false
   }
 
   codeHotspotsEnabled () {
@@ -213,11 +215,11 @@ class NativeWallProfiler {
   }
 
   _updateContext (context) {
-    if (typeof context.spanId === 'object') {
-      context.spanId = context.spanId.toString(10)
+    if (context.spanId !== null && typeof context.spanId === 'object') {
+      context.spanId = context.spanId.toBigInt()
     }
-    if (typeof context.rootSpanId === 'object') {
-      context.rootSpanId = context.rootSpanId.toString(10)
+    if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
+      context.rootSpanId = context.rootSpanId.toBigInt()
     }
     if (context.webTags !== undefined && context.endpoint === undefined) {
       // endpoint may not be determined yet, but keep it as fallback
@@ -250,7 +252,12 @@ class NativeWallProfiler {
       this._enter()
       this._lastSampleCount = 0
     }
-    const profile = this._pprof.time.stop(restart, this._generateLabels)
+
+    // Mark thread labels and trace endpoint label as good deduplication candidates
+    const lowCardinalityLabels = Object.keys(getThreadLabels())
+    lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
+
+    const profile = this._pprof.time.stop(restart, this._generateLabels, lowCardinalityLabels)
 
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
@@ -311,10 +318,10 @@ class NativeWallProfiler {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
     }
     if (webTags !== undefined && Object.keys(webTags).length !== 0) {
-      labels['trace endpoint'] = endpointNameFromTags(webTags)
+      labels[TRACE_ENDPOINT_LABEL] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken
-      labels['trace endpoint'] = endpoint
+      labels[TRACE_ENDPOINT_LABEL] = endpoint
     }
 
     return labels

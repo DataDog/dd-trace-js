@@ -7,11 +7,9 @@ const {
 } = require('../../../../datadog-plugin-google-cloud-vertexai/src/utils')
 
 class VertexAILLMObsPlugin extends LLMObsPlugin {
-  static get integration () { return 'vertexai' } // used for llmobs telemetry
-  static get id () { return 'vertexai' }
-  static get prefix () {
-    return 'tracing:apm:vertexai:request'
-  }
+  static integration = 'vertexai' // used for llmobs telemetry
+  static id = 'vertexai'
+  static prefix = 'tracing:apm:vertexai:request'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const history = ctx.instance?.historyInternal || []

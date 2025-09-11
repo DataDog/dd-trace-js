@@ -1,9 +1,9 @@
 'use strict'
 
-const { workerData: { rcPort } } = require('node:worker_threads')
+const { workerData: { probePort } } = require('node:worker_threads')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
-const log = require('../../log')
+const log = require('./log')
 
 // Example log line probe (simplified):
 // {
@@ -32,16 +32,19 @@ const log = require('../../log')
 //   sampling: { snapshotsPerSecond: 5000 },
 //   evaluateAt: 'EXIT' // only used for method probes
 // }
-rcPort.on('message', async ({ action, conf: probe, ackId }) => {
+probePort.on('message', async ({ action, probe, ackId }) => {
   try {
     await processMsg(action, probe)
-    rcPort.postMessage({ ackId })
+    probePort.postMessage({ ackId })
   } catch (err) {
-    rcPort.postMessage({ ackId, error: err })
+    probePort.postMessage({ ackId, error: err })
     ackError(err, probe)
   }
 })
-rcPort.on('messageerror', (err) => log.error('[debugger:devtools_client] received "messageerror" on RC port', err))
+probePort.on(
+  'messageerror',
+  (err) => log.error('[debugger:devtools_client] received "messageerror" on probe port', err)
+)
 
 async function processMsg (action, probe) {
   log.debug(

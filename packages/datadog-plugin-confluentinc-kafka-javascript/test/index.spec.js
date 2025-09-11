@@ -1,23 +1,27 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const { randomUUID } = require('node:crypto')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema } = require('./naming')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
-const testTopic = 'test-topic'
-
-const getDsmPathwayHash = (isProducer, parentHash) => {
+const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
   if (isProducer) {
     edgeTags = ['direction:out', 'topic:' + testTopic, 'type:kafka']
   } else {
-    edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
+    edgeTags = ['direction:in', 'group:test-group-confluent', 'topic:' + testTopic, 'type:kafka']
   }
 
   edgeTags.sort()
@@ -26,8 +30,9 @@ const getDsmPathwayHash = (isProducer, parentHash) => {
 
 describe('Plugin', () => {
   const module = '@confluentinc/kafka-javascript'
+  const groupId = 'test-group-confluent'
 
-  describe('@confluentinc/kafka-javascript', function () {
+  describe('confluentinc-kafka-javascript', function () {
     this.timeout(30000)
 
     afterEach(() => {
@@ -36,11 +41,13 @@ describe('Plugin', () => {
 
     withVersions('confluentinc-kafka-javascript', module, (version) => {
       let kafka
+      let admin
       let tracer
       let Kafka
       let ConfluentKafka
       let messages
       let nativeApi
+      let testTopic
 
       describe('without configuration', () => {
         beforeEach(async () => {
@@ -48,7 +55,7 @@ describe('Plugin', () => {
 
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
-          await agent.load('@confluentinc/kafka-javascript')
+          await agent.load('confluentinc-kafka-javascript')
           const lib = require(`../../../versions/${module}@${version}`).get()
 
           // Store the module for later use
@@ -60,10 +67,23 @@ describe('Plugin', () => {
           kafka = new Kafka({
             kafkaJS: {
               clientId: `kafkajs-test-${version}`,
-              brokers: ['127.0.0.1:9092']
+              brokers: ['127.0.0.1:9092'],
+              logLevel: ConfluentKafka.logLevel.WARN
             }
           })
+          testTopic = `test-topic-${randomUUID()}`
+          admin = kafka.admin()
+          await admin.connect()
+          await admin.createTopics({
+            topics: [{
+              topic: testTopic,
+              numPartitions: 1,
+              replicationFactor: 1
+            }]
+          })
         })
+
+        afterEach(() => admin.disconnect())
 
         describe('kafkaJS api', () => {
           describe('producer', () => {
@@ -73,8 +93,8 @@ describe('Plugin', () => {
                 service: expectedSchema.send.serviceName,
                 meta: {
                   'span.kind': 'producer',
-                  component: '@confluentinc/kafka-javascript',
-                  'messaging.destination.name': 'test-topic',
+                  component: 'confluentinc-kafka-javascript',
+                  'messaging.destination.name': testTopic,
                   'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
                 },
                 metrics: {
@@ -106,7 +126,7 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: '@confluentinc/kafka-javascript'
+                  component: 'confluentinc-kafka-javascript'
                 })
               }, { timeoutMs: 10000 })
 
@@ -125,7 +145,7 @@ describe('Plugin', () => {
             beforeEach(async () => {
               messages = [{ key: 'key1', value: 'test2' }]
               consumer = kafka.consumer({
-                kafkaJS: { groupId: 'test-group' }
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false }
               })
               await consumer.connect()
               await consumer.subscribe({ topic: testTopic })
@@ -141,8 +161,8 @@ describe('Plugin', () => {
                 service: expectedSchema.receive.serviceName,
                 meta: {
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
-                  'messaging.destination.name': 'test-topic'
+                  component: 'confluentinc-kafka-javascript',
+                  'messaging.destination.name': testTopic
                 },
                 resource: testTopic,
                 error: 0,
@@ -151,7 +171,7 @@ describe('Plugin', () => {
 
               const consumerReceiveMessagePromise = new Promise(resolve => {
                 consumer.run({
-                  eachMessage: async () => {
+                  eachMessage: () => {
                     resolve()
                   }
                 })
@@ -220,8 +240,8 @@ describe('Plugin', () => {
                   [ERROR_MESSAGE]: fakeError.message,
                   [ERROR_STACK]: fakeError.stack,
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
-                  'messaging.destination.name': 'test-topic'
+                  component: 'confluentinc-kafka-javascript',
+                  'messaging.destination.name': testTopic
                 },
                 resource: testTopic,
                 error: 1,
@@ -256,7 +276,7 @@ describe('Plugin', () => {
             const lib = require(`../../../versions/${module}@${version}`).get()
             nativeApi = lib
 
-            await agent.load('@confluentinc/kafka-javascript')
+            await agent.load('confluentinc-kafka-javascript')
 
             // Get the producer/consumer classes directly from the module
             Producer = nativeApi.Producer
@@ -295,7 +315,7 @@ describe('Plugin', () => {
                 service: expectedSchema.send.serviceName,
                 meta: {
                   'span.kind': 'producer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic,
                   'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
                 },
@@ -322,7 +342,7 @@ describe('Plugin', () => {
                 })
 
                 expect(span.meta).to.include({
-                  component: '@confluentinc/kafka-javascript'
+                  component: 'confluentinc-kafka-javascript'
                 })
 
                 expect(span.meta[ERROR_TYPE]).to.exist
@@ -344,7 +364,10 @@ describe('Plugin', () => {
             beforeEach(async () => {
               nativeConsumer = new Consumer({
                 'bootstrap.servers': '127.0.0.1:9092',
-                'group.id': 'test-group'
+                'group.id': groupId,
+                'enable.auto.commit': false,
+              }, {
+                'auto.offset.reset': 'earliest'
               })
 
               await new Promise((resolve, reject) => {
@@ -410,7 +433,7 @@ describe('Plugin', () => {
                 service: expectedSchema.receive.serviceName,
                 meta: {
                   'span.kind': 'consumer',
-                  component: '@confluentinc/kafka-javascript',
+                  component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic
                 },
                 resource: testTopic,
@@ -464,7 +487,7 @@ describe('Plugin', () => {
             //     expect(errorSpan).to.exist
             //     expect(errorSpan.name).to.equal(expectedSchema.receive.opName)
             //     expect(errorSpan.meta).to.include({
-            //       component: '@confluentinc/kafka-javascript'
+            //       component: 'confluentinc-kafka-javascript'
             //     })
 
             //     expect(errorSpan.meta[ERROR_TYPE]).to.equal(fakeError.name)
@@ -488,18 +511,18 @@ describe('Plugin', () => {
 
           beforeEach(async () => {
             tracer.init()
-            tracer.use('@confluentinc/kafka-javascript', { dsmEnabled: true })
+            tracer.use('confluentinc-kafka-javascript', { dsmEnabled: true })
             messages = [{ key: 'key1', value: 'test2' }]
             consumer = kafka.consumer({
-              kafkaJS: { groupId: 'test-group', fromBeginning: false }
+              kafkaJS: { groupId, fromBeginning: true }
             })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
 
-          before(() => {
-            expectedProducerHash = getDsmPathwayHash(true, ENTRY_PARENT_HASH)
-            expectedConsumerHash = getDsmPathwayHash(false, expectedProducerHash)
+          beforeEach(() => {
+            expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
+            expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
           })
 
           afterEach(async () => {
@@ -617,24 +640,23 @@ describe('Plugin', () => {
                     partition,
                     offset: Number(message.offset)
                   }
-                  // Signal that we've processed a message
                   messageProcessedResolve()
                 }
               })
 
-              consumerRunPromise.catch(() => {})
+              await consumerRunPromise
 
               // wait for the message to be processed before continuing
-              await sendMessages(kafka, testTopic, messages).then(
-                async () => await messageProcessedPromise
-              )
+              await sendMessages(kafka, testTopic, messages)
+              await messageProcessedPromise
+              await consumer.disconnect()
 
               for (const call of setOffsetSpy.getCalls()) {
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
               }
 
               const newConsumer = kafka.consumer({
-                kafkaJS: { groupId: 'test-group', autoCommit: false }
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false }
               })
               await newConsumer.connect()
               await sendMessages(kafka, testTopic, [{ key: 'key1', value: 'test2' }])
@@ -648,12 +670,11 @@ describe('Plugin', () => {
 
               // Check our work
               const runArg = setOffsetSpy.lastCall.args[0]
-              expect(setOffsetSpy).to.be.calledOnce
               expect(runArg).to.have.property('offset', commitMeta.offset)
               expect(runArg).to.have.property('partition', commitMeta.partition)
               expect(runArg).to.have.property('topic', commitMeta.topic)
               expect(runArg).to.have.property('type', 'kafka_commit')
-              expect(runArg).to.have.property('consumer_group', 'test-group')
+              expect(runArg).to.have.property('consumer_group', groupId)
             })
 
             it('Should add backlog on producer response', async () => {

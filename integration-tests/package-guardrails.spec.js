@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
@@ -50,24 +52,24 @@ false
   context('when package is in range', () => {
     context('when bluebird is 2.9.0', () => {
       useSandbox(['bluebird@2.9.0'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
     context('when bluebird is 3.7.2', () => {
       useSandbox(['bluebird@3.7.2'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
   })
 
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
       useSandbox(['fastify'])
-      it('should instrument the package', () => runTest('true\n', [], 'ssi'))
+      it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
       useEnv({ DD_TRACE_DEBUG })
       it('should instrument the package', () =>
-        runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'ssi'))
+        runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'manual'))
     })
   })
 

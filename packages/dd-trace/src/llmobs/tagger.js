@@ -61,7 +61,23 @@ class LLMObsTagger {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
+    const spanMlApp =
+      mlApp ||
+      registry.get(parent)?.[ML_APP] ||
+      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
+      this._config.llmobs.mlApp ||
+      this._config.service // this should always have a default
+
+    if (!spanMlApp) {
+      throw new Error(
+        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
+        'Ensure this configuration is set before running your application.'
+      )
+    }
+
     this._register(span)
+
+    this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
 
@@ -73,21 +89,6 @@ class LLMObsTagger {
     if (sessionId) this._setTag(span, SESSION_ID, sessionId)
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
-
-    const spanMlApp =
-      mlApp ||
-      registry.get(parent)?.[ML_APP] ||
-      span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp
-
-    if (!spanMlApp) {
-      throw new Error(
-        '[LLMObs] Cannot start an LLMObs span without an mlApp configured.' +
-        'Ensure this configuration is set before running your application.'
-      )
-    }
-
-    this._setTag(span, ML_APP, spanMlApp)
 
     const parentId =
       parent?.context().toSpanId() ??
@@ -281,6 +282,7 @@ class LLMObsTagger {
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
+      const toolId = message.toolId
       const messageObj = { content }
 
       const valid = typeof content === 'string'
@@ -288,13 +290,21 @@ class LLMObsTagger {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
 
-      const condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
 
         if (filteredToolCalls.length) {
           messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (toolId) {
+        if (role === 'tool') {
+          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id')
+        } else {
+          log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
         }
       }
 

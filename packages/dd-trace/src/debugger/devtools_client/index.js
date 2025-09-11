@@ -9,7 +9,7 @@ const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
 const { parentThreadId } = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
-const log = require('../../log')
+const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { NODE_MAJOR } = require('../../../../../version')
 
@@ -40,11 +40,19 @@ const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
-// TODO: Is a limit of 256 snapshots ever going to be a problem?
-const snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
-// TODO: Is a limit of 256 probes ever going to be a problem?
+
 // TODO: Change to const once we drop support for Node.js 18
-let snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
+let snapshotProbeIndexBuffer, snapshotProbeIndex
+
+if (SUPPORT_ARRAY_BUFFER_RESIZE) {
+  // TODO: Is a limit of 256 snapshots ever going to be a problem?
+  // eslint-disable-next-line n/no-unsupported-features/es-syntax
+  snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
+  // TODO: Is a limit of 256 probes ever going to be a problem?
+  snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
+} else {
+  snapshotProbeIndex = new Uint8Array(1)
+}
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {

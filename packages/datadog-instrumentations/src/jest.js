@@ -160,12 +160,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
+        earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
         try {
-          const hasKnownTests = !!knownTests?.jest
-          earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
-          this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests?.jest?.[this.testSuite] || [])
-            : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+          this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+
+          if (!Array.isArray(this.knownTestsForThisSuite)) {
+            log.warn('this.knownTestsForThisSuite is not an array so new test and Early Flake detection is disabled.')
+            this.isEarlyFlakeDetectionEnabled = false
+            this.isKnownTestsEnabled = false
+          }
         } catch {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
@@ -221,19 +224,20 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return hasSnapshotTests
     }
 
-    // Function that receives a list of known tests for a test service and
-    // returns the ones that belong to the current suite
-    getKnownTestsForSuite (knownTests) {
-      if (this.knownTestsForThisSuite) {
-        return this.knownTestsForThisSuite
+    // This function returns an array if the known tests are valid and null otherwise.
+    getKnownTestsForSuite (suiteKnownTests) {
+      // `suiteKnownTests` is `this.testEnvironmentOptions._ddKnownTests`,
+      // which is only set if jest is configured to run in parallel.
+      if (suiteKnownTests) {
+        return suiteKnownTests
       }
-      let knownTestsForSuite = knownTests
-      // If jest is using workers, known tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof knownTestsForSuite === 'string') {
-        knownTestsForSuite = JSON.parse(knownTestsForSuite)
+      // Global variable `knownTests` is set only in the main process.
+      // If jest is configured to run serially, the tests run in the same process, so `knownTests` is set.
+      // The assumption is that if the key `jest` is defined in the dictionary, the response is valid.
+      if (knownTests?.jest) {
+        return knownTests.jest[this.testSuite] || []
       }
-      return knownTestsForSuite
+      return null
     }
 
     getTestManagementTestsForSuite (testManagementTests) {
@@ -469,7 +473,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
         if (this.isKnownTestsEnabled) {
-          const isNew = !this.knownTestsForThisSuite?.includes(originalTestName)
+          const isNew = !this.knownTestsForThisSuite.includes(originalTestName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
             retriedTestsToNumAttempts.set(originalTestName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
@@ -675,8 +679,11 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
-      const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
+
+      // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
+      const isFaulty = !knownTests?.jest ||
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
@@ -1071,7 +1078,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
-    if (!environment) {
+    if (!environment || !environment.testEnvironmentOptions) {
       return adapter.apply(this, arguments)
     }
     testSuiteStartCh.publish({
@@ -1330,7 +1337,7 @@ function sendWrapper (send) {
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
     if (type === CHILD_MESSAGE_CALL) {
       // This is the message that the main process sends to the worker to run a test suite (=test file).
-      // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
+      // In here we modify the `config.testEnvironmentOptions` to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request.at(-1)
       if (args.length > 1) {

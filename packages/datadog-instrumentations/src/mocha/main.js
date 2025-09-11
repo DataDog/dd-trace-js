@@ -663,14 +663,22 @@ addHook({
     const newWorkerArgs = { ...workerArgs }
 
     if (config.isKnownTestsEnabled) {
-      const testSuiteKnownTests = config.knownTests.mocha?.[testPath] || []
-      newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
-      newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
-      newWorkerArgs._ddIsKnownTestsEnabled = true
-      newWorkerArgs._ddKnownTests = {
-        mocha: {
-          [testPath]: testSuiteKnownTests
+      if (config.knownTests?.mocha) {
+        const testSuiteKnownTests = config.knownTests.mocha[testPath] || []
+        newWorkerArgs._ddEfdNumRetries = config.earlyFlakeDetectionNumRetries
+        newWorkerArgs._ddIsEfdEnabled = config.isEarlyFlakeDetectionEnabled
+        newWorkerArgs._ddIsKnownTestsEnabled = true
+        newWorkerArgs._ddKnownTests = {
+          mocha: {
+            [testPath]: testSuiteKnownTests
+          }
         }
+      } else {
+        config.isEarlyFlakeDetectionEnabled = false
+        config.isKnownTestsEnabled = false
+        newWorkerArgs._ddIsKnownTestsEnabled = false
+        newWorkerArgs._ddIsEfdEnabled = false
+        newWorkerArgs._ddKnownTests = {}
       }
     }
     if (config.isTestManagementTestsEnabled) {

@@ -22,16 +22,16 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, multiplicity)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, expectSeq)
   ])
 }
 
 function expectProfileMessagePromise (agent, timeout,
-  expectedProfileTypes = DEFAULT_PROFILE_TYPES, multiplicity = 1
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectSeq = true
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
@@ -50,11 +50,14 @@ function expectProfileMessagePromise (agent, timeout,
       for (const [index, fileName] of attachments.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
+      if (expectSeq) {
+        assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
+      }
     } catch (e) {
       e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
-  }, timeout, multiplicity)
+  }, timeout, 1, true)
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -386,8 +389,8 @@ describe('profiler', () => {
         for (const label of sample.label) {
           switch (label.key) {
             case tsKey: ts = label.num; break
-            case spanKey: spanId = label.str; break
-            case rootSpanKey: rootSpanId = label.str; break
+            case spanKey: spanId = label.num; break
+            case rootSpanKey: rootSpanId = label.num; break
             case endpointKey: endpoint = label.str; break
             case threadNameKey: threadName = label.str; break
             case threadIdKey: threadId = label.str; break
@@ -553,46 +556,6 @@ describe('profiler', () => {
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
-    it('records SSI telemetry on process exit', async () => {
-      proc = fork(profilerTestFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_INJECTION_ENABLED: 'tracing',
-          DD_PROFILING_ENABLED: 1
-        }
-      })
-
-      function checkTags (tags) {
-        assert.include(tags, 'enablement_choice:manually_enabled')
-        assert.include(tags, 'heuristic_hypothetical_decision:no_span_short_lived')
-        assert.include(tags, 'installation:ssi')
-        // There's a race between metrics and on-shutdown profile, so tag value
-        // can be either false or true but it must be present
-        assert.isTrue(tags.some(tag => tag === 'has_sent_profiles:false' || tag === 'has_sent_profiles:true'))
-      }
-
-      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
-        const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers')
-        const series = pp.series
-        assert.lengthOf(series, 2)
-        assert.equal(series[0].metric, 'ssi_heuristic.number_of_profiles')
-        assert.equal(series[0].type, 'count')
-        checkTags(series[0].tags)
-        // There's a race between metrics and on-shutdown profile, so metric
-        // value will be either 0 or 1
-        assert.isAtMost(series[0].points[0][1], 1)
-
-        assert.equal(series[1].metric, 'ssi_heuristic.number_of_runtime_id')
-        assert.equal(series[1].type, 'count')
-        checkTags(series[1].tags)
-        assert.equal(series[1].points[0][1], 1)
-      }, 'generate-metrics', timeout)
-
-      await Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
-    })
-
     if (process.platform !== 'win32') { // PROF-8905
       it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
@@ -600,7 +563,7 @@ describe('profiler', () => {
           execArgv: oomExecArgv,
           env: oomEnv
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true)
+        return checkProfiles(agent, proc, timeout, ['space'], true, false)
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
@@ -608,7 +571,7 @@ describe('profiler', () => {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false)
       })
 
       // Following tests are flaky because they use unreliable strategies to export profiles
@@ -624,7 +587,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 3
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], false, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], false, false)
       }).retries(3)
 
       it('sends a heap profile on OOM with async callback', () => {
@@ -652,7 +615,7 @@ describe('profiler', () => {
             DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
           }
         })
-        return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+        return checkProfiles(agent, proc, timeout, ['space'], true)
       }).retries(3)
     }
   })
@@ -664,36 +627,20 @@ describe('profiler', () => {
 
     describe('does not trigger for', () => {
       it('a short-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor([], false, false)
+        return heuristicsDoesNotTriggerFor([], false)
       })
 
       it('a short-lived app that creates a span', () => {
-        return heuristicsDoesNotTriggerFor(['create-span'], true, false)
+        return heuristicsDoesNotTriggerFor(['create-span'], true)
       })
 
       it('a long-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor(['long-lived'], false, false)
-      })
-
-      it('a short-lived app that creates no spans with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor([], false, true)
-      })
-
-      it('a short-lived app that creates a span with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor(['create-span'], true, true)
-      })
-
-      it('a long-lived app that creates no spans with the auto env var', () => {
-        return heuristicsDoesNotTriggerFor(['long-lived'], false, true)
+        return heuristicsDoesNotTriggerFor(['long-lived'], false)
       })
     })
 
     it('triggers for long-lived span-creating app', () => {
-      return heuristicsTrigger(false)
-    })
-
-    it('triggers for long-lived span-creating app with the auto env var', () => {
-      return heuristicsTrigger(true)
+      return heuristicsTrigger()
     })
   })
 
@@ -762,32 +709,28 @@ describe('profiler', () => {
     })
   })
 
-  function forkSsi (args, whichEnv) {
-    const profilerEnablingEnv = whichEnv ? { DD_PROFILING_ENABLED: 'auto' } : { DD_INJECTION_ENABLED: 'profiler' }
+  function forkSsi (args) {
     return fork(ssiTestFile, args, {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300',
-        ...profilerEnablingEnv
+        DD_PROFILING_ENABLED: 'auto'
       }
     })
   }
 
-  function heuristicsTrigger (whichEnv) {
+  function heuristicsTrigger () {
     return checkProfiles(agent,
-      forkSsi(['create-span', 'long-lived'], whichEnv),
+      forkSsi(['create-span', 'long-lived']),
       timeout,
       DEFAULT_PROFILE_TYPES,
-      false,
-      // Will receive 2 messages: first one is for the trace, second one is for the profile. We
-      // only need the assertions in checkProfiles to succeed for the one with the profile.
-      2)
+      false)
   }
 
-  function heuristicsDoesNotTriggerFor (args, allowTraceMessage, whichEnv) {
+  function heuristicsDoesNotTriggerFor (args, allowTraceMessage) {
     return Promise.all([
-      processExitPromise(forkSsi(args, whichEnv), timeout, false),
+      processExitPromise(forkSsi(args), timeout, false),
       expectTimeout(expectProfileMessagePromise(agent, 1500), allowTraceMessage)
     ])
   }

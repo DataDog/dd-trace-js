@@ -1,8 +1,13 @@
 'use strict'
 
-const semver = require('semver')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
+
+const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -58,8 +63,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mariadb',
-          done => connection.query('SELECT 1', (err) => { err && done(err) }),
-          'db', 'db.name')
+          done => connection.query('SELECT 1', done),
+          'db',
+          'db.name'
+        )
 
         it('should propagate context to callbacks, with correct callback args', done => {
           const span = tracer.startSpan('test')
@@ -109,6 +116,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'mariadb')
             })
             .then(done)
             .catch(done)

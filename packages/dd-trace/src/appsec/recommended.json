@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.14.2"
+    "rules_version": "1.15.1"
   },
   "rules": [
     {
@@ -2985,7 +2985,7 @@
                 "address": "graphql.server.resolver"
               }
             ],
-            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
+            "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main\\b|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
             "options": {
               "case_sensitive": true,
               "min_length": 3
@@ -5539,6 +5539,7 @@
         "confidence": "0",
         "module": "waf"
       },
+      "max_version": "1.24.9",
       "conditions": [
         {
           "parameters": {
@@ -5649,6 +5650,52 @@
             "options": {
               "case_sensitive": true,
               "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-932-110",
+      "name": "Python: Subprocess-based command injection",
+      "tags": {
+        "type": "command_injection",
+        "category": "attack_attempt",
+        "confidence": "0",
+        "module": "waf"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "regex": "(?s)\\bsubprocess\\b.*\\b(?:check_output|run|Popen|call|check_call)\\b",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 14
             }
           },
           "operator": "match_regex"
@@ -6625,7 +6672,10 @@
               {
                 "address": "graphql.server.resolver"
               }
-            ]
+            ],
+            "options": {
+              "path-inspection": true
+            }
           },
           "operator": "ssrf_detector"
         }
@@ -8870,6 +8920,271 @@
       "transformers": []
     }
   ],
+  "rules_compat": [
+    {
+      "id": "api-001-100",
+      "name": "JWT: No expiry is present",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "exp"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_expiry": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-110",
+      "name": "JWT: Collect algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ]
+          },
+          "operator": "exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt_alg": {
+            "address": "server.request.jwt",
+            "key_path": [
+              "header",
+              "alg"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-120",
+      "name": "JWT: No audience is specified",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "aud"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_audience": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-130",
+      "name": "JWT: None algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ],
+            "list": [
+              "none",
+              "nonE",
+              "noNe",
+              "noNE",
+              "nOne",
+              "nOnE",
+              "nONe",
+              "nONE",
+              "None",
+              "NonE",
+              "NoNe",
+              "NoNE",
+              "NOne",
+              "NOnE",
+              "NONe",
+              "NONE"
+            ]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "_dd.appsec.api.jwt.none_alg": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-551",
+      "name": "Datadog test scanner - scalar trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-scalar(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.scalar": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-552",
+      "name": "Datadog test scanner - reference trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-ref(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.reference": {
+            "address": "server.request.headers.no_cookies",
+            "key_path": [
+              "user-agent"
+            ]
+          }
+        }
+      }
+    }
+  ],
   "processors": [
     {
       "id": "http-endpoint-fingerprint",
@@ -9073,6 +9388,28 @@
       },
       "evaluate": true,
       "output": true
+    },
+    {
+      "id": "decode-auth-jwt",
+      "generator": "jwt_decode",
+      "min_version": "1.25.0",
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "authorization"
+                ]
+              }
+            ],
+            "output": "server.request.jwt"
+          }
+        ]
+      },
+      "evaluate": true,
+      "output": false
     },
     {
       "id": "http-network-fingerprint",
@@ -9916,6 +10253,24 @@
         "type": "card",
         "card_type": "mastercard",
         "category": "payment"
+      }
+    },
+    {
+      "id": "c542c147-3883-43d6-a067-178e4a7bd65d",
+      "name": "Password",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bpass(?:[_-]?word|wd)?\\b|\\bpwd\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "tags": {
+        "type": "password",
+        "category": "credentials"
       }
     },
     {

@@ -1,22 +1,26 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const os = require('node:os')
 
-const os = require('os')
+require('./setup/core')
+
 const { getAzureAppMetadata, getAzureTagsFromMetadata } = require('../src/azure_metadata')
 
 describe('Azure metadata', () => {
   describe('for apps is', () => {
-    it('not provided without DD_AZURE_APP_SERVICES', () => {
-      delete process.env.DD_AZURE_APP_SERVICES
+    it('not provided without WEBSITE_SITE_NAME', () => {
+      delete process.env.WEBSITE_SITE_NAME
       expect(getAzureAppMetadata()).to.be.undefined
     })
 
-    it('provided with DD_AZURE_APP_SERVICES', () => {
+    it('provided with WEBSITE_SITE_NAME', () => {
       delete process.env.COMPUTERNAME // actually defined on Windows
-      process.env.DD_AZURE_APP_SERVICES = '1'
-      delete process.env.WEBSITE_SITE_NAME
-      expect(getAzureAppMetadata()).to.deep.equal({ operatingSystem: os.platform(), siteKind: 'app', siteType: 'app' })
+      process.env.WEBSITE_SITE_NAME = 'website_name'
+      expect(getAzureAppMetadata()).to.deep.equal({
+        operatingSystem: os.platform(), siteKind: 'app', siteName: 'website_name', siteType: 'app'
+      })
     })
   })
 
@@ -27,7 +31,6 @@ describe('Azure metadata', () => {
     delete process.env.FUNCTIONS_WORKER_RUNTIME
     delete process.env.FUNCTIONS_WORKER_RUNTIME_VERSION
     process.env.COMPUTERNAME = 'boaty_mcboatface'
-    process.env.DD_AZURE_APP_SERVICES = '1'
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
     process.env.WEBSITE_INSTANCE_ID = 'instance_id'
@@ -50,7 +53,6 @@ describe('Azure metadata', () => {
 
   it('provided completely with complete vars', () => {
     process.env.COMPUTERNAME = 'boaty_mcboatface'
-    process.env.DD_AZURE_APP_SERVICES = '1'
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_RESOURCE_GROUP = 'resource_group'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+foo-regionwebspace'
@@ -86,7 +88,6 @@ describe('Azure metadata', () => {
     delete process.env.FUNCTIONS_WORKER_RUNTIME
     delete process.env.FUNCTIONS_WORKER_RUNTIME_VERSION
     process.env.COMPUTERNAME = 'boaty_mcboatface'
-    process.env.DD_AZURE_APP_SERVICES = '1'
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
     process.env.WEBSITE_INSTANCE_ID = 'instance_id'

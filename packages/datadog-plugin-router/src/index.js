@@ -7,9 +7,7 @@ const { storage } = require('../../datadog-core')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
 class RouterPlugin extends WebPlugin {
-  static get id () {
-    return 'router'
-  }
+  static id = 'router'
 
   constructor (...args) {
     super(...args)
@@ -106,6 +104,7 @@ class RouterPlugin extends WebPlugin {
 
     const span = this.tracer.startSpan(`${this.constructor.id}.middleware`, {
       childOf,
+      integrationName: this.constructor.id,
       tags: {
         [COMPONENT]: this.constructor.id,
         'resource.name': name || '<anonymous>'

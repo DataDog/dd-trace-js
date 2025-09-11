@@ -1,7 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const agent = require('../../../plugins/agent')
+const { withVersions } = require('../../../setup/mocha')
 const {
   expectedLLMObsLLMSpanEvent,
   deepEqualWithMockValues
@@ -18,8 +23,10 @@ chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
- * @param {string} scenario the scenario to load
- * @param {number} statusCode the status code to return. defaults to 200
+ * @param {object} options the options for the scenario
+ * @param {string} options.scenario the scenario to load
+ * @param {number} [options.statusCode] the status code to return. defaults to 200
+ * @param {boolean} [options.stream] whether to stream the response
  */
 function useScenario ({ scenario, statusCode = 200, stream = false }) {
   let originalFetch

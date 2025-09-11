@@ -75,9 +75,7 @@ function getTestSuiteTags (testSuiteSpan) {
 }
 
 class CucumberPlugin extends CiPlugin {
-  static get id () {
-    return 'cucumber'
-  }
+  static id = 'cucumber'
 
   constructor (...args) {
     super(...args)
@@ -184,7 +182,8 @@ class CucumberPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       this.testSuiteSpanByPath[testSuitePath] = testSuiteSpan
 
@@ -295,7 +294,8 @@ class CucumberPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           'cucumber.step': resource,
           [RESOURCE_NAME]: resource
-        }
+        },
+        integrationName: this.constructor.id
       })
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }

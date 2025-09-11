@@ -1,11 +1,16 @@
 'use strict'
 
 const axios = require('axios')
-const http = require('http')
-const os = require('os')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+
+const http = require('node:http')
+const os = require('node:os')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxy = require('./proxy')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
@@ -87,6 +92,7 @@ describe('Plugin', () => {
               expect(spans[0].meta).to.have.property('http.method', 'GET')
               expect(spans[0].meta).to.have.property('http.status_code', '200')
               expect(spans[0].meta).to.have.property('component', 'microgateway')
+              expect(spans[0].meta).to.have.property('_dd.integration', 'microgateway')
             })
             .then(done)
             .catch(done)

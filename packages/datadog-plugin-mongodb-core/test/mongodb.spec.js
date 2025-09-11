@@ -1,7 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const semver = require('semver')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -18,7 +22,7 @@ const withTopologies = fn => {
         await client.connect()
 
         return client
-      })
+      }, version)
     })
 
     // unified topology is now the only topology and thus the default since 4.x
@@ -47,13 +51,14 @@ describe('Plugin', () => {
   let db
   let BSON
   let startSpy
+  let usesDelete
 
   describe('mongodb-core', () => {
-    withTopologies(createClient => {
+    withTopologies((createClient, version) => {
       beforeEach(() => {
         id = require('../../dd-trace/src/id')
         tracer = require('../../dd-trace')
-
+        usesDelete = version ? semver.intersects(version, '>=4') : false
         collectionName = id().toString()
 
         BSON = require('../../../versions/bson@4.0.0').get()
@@ -82,8 +87,9 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'mongodb-core',
-            () => collection.insertOne({ a: 1 }, {}, () => {}),
-            'test', 'peer.service'
+            (done) => collection.insertOne({ a: 1 }, {}, done),
+            'test',
+            'peer.service'
           )
 
           it('should do automatic instrumentation', done => {
@@ -105,6 +111,142 @@ describe('Plugin', () => {
               .catch(done)
 
             collection.insertOne({ a: 1 }, {}, () => {})
+          })
+
+          it('should have the statement tag when doing a single delete operation', async () => {
+            collection.deleteOne({ a: 1 }, {}, () => {})
+
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '{"a":1}'
+              }
+            })
+          })
+
+          it('should have the statement tag when doing a single deleteMany operation', async () => {
+            //  deleteMany and delete run the same command under the hood, they should have the same output
+            collection.deleteMany({ a: 1 }, {}, () => {})
+
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '{"a":1}'
+              }
+            })
+          })
+
+          it('should have the statement tag when doing a single update operation', async () => {
+            collection.updateOne({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
+
+            const resource = `update test.${collectionName}`
+            return agent.assertFirstTraceSpan({
+              resource,
+              meta: {
+                'mongodb.query': '{"a":1}'
+              }
+            })
+          })
+
+          it('should have the statement tag when doing a single updateMany operation', async () => {
+            collection.updateMany({ a: 1 }, { $set: { a: 2 } }, {}, () => {})
+
+            const resource = `update test.${collectionName}`
+            return agent.assertFirstTraceSpan({
+              resource,
+              meta: {
+                'mongodb.query': '{"a":1}'
+              }
+            })
+          })
+
+          it('should have the statement tag when doing a multi statement update', async () => {
+            collection.bulkWrite([
+              { updateOne: { filter: { a: 1 }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } }
+            ])
+
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"a":1},{"b":2}]'
+              }
+            })
+          })
+
+          it('should have the statement tag when doing a multi statement delete', async () => {
+            collection.bulkWrite([{ deleteOne: { filter: { a: 1 } } }, { deleteOne: { filter: { b: 2 } } }])
+
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"a":1},{"b":2}]'
+              }
+            })
+          })
+
+          it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
+            collection.bulkWrite([
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+            ])
+
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
+              }
+            })
+          })
+
+          it('should sanitize BigInts when doing a single delete operation', async () => {
+            collection.deleteOne({ _id: 9999999999999999999999n }, {}, () => {})
+
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '{"_id":"9999999999999999999999"}'
+              }
+            })
+          })
+
+          it('should sanitize BigInts when doing a single update operation', async () => {
+            collection.updateOne({ _id: 9999999999999999999999n }, { $set: { a: 2 } }, {}, () => {})
+
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '{"_id":"9999999999999999999999"}'
+              }
+            })
+          })
+
+          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+            collection.bulkWrite([
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
+              { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
+            ])
+
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
+              }
+            })
+          })
+
+          it('should sanitize BigInts when doing a multi delete operation', async () => {
+            collection.bulkWrite([
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } },
+              { deleteOne: { filter: { _id: 9999999999999999999999n } } }
+            ])
+
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
+              }
+            })
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -340,6 +482,20 @@ describe('Plugin', () => {
           collection.find({
             _bin: new BSON.Binary()
           }).toArray()
+        })
+
+        it('should sanitize query in resource when configured and doing a multi statement update', async () => {
+          collection.bulkWrite([
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
+            { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } }
+          ])
+
+          return agent.assertFirstTraceSpan({
+            resource: `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`,
+            meta: {
+              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]'
+            }
+          })
         })
 
         withNamingSchema(

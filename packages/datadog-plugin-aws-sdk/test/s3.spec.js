@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const axios = require('axios')
@@ -62,7 +66,7 @@ describe('Plugin', () => {
             Bucket: bucketName,
             Key: 'test-key',
             Body: 'test body'
-          }, (err) => err && done(err)),
+          }, done),
           bucketName, 'bucketname')
 
         withNamingSchema(

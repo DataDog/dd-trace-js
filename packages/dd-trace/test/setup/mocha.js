@@ -2,8 +2,10 @@
 
 require('./core')
 
-const { platform } = require('os')
-const path = require('path')
+const assert = require('node:assert')
+const util = require('node:util')
+const { platform } = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
@@ -14,10 +16,10 @@ const { getInstrumentation } = require('./helpers/load-inst')
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
-global.withVersions = withVersions
-global.withExports = withExports
-global.withNamingSchema = withNamingSchema
-global.withPeerService = withPeerService
+exports.withVersions = withVersions
+exports.withExports = withExports
+exports.withNamingSchema = withNamingSchema
+exports.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
 
@@ -29,7 +31,7 @@ function withNamingSchema (
   const {
     hooks = (version, defaultToGlobalService) => {},
     desc = '',
-    selectSpan = (traces) => traces[0][0]
+    selectSpan = (traces) => traces[0][0],
   } = opts
   let fullConfig
 
@@ -57,8 +59,9 @@ function withNamingSchema (
 
         it('should conform to the naming schema', function () {
           this.timeout(10000)
+
           return new Promise((resolve, reject) => {
-            agent
+            const agentPromise = agent
               .assertSomeTraces(traces => {
                 const span = selectSpan(traces)
                 const expectedOpName = typeof opName === 'function'
@@ -71,9 +74,10 @@ function withNamingSchema (
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
               })
-              .then(resolve)
-              .catch(reject)
-            spanProducerFn(reject)
+
+            const testPromise = spanProducerFn(reject)
+
+            Promise.all([testPromise, agentPromise]).then(resolve, reject)
           })
         })
       })
@@ -97,19 +101,21 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', done => {
-        agent
-          .assertSomeTraces(traces => {
-            const span = traces[0][0]
-            const expectedServiceName = typeof serviceName === 'function'
-              ? serviceName()
-              : serviceName
-            expect(span).to.have.property('service', expectedServiceName)
-          })
-          .then(done)
-          .catch(done)
+      it('should pass service name through', () => {
+        return new Promise((resolve, reject) => {
+          const agentPromise = agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const expectedServiceName = typeof serviceName === 'function'
+                ? serviceName()
+                : serviceName
+              expect(span).to.have.property('service', expectedServiceName)
+            })
 
-        spanProducerFn(done)
+          const testPromise = spanProducerFn(reject)
+
+          Promise.all([testPromise, agentPromise]).then(resolve, reject)
+        })
       })
     })
   })
@@ -128,17 +134,33 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
       computePeerServiceSpy.restore()
     })
 
-    it('should compute peer service', done => {
-      agent
-        .assertSomeTraces(traces => {
+    it('should compute peer service', async () => {
+      const useCallback = spanGenerationFn.length === 1
+      const spanGenerationPromise = useCallback
+        ? new Promise((resolve, reject) => {
+          const result = spanGenerationFn((err) => err ? reject(err) : resolve())
+          // Some callback based methods are a mixture of callback and promise,
+          // depending on the module version. Await the promises as well.
+          if (util.types.isPromise(result)) {
+            result.then?.(resolve, reject)
+          }
+        })
+        : spanGenerationFn()
+
+      assert.ok(
+        typeof spanGenerationPromise?.then === 'function',
+        'spanGenerationFn should return a promise in case no callback is defined. Received: ' +
+        util.inspect(spanGenerationPromise, { depth: 1 })
+      )
+
+      await Promise.all([
+        agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           expect(span.meta).to.have.property('peer.service', typeof service === 'function' ? service() : service)
           expect(span.meta).to.have.property('_dd.peer.service.source', serviceSource)
-        })
-        .then(done)
-        .catch(done)
-
-      spanGenerationFn(done)
+        }),
+        spanGenerationPromise
+      ])
     })
   })
 }

@@ -1,4 +1,9 @@
-require('./setup/tap')
+'use strict'
+
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('./setup/core')
 
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
@@ -6,8 +11,6 @@ const {
 } = require('../src/constants')
 const { tagsFromObject } = require('../src/payload-tagging/tagging')
 const { computeTags } = require('../src/payload-tagging')
-
-const { expect } = require('chai')
 
 const defaultOpts = { maxDepth: 10, prefix: 'http.payload' }
 

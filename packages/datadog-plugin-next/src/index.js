@@ -9,9 +9,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
 class NextPlugin extends ServerPlugin {
-  static get id () {
-    return 'next'
-  }
+  static id = 'next'
 
   constructor (...args) {
     super(...args)
@@ -31,7 +29,8 @@ class NextPlugin extends ServerPlugin {
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method
-      }
+      },
+      integrationName: this.constructor.id
     })
 
     analyticsSampler.sample(span, this.config.measured, true)

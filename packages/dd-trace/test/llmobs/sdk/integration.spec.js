@@ -1,7 +1,11 @@
 'use strict'
 
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
+const { expect } = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
 const chai = require('chai')
+
+const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -12,6 +16,7 @@ const tags = {
 
 const SpanWriter = require('../../../src/llmobs/writers/spans')
 const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
+const agent = require('../../plugins/agent')
 
 const tracerVersion = require('../../../../../package.json').version
 
@@ -22,6 +27,7 @@ function getTag (llmobsSpan, tagName) {
 
 describe('end to end sdk integration tests', () => {
   let tracer
+  let llmobsModule
   let llmobs
   let payloadGenerator
 
@@ -51,17 +57,8 @@ describe('end to end sdk integration tests', () => {
       }
     })
 
-    // another test suite may have disabled LLMObs
-    // to clear the intervals and unsubscribe
-    // in that case, the `init` call above won't have re-enabled it
-    // we'll re-enable it here
+    llmobsModule = require('../../../../dd-trace/src/llmobs')
     llmobs = tracer.llmobs
-    if (!llmobs.enabled) {
-      llmobs.enable({
-        mlApp: 'test',
-        agentlessEnabled: false
-      })
-    }
 
     tracer._tracer._config.apiKey = 'test'
 
@@ -76,16 +73,12 @@ describe('end to end sdk integration tests', () => {
     EvalMetricsWriter.prototype.append.resetHistory()
 
     process.removeAllListeners('beforeExit')
-
-    llmobs.disable()
-    llmobs.enable({ mlApp: 'test', apiKey: 'test' })
   })
 
   after(() => {
     sinon.restore()
-    llmobs.disable()
-    delete global._ddtrace
-    delete require.cache[require.resolve('../../../../dd-trace')]
+    llmobsModule.disable()
+    agent.wipe() // clear the require cache
   })
 
   it('uses trace correctly', () => {
@@ -292,6 +285,129 @@ describe('end to end sdk integration tests', () => {
       expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('test')
       expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('test')
       expect(getTag(llmobsSpans[2], 'ml_app')).to.equal('test')
+    })
+  })
+
+  describe('with no global mlApp', () => {
+    let originalMlApp
+
+    before(() => {
+      originalMlApp = tracer._tracer._config.llmobs.mlApp
+      tracer._tracer._config.llmobs.mlApp = null
+    })
+
+    after(() => {
+      tracer._tracer._config.llmobs.mlApp = originalMlApp
+    })
+
+    it('defaults to the service name', () => {
+      payloadGenerator = function () {
+        llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(1)
+      expect(getTag(llmobsSpans[0], 'ml_app')).to.exist
+    })
+  })
+
+  describe('with user span processor', () => {
+    afterEach(() => {
+      llmobs.deregisterProcessor()
+    })
+
+    describe('when a processor is registered twice', () => {
+      function processor (span) {
+        return span
+      }
+
+      it('throws', () => {
+        llmobs.registerProcessor(processor)
+        expect(() => llmobs.registerProcessor(processor)).to.throw()
+      })
+    })
+
+    describe('with a processor that returns null', () => {
+      function processor (span) {
+        const dropSpan = span.getTag('drop_span')
+        if (dropSpan) return null
+
+        return span
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it('does not submit dropped spans', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'keep' }, () => {
+            llmobs.trace({ kind: 'workflow', name: 'drop' }, () => {
+              llmobs.annotate({ tags: { drop_span: true } })
+            })
+          })
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(1)
+        expect(llmobsSpans[0].name).to.equal('keep')
+      })
+    })
+
+    describe('with a processor that returns an invalid type', () => {
+      function processor (span) {
+        return {}
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it('does not submit the span', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(0)
+      })
+    })
+
+    describe('with a processor that returns a valid LLMObservabilitySpan', () => {
+      function processor (span) {
+        const redactInput = span.getTag('redact_input')
+        if (redactInput) {
+          span.input = span.input.map(message => ({ ...message, content: 'REDACTED' }))
+        }
+
+        const redactOutput = span.getTag('redact_output')
+        if (redactOutput) {
+          span.output = span.output.map(message => ({ ...message, content: 'REDACTED' }))
+        }
+
+        return span
+      }
+
+      beforeEach(() => {
+        llmobs.registerProcessor(processor)
+      })
+
+      it('redacts the input and output', () => {
+        payloadGenerator = function () {
+          llmobs.trace({ kind: 'workflow', name: 'redact-input' }, () => {
+            llmobs.annotate({ tags: { redact_input: true }, inputData: 'hello' })
+            llmobs.trace({ kind: 'llm', name: 'redact-output' }, () => {
+              llmobs.annotate({ tags: { redact_output: true }, outputData: 'world' })
+            })
+          })
+        }
+
+        const { llmobsSpans } = run(payloadGenerator)
+        expect(llmobsSpans).to.have.lengthOf(2)
+
+        expect(llmobsSpans[0].meta.input.value).to.equal('REDACTED')
+        expect(llmobsSpans[1].meta.output.messages[0].content).to.equal('REDACTED')
+      })
     })
   })
 })

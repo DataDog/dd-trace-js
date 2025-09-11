@@ -1,16 +1,25 @@
 'use strict'
 
+const semver = require('semver')
 const Axios = require('axios')
 const { assert } = require('chai')
-const getPort = require('get-port')
-const path = require('path')
+const sinon = require('sinon')
+const path = require('node:path')
+const zlib = require('node:zlib')
+
+const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
-const zlib = require('zlib')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
+  if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+    describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+    return
+  }
+
   describe('Suspicious request blocking - path parameters', () => {
     let server, paramCallbackSpy, axios
 
@@ -46,11 +55,10 @@ withVersions('express', 'express', version => {
 
       app.param('callbackedParameter', paramCallbackSpy)
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -196,11 +204,10 @@ withVersions('express', 'express', version => {
         res.end('DONE')
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 
@@ -274,11 +281,10 @@ withVersions('express', 'express', version => {
         res.json({ jsonResKey: 'jsonResValue' })
       })
 
-      getPort().then((port) => {
-        server = app.listen(port, () => {
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+      server = app.listen(0, () => {
+        const port = server.address().port
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        done()
       })
     })
 

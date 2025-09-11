@@ -8,10 +8,10 @@ runs:
     - uses: ./.github/actions/install
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: ./.github/actions/node/active-lts
+    - uses: ./.github/actions/node/latest
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # v5.4.0
+    - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:

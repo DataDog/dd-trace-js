@@ -4,9 +4,11 @@ const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 
 class MemcachedPlugin extends CachePlugin {
-  static get id () { return 'memcached' }
+  static id = 'memcached'
 
-  start ({ client, server, query }) {
+  bindStart (ctx) {
+    const { client, server, query } = ctx
+
     const address = getAddress(client, server, query)
 
     const meta = {
@@ -23,7 +25,9 @@ class MemcachedPlugin extends CachePlugin {
       resource: query.type,
       type: 'memcached',
       meta
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 

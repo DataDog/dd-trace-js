@@ -6,9 +6,9 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
-// TODO(sabrenner): re-enable once issues with mocking OpenAI calls are resolved
 describe('esm', () => {
   let agent
   let proc

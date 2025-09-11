@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
@@ -58,7 +62,7 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'elasticsearch',
-          () => client.search({
+          (done) => client.search({
             index: 'docs',
             sort: 'name',
             size: 100,
@@ -67,8 +71,10 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
-          }, hasCallbackSupport ? () => {} : undefined),
-          'localhost', 'out.host'
+          // Ignore index_not_found_exception
+          }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
+          'localhost',
+          'out.host'
         )
 
         it('should set the correct tags', done => {
@@ -77,6 +83,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0].meta).to.have.property('component', 'elasticsearch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('db.type', 'elasticsearch')
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('elasticsearch.method', 'POST')
@@ -300,13 +307,17 @@ describe('Plugin', () => {
             client.ping().catch(done)
           })
 
-          withNamingSchema(
-            () => client.search(
-              { index: 'logstash-2000.01.01', body: {} },
-              hasCallbackSupport ? () => {} : undefined
-            ),
-            rawExpectedSchema.outbound
-          )
+          describe('test', () => {
+            withNamingSchema(
+              () => {
+                client.search(
+                  { index: 'logstash-2000.01.01', body: {} },
+                  hasCallbackSupport ? () => {} : undefined
+                )
+              },
+              rawExpectedSchema.outbound
+            )
+          })
         })
       })
 
@@ -366,10 +377,12 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search(
-            { index: 'logstash-2000.01.01', body: {} },
-            hasCallbackSupport ? () => {} : undefined
-          ),
+          () => {
+            client.search(
+              { index: 'logstash-2000.01.01', body: {} },
+              hasCallbackSupport ? () => {} : undefined
+            )
+          },
           {
             v0: {
               opName: 'elasticsearch.query',

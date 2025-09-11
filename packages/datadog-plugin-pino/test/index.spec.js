@@ -1,8 +1,14 @@
 'use strict'
 
-const Writable = require('stream').Writable
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { Writable } = require('node:stream')
+
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {

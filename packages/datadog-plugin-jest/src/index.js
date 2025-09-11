@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
@@ -65,9 +67,7 @@ function withTimeout (promise, timeoutMs) {
 }
 
 class JestPlugin extends CiPlugin {
-  static get id () {
-    return 'jest'
-  }
+  static id = 'jest'
 
   // The lists are the same for every test suite, so we can cache them
   getUnskippableSuites (unskippableSuitesList) {
@@ -252,7 +252,8 @@ class JestPlugin extends CiPlugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testSuiteMetadata
-        }
+        },
+        integrationName: this.constructor.id
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {

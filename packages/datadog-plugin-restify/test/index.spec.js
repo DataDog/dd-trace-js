@@ -1,10 +1,16 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer
@@ -49,6 +55,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('http.method', 'GET')
                 expect(traces[0][0].meta).to.have.property('http.status_code', '404')
                 expect(traces[0][0].meta).to.have.property('component', 'restify')
+                expect(traces[0][0].meta).to.have.property('_dd.integration', 'restify')
               })
               .then(done)
               .catch(done)

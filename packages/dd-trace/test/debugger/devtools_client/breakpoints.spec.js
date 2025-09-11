@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('../../setup/mocha')
 
 describe('breakpoints', function () {
@@ -37,7 +42,7 @@ describe('breakpoints', function () {
       '@noCallThru': true
     }
 
-    breakpoints = proxyquire('../src/debugger/devtools_client/breakpoints', {
+    breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
       './state': stateMock
     })
@@ -217,7 +222,9 @@ describe('breakpoints', function () {
         })
         .catch((err) => {
           expect(err).to.be.instanceOf(Error)
-          expect(err.message).to.equal('Cannot compile expression: this is an invalid condition')
+          expect(err.message).to.equal(
+            'Cannot compile expression: this is an invalid condition (probe: probe-1, version: 1)'
+          )
         })
     })
   })

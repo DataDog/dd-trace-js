@@ -1,8 +1,11 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, context } = require('tap').mocha
+const sinon = require('sinon')
 const nock = require('nock')
+
+require('../../../../../dd-trace/test/setup/core')
 
 const AgentProxyCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agent-proxy')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
@@ -16,7 +19,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const queryDelay = 50
   const tags = {}
 
-  it('should query /info right when it is instantiated', (done) => {
+  it('should query /info right when it is instantiated', async () => {
     const scope = nock('http://localhost:8126')
       .get('/info')
       .reply(200, JSON.stringify({
@@ -26,8 +29,8 @@ describe('AgentProxyCiVisibilityExporter', () => {
     const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
 
     expect(agentProxyCiVisibilityExporter).not.to.be.null
+    await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
     expect(scope.isDone()).to.be.true
-    done()
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', async () => {

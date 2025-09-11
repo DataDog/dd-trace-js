@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -47,8 +51,9 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'cassandra-driver',
-          (done) => client.execute('SELECT now() FROM local;', err => err && done(err)),
-          '127.0.0.1', 'db.cassandra.contact.points'
+          (done) => client.execute('SELECT now() FROM local;', done),
+          '127.0.0.1',
+          'db.cassandra.contact.points'
         )
 
         it('should do automatic instrumentation', done => {

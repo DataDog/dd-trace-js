@@ -1,4 +1,10 @@
+'use strict'
+
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')
 const { storage } = require('../../../datadog-core')
@@ -53,7 +59,6 @@ describe('GraphQL', () => {
 
     it('Should subscribe to all channels', () => {
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(apolloChannel.start.hasSubscribers).to.be.false
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
@@ -63,7 +68,6 @@ describe('GraphQL', () => {
       graphql.enable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(apolloChannel.start.hasSubscribers).to.be.true
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
@@ -77,7 +81,6 @@ describe('GraphQL', () => {
       graphql.enable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(apolloChannel.start.hasSubscribers).to.be.true
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
@@ -87,7 +90,6 @@ describe('GraphQL', () => {
       graphql.disable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(apolloChannel.start.hasSubscribers).to.be.false
       expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
       expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
@@ -166,9 +168,9 @@ describe('GraphQL', () => {
       user: [{ id: '1234' }]
     }
     const blockParameters = {
-      status_code: '401',
+      status_code: 401,
       type: 'auto',
-      grpc_status_code: '10'
+      grpc_status_code: 10
     }
 
     let context, rootSpan
@@ -188,7 +190,6 @@ describe('GraphQL', () => {
     })
 
     afterEach(() => {
-      graphqlMiddlewareChannel.end.publish({ req })
       graphql.disable()
       sinon.restore()
     })

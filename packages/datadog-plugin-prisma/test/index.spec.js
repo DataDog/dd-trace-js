@@ -1,9 +1,14 @@
 'use strict'
 
-const fs = require('fs/promises')
-const path = require('path')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
+const fs = require('node:fs/promises')
+const path = require('node:path')
 const { execSync } = require('node:child_process')
+
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -136,6 +141,49 @@ describe('Plugin', () => {
             {
               id: '2',
               parentId: '1',
+              name: 'prisma:engine:db_query',
+              startTime: [1745340876, 436861000],
+              endTime: [1745340876, 438601541],
+              kind: 'client',
+              attributes: {
+                'db.system': 'postgresql',
+                'db.query.text': 'SELECT 1'
+              }
+            }
+          ]
+          tracingHelper.dispatchEngineSpans(engineSpans)
+          await Promise.all([
+            tracingPromise
+          ])
+        })
+
+        it('should include database connection attributes in db_query spans', async () => {
+          // Set up database config that should be parsed from connection URL
+          const dbConfig = {
+            user: 'foo',
+            host: 'localhost',
+            port: '5432',
+            database: 'postgres'
+          }
+          tracingHelper.setDbString(dbConfig)
+
+          const tracingPromise = agent.assertSomeTraces(traces => {
+            // Find the db_query span
+            const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+            expect(dbQuerySpan).to.exist
+
+            // Verify database connection attributes are present
+            expect(dbQuerySpan.meta).to.have.property('db.name', 'postgres')
+            expect(dbQuerySpan.meta).to.have.property('db.user', 'foo')
+            expect(dbQuerySpan.meta).to.have.property('out.host', 'localhost')
+            expect(dbQuerySpan.meta).to.have.property('network.destination.port', '5432')
+            expect(dbQuerySpan.meta).to.have.property('db.type', 'postgres')
+          })
+
+          const engineSpans = [
+            {
+              id: '1',
+              parentId: null,
               name: 'prisma:engine:db_query',
               startTime: [1745340876, 436861000],
               endTime: [1745340876, 438601541],

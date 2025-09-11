@@ -12,27 +12,42 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+
 jobs:
   benchmarks-e2e:
     name: Performance and correctness tests
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/create-github-app-token@db3cdf40984fe6fd25ae19ac2bf2f4886ae8d959 # v2.0.5
-        id: app-token
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
         with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-          repositories: |
-            dd-trace-js
-            test-environment
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+          scope: DataDog/test-environment
+          policy: dd-trace-js
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - name: Test Optimization Performance Overhead Test
         run: yarn bench:e2e:test-optimization
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+
+  integration:
+    strategy:
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:testopt
 
   integration-playwright:
     strategy:
@@ -41,6 +56,8 @@ jobs:
         playwright-version: [oldest, latest]
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    container:
+      image: rochdev/playwright-tools@sha256:4903e8078c956b04d3190973732de99eea4e0fd5074188e007c8f6c7af066504 # 1.54.1-2
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -48,13 +65,11 @@ jobs:
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # Install system dependencies for playwright
-      - run: npx playwright install-deps
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: '-r ./ci/init'
@@ -71,7 +86,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -105,8 +120,9 @@ jobs:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
         # 10.2.0 is the minimum version we support in >=6
+        # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
-        cypress-version: [6.7.0, 10.2.0, latest]
+        cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
@@ -114,7 +130,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -138,7 +154,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -152,7 +168,7 @@ jobs:
     env:
       PLUGINS: cucumber
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   # TODO: fix performance issues and test more Node versions
@@ -161,16 +177,16 @@ jobs:
     env:
       PLUGINS: cypress
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # TODO: fix performance issues and test more Node versions
   plugin-jest:
@@ -178,21 +194,21 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v5.4.2
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   plugin-mocha:
     runs-on: ubuntu-latest
     env:
       PLUGINS: mocha
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test

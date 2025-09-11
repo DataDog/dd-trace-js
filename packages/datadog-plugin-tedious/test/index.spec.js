@@ -1,7 +1,11 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
@@ -80,9 +84,9 @@ describe('Plugin', () => {
       withPeerService(
         () => tracer,
         'tedious',
-        (done) => connection.execSql(new tds.Request('SELECT 1', (err) => {
-          if (err) return done(err)
-        })), 'master', 'db.name'
+        (done) => connection.execSql(new tds.Request('SELECT 1', done)),
+        'master',
+        'db.name'
       )
 
       describe('with tedious disabled', () => {
@@ -142,6 +146,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('resource', query)
             expect(traces[0][0]).to.have.property('type', 'sql')
             expect(traces[0][0].meta).to.have.property('component', 'tedious')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'tedious')
             expect(traces[0][0].meta).to.have.property('db.name', 'master')
             expect(traces[0][0].meta).to.have.property('db.user', 'sa')
             expect(traces[0][0].meta).to.have.property('db.type', 'mssql')

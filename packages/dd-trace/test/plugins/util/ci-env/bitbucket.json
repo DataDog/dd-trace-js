@@ -407,7 +407,7 @@
       "BITBUCKET_GIT_HTTP_ORIGIN": "https://bitbucket.org/DataDog/dogweb",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
+      "DD_TEST_CASE_NAME": "http-repository-url-no-git-suffix"
     },
     {
       "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
@@ -427,7 +427,7 @@
       "BITBUCKET_GIT_HTTP_ORIGIN": "ssh://host.xz:54321/path/to/repo/",
       "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
       "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo",
-      "TESTING_TEST_OPTIMIZATION_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
+      "DD_TEST_CASE_NAME": "ssh-repository-url-no-git-suffix"
     },
     {
       "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
@@ -612,7 +612,7 @@
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "target-branch",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]

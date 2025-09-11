@@ -1,8 +1,12 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+
 const sinon = require('sinon')
 const semver = require('semver')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
@@ -354,7 +358,7 @@ describe('Sns', function () {
         (done) => sns.publish({
           TopicArn,
           Message: 'message 1'
-        }, (err) => err && done()),
+        }, done),
         'TestTopic', 'topicname')
 
       withNamingSchema(
@@ -495,8 +499,8 @@ describe('Sns', function () {
     })
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = '5117773060236273241'
-      const expectedConsumerHash = '1353703578833511841'
+      const expectedProducerHash = '15386798273908484982'
+      const expectedConsumerHash = '15162998336469814920'
       let nowStub
 
       before(() => {

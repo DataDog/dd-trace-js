@@ -1,10 +1,16 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -64,6 +70,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
                 expect(spans[0].meta).to.have.property('component', 'koa')
+                expect(spans[0].meta).to.have.property('_dd.integration', 'koa')
 
                 expect(spans[1]).to.have.property('name', 'koa.middleware')
                 expect(spans[1]).to.have.property('service', 'test')

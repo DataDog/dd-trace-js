@@ -19,7 +19,7 @@ const maxActiveRequests = 8
 let activeRequests = 0
 
 function parseUrl (urlObjOrString) {
-  if (typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
+  if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
   const url = urlToHttpOptions(new URL(urlObjOrString))
 

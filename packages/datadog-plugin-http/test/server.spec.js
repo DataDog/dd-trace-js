@@ -1,7 +1,12 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { rawExpectedSchema } = require('./naming')
 
@@ -71,6 +76,7 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('http.method', 'GET')
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('component', 'http')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'http')
             })
             .then(done)
             .catch(done)

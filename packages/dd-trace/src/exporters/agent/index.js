@@ -31,9 +31,7 @@ class AgentExporter {
     })
 
     process.once('beforeExit', () => {
-      clearTimeout(this.#timer)
-      this.#timer = undefined
-      this._writer.flush()
+      this.flush()
     })
   }
 
@@ -63,6 +61,8 @@ class AgentExporter {
   }
 
   flush (done = () => {}) {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
     this._writer.flush(done)
   }
 }

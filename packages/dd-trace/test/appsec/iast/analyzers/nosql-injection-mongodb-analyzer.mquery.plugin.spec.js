@@ -1,11 +1,15 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe } = require('mocha')
+const os = require('node:os')
+const path = require('node:path')
+const fs = require('node:fs')
+
+const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
-const os = require('os')
-const path = require('path')
-const fs = require('fs')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200

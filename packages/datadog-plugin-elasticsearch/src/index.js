@@ -3,9 +3,11 @@
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 class ElasticsearchPlugin extends DatabasePlugin {
-  static get id () { return 'elasticsearch' }
+  static id = 'elasticsearch'
 
-  start ({ params }) {
+  bindStart (ctx) {
+    const { params } = ctx
+
     const body = getBody(params.body || params.bulkBody)
 
     this.startSpan(this.operationName(), {
@@ -20,13 +22,19 @@ class ElasticsearchPlugin extends DatabasePlugin {
         [`${this.system}.body`]: body,
         [`${this.system}.params`]: JSON.stringify(params.querystring || params.query)
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 
-  finish ({ params }) {
+  bindFinish (ctx) {
+    const { params } = ctx
+
     const span = this.activeSpan
     this.config.hooks.query(span, params)
-    super.finish({ params })
+    super.finish(ctx)
+
+    return ctx.parentStore
   }
 }
 

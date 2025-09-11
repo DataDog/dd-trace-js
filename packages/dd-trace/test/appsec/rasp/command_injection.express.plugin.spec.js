@@ -3,6 +3,7 @@
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const Axios = require('axios')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
@@ -56,7 +57,7 @@ describe('RASP - command_injection', () => {
     }
 
     before(() => {
-      return agent.load(['express', 'http', 'child_process'], { client: false })
+      return agent.load(['express', 'http', 'child_process', 'router'], { client: false })
     })
 
     before((done) => {

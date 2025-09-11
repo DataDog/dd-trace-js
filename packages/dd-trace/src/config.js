@@ -16,7 +16,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const {
-  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES, INSTRUMENTED_BY_SSI
+  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
@@ -151,6 +151,16 @@ function maybeFile (filepath) {
   }
 }
 
+function maybeJsonFile (filepath) {
+  const file = maybeFile(filepath)
+  if (!file) return
+  try {
+    return JSON.parse(file)
+  } catch (e) {
+    log.error('Error parsing JSON file %s', filepath, e)
+  }
+}
+
 function safeJsonParse (input) {
   try {
     return JSON.parse(input)
@@ -242,6 +252,12 @@ const sourcesOrder = [
 ]
 
 class Config {
+  /**
+   * parsed DD_TAGS, usable as a standalone tag set across products
+   * @type {Record<string, string> | undefined}
+   */
+  #parsedDdTags = {}
+
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
@@ -298,6 +314,12 @@ class Config {
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
         enabled: options.appsec
+      }
+    }
+
+    if (typeof options.runtimeMetrics === 'boolean') {
+      options.runtimeMetrics = {
+        enabled: options.runtimeMetrics
       }
     }
 
@@ -409,6 +431,10 @@ class Config {
     }
   }
 
+  get parsedDdTags () {
+    return this.#parsedDdTags
+  }
+
   // Supports only a subset of options for now.
   configure (options, remote) {
     if (remote) {
@@ -461,6 +487,8 @@ class Config {
     defaults.apmTracingEnabled = true
     defaults['appsec.apiSecurity.enabled'] = true
     defaults['appsec.apiSecurity.sampleDelay'] = 30
+    defaults['appsec.apiSecurity.endpointCollectionEnabled'] = true
+    defaults['appsec.apiSecurity.endpointCollectionMessageLimit'] = 300
     defaults['appsec.blockedTemplateGraphql'] = undefined
     defaults['appsec.blockedTemplateHtml'] = undefined
     defaults['appsec.blockedTemplateJson'] = undefined
@@ -494,6 +522,7 @@ class Config {
     defaults['dogstatsd.port'] = '8125'
     defaults.dsmEnabled = false
     defaults['dynamicInstrumentation.enabled'] = false
+    defaults['dynamicInstrumentation.probeFile'] = undefined
     defaults['dynamicInstrumentation.redactedIdentifiers'] = []
     defaults['dynamicInstrumentation.redactionExcludedIdentifiers'] = []
     defaults['dynamicInstrumentation.uploadIntervalSeconds'] = 1
@@ -507,6 +536,9 @@ class Config {
     defaults['grpc.client.error.statuses'] = GRPC_CLIENT_ERROR_STATUSES
     defaults['grpc.server.error.statuses'] = GRPC_SERVER_ERROR_STATUSES
     defaults.headerTags = []
+    defaults['heapSnapshot.count'] = 0
+    defaults['heapSnapshot.destination'] = ''
+    defaults['heapSnapshot.interval'] = 3600
     defaults.hostname = '127.0.0.1'
     defaults['iast.dbRowsToTaint'] = 1
     defaults['iast.deduplicationEnabled'] = true
@@ -545,7 +577,7 @@ class Config {
     defaults.testManagementAttemptToFixRetries = 20
     defaults.isTestManagementEnabled = false
     defaults.isImpactedTestsEnabled = false
-    defaults.logInjection = 'structured'
+    defaults.logInjection = true
     defaults.lookup = undefined
     defaults.inferredProxyServicesEnabled = false
     defaults.memcachedCommandEnabled = false
@@ -564,7 +596,9 @@ class Config {
     defaults['remoteConfig.enabled'] = true
     defaults['remoteConfig.pollInterval'] = 5 // seconds
     defaults.reportHostname = false
-    defaults.runtimeMetrics = false
+    defaults['runtimeMetrics.enabled'] = false
+    defaults['runtimeMetrics.eventLoop'] = true
+    defaults['runtimeMetrics.gc'] = true
     defaults.runtimeMetricsRuntimeId = false
     defaults.sampleRate = undefined
     defaults['sampler.rateLimit'] = 100
@@ -596,6 +630,9 @@ class Config {
     defaults['tracePropagationStyle.inject'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.extract'] = ['datadog', 'tracecontext', 'baggage']
     defaults['tracePropagationStyle.otelPropagators'] = false
+    defaults.traceWebsocketMessagesEnabled = true
+    defaults.traceWebsocketMessagesInheritSampling = true
+    defaults.traceWebsocketMessagesSeparateTraces = true
     defaults.tracing = true
     defaults.url = undefined
     defaults.version = pkg.version
@@ -641,7 +678,7 @@ class Config {
     this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
     const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
     this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setBoolean(obj, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED)
     this._setString(obj, 'service', DD_SERVICE)
     this._setString(obj, 'version', DD_VERSION)
   }
@@ -652,6 +689,8 @@ class Config {
       DD_AGENT_HOST,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
@@ -680,6 +719,7 @@ class Config {
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
+      DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE,
       DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
       DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS,
@@ -689,6 +729,9 @@ class Config {
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
       JEST_WORKER_ID,
+      DD_HEAP_SNAPSHOT_COUNT,
+      DD_HEAP_SNAPSHOT_DESTINATION,
+      DD_HEAP_SNAPSHOT_INTERVAL,
       DD_IAST_DB_ROWS_TO_TAINT,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
@@ -719,6 +762,8 @@ class Config {
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
+      DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,
+      DD_RUNTIME_METRICS_GC_ENABLED,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
       DD_SITE,
@@ -770,6 +815,9 @@ class Config {
       DD_TRACE_SPAN_LEAK_DEBUG,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
+      DD_TRACE_WEBSOCKET_MESSAGES_ENABLED,
+      DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,
+      DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION,
@@ -789,8 +837,10 @@ class Config {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
 
+    tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
+
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
+    tagger.add(tags, this.#parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
@@ -800,6 +850,10 @@ class Config {
     ))
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
+    this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED)
+    env['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+      maybeInt(DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT)
     env['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     env['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
@@ -851,6 +905,7 @@ class Config {
     this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setString(env, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
     this._setArray(env, 'dynamicInstrumentation.redactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
     this._setArray(
       env,
@@ -870,6 +925,9 @@ class Config {
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this._setString(env, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
+    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
     this._setString(env, 'hostname', DD_AGENT_HOST)
     env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
@@ -890,6 +948,7 @@ class Config {
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
     this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setString(env, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
     this._setBoolean(env, 'injectForce', DD_INJECT_FORCE)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
@@ -940,11 +999,13 @@ class Config {
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
-    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
+    this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
+    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
-      safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
+      maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE),
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     )))
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
@@ -995,6 +1056,9 @@ class Config {
       DD_TRACE_PROPAGATION_STYLE_EXTRACT
         ? false
         : !!OTEL_PROPAGATORS)
+    this._setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
+    this._setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
+    this._setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
     this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
@@ -1020,6 +1084,10 @@ class Config {
       options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
     ))
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
+    this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
+      options.appsec?.apiSecurity?.endpointCollectionEnabled)
+    opts['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+      maybeInt(options.appsec?.apiSecurity?.endpointCollectionMessageLimit)
     opts['appsec.blockedTemplateGraphql'] = maybeFile(options.appsec?.blockedTemplateGraphql)
     opts['appsec.blockedTemplateHtml'] = maybeFile(options.appsec?.blockedTemplateHtml)
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
@@ -1070,6 +1138,7 @@ class Config {
     }
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
+    this._setString(opts, 'dynamicInstrumentation.probeFile', options.dynamicInstrumentation?.probeFile)
     this._setArray(
       opts,
       'dynamicInstrumentation.redactedIdentifiers',
@@ -1113,9 +1182,6 @@ class Config {
     opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
-    if (options[INSTRUMENTED_BY_SSI]) {
-      this._setString(opts, 'instrumentationSource', options[INSTRUMENTED_BY_SSI])
-    }
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
@@ -1137,7 +1203,9 @@ class Config {
       this._optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
-    this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
+    this._setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
+    this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
@@ -1156,6 +1224,9 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesEnabled', options.traceWebsocketMessagesEnabled)
+    this._setBoolean(opts, 'traceWebsocketMessagesInheritSampling', options.traceWebsocketMessagesInheritSampling)
+    this._setBoolean(opts, 'traceWebsocketMessagesSeparateTraces', options.traceWebsocketMessagesSeparateTraces)
     this._setString(opts, 'version', options.version || tags.version)
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
@@ -1504,22 +1575,6 @@ class Config {
         return origin
       }
     }
-  }
-
-  // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-  /**
-   * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
-   * @returns {Object} The serialized config object.
-   */
-  serialize () {
-    // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-    if (this.url instanceof URL) {
-      const config = { ...this }
-      config.url = this.url.toString()
-      return config
-    }
-
-    return this
   }
 }
 

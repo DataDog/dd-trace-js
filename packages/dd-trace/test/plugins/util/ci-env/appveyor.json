@@ -369,12 +369,12 @@
       "git.branch": "pr",
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
-      "git.commit.head_sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
+      "git.commit.head.sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "master",
       "git.repository_url": "https://github.com/appveyor-repo-name.git",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ],
   [
@@ -405,7 +405,7 @@
       "git.branch": "pr",
       "git.commit.author.email": "appveyor-commit-author-email@datadoghq.com",
       "git.commit.author.name": "appveyor-commit-author-name",
-      "git.commit.head_sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
+      "git.commit.head.sha": "724faca55efebf66fc15bfccc34577c64c5480bd",
       "git.commit.message": "appveyor-commit-message\nappveyor-commit-message-extended",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.pull_request.base_branch": "master",

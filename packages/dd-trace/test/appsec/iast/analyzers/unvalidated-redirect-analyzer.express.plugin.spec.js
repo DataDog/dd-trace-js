@@ -6,6 +6,7 @@ const path = require('path')
 
 const { UNVALIDATED_REDIRECT } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIastInExpress } = require('../utils')
+const { withVersions } = require('../../../setup/mocha')
 const Axios = require('axios')
 
 describe('Unvalidated Redirect vulnerability', () => {

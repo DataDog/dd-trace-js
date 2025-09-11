@@ -100,6 +100,10 @@ class Tracer extends NoopProxy {
         require('./crashtracking').start(config)
       }
 
+      if (config.heapSnapshot.count > 0) {
+        require('./heap_snapshots').start(config)
+      }
+
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
@@ -153,36 +157,22 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.profiling.enabled !== 'false') {
-        const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-        const ssiHeuristics = new SSIHeuristics(config)
-        ssiHeuristics.start()
-        let mockProfiler = null
-        if (config.profiling.enabled === 'true') {
-          this._profilerStarted = this._startProfiler(config)
-        } else if (ssiHeuristics.emitsTelemetry) {
-          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
-          // It will be stopped if the real profiler is started by the heuristics.
-          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-          mockProfiler.start(config)
-        }
-
-        if (ssiHeuristics.heuristicsActive) {
+      if (config.profiling.enabled === 'true') {
+        this._profilerStarted = this._startProfiler(config)
+      } else {
+        this._profilerStarted = Promise.resolve(false)
+        if (config.profiling.enabled === 'auto') {
+          const { SSIHeuristics } = require('./profiling/ssi-heuristics')
+          const ssiHeuristics = new SSIHeuristics(config)
+          ssiHeuristics.start()
           ssiHeuristics.onTriggered(() => {
-            if (mockProfiler) {
-              mockProfiler.stop()
-            }
             this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
-
-        if (!this._profilerStarted) {
-          this._profilerStarted = Promise.resolve(false)
-        }
       }
 
-      if (config.runtimeMetrics) {
+      if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
 

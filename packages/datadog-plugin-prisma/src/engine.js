@@ -23,9 +23,9 @@ const databaseDriverMapper = {
 }
 
 class PrismaEngine extends DatabasePlugin {
-  static get id () { return 'prisma' }
-  static get operation () { return 'engine' }
-  static get system () { return 'prisma' }
+  static id = 'prisma'
+  static operation = 'engine'
+  static system = 'prisma'
 
   start (ctx) {
     const { engineSpan, allEngineSpans, childOf, dbConfig } = ctx
@@ -53,8 +53,8 @@ class PrismaEngine extends DatabasePlugin {
       options.resource = originalStatement
       options.type = type || engineSpan.attributes['db.system']
       options.meta['db.type'] = dbType || engineSpan.attributes['db.system']
-      options.meta['db.instance'] = dbConfig?.database
-      options.meta['db.name'] = dbConfig?.user
+      options.meta['db.name'] = dbConfig?.database
+      options.meta['db.user'] = dbConfig?.user
       options.meta['out.host'] = dbConfig?.host
       options.meta[CLIENT_PORT_KEY] = dbConfig?.port
     }

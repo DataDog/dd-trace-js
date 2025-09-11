@@ -4,11 +4,13 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const CASSANDRA_CONTACT_POINTS_KEY = 'db.cassandra.contact.points'
 
 class CassandraDriverPlugin extends DatabasePlugin {
-  static get id () { return 'cassandra-driver' }
-  static get system () { return 'cassandra' }
-  static get peerServicePrecursors () { return [CASSANDRA_CONTACT_POINTS_KEY] }
+  static id = 'cassandra-driver'
+  static system = 'cassandra'
+  static peerServicePrecursors = [CASSANDRA_CONTACT_POINTS_KEY]
 
-  start ({ keyspace, query, contactPoints = {} }) {
+  bindStart (ctx) {
+    let { keyspace, query, contactPoints = {} } = ctx
+
     if (Array.isArray(query)) {
       query = combine(query)
     }
@@ -24,7 +26,9 @@ class CassandraDriverPlugin extends DatabasePlugin {
         'cassandra.keyspace': keyspace,
         [CASSANDRA_CONTACT_POINTS_KEY]: contactPoints.join(',') || null
       }
-    })
+    }, ctx)
+
+    return ctx.currentStore
   }
 }
 

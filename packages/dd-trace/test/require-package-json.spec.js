@@ -1,6 +1,9 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('./setup/core')
 
 const requirePackageJson = require('../src/require-package-json')
 const packageJson = require('../../../package.json')

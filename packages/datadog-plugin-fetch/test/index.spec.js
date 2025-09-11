@@ -1,5 +1,6 @@
 'use strict'
 
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
@@ -77,6 +78,7 @@ describe('Plugin', function () {
               expect(traces[0][0].meta).to.have.property('http.method', 'GET')
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
               expect(traces[0][0].meta).to.have.property('component', 'fetch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'fetch')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
             })
             .then(done)

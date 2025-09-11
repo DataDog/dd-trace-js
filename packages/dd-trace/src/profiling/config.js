@@ -171,6 +171,8 @@ class Config {
       samplingContextsAvailable))
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
+    this.samplingInterval = coalesce(options.samplingInterval, 1e3 / 99) // 99hz in millis
+
     this.heapSamplingInterval = coalesce(options.heapSamplingInterval,
       Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL))
     const uploadCompression0 = coalesce(options.uploadCompression, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION, 'on')

@@ -8,13 +8,14 @@ function strategiesToCallbackMode (strategies, callbackMode) {
 }
 
 class NativeSpaceProfiler {
+  type = 'space'
+  _pprof
+  _started = false
+
   constructor (options = {}) {
-    this.type = 'space'
     this._samplingInterval = options.heapSamplingInterval || 512 * 1024
     this._stackDepth = options.stackDepth || 64
-    this._pprof = undefined
     this._oomMonitoring = options.oomMonitoring || {}
-    this._started = false
   }
 
   start ({ mapper, nearOOMCallback } = {}) {

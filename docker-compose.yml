@@ -3,6 +3,29 @@ services:
     image: aerospike:ce-6.4.0.3
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    ports:
+        - "127.0.0.1:10000:10000"
+        - "127.0.0.1:10001:10001"
+        - "127.0.0.1:10002:10002"
+  azureservicebusemulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    ports:
+        - "127.0.0.1:5672:5672"
+        - "127.0.0.1:5300:5300"
+    environment:
+        ACCEPT_EULA: "Y"
+        MSSQL_SA_PASSWORD: "Localtestpass1!"
+        SQL_SERVER: azuresqledge
+  azuresqledge:
+    image: mcr.microsoft.com/azure-sql-edge:1.0.7
+    platform: linux/amd64
+    ports:
+        - "127.0.0.1:1433:1433"
+    environment:
+        ACCEPT_EULA: "Y"
+        MSSQL_SA_PASSWORD: "Localtestpass1!"
   couchbase:
     image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
@@ -154,11 +177,19 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.21.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
-        - "127.0.0.1:9126:9126"
+      - "127.0.0.1:9126:9126"
     environment:
-        - LOG_LEVEL=DEBUG
-        - TRACE_LANGUAGE=javascript
-        - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-        - PORT=9126
+      - LOG_LEVEL=DEBUG
+      - TRACE_LANGUAGE=javascript
+      - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+      - PORT=9126
+      - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
+      # - AWS_SECRET_ACCESS_KEY # uncomment this line for generating aws service cassettes
+    volumes:
+      # when there are other products not using the cassette feature from the test agent,
+      # we can move this directory to a shared location here, and change the above
+      # environment variable to point to that location
+      - ./packages/dd-trace/test/llmobs/cassettes:/vcr-cassettes
+

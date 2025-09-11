@@ -17,7 +17,7 @@ module.exports = {
   setup
 }
 
-function setup ({ env, testApp, testAppSource, dependencies } = {}) {
+function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler } = {}) {
   let sandbox, cwd
 
   const breakpoints = getBreakpointInfo({
@@ -101,8 +101,9 @@ function setup ({ env, testApp, testAppSource, dependencies } = {}) {
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
         ...env
-      }
-    })
+      },
+      silent: silent ?? false
+    }, stdioHandler, stderrHandler)
     t.axios = Axios.create({ baseURL: t.proc.url })
   })
 

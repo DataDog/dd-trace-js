@@ -1,4 +1,11 @@
-const { generatePointerHash, encodeValue, extractPrimaryKeys } = require('../src/util')
+'use strict'
+
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
+const { Buffer } = require('node:buffer')
+
+const { generatePointerHash, encodeValue, extractPrimaryKeys, extractQueueMetadata } = require('../src/util')
 
 describe('generatePointerHash', () => {
   describe('should generate a valid hash for S3 object with', () => {
@@ -208,6 +215,139 @@ describe('extractPrimaryKeys', () => {
       }
       const result = extractPrimaryKeys(keySet, item)
       expect(result).to.be.undefined
+    })
+  })
+})
+
+describe('extractQueueMetadata', () => {
+  describe('standard AWS SQS URLs', () => {
+    it('handles standard AWS SQS URL', () => {
+      const result = extractQueueMetadata('https://sqs.eu-west-1.amazonaws.com/987654321098/test-queue')
+      expect(result).to.deep.equal({
+        queueName: 'test-queue',
+        arn: 'arn:aws:sqs:eu-west-1:987654321098:test-queue'
+      })
+    })
+
+    it('handles AWS China region', () => {
+      const result = extractQueueMetadata('https://sqs.cn-north-1.amazonaws.com.cn/123456789012/china-queue')
+      expect(result).to.deep.equal({
+        queueName: 'china-queue',
+        arn: 'arn:aws-cn:sqs:cn-north-1:123456789012:china-queue'
+      })
+    })
+
+    it('handles AWS GovCloud region', () => {
+      const result = extractQueueMetadata('https://sqs.us-gov-west-1.amazonaws.com/123456789012/gov-queue')
+      expect(result).to.deep.equal({
+        queueName: 'gov-queue',
+        arn: 'arn:aws-us-gov:sqs:us-gov-west-1:123456789012:gov-queue'
+      })
+    })
+
+    it('handles queue name with special characters', () => {
+      const result = extractQueueMetadata('https://sqs.us-west-2.amazonaws.com/123456789012/my-queue-test_123')
+      expect(result).to.deep.equal({
+        queueName: 'my-queue-test_123',
+        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue-test_123'
+      })
+    })
+  })
+
+  describe('LocalStack URLs', () => {
+    it('handles LocalStack URL with default port', () => {
+      const result = extractQueueMetadata('http://localhost:4566/000000000000/local-queue')
+      expect(result).to.deep.equal({
+        queueName: 'local-queue',
+        arn: 'arn:aws:sqs:us-east-1:000000000000:local-queue'
+      })
+    })
+
+    it('handles LocalStack URL with custom port', () => {
+      const result = extractQueueMetadata('http://127.0.0.1:9324/123456789012/dev-queue')
+      expect(result).to.deep.equal({
+        queueName: 'dev-queue',
+        arn: 'arn:aws:sqs:us-east-1:123456789012:dev-queue'
+      })
+    })
+  })
+
+  describe('legacy AWS SQS URLs', () => {
+    it('handles regional legacy format', () => {
+      const result = extractQueueMetadata('https://us-west-2.queue.amazonaws.com/123456789012/legacy-queue')
+      expect(result).to.deep.equal({
+        queueName: 'legacy-queue',
+        arn: 'arn:aws:sqs:us-west-2:123456789012:legacy-queue'
+      })
+    })
+
+    it('handles global legacy format', () => {
+      const result = extractQueueMetadata('https://queue.amazonaws.com/123456789012/global-legacy-queue')
+      expect(result).to.deep.equal({
+        queueName: 'global-legacy-queue',
+        arn: 'arn:aws:sqs:us-east-1:123456789012:global-legacy-queue'
+      })
+    })
+
+    it('handles legacy format without scheme', () => {
+      const result = extractQueueMetadata('eu-central-1.queue.amazonaws.com/987654321098/no-scheme-legacy')
+      expect(result).to.deep.equal({
+        queueName: 'no-scheme-legacy',
+        arn: 'arn:aws:sqs:eu-central-1:987654321098:no-scheme-legacy'
+      })
+    })
+  })
+
+  describe('URLs without schemes', () => {
+    it('handles modern format without scheme', () => {
+      const result = extractQueueMetadata('sqs.eu-west-1.amazonaws.com/123456789012/no-scheme-queue')
+      expect(result).to.deep.equal({
+        queueName: 'no-scheme-queue',
+        arn: 'arn:aws:sqs:eu-west-1:123456789012:no-scheme-queue'
+      })
+    })
+
+    it('handles localstack without scheme', () => {
+      const result = extractQueueMetadata('localhost:4566/000000000000/local-no-scheme')
+      expect(result).to.deep.equal({
+        queueName: 'local-no-scheme',
+        arn: 'arn:aws:sqs:us-east-1:000000000000:local-no-scheme'
+      })
+    })
+  })
+
+  describe('edge cases', () => {
+    it('returns null for invalid URL with insufficient parts', () => {
+      const result = extractQueueMetadata('https://sqs.us-east-1.amazonaws.com/incomplete')
+      expect(result).to.be.null
+    })
+
+    it('returns null for completely malformed URL', () => {
+      const result = extractQueueMetadata('not-a-valid-url')
+      expect(result).to.be.null
+    })
+
+    it('returns null for empty string', () => {
+      const result = extractQueueMetadata('')
+      expect(result).to.be.null
+    })
+
+    it('returns null for null input', () => {
+      const result = extractQueueMetadata(null)
+      expect(result).to.be.null
+    })
+
+    it('returns null for undefined input', () => {
+      const result = extractQueueMetadata(undefined)
+      expect(result).to.be.null
+    })
+
+    it('handles URL with trailing slash', () => {
+      const result = extractQueueMetadata('https://sqs.us-west-2.amazonaws.com/123456789012/my-queue/')
+      expect(result).to.deep.equal({
+        queueName: 'my-queue',
+        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue'
+      })
     })
   })
 })

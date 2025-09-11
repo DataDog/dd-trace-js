@@ -2,6 +2,10 @@
 
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const { expect } = require('chai')
+
 const IastContextPlugin = require('../../../../src/appsec/iast/context/context-plugin')
 
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')

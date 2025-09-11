@@ -22,18 +22,10 @@ const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
-const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
-)
 
-// Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
-for (const [key, value] of Object.entries(envs)) {
-  const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && (value?.toLowerCase() === 'false' || value === '0')) {
-    const integration = match[1].toLowerCase()
-    disabledInstrumentations.add(integration)
-  }
-}
+const disabledInstrumentations = new Set(
+  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
+)
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -64,7 +56,7 @@ for (const packageName of names) {
 
   let hook = hooks[packageName]
 
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
     hookOptions.internals = hook.esmFirst
@@ -154,7 +146,11 @@ for (const packageName of names) {
               `error_type:${e.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
-            ])
+            ], {
+              result: 'error',
+              result_class: 'internal_error',
+              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
+            })
           }
           namesAndSuccesses[`${name}@${version}`] = true
         }
@@ -168,7 +164,11 @@ for (const packageName of names) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
-        ])
+        ], {
+          result: 'abort',
+          result_class: 'incompatible_library',
+          result_reason: `Incompatible integration version: ${name}@${version}`
+        })
         log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }
@@ -195,7 +195,7 @@ function filename (name, file) {
 // This function captures the instrumentation file name for a given package by parsing the hook require
 // function given the module name. It is used to ensure that instrumentations such as redis
 // that have several different modules being hooked, ie: 'redis' main package, and @redis/client submodule
-// return a consistent instrumentation name. This is used later to ensure that atleast some portion of
+// return a consistent instrumentation name. This is used later to ensure that at least some portion of
 // the integration was successfully instrumented. Prevents incorrect `Found incompatible integration version: ` messages
 // Example:
 //                  redis -> "() => require('../redis')" -> redis

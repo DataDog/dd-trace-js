@@ -1,3 +1,5 @@
+'use strict'
+
 const CiPlugin = require('../../plugins/ci_plugin')
 const {
   TEST_STATUS,
@@ -7,9 +9,7 @@ const {
 const { storage } = require('../../../../datadog-core')
 
 class TestApiManualPlugin extends CiPlugin {
-  static get id () {
-    return 'test-api-manual'
-  }
+  static id = 'test-api-manual'
 
   constructor (...args) {
     super(...args)

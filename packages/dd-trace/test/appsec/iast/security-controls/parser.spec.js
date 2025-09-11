@@ -1,6 +1,9 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert')
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const { parse } = require('../../../../src/appsec/iast/security-controls/parser')
 
 const {
@@ -21,7 +24,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get(civFilename)
 
-      assert.isUndefined(civ)
+      assert.strictEqual(civ, undefined)
     })
 
     it('should not parse invalid security control definition with extra fields', () => {
@@ -30,7 +33,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get(civFilename)
 
-      assert.isUndefined(civ)
+      assert.strictEqual(civ, undefined)
     })
 
     it('should not parse invalid security mark security control definition', () => {
@@ -39,7 +42,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get(civFilename)
 
-      assert.isUndefined(civ)
+      assert.strictEqual(civ, undefined)
     })
 
     it('should not parse invalid parameter in security control definition', () => {
@@ -48,7 +51,7 @@ describe('IAST Security Controls parser', () => {
 
       const civ = securityControls.get(civFilename)
 
-      assert.isUndefined(civ)
+      assert.strictEqual(civ, undefined)
     })
 
     it('should parse valid simple security control definition without parameters', () => {
@@ -98,7 +101,7 @@ describe('IAST Security Controls parser', () => {
     })
 
     it('should parse security control definition containing spaces or alike', () => {
-      const conf = `INPUT_VALIDATOR  : COMMAND_INJECTION:  
+      const conf = `INPUT_VALIDATOR  : COMMAND_INJECTION:
         bar/foo/custom_input_validator.js:   validate`
       const securityControls = parse(conf)
 
