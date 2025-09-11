@@ -157,7 +157,7 @@ describe('request', function () {
     })
   })
 
-  it('should inject the container ID', () => {
+  it('should inject the container ID', (done) => {
     nock('http://test:123', {
       reqheaders: {
         'datadog-container-id': 'abcd'
@@ -166,19 +166,24 @@ describe('request', function () {
       .get('/')
       .reply(200, 'OK')
 
-    return request(Buffer.from(''), {
+    request(Buffer.from(''), {
       hostname: 'test',
       port: 123,
       path: '/'
     }, (err, res) => {
       expect(res).to.equal('OK')
+      done(err)
     })
   })
 
   it('should retry', (done) => {
     nock('http://localhost:80')
       .put('/path')
-      .replyWithError({ code: 'ECONNRESET' })
+      .replyWithError(() => {
+        const err = new Error('Socket hang up')
+        err.code = 'ECONNRESET'
+        return err
+      })
       .put('/path')
       .reply(200, 'OK')
 
@@ -285,13 +290,19 @@ describe('request', function () {
   it('should parse unix domain sockets properly', (done) => {
     const sock = '/tmp/unix_socket'
 
+    const sandbox = sinon.createSandbox()
+    const requestSpy = sandbox.spy(http, 'request')
+
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
         method: 'PUT'
       },
       (err, _) => {
-        expect(err.address).to.equal(sock)
+        expect(err).to.be.instanceof(Error)
+        const { socketPath } = requestSpy.getCall(0).args[0]
+        sandbox.restore()
+        expect(socketPath).to.equal(sock)
         done()
       })
   })
@@ -299,20 +310,26 @@ describe('request', function () {
   it('should parse windows named pipes properly', (done) => {
     const pipe = '//./pipe/datadogtrace'
 
+    const sandbox = sinon.createSandbox()
+    const requestSpy = sandbox.spy(http, 'request')
+
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
         method: 'PUT'
       },
       (err, _) => {
-        expect(err.address).to.equal(pipe)
+        expect(err).to.be.instanceof(Error)
+        const { socketPath } = requestSpy.getCall(0).args[0]
+        sandbox.restore()
+        expect(socketPath).to.equal(pipe)
         done()
       })
   })
 
   it('should calculate correct Content-Length header for multi-byte characters', (done) => {
     const sandbox = sinon.createSandbox()
-    sandbox.spy(http, 'request')
+    const requestSpy = sandbox.spy(http, 'request')
 
     const body = 'æøå'
     const charLength = body.length
@@ -332,7 +349,7 @@ describe('request', function () {
       },
       (err, res) => {
         expect(res).to.equal('OK')
-        const { headers } = http.request.getCall(0).args[0]
+        const { headers } = requestSpy.getCall(0).args[0]
         sandbox.restore()
         expect(headers['Content-Length']).to.equal(byteLength)
         done(err)

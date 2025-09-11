@@ -33,6 +33,12 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
+/**
+ * @description Send an HTTP request.
+ * @param {Buffer|Buffer[]|Readable} data - The data to send in the request.
+ * @param {Object} options - The options for the request.
+ * @param {Function} callback - The callback function to handle the response.
+ */
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}
