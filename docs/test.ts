@@ -583,6 +583,12 @@ const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
+otelSpan.addLink({ context: spanContext })
+otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
+otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
+otelSpan.addLink(spanContext)
+otelSpan.addLink(spanContext, { foo: 'bar' })
+
 // -- LLM Observability --
 const llmobsEnableOptions = {
   mlApp: 'mlApp',
