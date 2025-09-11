@@ -1,8 +1,8 @@
 'use strict'
 
+const { once } = require('node:events')
+const assert = require('node:assert')
 const { exec } = require('child_process')
-
-const { assert } = require('chai')
 
 const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -27,7 +27,7 @@ const testFrameworks = [
     expectedOutput: '1 passed',
     extraTestContext: {
       TEST_DIR: 'ci-visibility/test-optimization-wrong-init/vitest-sum-wrong-init*',
-      NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/init'
+      NODE_OPTIONS: '--import dd-trace/register.js'
     }
   },
   {
@@ -48,7 +48,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
     if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
 
     before(async () => {
-      const testFrameworks = ['jest', 'mocha', 'chai@v4', 'vitest']
+      const testFrameworks = ['jest', 'mocha', 'vitest']
 
       // Remove once we drop support for Node.js@18
       if (NODE_MAJOR > 18) {
@@ -73,7 +73,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
       await receiver.stop()
     })
 
-    it('does not initialize test optimization plugins if Test Optimization mode is not enabled', (done) => {
+    it('does not initialize test optimization plugins if Test Optimization mode is not enabled', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (tracesRequests) => {
           const spans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
@@ -115,15 +115,17 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         processOutput += chunk.toString()
       })
 
-      childProcess.on('exit', () => {
-        assert.include(processOutput,
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+
+      assert.ok(
+        processOutput.includes(
           `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
         )
-        assert.include(processOutput, expectedOutput)
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      )
+      assert.ok(processOutput.includes(expectedOutput))
     })
   })
 })
