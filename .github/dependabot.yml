@@ -77,7 +77,6 @@ updates:
           - "@datadog/pprof"
           - "@datadog/sketches-js"
           - "@datadog/wasm-js-rewriter"
-          - "@opentelemetry/api"
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
