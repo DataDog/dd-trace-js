@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -52,7 +53,6 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { once } = require('node:events')
 
 const NUM_RETRIES_EFD = 3
 
@@ -1062,7 +1062,7 @@ versions.forEach((version) => {
         })
       })
 
-      it('does not detect new tests if the response is invalid', (done) => {
+      it('does not detect new tests if the response is invalid', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true
@@ -1103,12 +1103,10 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
-
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 
