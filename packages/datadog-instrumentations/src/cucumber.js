@@ -82,9 +82,13 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let modifiedTests = {}
 let numTestRetries = 0
-let knownTests = []
+let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+
+function isValidKnownTests (receivedKnownTests) {
+  return !!receivedKnownTests.cucumber
+}
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.includes('fail')) {
@@ -123,7 +127,10 @@ function getStatusFromResultLatest (result) {
 }
 
 function isNewTest (testSuite, testName) {
-  const testsForSuite = knownTests.cucumber?.[testSuite] || []
+  if (!isValidKnownTests(knownTests)) {
+    return false
+  }
+  const testsForSuite = knownTests.cucumber[testSuite] || []
   return !testsForSuite.includes(testName)
 }
 
@@ -508,9 +515,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     if (isKnownTestsEnabled) {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
+      const isFaulty = !isValidKnownTests(knownTests) || getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
-        knownTests.cucumber || {},
+        knownTests.cucumber,
         earlyFlakeDetectionFaultyThreshold
       )
       if (isFaulty) {
@@ -972,10 +979,17 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isKnownTestsEnabled) {
+    if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
+      this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    } else {
+      isEarlyFlakeDetectionEnabled = false
+      isKnownTestsEnabled = false
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
+      this.options.worldParameters._ddIsKnownTestsEnabled = false
+      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
     }
 
     if (isImpactedTestsEnabled) {
@@ -1001,9 +1015,14 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      isKnownTestsEnabled = !!this.options.worldParameters._ddIsKnownTestsEnabled
       if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+        // if for whatever reason the worker does not receive valid known tests, we disable EFD and known tests
+        if (!isValidKnownTests(knownTests)) {
+          isKnownTestsEnabled = false
+          knownTests = {}
+        }
       }
       isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
       if (isEarlyFlakeDetectionEnabled) {
