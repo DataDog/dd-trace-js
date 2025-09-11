@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert')
 const sum = require('../sum')
 
 describe('ci visibility', () => {
   it('can report tests', () => {
-    expect(sum(1, 2)).to.equal(3)
+    assert.strictEqual(sum(1, 2), 3)
   })
 })

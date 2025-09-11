@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { fork, exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -2406,7 +2407,7 @@ describe('jest CommonJS', () => {
     })
 
     context('parallel mode', () => {
-      it('retries new tests', (done) => {
+      it('retries new tests', async () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
         // Tests from ci-visibility/test/ci-visibility-test-4.js will be considered new
         receiver.setKnownTests({
@@ -2478,14 +2479,13 @@ describe('jest CommonJS', () => {
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
 
-      it('does not detect new tests if known tests are faulty', (done) => {
+      it('does not detect new tests if known tests are faulty', async () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
         receiver.setKnownTests({
           // invalid known tests
@@ -2534,9 +2534,10 @@ describe('jest CommonJS', () => {
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
   })
