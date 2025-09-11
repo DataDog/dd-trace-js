@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { fork, exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -1972,7 +1973,7 @@ describe('mocha CommonJS', function () {
         })
       })
 
-      it('does not detect new tests if the response is invalid', (done) => {
+      it('does not detect new tests if the response is invalid', async () => {
         const NUM_RETRIES_EFD = 5
 
         receiver.setSettings({
@@ -2024,11 +2025,10 @@ describe('mocha CommonJS', function () {
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 
