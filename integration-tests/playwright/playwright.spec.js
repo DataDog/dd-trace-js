@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const satisfies = require('semifies')
 const path = require('path')
@@ -645,7 +646,7 @@ versions.forEach((version) => {
         })
       })
 
-      it('does not run EFD if the known tests response is invalid', (done) => {
+      it('does not run EFD if the known tests response is invalid', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -694,11 +695,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
       })
     })
 
