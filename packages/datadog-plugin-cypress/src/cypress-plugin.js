@@ -482,8 +482,12 @@ class CypressPlugin {
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        // We use TEST_FRAMEWORK_NAME for the name of the module
-        this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        } else {
+          this.isEarlyFlakeDetectionEnabled = false
+          this.isKnownTestsEnabled = false
+        }
       }
     }
 
