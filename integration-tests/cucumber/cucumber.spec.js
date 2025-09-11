@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 
 const { assert } = require('chai')
@@ -1473,7 +1474,7 @@ versions.forEach(version => {
                 })
               })
 
-              it('does not detect new tests if the response is invalid', (done) => {
+              it('does not detect new tests if the response is invalid', async () => {
                 const NUM_RETRIES_EFD = 3
                 receiver.setSettings({
                   early_flake_detection: {
@@ -1520,11 +1521,10 @@ versions.forEach(version => {
                   }
                 )
 
-                childProcess.on('exit', () => {
-                  eventsPromise.then(() => {
-                    done()
-                  }).catch(done)
-                })
+                await Promise.all([
+                  once(childProcess, 'exit'),
+                  eventsPromise,
+                ])
               })
             })
           }
