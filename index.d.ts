@@ -2567,6 +2567,25 @@ declare namespace tracer {
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
 
       /**
+       * Register a processor to be called on each LLMObs span.
+       *
+       * This can be used to modify the span before it is sent to LLMObs. For example, you can modify the input/output.
+       * You can also return `null` to omit the span entirely from being sent to LLM Observability.
+       *
+       * Otherwise, if the return value from the processor is not an instance of `LLMObservabilitySpan`, the span will be dropped.
+       *
+       * To deregister the processor, call `llmobs.deregisterProcessor()`
+       * @param processor A function that will be called for each span.
+       * @throws {Error} If a processor is already registered.
+       */
+      registerProcessor (processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)): void
+
+      /**
+       * Deregister a processor.
+       */
+      deregisterProcessor (): void
+
+      /**
        * Submits a custom evaluation metric for a given span ID and trace ID.
        * @param spanContext The span context of the span to submit the evaluation metric for.
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
@@ -2577,6 +2596,25 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    interface LLMObservabilitySpan {
+      /**
+       * The input content associated with the span.
+       */
+      input: { content: string, role?: string }[]
+
+      /**
+       * The output content associated with the span.
+       */
+      output: { content: string, role?: string }[]
+
+      /**
+       * Get a tag from the span.
+       * @param key The key of the tag to get.
+       * @returns The value of the tag, or `undefined` if the tag does not exist.
+       */
+      getTag (key: string): string | undefined
     }
 
     interface EvaluationOptions {
