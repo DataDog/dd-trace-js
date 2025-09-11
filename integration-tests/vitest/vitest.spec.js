@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -52,7 +53,6 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { once } = require('node:events')
 
 const NUM_RETRIES_EFD = 3
 
@@ -502,7 +502,7 @@ versions.forEach((version) => {
         )
       })
     }
-    // maybe only latest version?
+
     context('early flake detection', () => {
       it('retries new tests', (done) => {
         receiver.setSettings({
@@ -1060,6 +1060,53 @@ versions.forEach((version) => {
             done()
           }).catch(done)
         })
+      })
+
+      it('does not detect new tests if the response is invalid', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          'not-vitest': {}
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 4)
+
+            const newTests = tests.filter(
+              test => test.meta[TEST_IS_NEW] === 'true'
+            )
+            // no new tests
+            assert.equal(newTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+            },
+            stdio: 'pipe'
+          }
+        )
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 
@@ -2041,7 +2088,9 @@ versions.forEach((version) => {
       })
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            vitest: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
