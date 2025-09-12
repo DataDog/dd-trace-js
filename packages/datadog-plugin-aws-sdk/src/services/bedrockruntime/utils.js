@@ -31,11 +31,13 @@ const PROVIDER = {
  * @returns {Object}
  */
 function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
+  const modelProviderUpper = modelProvider.toUpperCase()
+
   // streaming unsupported for AMAZON embedding models, COHERE embedding models, STABILITY
   if (
-    (modelProvider.toUpperCase() === PROVIDER.AMAZON && modelName.includes('embed')) ||
-    (modelProvider.toUpperCase() === PROVIDER.COHERE && modelName.includes('embed')) ||
-    modelProvider.toUpperCase() === PROVIDER.STABILITY
+    (modelProviderUpper === PROVIDER.AMAZON && modelName.includes('embed')) ||
+    (modelProviderUpper === PROVIDER.COHERE && modelName.includes('embed')) ||
+    modelProviderUpper === PROVIDER.STABILITY
   ) {
     return {}
   }
@@ -47,31 +49,50 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
 
-    if (modelProvider.toUpperCase() === PROVIDER.AMAZON) {
-      message += body?.outputText
+    switch (modelProviderUpper) {
+      case PROVIDER.AMAZON: {
+        message += body?.outputText
 
-      inputTokens = body?.inputTextTokenCount
-      outputTokens = body?.totalOutputTextTokenCount
-    } else if (modelProvider.toUpperCase() === PROVIDER.AI21) {
-      const content = body?.choices?.[0]?.delta?.content
-      if (content) {
-        message += content
-      }
-    } else if (modelProvider.toUpperCase() === PROVIDER.ANTHROPIC) {
-      if (body.completion) {
-        message += body.completion
-      } else if (body.delta?.text) {
-        message += body.delta.text
-      }
+        inputTokens = body?.inputTextTokenCount
+        outputTokens = body?.totalOutputTextTokenCount
 
-      if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
-      if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
-    } else if (modelProvider.toUpperCase() === PROVIDER.COHERE && body?.event_type === 'stream-end') {
-      message = body.response?.text
-    } else if (modelProvider.toUpperCase() === PROVIDER.META) {
-      message += body?.generation
-    } else if (modelProvider.toUpperCase() === PROVIDER.MISTRAL) {
-      message += body?.outputs?.[0]?.text
+        break
+      }
+      case PROVIDER.AI21: {
+        const content = body?.choices?.[0]?.delta?.content
+        if (content) {
+          message += content
+        }
+
+        break
+      }
+      case PROVIDER.ANTHROPIC: {
+        if (body.completion) {
+          message += body.completion
+        } else if (body.delta?.text) {
+          message += body.delta.text
+        }
+
+        if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
+        if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
+
+        break
+      }
+      case PROVIDER.COHERE: {
+        if (body?.event_type === 'stream-end') {
+          message = body.response?.text
+        }
+
+        break
+      }
+      case PROVIDER.META: {
+        message += body?.generation
+        break
+      }
+      case PROVIDER.MISTRAL: {
+        message += body?.outputs?.[0]?.text
+        break
+      }
     }
 
     // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
