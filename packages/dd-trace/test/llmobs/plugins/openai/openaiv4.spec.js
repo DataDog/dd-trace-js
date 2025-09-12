@@ -55,8 +55,7 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    // TODO: Remove the range cap once we support openai 5
-    withVersions('openai', 'openai', '>=4 <5', version => {
+    withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
       let realVersion
 
@@ -75,13 +74,13 @@ describe('integrations', () => {
         const AzureOpenAI = OpenAI.AzureOpenAI ?? OpenAI
         if (OpenAI.AzureOpenAI) {
           azureOpenai = new AzureOpenAI({
-            endpoint: 'https://dd.openai.azure.com/',
+            endpoint: 'http://127.0.0.1:9126/vcr/azure-openai',
             apiKey: 'test',
             apiVersion: '2024-05-01-preview'
           })
         } else {
           azureOpenai = new OpenAI({
-            baseURL: 'https://dd.openai.azure.com/',
+            baseURL: 'http://127.0.0.1:9126/vcr/azure-openai',
             apiKey: 'test',
             apiVersion: '2024-05-01-preview'
           })

@@ -91,20 +91,25 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
+    console.log('getting llmobs span register options for', ctx.name)
     const span = ctx.currentStore?.span
     const operation = getOperation(span)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
+    console.log('valid span kind', kind, '**')
     if (!kind) return
 
     return { kind, name: operation }
   }
 
   setLLMObsTags (ctx) {
+    console.log('setting llmobs tags for', ctx.name)
     const span = ctx.currentStore?.span
+    console.log('span', !!span)
     if (!span) return
 
     const operation = getOperation(span)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
+    console.log('valid span kind', kind, '**')
     if (!kind) return
 
     const tags = getSpanTags(ctx)
@@ -140,6 +145,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       default:
         break
     }
+
+    console.log('finished setting llmobs tags for', ctx.name)
   }
 
   setEmbeddingWorkflowTags (span, tags) {

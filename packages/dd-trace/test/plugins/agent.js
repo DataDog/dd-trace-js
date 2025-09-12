@@ -354,6 +354,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', (req, res) => {
+      console.log('received apm traces')
       handleTraceRequest(req, res, useTestAgent)
     })
 
@@ -365,6 +366,7 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
+      console.log('received llmobs traces')
       llmobsHandlers.forEach(({ handler }) => {
         handler(JSON.parse(req.body))
       })
