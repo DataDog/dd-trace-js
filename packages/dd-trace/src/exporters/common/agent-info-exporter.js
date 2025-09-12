@@ -27,6 +27,8 @@ function fetchAgentInfo (url, callback) {
  * While this._writer is not initialized, exported traces are stored as is.
  */
 class AgentInfoExporter {
+  #cachedAgentInfo = null
+
   constructor (tracerConfig) {
     this._config = tracerConfig
     const { url, hostname, port } = this._config
@@ -40,7 +42,15 @@ class AgentInfoExporter {
   }
 
   getAgentInfo (onReceivedInfo) {
-    fetchAgentInfo(this._url, onReceivedInfo)
+    if (this.#cachedAgentInfo !== null) {
+      return process.nextTick(() => onReceivedInfo(null, this.#cachedAgentInfo))
+    }
+
+    fetchAgentInfo(this._url, (err, response) => {
+      if (err) return onReceivedInfo(err, response)
+      this.#cachedAgentInfo = response
+      onReceivedInfo(null, response)
+    })
   }
 
   export (trace) {
