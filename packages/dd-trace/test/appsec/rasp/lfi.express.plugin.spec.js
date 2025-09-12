@@ -427,7 +427,7 @@ describe('RASP - lfi', () => {
           runFsMethodTestThreeWay('writeFile', undefined, src, 'content')
         })
 
-        describe('test with express render', () => {
+        describe.only('test with express render', () => {
           function getAppFn (fn, args, options) {
             return (req, res) => {
               try {
