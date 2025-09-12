@@ -6,6 +6,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -41,7 +42,7 @@ describe('esm', () => {
       })
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
+      console.log("this is the proc: ", proc)
       await res
     }).timeout(20000)
   })

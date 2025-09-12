@@ -185,6 +185,24 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/upstream
 
+  azure-event-hubs:
+    runs-on: ubuntu-latest
+    services:
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          volumes:
+            - "./Config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+          env:
+            BLOB_SERVER: localhost
+            METADATA_SERVER: localhost
+            ACCEPT_EULA: "Y"
+        azurite:
+          image: "mcr.microsoft.com/azure-storage/azurite:latest"
+          ports:
+            - "10005:10000"
+            - "10006:10001"
+            - "10007:10002"
+
   azure-functions:
     runs-on: ubuntu-latest
     services:

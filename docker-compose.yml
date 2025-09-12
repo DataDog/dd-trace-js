@@ -3,6 +3,21 @@ services:
     image: aerospike:ce-6.4.0.3
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
+  azurite:
+    image: "mcr.microsoft.com/azure-storage/azurite:latest"
+    ports:
+      - "10005:10000"
+      - "10006:10001"
+      - "10007:10002"
+  azureeventhubsemulator:
+    image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:9092:9092"
+    environment:
+      BLOB_SERVER: azurite
+      METADATA_SERVER: azurite
+      ACCEPT_EULA: "Y"
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     ports:
