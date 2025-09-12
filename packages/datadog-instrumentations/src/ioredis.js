@@ -10,7 +10,7 @@ const startCh = channel('apm:ioredis:command:start')
 const finishCh = channel('apm:ioredis:command:finish')
 const errorCh = channel('apm:ioredis:command:error')
 
-addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
+function wrapRedis(Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
     if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
 
@@ -35,7 +35,18 @@ addHook({ name: 'ioredis', versions: ['>=2'] }, Redis => {
     })
   })
   return Redis
+}
+
+addHook({ name: 'ioredis', versions: ['>=2 <4'], file: 'lib/redis.js' }, wrapRedis)
+
+addHook({ name: 'ioredis', versions: [ '>=4 <4.11.0'], file: 'built/redis.js' }, wrapRedis)
+
+addHook({ name: 'ioredis', versions: [ '>=4.11.0 <5'], file: 'built/redis/index.js' }, (exports) => {
+  wrapRedis(exports.default)
+  return exports
 })
+
+addHook({ name: 'ioredis', versions: [ '>=5'] }, wrapRedis)
 
 function finish (finishCh, errorCh, ctx, error) {
   if (error) {
