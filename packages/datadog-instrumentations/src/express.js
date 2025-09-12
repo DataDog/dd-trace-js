@@ -39,6 +39,7 @@ function wrapResponseJson (json) {
 const responseRenderChannel = tracingChannel('datadog:express:response:render')
 
 function wrapResponseRender (render) {
+  // random comment !!!!!!!!!!!!
   return function wrappedRender (view, options, callback) {
     if (!responseRenderChannel.start.hasSubscribers) {
       return render.apply(this, arguments)
