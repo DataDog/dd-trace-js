@@ -22,10 +22,6 @@ function Hook (modules, hookOptions, onrequire) {
   const patched = new WeakMap()
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    if (patched.has(moduleExports)) {
-      return patched.get(moduleExports)
-    }
-
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (
@@ -37,7 +33,9 @@ function Hook (modules, hookOptions, onrequire) {
       newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    patched.set(moduleExports, newExports)
+    if (newExports && (typeof newExports === 'object' || typeof newExports === 'function')) { 
+      patched.set(moduleExports, newExports)
+    }
 
     return newExports
   }
