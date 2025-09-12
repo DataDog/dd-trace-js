@@ -34,7 +34,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       injectTraceContext(this.tracer, span, ctx.eventData)
     }
 
-    if (ctx.functionName === 'sendBatch') {
+    if (ctx.functionName === 'sendBatch' || ctx.functionName === 'enqueuEvents') {
       const eventData = ctx.eventData
       span.setTag('messaging.operation', 'send')
       span.setTag('messaging.batch.message_count', eventData.length)
@@ -49,6 +49,13 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         })
         this.batch = []
       }
+    }
+
+    if (ctx.functionName === 'enqueueEvent') {
+      const eventData = ctx.eventData
+      span.setTag('messaging.operation', 'send')
+      span.setTag('messaging.batch.message_count', 1)
+      injectTraceContext(this.tracer, span, eventData)
     }
     return ctx.currentStore
   }

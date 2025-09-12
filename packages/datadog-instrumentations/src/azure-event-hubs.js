@@ -39,3 +39,23 @@ addHook({
     })
   return obj
 })
+
+addHook({
+  name: '@azure/event-hubs',
+  versions: ['>=6.0.0'],
+}, obj => {
+  const EventHubBufferedProducerClient = obj.EventHubBufferedProducerClient
+  shimmer.wrap(EventHubBufferedProducerClient.prototype, 'enqueuEvents',
+    enqueuEvents => function (eventData) {
+      const config = this._context.config
+      const functionName = enqueuEvents.name
+      return producerCh.tracePromise(sendBatch, { functionName, eventData, config }, this, ...arguments)
+    })
+  shimmer.wrap(EventHubBufferedProducerClient.prototype, 'enqueueEvent',
+    enqueueEvent => function (eventData) {
+      const config = this._context.config
+      const functionName = enqueueEvent.name
+      return producerCh.tracePromise(sendBatch, { functionName, eventData, config }, this, ...arguments)
+    })
+  return obj
+})
