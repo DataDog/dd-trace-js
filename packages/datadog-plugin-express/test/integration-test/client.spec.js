@@ -47,10 +47,10 @@ describe('esm', () => {
         it('is instrumented', async () => {
           proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
           const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2
-        const whichMiddleware = semver.intersects(version, '<5.0.0')
-          ? 'express'
-          : 'router'
-  
+          const whichMiddleware = semver.intersects(version, '<5.0.0')
+            ? 'express'
+            : 'router'
+
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
             assert.isArray(payload)
@@ -67,15 +67,15 @@ describe('esm', () => {
         before(() => {
           process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = false
         })
-  
+
         after(() => {
           delete process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED
         })
-  
+
         it('disables middleware spans when config.middlewareTracingEnabled is false via env var', async () => {
           proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
           const numberOfSpans = 1
-  
+
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
             assert.isArray(payload)

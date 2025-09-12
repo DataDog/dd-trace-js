@@ -4,7 +4,8 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
@@ -13,12 +14,18 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  let variants
 
   withVersions('limitd-client', 'limitd-client', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'limitd-client@${version}'`], false, [
         './packages/datadog-plugin-limitd-client/test/integration-test/*'])
+      variants = varySandbox(sandbox, 'server.mjs', {
+        default: 'import LimitdClient from \'limitd-client\'',
+        star: 'import * as LimitdClientStar from \'limitd-client\'; const LimitdClient = LimitdClientStar.default',
+        destructure: 'import {default as LimitdClient} from \'limitd-client\''
+      })
     })
 
     after(async () => {
@@ -33,19 +40,20 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
+    for (const variant of ['default', 'star', 'destructure']) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          // not asserting for a limitd-client trace,
+          // just asserting that we're not completely breaking when loading limitd-client with esm
+          assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
+        })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        // not asserting for a limitd-client trace,
-        // just asserting that we're not completely breaking when loading limitd-client with esm
-        assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
-      })
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })
