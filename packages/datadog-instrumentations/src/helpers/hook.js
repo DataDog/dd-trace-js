@@ -12,6 +12,7 @@ const ritm = require('../../../dd-trace/src/ritm')
  * @param {Function} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, hookOptions, onrequire) {
+  // random comment for testing purposes not to be merged!!
   if (!(this instanceof Hook)) return new Hook(modules, hookOptions, onrequire)
 
   if (typeof hookOptions === 'function') {
