@@ -8,6 +8,7 @@ const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'bunyan', versions: ['>=1'] }, Logger => {
   const logCh = channel('apm:bunyan:log')
+
   shimmer.wrap(Logger.prototype, '_emit', emit => {
     return function wrappedEmit (rec) {
       if (logCh.hasSubscribers) {

@@ -19,37 +19,38 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
-  this._patched = Object.create(null)
+  const patched = new WeakMap()
 
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
-    const parts = [moduleBaseDir, moduleName].filter(Boolean)
-    const filename = path.join(...parts)
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (patched.has(moduleExports)) {
+      return patched.get(moduleExports)
+    }
 
-    if (this._patched[filename]) return moduleExports
+    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
-    this._patched[filename] = true
+    if (
+      isIitm &&
+      moduleExports.default &&
+      (typeof moduleExports.default === 'object' ||
+        typeof moduleExports.default === 'function')
+    ) {
+      newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    }
 
-    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+    patched.set(moduleExports, newExports)
+
+    return newExports
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
-    // modules and not ESM. In the meantime, all the modules we instrument are
-    // CommonJS modules for which the default export is always moved to
-    // `default` anyway.
-    if (moduleExports && moduleExports.default) {
-      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
-      return moduleExports
-    }
-    return safeHook(moduleExports, moduleName, moduleBaseDir)
+    return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
 }
 
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
-  this._patched = Object.create(null)
 }
 
 module.exports = Hook
