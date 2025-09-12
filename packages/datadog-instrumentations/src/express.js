@@ -68,14 +68,14 @@ addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, expres
   return express
 })
 
-addHook({ name: 'express', versions: ['4'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['4'] }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   return express
 })
 
-addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
+addHook({ name: 'express', versions: ['>=5.0.0'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
