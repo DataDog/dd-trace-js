@@ -68,16 +68,12 @@ addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, expres
   return express
 })
 
+// Express 5 does not rely on router in the same way as v4 and should not be instrumented anymore.
+// It would otherwise produce spans for router and express, and so duplicating them.
+// We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
-
-  return express
-})
-
-addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
-  shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
-  shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
   return express
 })
