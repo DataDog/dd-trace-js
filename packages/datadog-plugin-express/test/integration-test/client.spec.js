@@ -46,7 +46,10 @@ describe('esm', () => {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
         it('is instrumented', async () => {
           proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
-          const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 3
+          const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2
+        const whichMiddleware = semver.intersects(version, '<5.0.0')
+          ? 'express'
+          : 'router'
   
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
             assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -55,7 +58,7 @@ describe('esm', () => {
             assert.isArray(payload[0])
             assert.strictEqual(payload[0].length, numberOfSpans)
             assert.propertyVal(payload[0][0], 'name', 'express.request')
-            assert.propertyVal(payload[0][1], 'name', 'express.middleware')
+            assert.propertyVal(payload[0][1], 'name', `${whichMiddleware}.middleware`)
           })
         }).timeout(50000)
       })

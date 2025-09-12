@@ -37,6 +37,7 @@ module.exports = {
   responseSetHeader: dc.channel('datadog:http:server:response:set-header:start'),
   responseWriteHead: dc.channel('apm:http:server:response:writeHead:start'),
   routerParam: dc.channel('datadog:router:param:start'),
+  routerMiddlewareError: dc.channel('apm:router:middleware:error'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
   startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
