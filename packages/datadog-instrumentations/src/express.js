@@ -58,7 +58,7 @@ function wrapResponseRender (render) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'] }, express => {
+addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
