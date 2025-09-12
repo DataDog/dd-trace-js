@@ -57,7 +57,7 @@ function wrapResponseRender (render) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
@@ -67,14 +67,14 @@ addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, expres
   return express
 })
 
-addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
+addHook({ name: 'express', versions: ['4'] }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   return express
 })
 
-addHook({ name: 'express', versions: ['>=5.0.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
   shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
@@ -136,12 +136,12 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })
