@@ -20,7 +20,6 @@ const {
 } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
-const { JSONPath } = require('jsonpath-plus')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
