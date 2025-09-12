@@ -56,7 +56,7 @@ class Sampler {
 
     span = typeof span.context === 'function' ? span.context() : span
 
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
+    return (span._traceId.toFirst64BitsBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
   }
 }
 
