@@ -50,7 +50,12 @@ class WSProducerPlugin extends TracingPlugin {
   end (ctx) {
     if (!Object.hasOwn(ctx, 'result')) return
 
-    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext, { 'dd.kind': 'resuming' })
+    if (ctx.socket.spanContext) {
+      ctx.span.addLink({
+        context: ctx.socket.spanContext,
+        attributes: { 'dd.kind': 'resuming' },
+      })
+    }
 
     ctx.span.finish()
     return ctx.parentStore
