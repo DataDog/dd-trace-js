@@ -25,7 +25,9 @@ const {
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY
+  PROPAGATED_ML_APP_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -144,6 +146,12 @@ class LLMObsTagger {
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
           break
+        case 'cacheWriteInputTokens':
+          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheReadInputTokens':
+          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
+          break
       }
 
       if (typeof value === 'number') {
@@ -260,6 +268,32 @@ class LLMObsTagger {
     return filteredToolCalls
   }
 
+  #filterToolResults (toolResults) {
+    if (!Array.isArray(toolResults)) {
+      toolResults = [toolResults]
+    }
+
+    const filteredToolResults = []
+    for (const toolResult of toolResults) {
+      if (typeof toolResult !== 'object') {
+        this.#handleFailure('Tool call must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { result, toolId, type } = toolResult
+      const toolResultObj = {}
+
+      const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
+      const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
+
+      if (condition1 && condition2 && condition3) {
+        filteredToolResults.push(toolResultObj)
+      }
+    }
+    return filteredToolResults
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -282,6 +316,7 @@ class LLMObsTagger {
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
+      const toolResults = message.toolResults
       const toolId = message.toolId
       const messageObj = { content }
 
@@ -297,6 +332,14 @@ class LLMObsTagger {
 
         if (filteredToolCalls.length) {
           messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (toolResults) {
+        const filteredToolResults = this.#filterToolResults(toolResults)
+
+        if (filteredToolResults.length) {
+          messageObj.tool_results = filteredToolResults
         }
       }
 

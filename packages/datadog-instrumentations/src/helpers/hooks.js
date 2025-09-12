@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
   'apollo-server-core': () => require('../apollo-server-core'),
