@@ -1,5 +1,6 @@
 'use strict'
 
+const { before, beforeEach, after } = require('mocha')
 const chai = require('chai')
 
 const tracerVersion = require('../../../../package.json').version
