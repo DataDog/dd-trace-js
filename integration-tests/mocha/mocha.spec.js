@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { fork, exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -1405,7 +1406,9 @@ describe('mocha CommonJS', function () {
 
     it('retries flaky tests', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -1472,7 +1475,9 @@ describe('mocha CommonJS', function () {
 
     it('does not retry new tests that are skipped', (done) => {
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -1640,7 +1645,9 @@ describe('mocha CommonJS', function () {
 
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -1773,7 +1780,9 @@ describe('mocha CommonJS', function () {
     context('parallel mode', () => {
       it('retries new tests', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          mocha: {}
+        })
 
         // The total number of executions need to be an odd number, so that we
         // check that the EFD logic of ignoring failed executions is working.
@@ -1837,7 +1846,9 @@ describe('mocha CommonJS', function () {
 
       it('retries new tests when using the programmatic API', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          mocha: {}
+        })
 
         const NUM_RETRIES_EFD = 5
         receiver.setSettings({
@@ -1960,6 +1971,64 @@ describe('mocha CommonJS', function () {
             done()
           }).catch(done)
         })
+      })
+
+      it('does not detect new tests if the response is invalid', async () => {
+        const NUM_RETRIES_EFD = 5
+
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          'not-mocha': {
+            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              RUN_IN_PARALLEL: true,
+              TESTS_TO_RUN: JSON.stringify([
+                './test/ci-visibility-test.js',
+                './test/ci-visibility-test-2.js'
+              ])
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 
@@ -3443,7 +3512,9 @@ describe('mocha CommonJS', function () {
       })
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            mocha: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {

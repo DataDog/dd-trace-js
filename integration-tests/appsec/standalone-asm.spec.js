@@ -74,8 +74,8 @@ describe('Standalone ASM', () => {
         assert.strictEqual(payload.length, 1)
         assert.isArray(payload[0])
 
-        // express.request + 4 middlewares
-        assert.strictEqual(payload[0].length, 5)
+        // express.request + router.middleware x 2
+        assert.strictEqual(payload[0].length, 3)
 
         assertKeep(payload[0][0])
       })
@@ -95,7 +95,7 @@ describe('Standalone ASM', () => {
         } else {
           const fifthReq = payload[0]
           assert.isArray(fifthReq)
-          assert.strictEqual(fifthReq.length, 5)
+          assert.strictEqual(fifthReq.length, 3)
 
           const { meta, metrics } = fifthReq[0]
           assert.notProperty(meta, 'manual.keep')
@@ -288,7 +288,7 @@ describe('Standalone ASM', () => {
         } else {
           const fifthReq = payload[0]
           assert.isArray(fifthReq)
-          assert.strictEqual(fifthReq.length, 5)
+          assert.strictEqual(fifthReq.length, 3)
           assertKeep(fifthReq[0])
         }
       }, 40000, 2)
@@ -330,8 +330,8 @@ describe('Standalone ASM', () => {
         assert.strictEqual(payload.length, 1)
         assert.isArray(payload[0])
 
-        // express.request + 4 middlewares
-        assert.strictEqual(payload[0].length, 5)
+        // express.request + router.middleware x 2
+        assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
         assert.property(meta, '_dd.iast.json') // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
@@ -350,8 +350,8 @@ describe('Standalone ASM', () => {
         assert.strictEqual(payload.length, 1)
         assert.isArray(payload[0])
 
-        // express.request + 4 middlewares
-        assert.strictEqual(payload[0].length, 5)
+        // express.request + router.middleware x 2
+        assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
         assert.property(meta, '_dd.appsec.json') // crs-942-100 triggered
