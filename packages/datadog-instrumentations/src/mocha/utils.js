@@ -56,6 +56,9 @@ function getTestProperties (test, testManagementTests) {
 }
 
 function isNewTest (test, knownTests) {
+  if (!knownTests?.mocha) { // invalid response, so we won't consider it as new
+    return false
+  }
   const testSuite = getTestSuitePath(test.file, process.cwd())
   const testName = removeEfdStringFromTestName(test.fullTitle())
   const testsForSuite = knownTests.mocha?.[testSuite] || []

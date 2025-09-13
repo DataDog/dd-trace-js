@@ -320,10 +320,10 @@ describe('OTel Span', () => {
 
     const { _links } = span._ddSpan
 
-    span.addLink(span2.spanContext())
+    span.addLink({ context: span2.spanContext() })
     expect(_links).to.have.lengthOf(1)
 
-    span.addLink(span3.spanContext())
+    span.addLink({ context: span3.spanContext() })
     expect(_links).to.have.lengthOf(2)
   })
 

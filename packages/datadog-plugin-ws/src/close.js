@@ -60,7 +60,7 @@ class WSClosePlugin extends TracingPlugin {
   end (ctx) {
     if (!Object.hasOwn(ctx, 'result')) return
 
-    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext)
+    if (ctx.socket.spanContext) ctx.span.addLink({ context: ctx.socket.spanContext })
 
     ctx.span.finish()
   }

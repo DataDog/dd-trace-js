@@ -93,7 +93,7 @@ describe('Plugin', () => {
       })
       return agent.close({ ritmReset: false, wipe: true })
     })
-    beforeEach(function () {
+    beforeEach(async function () {
       // for http integration tests
       nock('http://test:123')
         .get('/')
@@ -109,9 +109,12 @@ describe('Plugin', () => {
       if (!isEvpProxyTest) {
         agent.setAvailableEndpoints([])
       }
-      return agent.load(['mocha', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
-        Mocha = require(`../../../versions/mocha@${version}`).get()
-      })
+      await agent.load(
+        ['mocha', 'http'],
+        { service: 'test' },
+        { isCiVisibility: true, experimental: { exporter } }
+      )
+      Mocha = require(`../../../versions/mocha@${version}`).get()
     })
     describe('mocha', () => {
       it('works with passing tests', (done) => {

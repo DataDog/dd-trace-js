@@ -22,6 +22,7 @@ class NoopSpan {
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
   addLink (link) { return this }
+  addLinks (links) { return this }
   addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
   log () { return this }
   logEvent () {}

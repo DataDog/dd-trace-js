@@ -26,6 +26,10 @@ function safeGetRum (window) {
 }
 
 function isNewTest (test) {
+  // If for whatever reason the worker does not receive valid known tests, we don't consider it as new
+  if (!Array.isArray(knownTestsForSuite)) {
+    return false
+  }
   return !knownTestsForSuite.includes(test.fullTitle())
 }
 
