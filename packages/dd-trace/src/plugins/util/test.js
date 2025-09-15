@@ -461,7 +461,7 @@ function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
 
   let gitMetadata = {}
 
-  // We will not execute git in the workers since it's slow and the information is already available in the parent process
+  // We won't execute git in the test workers since it's slow and the information is in the parent process
   if (!isWorker) {
     gitMetadata = getGitMetadata({
       commitSHA,
