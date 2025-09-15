@@ -290,20 +290,6 @@ class NativeWallProfiler {
     )
   }
 
-  _updateContext (context) {
-    if (context.spanId !== null && typeof context.spanId === 'object') {
-      context.spanId = context.spanId.toBigInt()
-    }
-    if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
-      context.rootSpanId = context.rootSpanId.toBigInt()
-    }
-    if (context.webTags !== undefined && context.endpoint === undefined) {
-      // endpoint may not be determined yet, but keep it as fallback
-      // if tags are not available anymore during serialization
-      context.endpoint = endpointNameFromTags(context.webTags)
-    }
-  }
-
   _spanFinished (span) {
     if (span[ProfilingContext] !== undefined) {
       span[ProfilingContext] = undefined
