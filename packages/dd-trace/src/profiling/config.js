@@ -218,8 +218,8 @@ class Config {
       that.asyncContextFrameEnabled = false
     }
 
-    this.asyncContextFrameEnabled = isTrue(coalesce(options.useAsyncContextFrame,
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED, false))
+    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ??
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false))
     if (this.asyncContextFrameEnabled) {
       if (satisfies(process.versions.node, '>=24.0.0')) {
         if (process.execArgv.includes('--no-async-context-frame')) {
@@ -232,7 +232,7 @@ class Config {
       } else {
         // NOTE: technically, this should work starting with 22.7.0 but it would
         // require a change in pprof-nodejs too.
-        turnOffAsyncContextFrame('but it requires at least Node 23')
+        turnOffAsyncContextFrame('but it requires at least Node.js 23')
       }
     }
 
