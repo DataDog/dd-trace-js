@@ -444,7 +444,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   )
 }
 
-function getTestEnvironmentMetadata (testFramework, config) {
+function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
   const {
@@ -459,21 +459,28 @@ function getTestEnvironmentMetadata (testFramework, config) {
     [GIT_COMMIT_HEAD_SHA]: headCommitSha
   } = ciMetadata
 
-  const gitMetadata = getGitMetadata({
-    commitSHA,
-    branch,
-    repositoryUrl,
-    tag,
-    authorName,
-    authorEmail,
-    commitMessage,
-    ciWorkspacePath,
-    headCommitSha
-  })
+  let gitMetadata = {}
+
+  // We will not execute git in the workers since it's slow and the information is already available in the parent process
+  if (!isWorker) {
+    gitMetadata = getGitMetadata({
+      commitSHA,
+      branch,
+      repositoryUrl,
+      tag,
+      authorName,
+      authorEmail,
+      commitMessage,
+      ciWorkspacePath,
+      headCommitSha
+    })
+  }
 
   const userProvidedGitMetadata = getUserProviderGitMetadata()
 
-  checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+  if (!isWorker) {
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+  }
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
@@ -1007,7 +1014,10 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     candidateBranches.push(pullRequestBaseBranch)
   } else {
     for (const branch of POSSIBLE_BASE_BRANCHES) {
-      checkAndFetchBranch(branch, remoteName)
+      const isSuccess = checkAndFetchBranch(branch, remoteName)
+      if (isSuccess) {
+        break
+      }
     }
 
     const localBranches = getLocalBranches(remoteName)

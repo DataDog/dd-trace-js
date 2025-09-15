@@ -408,14 +408,26 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:worker-report:trace', (traces) => {
-      const formattedTraces = JSON.parse(traces).map(trace => {
-        return trace.map(span => ({
-          ...span,
-          span_id: id(span.span_id),
-          trace_id: id(span.trace_id),
-          parent_id: id(span.parent_id)
-        }))
-      })
+      const formattedTraces = JSON.parse(traces)
+
+      for (const trace of formattedTraces) {
+        for (const span of trace) {
+          span.span_id = id(span.span_id)
+          span.trace_id = id(span.trace_id)
+          span.parent_id = id(span.parent_id)
+
+          if (span.name?.startsWith('vitest.')) {
+            // augment with git information (since it will not be available in the worker)
+            for (const key in this.testEnvironmentMetadata) {
+              // CAREFUL: this bypasses the metadata/metrics distinction
+              // Be careful not to pass numbers in `meta`
+              if (key.startsWith('git.')) {
+                span.meta[key] = this.testEnvironmentMetadata[key]
+              }
+            }
+          }
+        }
+      }
 
       formattedTraces.forEach(trace => {
         this.tracer._exporter.export(trace)

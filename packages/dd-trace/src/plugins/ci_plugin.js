@@ -70,6 +70,14 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   jest: 'jest'
 }
 
+const WORKER_EXPORTERS = new Set([
+  'vitest_worker',
+  'mocha_worker',
+  'cucumber_worker',
+  'playwright_worker',
+  'jest_worker'
+])
+
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
     super(...args)
@@ -290,6 +298,8 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
+    const isTestWorker = WORKER_EXPORTERS.has(config.experimental?.exporter)
+
     if (!shouldGetEnvironmentData) {
       return
     }
@@ -298,7 +308,11 @@ module.exports = class CiPlugin extends Plugin {
       this.di = getDiClient()
     }
 
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
+    if (this.testConfiguration) {
+      return
+    }
+
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config, isTestWorker)
 
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
