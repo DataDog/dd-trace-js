@@ -132,8 +132,9 @@ moduleTypes.forEach(({
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
 
-      // Ensure Cypress is properly installed
-      await execPromise('npx cypress install', { cwd })
+      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // Install cypress' browser before running the tests
+      await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
 
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
