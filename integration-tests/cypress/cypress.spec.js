@@ -1,10 +1,12 @@
 'use strict'
 
+const { promisify } = require('util')
 const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const execPromise = promisify(exec)
 
 const { assert } = require('chai')
 
@@ -131,7 +133,7 @@ moduleTypes.forEach(({
       cwd = sandbox.folder
 
       // Ensure Cypress is properly installed
-      await exec('npx cypress install', { cwd })
+      await execPromise('npx cypress install', { cwd })
 
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
