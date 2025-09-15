@@ -21,9 +21,9 @@ describe('esm', () => {
       sandbox = await createSandbox([`'ioredis@${version}'`], false, [
         './packages/datadog-plugin-ioredis/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import Redis from 'ioredis'`,
-        star: `import * as modRedis from 'ioredis'; const { default: Redis } = modRedis`,
-        destructure: `import { default as Redis } from 'ioredis'`
+        default: 'import Redis from \'ioredis\'',
+        star: 'import * as modRedis from \'ioredis\'; const { default: Redis } = modRedis',
+        destructure: 'import { default as Redis } from \'ioredis\''
       })
     })
 

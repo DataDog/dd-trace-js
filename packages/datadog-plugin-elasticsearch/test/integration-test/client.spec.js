@@ -23,9 +23,9 @@ describe('esm', () => {
       sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
         './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import elasticsearch from '@elastic/elasticsearch'`,
-        star: `import * as elasticsearch from '@elastic/elasticsearch'`,
-        destructure: `import { Client } from '@elastic/elasticsearch'; const elasticsearch = { Client }`
+        default: 'import elasticsearch from \'@elastic/elasticsearch\'',
+        star: 'import * as elasticsearch from \'@elastic/elasticsearch\'',
+        destructure: 'import { Client } from \'@elastic/elasticsearch\'; const elasticsearch = { Client }'
       })
     })
 

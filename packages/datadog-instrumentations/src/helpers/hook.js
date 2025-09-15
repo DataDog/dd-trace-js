@@ -1,6 +1,5 @@
 'use strict'
 
-const path = require('path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -33,7 +32,7 @@ function Hook (modules, hookOptions, onrequire) {
       newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    if (newExports && (typeof newExports === 'object' || typeof newExports === 'function')) { 
+    if (newExports && (typeof newExports === 'object' || typeof newExports === 'function')) {
       patched.set(moduleExports, newExports)
     }
 

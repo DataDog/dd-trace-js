@@ -21,9 +21,9 @@ describe('esm', () => {
       sandbox = await createSandbox([`'pino@${version}'`],
         false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import pino from 'pino'`,
-        star: `import * as modPino from 'pino'; const pino = (...a) => modPino.default(...a)`,
-        destructure: `import { default as pino } from 'pino'`,
+        default: 'import pino from \'pino\'',
+        star: 'import * as modPino from \'pino\'; const pino = (...a) => modPino.default(...a)',
+        destructure: 'import { default as pino } from \'pino\'',
       })
     })
 

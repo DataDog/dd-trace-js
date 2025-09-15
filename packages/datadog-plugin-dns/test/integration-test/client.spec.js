@@ -20,9 +20,9 @@ describe('esm', () => {
     sandbox = await createSandbox([], false, [
       './packages/datadog-plugin-dns/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', {
-      default: `import dns from 'dns'`,
-      star: `import * as dns from 'dns'`,
-      destructure: `import { lookup } from 'dns'; const dns = { lookup }`
+      default: 'import dns from \'dns\'',
+      star: 'import * as dns from \'dns\'',
+      destructure: 'import { lookup } from \'dns\'; const dns = { lookup }'
     })
   })
 

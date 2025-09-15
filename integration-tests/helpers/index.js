@@ -286,7 +286,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  * @param {object} variants - The variants.
  * @returns {object} A map from variant names to resulting filenames
  */
-function varySandbox(sandbox, filename, variants) {
+function varySandbox (sandbox, filename, variants) {
   const origFileData = fs.readFileSync(path.join(sandbox.folder, filename), 'utf8')
   const [prefix, suffix] = filename.split('.')
   const variantFilenames = {}
@@ -410,7 +410,7 @@ function checkSpansForServiceName (spans, name) {
 
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
-    NODE_OPTIONS: `--no-warnings --loader=${hookFile}`,
+    NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort
   }
   env = { ...process.env, ...env, ...additionalEnvArgs }

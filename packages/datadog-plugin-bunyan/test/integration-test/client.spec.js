@@ -21,9 +21,9 @@ describe('esm', () => {
       sandbox = await createSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import bunyan from 'bunyan'`,
-        star: `import * as bunyan from 'bunyan'`,
-        destructure: `import { default as bunyan } from 'bunyan'`
+        default: 'import bunyan from \'bunyan\'',
+        star: 'import * as bunyan from \'bunyan\'',
+        destructure: 'import { default as bunyan } from \'bunyan\''
       })
     })
 

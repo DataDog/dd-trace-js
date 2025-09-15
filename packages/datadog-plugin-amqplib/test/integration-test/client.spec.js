@@ -23,9 +23,9 @@ describe('esm', () => {
       sandbox = await createSandbox([`'amqplib@${version}'`], false,
         ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import amqplib from 'amqplib'`,
-        star: `import * as amqplib from 'amqplib'`,
-        destructure: `import { connect } from 'amqplib'; const amqplib = { connect }`
+        default: 'import amqplib from \'amqplib\'',
+        star: 'import * as amqplib from \'amqplib\'',
+        destructure: 'import { connect } from \'amqplib\'; const amqplib = { connect }'
       })
     })
 

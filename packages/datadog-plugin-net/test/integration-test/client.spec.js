@@ -20,9 +20,9 @@ describe('esm', () => {
     sandbox = await createSandbox(['net'], false, [
       './packages/datadog-plugin-net/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', {
-      default: `import net from 'net'`,
-      star: `import * as net from 'net'`,
-      destructure: `import { createConnection } from 'net'; const net = { createConnection }`
+      default: 'import net from \'net\'',
+      star: 'import * as net from \'net\'',
+      destructure: 'import { createConnection } from \'net\'; const net = { createConnection }'
     })
   })
 

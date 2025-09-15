@@ -20,9 +20,9 @@ describe('esm', () => {
     sandbox = await createSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', {
-      default: `import http2 from 'http2'`,
-      star: `import * as http2 from 'http2'`,
-      destructure: `import { createServer } from 'http2'; const http2 = { createServer }`
+      default: 'import http2 from \'http2\'',
+      star: 'import * as http2 from \'http2\'',
+      destructure: 'import { createServer } from \'http2\'; const http2 = { createServer }'
     })
   })
 
