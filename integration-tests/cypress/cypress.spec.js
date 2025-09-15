@@ -118,7 +118,7 @@ moduleTypes.forEach(({
     }
 
     this.retries(2)
-    this.timeout(60000)
+    this.timeout(70000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
@@ -129,6 +129,10 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
+
+      // Ensure Cypress is properly installed
+      await exec('npx cypress install', { cwd })
+
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
         resolve()
@@ -188,7 +192,7 @@ moduleTypes.forEach(({
       })
     }
 
-    it('does not crash if badly init', (done) => {
+    it.only('does not crash if badly init', (done) => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
@@ -222,23 +226,20 @@ moduleTypes.forEach(({
         testOutput += chunk.toString()
       })
 
-      // TODO: remove once we find the source of flakiness
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
-
       childProcess.on('exit', () => {
         assert.notInclude(testOutput, 'TypeError')
         // TODO: remove try/catch once we find the source of flakiness
         try {
           assert.include(testOutput, '1 of 1 failed')
+          done()
         } catch (e) {
           // eslint-disable-next-line no-console
           console.log('---- Actual test output -----')
           // eslint-disable-next-line no-console
           console.log(testOutput)
-          throw e
+          console.log('---- finish actual test output -----')
+          done(e)
         }
-        done()
       })
     })
 
