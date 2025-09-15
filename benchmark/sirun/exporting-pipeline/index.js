@@ -10,7 +10,7 @@ const defaults = require('../../../packages/dd-trace/src/config_defaults')
 const hostname = require('os').hostname()
 
 const config = {
-  url: `http://${defaults.hostname}:${defaults.port}`,
+  url: defaults.url,
   flushInterval: 1000,
   flushMinSpans: 100,
   protocolVersion: process.env.ENCODER_VERSION,

@@ -16,16 +16,16 @@ describe('AgentInfoExporter', () => {
     setUrl: sinon.spy()
   }
   const flushInterval = 100
-  const port = 8126
+  const url = 'http://127.0.0.1:8126'
 
   it('should query /info when getAgentInfo is called', (done) => {
-    const scope = nock('http://127.0.0.1:8126')
+    const scope = nock(url)
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
       }))
 
-    const agentInfoExporter = new AgentInfoExporter({ port })
+    const agentInfoExporter = new AgentInfoExporter({ url })
     expect(scope.isDone()).not.to.be.true
     agentInfoExporter.getAgentInfo((err, { endpoints }) => {
       expect(err).to.be.null
@@ -36,13 +36,13 @@ describe('AgentInfoExporter', () => {
   })
 
   it('should store traces as is when export is called', (done) => {
-    nock('http://127.0.0.1:8126')
+    nock(url)
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
       }))
     const trace = [{ span_id: '1234' }]
-    const agentInfoExporter = new AgentInfoExporter({ port })
+    const agentInfoExporter = new AgentInfoExporter({ url })
 
     agentInfoExporter.export(trace)
 
@@ -55,14 +55,14 @@ describe('AgentInfoExporter', () => {
   })
 
   it('should export if a writer is initialized', (done) => {
-    nock('http://127.0.0.1:8126')
+    nock(url)
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
       }))
 
     const trace = [{ span_id: '1234' }]
-    const agentInfoExporter = new AgentInfoExporter({ port, flushInterval })
+    const agentInfoExporter = new AgentInfoExporter({ url, flushInterval })
 
     agentInfoExporter.getAgentInfo(() => {
       agentInfoExporter._writer = writer

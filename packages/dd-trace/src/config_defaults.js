@@ -1,5 +1,8 @@
 'use strict'
 
+const os = require('os')
+const { existsSync } = require('fs')
+const { format } = require('url')
 const pkg = require('./pkg')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { getEnvironmentVariables } = require('./config-helper')
@@ -24,6 +27,16 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
   WEBSITE_SITE_NAME || // set by Azure Functions
   pkg.name ||
   'node'
+
+const hostname = '127.0.0.1'
+const port = '8126'
+const url = os.type() !== 'Windows_NT' && existsSync('/var/run/datadog/apm.socket')
+  ? 'unix:///var/run/datadog/apm.socket'
+  : format({
+    protocol: 'http:',
+    hostname,
+    port
+  })
 
 module.exports = {
   apmTracingEnabled: true,
@@ -59,7 +72,7 @@ module.exports = {
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
   dbmPropagationMode: 'disabled',
-  'dogstatsd.hostname': '127.0.0.1',
+  'dogstatsd.hostname': hostname,
   'dogstatsd.port': '8125',
   dsmEnabled: false,
   'dynamicInstrumentation.enabled': false,
@@ -80,7 +93,7 @@ module.exports = {
   'heapSnapshot.count': 0,
   'heapSnapshot.destination': '',
   'heapSnapshot.interval': 3600,
-  hostname: '127.0.0.1',
+  hostname,
   'iast.dbRowsToTaint': 1,
   'iast.deduplicationEnabled': true,
   'iast.enabled': false,
@@ -127,7 +140,7 @@ module.exports = {
   'openai.spanCharLimit': 128,
   peerServiceMapping: {},
   plugins: true,
-  port: '8126',
+  port,
   'profiling.enabled': undefined,
   'profiling.exporters': 'agent',
   'profiling.sourceMap': true,
@@ -175,7 +188,7 @@ module.exports = {
   traceWebsocketMessagesInheritSampling: true,
   traceWebsocketMessagesSeparateTraces: true,
   tracing: true,
-  url: undefined,
+  url,
   version: pkg.version,
   instrumentation_config_id: undefined,
   'vertexai.spanCharLimit': 128,

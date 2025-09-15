@@ -3,7 +3,7 @@
 const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const { URL } = require('url')
+const { format } = require('url')
 const log = require('./log')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
@@ -20,6 +20,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-he
 const defaults = require('./config_defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+const WINDOWS_OS_TYPE = os.type() === 'Windows_NT'
 
 const changeTracker = {}
 
@@ -1075,19 +1076,6 @@ class Config {
     )
   }
 
-  _getHostname () {
-    const DD_CIVISIBILITY_AGENTLESS_URL = getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_URL')
-    const url = DD_CIVISIBILITY_AGENTLESS_URL
-      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
-    const DD_AGENT_HOST = coalesce(
-      this._optionsArg.hostname,
-      getEnvironmentVariable('DD_AGENT_HOST'),
-      defaults.hostname
-    )
-    return DD_AGENT_HOST || url?.hostname
-  }
-
   _getSpanComputePeerService () {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
@@ -1141,12 +1129,29 @@ class Config {
     )
   }
 
-  _getTraceAgentUrl () {
-    return coalesce(
-      this._optionsArg.url,
-      getEnvironmentVariable('DD_TRACE_AGENT_URL'),
-      null
-    )
+  _getAgentUrl () {
+    const url = getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_URL') ||
+      this._optionsArg.url ||
+      getEnvironmentVariable('DD_TRACE_AGENT_URL')
+
+    if (url) {
+      if (url instanceof URL) return url.toString()
+      return new URL(url).toString() // Pass through the URL object to ensure the URL is valid
+    }
+
+    const hostname = this._optionsArg.hostname || getEnvironmentVariable('DD_AGENT_HOST')
+    const port = this._optionsArg.port || getEnvironmentVariable('DD_TRACE_AGENT_PORT')
+
+    if (WINDOWS_OS_TYPE === false && !hostname && !port && fs.existsSync('/var/run/datadog/apm.socket')) {
+      return 'unix:///var/run/datadog/apm.socket'
+    }
+
+    // Pass through the URL object to ensure the URL is valid
+    return new URL(format({
+      protocol: 'http:',
+      hostname: hostname || this._defaults.hostname,
+      port: port || this._defaults.port
+    })).toString()
   }
 
   // handles values calculated from a mixture of options and env vars
@@ -1154,7 +1159,6 @@ class Config {
     const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
-      DD_CIVISIBILITY_AGENTLESS_URL,
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
@@ -1166,9 +1170,7 @@ class Config {
       DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED
     } = getEnvironmentVariables()
 
-    calc.url = DD_CIVISIBILITY_AGENTLESS_URL
-      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
+    calc.url = this._getAgentUrl()
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
@@ -1185,7 +1187,10 @@ class Config {
       calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
-    calc['dogstatsd.hostname'] = this._getHostname()
+    calc['dogstatsd.hostname'] = this._optionsArg.hostname ||
+      getEnvironmentVariable('DD_AGENT_HOST') ||
+      this._defaults.hostname ||
+      calc.url.hostname
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
@@ -1420,22 +1425,6 @@ function maybeInt (number) {
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
   return Number.isNaN(parsed) ? undefined : parsed
-}
-
-function getAgentUrl (url, options) {
-  if (url) return new URL(url)
-
-  if (os.type() === 'Windows_NT') return
-
-  if (
-    !options.hostname &&
-    !options.port &&
-    !getEnvironmentVariable('DD_AGENT_HOST') &&
-    !getEnvironmentVariable('DD_TRACE_AGENT_PORT') &&
-    fs.existsSync('/var/run/datadog/apm.socket')
-  ) {
-    return new URL('unix:///var/run/datadog/apm.socket')
-  }
 }
 
 function setHiddenProperty (obj, name, value) {

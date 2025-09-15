@@ -2,7 +2,7 @@
 
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config-helper')
-const { URL, format } = require('node:url')
+const { format } = require('node:url')
 const path = require('node:path')
 
 const logger = require('../../log')
@@ -45,13 +45,10 @@ class BaseLLMObsWriter {
   get url () {
     if (this._agentless == null) return null
 
-    const baseUrl = this._baseUrl.href
-    const endpoint = this._endpoint
-
     // Split on protocol separator to preserve it
     // path.join will remove some slashes unnecessarily
-    const [protocol, rest] = baseUrl.split('://')
-    return protocol + '://' + path.join(rest, endpoint)
+    const [protocol, rest] = this._baseUrl.split('://')
+    return protocol + '://' + path.join(rest, this._endpoint)
   }
 
   append (event, byteLength) {
@@ -105,33 +102,22 @@ class BaseLLMObsWriter {
     this._baseUrl = url
     this._endpoint = endpoint
 
-    logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
+    logger.debug(() => `Configuring ${this.constructor.name} to ${this.url}`)
   }
 
   _getUrlAndPath () {
     if (this._agentless) {
       return {
-        url: new URL(format({
+        url: format({
           protocol: 'https:',
           hostname: `${this._intake}.${this._config.site}`
-        })),
+        }),
         endpoint: this._endpoint
       }
     }
 
-    const { hostname, port } = this._config
-
-    const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
-    const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
-
-    const base = overrideOriginUrl ?? this._config.url ?? new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
-
     return {
-      url: base,
+      url: getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') ?? this._config.url,
       endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH, this._endpoint)
     }
   }

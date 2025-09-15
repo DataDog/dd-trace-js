@@ -5,6 +5,7 @@ const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const log = require('../../../log')
+const { getEnvironmentVariable } = require('../../../config-helper')
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
@@ -14,20 +15,21 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._isInitialized = true
     this._resolveCanUseCiVisProtocol(true)
     this._canForwardLogs = true
+    const useConfigUrl = getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_URL') !== undefined
 
-    this._url = url || new URL(`https://citestcycle-intake.${site}`)
+    this._url = useConfigUrl ? url : new URL(`https://citestcycle-intake.${site}`)
     this._writer = new Writer({ url: this._url, tags })
 
-    this._coverageUrl = url || new URL(`https://citestcov-intake.${site}`)
+    this._coverageUrl = useConfigUrl ? url : new URL(`https://citestcov-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     if (isTestDynamicInstrumentationEnabled) {
       const DynamicInstrumentationLogsWriter = require('./di-logs-writer')
-      this._logsUrl = url || new URL(`https://http-intake.logs.${site}`)
+      this._logsUrl = useConfigUrl ? url : new URL(`https://http-intake.logs.${site}`)
       this._logsWriter = new DynamicInstrumentationLogsWriter({ url: this._logsUrl, tags })
     }
 
-    this._apiUrl = url || new URL(`https://api.${site}`)
+    this._apiUrl = useConfigUrl ? url : new URL(`https://api.${site}`)
     // Agentless is always gzip compatible
     this._isGzipCompatible = true
   }

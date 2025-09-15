@@ -9,9 +9,8 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
+  constructor () {
     super(...arguments)
-    this._url = url
     this._encoder = new SpanStatsEncoder(this)
   }
 
@@ -30,6 +29,7 @@ class Writer extends BaseWriter {
 
 function makeRequest (data, url, cb) {
   const options = {
+    url,
     path: '/v0.6/stats',
     method: 'PUT',
     headers: {
@@ -38,10 +38,6 @@ function makeRequest (data, url, cb) {
       'Content-Type': 'application/msgpack'
     }
   }
-
-  options.protocol = url.protocol
-  options.hostname = url.hostname
-  options.port = url.port
 
   log.debug('Request to the intake: %j', options)
 

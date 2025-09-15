@@ -20,8 +20,7 @@ describe('LLMObsSpanWriter', () => {
       '../../log': logger
     })
     config = {
-      port: 8126,
-      hostname: 'localhost',
+      url: 'http://localhost:8126/',
       site: 'datadoghq.com'
     }
   })

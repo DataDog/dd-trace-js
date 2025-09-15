@@ -6,13 +6,13 @@ const sinon = require('sinon')
 const nock = require('nock')
 const cp = require('node:child_process')
 
-require('../../../../../dd-trace/test/setup/core')
+require('../../../setup/core')
 
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
 describe('CI Visibility Agentless Exporter', () => {
-  const url = new URL('http://www.example.com')
+  const url = 'http://www.example.com'
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
@@ -33,7 +33,9 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
+    process.env.DD_CIVISIBILITY_AGENTLESS_URL = url
     const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    delete process.env.DD_CIVISIBILITY_AGENTLESS_URL
     expect(agentlessExporter.canReportSessionTraces()).to.be.true
   })
 
@@ -97,7 +99,7 @@ describe('CI Visibility Agentless Exporter', () => {
     })
 
     it('can request ITR configuration right away', (done) => {
-      const scope = nock('http://www.example.com')
+      const scope = nock(url)
         .post('/api/v2/libraries/tests/services/setting')
         .reply(200, JSON.stringify({
           data: {
@@ -108,9 +110,11 @@ describe('CI Visibility Agentless Exporter', () => {
             }
           }
         }))
+      process.env.DD_CIVISIBILITY_AGENTLESS_URL = url
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_URL
       agentlessExporter.getLibraryConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
         expect(agentlessExporter.canReportCodeCoverage()).to.be.true
@@ -120,7 +124,7 @@ describe('CI Visibility Agentless Exporter', () => {
     })
 
     it('can report code coverages if enabled by the API', (done) => {
-      const scope = nock('http://www.example.com')
+      const scope = nock(url)
         .post('/api/v2/libraries/tests/services/setting')
         .reply(200, JSON.stringify({
           data: {
@@ -131,9 +135,11 @@ describe('CI Visibility Agentless Exporter', () => {
             }
           }
         }))
+      process.env.DD_CIVISIBILITY_AGENTLESS_URL = url
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_URL
       agentlessExporter.getLibraryConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
         expect(agentlessExporter.canReportCodeCoverage()).to.be.true
@@ -145,7 +151,7 @@ describe('CI Visibility Agentless Exporter', () => {
       // request will fail
       delete process.env.DD_API_KEY
 
-      const scope = nock('http://www.example.com')
+      const scope = nock(url)
         .post('/api/v2/libraries/tests/services/setting')
         .reply(200, JSON.stringify({
           data: {
@@ -157,9 +163,11 @@ describe('CI Visibility Agentless Exporter', () => {
           }
         }))
 
+      process.env.DD_CIVISIBILITY_AGENTLESS_URL = url
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
+      delete process.env.DD_CIVISIBILITY_AGENTLESS_URL
       agentlessExporter.sendGitMetadata = () => {
         return new Promise(resolve => {
           agentlessExporter._resolveGit()

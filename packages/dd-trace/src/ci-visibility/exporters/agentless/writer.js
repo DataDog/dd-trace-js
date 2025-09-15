@@ -17,10 +17,9 @@ const {
 } = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
-  constructor ({ url, tags, evpProxyPrefix = '' }) {
+  constructor ({ tags, evpProxyPrefix = '' }) {
     super(...arguments)
     const { 'runtime-id': runtimeId, env, service } = tags
-    this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
     this._evpProxyPrefix = evpProxyPrefix
   }

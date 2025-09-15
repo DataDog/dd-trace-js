@@ -1,11 +1,10 @@
 'use strict'
 
-const lookup = require('dns').lookup // cache to avoid instrumentation
+const { lookup } = require('dns') // cache to avoid instrumentation
 const request = require('./exporters/common/request')
 const dgram = require('dgram')
-const isIP = require('net').isIP
+const { isIP } = require('net')
 const log = require('./log')
-const { URL, format } = require('url')
 const Histogram = require('./histogram')
 const defaults = require('./config_defaults')
 
@@ -24,7 +23,7 @@ class DogStatsDClient {
   constructor (options = {}) {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
-        url: options.metricsProxyUrl.toString(),
+        url: options.metricsProxyUrl,
         path: '/dogstatsd/v2/proxy'
       }
     }
@@ -172,23 +171,12 @@ class DogStatsDClient {
       }
     }
 
-    const clientConfig = {
+    return {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
-      tags
+      tags,
+      metricsProxyUrl: config.url
     }
-
-    if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
-    } else if (config.port) {
-      clientConfig.metricsProxyUrl = new URL(format({
-        protocol: 'http:',
-        hostname: config.hostname || defaults.hostname,
-        port: config.port
-      }))
-    }
-
-    return clientConfig
   }
 }
 

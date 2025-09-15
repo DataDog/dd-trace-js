@@ -3,7 +3,7 @@
 const coalesce = require('koalas')
 const os = require('os')
 const path = require('path')
-const { URL, format, pathToFileURL } = require('url')
+const { pathToFileURL } = require('url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -16,13 +16,11 @@ const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
 
 class Config {
   constructor (options = {}) {
     const {
       AWS_LAMBDA_FUNCTION_NAME: functionname,
-      DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
@@ -46,8 +44,6 @@ class Config {
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
       DD_TAGS,
-      DD_TRACE_AGENT_PORT,
-      DD_TRACE_AGENT_URL,
       DD_VERSION
     } = getEnvironmentVariables()
 
@@ -113,13 +109,7 @@ class Config {
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND, true))
-    const hostname = coalesce(options.hostname, DD_AGENT_HOST) || defaults.hostname
-    const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || defaults.port
-    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
-      protocol: 'http:',
-      hostname,
-      port
-    })))
+    this.url = options.url
 
     this.libraryInjected = options.libraryInjected
     this.activation = options.activation
@@ -347,7 +337,7 @@ function buildExportCommand (options) {
   const urls = []
   for (const exporter of options.exporters) {
     if (exporter instanceof AgentExporter) {
-      urls.push(options.url.toString())
+      urls.push(options.url.toString()) // TODO: remove toString()
     } else if (exporter instanceof FileExporter) {
       urls.push(pathToFileURL(options.pprofPrefix).toString())
     }

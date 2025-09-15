@@ -3,9 +3,7 @@
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { URL, format } = require('url')
 const { MsgpackEncoder } = require('../msgpack')
-const defaults = require('../config_defaults')
 const zlib = require('zlib')
 
 const msgpack = new MsgpackEncoder()
@@ -32,12 +30,7 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    const { hostname = defaults.hostname, port = defaults.port, url } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
+    this._url = config.url
   }
 
   flush (payload) {
