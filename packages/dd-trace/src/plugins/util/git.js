@@ -278,6 +278,7 @@ function checkAndFetchBranch (branch, remoteName) {
       { stdio: 'pipe' }
     )
     // branch exists locally, so we finish
+    return true
   } catch {
     // branch does not exist locally, so we will check the remote
     try {
@@ -297,11 +298,13 @@ function checkAndFetchBranch (branch, remoteName) {
           ['fetch', '--depth', '1', remoteName, branch],
           { stdio: 'pipe', timeout: 5000 }
         )
+        return true
       }
     } catch (e) {
       // branch does not exist or couldn't be fetched, so we can't do anything
       log.error('Git plugin error checking and fetching branch', e)
     }
+    return false
   }
 }
 

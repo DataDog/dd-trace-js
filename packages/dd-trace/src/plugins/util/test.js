@@ -1001,7 +1001,10 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     candidateBranches.push(pullRequestBaseBranch)
   } else {
     for (const branch of POSSIBLE_BASE_BRANCHES) {
-      checkAndFetchBranch(branch, remoteName)
+      const isSuccess = checkAndFetchBranch(branch, remoteName)
+      if (isSuccess) {
+        break
+      }
     }
 
     const localBranches = getLocalBranches(remoteName)
