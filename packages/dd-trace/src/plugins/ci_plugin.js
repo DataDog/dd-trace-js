@@ -36,6 +36,7 @@ const {
   getModifiedTestsFromDiff,
   getPullRequestBaseBranch
 } = require('./util/test')
+const { getRepositoryRoot } = require('./util/git')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -70,12 +71,12 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   jest: 'jest'
 }
 
-const WORKER_EXPORTERS = new Set([
-  'vitest_worker',
-  'mocha_worker',
-  'cucumber_worker',
-  'playwright_worker',
-  'jest_worker'
+const EXPORTER_TO_TEST_FRAMEWORK = {
+  vitest_worker: 'vitest'
+}
+
+const EXPORTERS_TO_SKIP_ENVIRONMENT_EXTRACTION = new Set([
+  'vitest'
 ])
 
 module.exports = class CiPlugin extends Plugin {
@@ -298,8 +299,6 @@ module.exports = class CiPlugin extends Plugin {
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
-    const isTestWorker = WORKER_EXPORTERS.has(config.experimental?.exporter)
-
     if (!shouldGetEnvironmentData) {
       return
     }
@@ -308,9 +307,12 @@ module.exports = class CiPlugin extends Plugin {
       this.di = getDiClient()
     }
 
-    if (this.testConfiguration) {
+    if (this.testConfiguration) { // no need to recalculate as it's constant
       return
     }
+
+    const exporter = config.experimental?.exporter
+    const isTestWorker = EXPORTERS_TO_SKIP_ENVIRONMENT_EXTRACTION.has(EXPORTER_TO_TEST_FRAMEWORK[exporter])
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config, isTestWorker)
 
@@ -332,9 +334,11 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || process.cwd()
+    this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
 
-    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
+    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    console.log('this.repositoryRoot', this.repositoryRoot)
+    console.log('this.codeOwnersEntries', this.codeOwnersEntries)
 
     this.ciProviderName = ciProviderName
 
