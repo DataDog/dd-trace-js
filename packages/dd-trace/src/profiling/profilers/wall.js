@@ -41,12 +41,8 @@ function updateContext (context) {
   // too. When we don't use async context frame, we can convert them when the
   // sample is taken though so we amortize the latency of operations. It is an
   // optimization.
-  if (context.spanId !== null && typeof context.spanId === 'object') {
-    context.spanId = context.spanId.toBigInt()
-  }
-  if (context.rootSpanId !== null && typeof context.rootSpanId === 'object') {
-    context.rootSpanId = context.rootSpanId.toBigInt()
-  }
+  context.spanId = toBigInt(context.spanId)
+  context.rootSpanId = toBigInt(context.rootSpanId)
   if (context.webTags !== undefined && context.endpoint === undefined) {
     // endpoint may not be determined yet, but keep it as fallback
     // if tags are not available anymore during serialization
