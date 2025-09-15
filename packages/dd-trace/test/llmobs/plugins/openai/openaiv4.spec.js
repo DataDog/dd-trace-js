@@ -611,6 +611,38 @@ describe('integrations', () => {
       it('submits a chat completion span with cached token metrics', async () => {
         const baseMessages = [{"role": "system", "content": "You are an expert software engineer ".repeat(200)}];
 
+        const firstCheckSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: baseMessages.concat([{"role": "user", "content": "What are the best practices for API design?"}]),
+            outputMessages: [
+              { role: 'assistant', content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1221,
+              output_tokens: 100,
+              total_tokens: 1321
+            },
+            modelName: 'gpt-4o',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+              user: 'dd-trace-test'
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
         await openai.chat.completions.create({
           model: 'gpt-4o',
           messages: baseMessages.concat([{"role": "user", "content": "What are the best practices for API design?"}]),
@@ -621,7 +653,9 @@ describe('integrations', () => {
           user: 'dd-trace-test'
         })
 
-        const checkSpan = agent.assertSomeTraces(traces => {
+        await firstCheckSpan
+
+        const secondCheckSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
           const spanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
 
@@ -664,7 +698,7 @@ describe('integrations', () => {
           user: 'dd-trace-test'
         })
 
-        await checkSpan
+        await secondCheckSpan
       })
     })
   })
