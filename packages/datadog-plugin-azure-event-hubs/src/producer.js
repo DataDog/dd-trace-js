@@ -36,10 +36,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
 
     if (ctx.functionName === 'sendBatch' || ctx.functionName === 'enqueuEvents') {
       const eventData = ctx.eventData
+      const eventDataLength = eventData.length || eventData._context.connection._eventsCount
       span.setTag('messaging.operation', 'send')
-      span.setTag('messaging.batch.message_count', eventData.length)
-      //batch is an array in this case and not from tryAdd
-      if (this.batch.length === 0 && Array.isArray(eventData)) {
+      span.setTag('messaging.batch.message_count', eventDataLength)
+
+      if (typeof (eventData) !== 'EventDataBatchImpl' && Array.isArray(eventData)) {
         eventData.forEach(event => {
           injectTraceContext(this.tracer, span, event)
         })
