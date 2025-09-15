@@ -168,23 +168,12 @@ class AgentEncoder {
     this._msgpack.encodeByte(bytes, value)
   }
 
-  // TODO: Use BigInt instead.
   _encodeId (bytes, id) {
     const offset = bytes.length
 
     bytes.reserve(9)
 
-    id = id.toArray()
-
-    bytes.buffer[offset] = 0xCF
-    bytes.buffer[offset + 1] = id[0]
-    bytes.buffer[offset + 2] = id[1]
-    bytes.buffer[offset + 3] = id[2]
-    bytes.buffer[offset + 4] = id[3]
-    bytes.buffer[offset + 5] = id[4]
-    bytes.buffer[offset + 6] = id[5]
-    bytes.buffer[offset + 7] = id[6]
-    bytes.buffer[offset + 8] = id[7]
+    id.writeToLast64Bits(bytes.buffer, offset)
   }
 
   _encodeNumber (bytes, value) {
