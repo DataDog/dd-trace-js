@@ -192,7 +192,7 @@ moduleTypes.forEach(({
       })
     }
 
-    it.only('does not crash if badly init', (done) => {
+    it('does not crash if badly init', (done) => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
@@ -201,6 +201,8 @@ moduleTypes.forEach(({
 
       receiver.assertPayloadReceived(() => {
         const error = new Error('it should not report test events')
+        // eslint-disable-next-line no-console
+        console.log('it should never be executed')
         done(error)
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
@@ -237,6 +239,7 @@ moduleTypes.forEach(({
           console.log('---- Actual test output -----')
           // eslint-disable-next-line no-console
           console.log(testOutput)
+          // eslint-disable-next-line no-console
           console.log('---- finish actual test output -----')
           done(e)
         }
