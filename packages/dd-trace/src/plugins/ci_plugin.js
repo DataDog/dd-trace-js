@@ -337,8 +337,6 @@ module.exports = class CiPlugin extends Plugin {
     this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
-    console.log('this.repositoryRoot', this.repositoryRoot)
-    console.log('this.codeOwnersEntries', this.codeOwnersEntries)
 
     this.ciProviderName = ciProviderName
 
