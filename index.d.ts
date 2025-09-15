@@ -427,7 +427,7 @@ declare namespace tracer {
 
     /**
      * The address of the trace agent that the tracer will submit to.
-     * @default 'localhost'
+     * @default '127.0.0.1'
      */
     hostname?: string;
 
