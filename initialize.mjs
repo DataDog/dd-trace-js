@@ -36,7 +36,12 @@ ${result.source}`
 const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
-const iitmExclusions = [/langsmith/, /openai\/_shims/, /openai\/resources\/chat\/completions\/messages/]
+const iitmExclusions = [
+  /langsmith/,
+  /openai\/_shims/,
+  /openai\/resources\/chat\/completions\/messages/,
+  /@anthropic-ai\/sdk\/_shims/
+]
 
 export async function load (url, context, nextLoad) {
   const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))

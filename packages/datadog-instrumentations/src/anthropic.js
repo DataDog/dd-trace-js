@@ -91,8 +91,20 @@ const extensions = ['js', 'mjs']
 for (const extension of extensions) {
   addHook({
     name: '@anthropic-ai/sdk',
+    file: `resources/messages.${extension}`,
+    versions: ['>=0.14.0 <0.33.0']
+  }, exports => {
+    const Messages = exports.Messages
+
+    shimmer.wrap(Messages.prototype, 'create', wrapCreate)
+
+    return exports
+  })
+
+  addHook({
+    name: '@anthropic-ai/sdk',
     file: `resources/messages/messages.${extension}`,
-    versions: ['>=0.2.0']
+    versions: ['>=0.33.0']
   }, exports => {
     const Messages = exports.Messages
 
