@@ -609,7 +609,8 @@ describe('integrations', () => {
       })
 
       it('submits a completion span with cached token metrics', async () => {
-        const basePrompt = "You are an expert software engineer ".repeat(200) + "What are the best practices for API design?";
+        const basePrompt = 'You are an expert software engineer '.repeat(200) +
+        'What are the best practices for API design?'
 
         const firstCheckSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -655,7 +656,8 @@ describe('integrations', () => {
 
         await firstCheckSpan
 
-        const secondPrompt = "You are an expert software engineer ".repeat(200) + "How should I structure my database schema?";
+        const secondPrompt = 'You are an expert software engineer '.repeat(200) +
+        'How should I structure my database schema?'
 
         const secondCheckSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -704,7 +706,7 @@ describe('integrations', () => {
       })
 
       it('submits a chat completion span with cached token metrics', async () => {
-        const baseMessages = [{"role": "system", "content": "You are an expert software engineer ".repeat(200)}];
+        const baseMessages = [{ role: 'system', content: 'You are an expert software engineer '.repeat(200) }]
 
         const firstCheckSpan = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -714,7 +716,14 @@ describe('integrations', () => {
             span,
             spanKind: 'llm',
             name: 'OpenAI.createChatCompletion',
-            inputMessages: baseMessages.concat([{"role": "user", "content": "What are the best practices for API design?"}]),
+            inputMessages: baseMessages.concat(
+              [
+                {
+                  role: 'user',
+                  content: 'What are the best practices for API design?'
+                }
+              ]
+            ),
             outputMessages: [
               { role: 'assistant', content: MOCK_STRING }
             ],
@@ -740,7 +749,14 @@ describe('integrations', () => {
 
         await openai.chat.completions.create({
           model: 'gpt-4o',
-          messages: baseMessages.concat([{"role": "user", "content": "What are the best practices for API design?"}]),
+          messages: baseMessages.concat(
+            [
+              {
+                role: 'user',
+                content: 'What are the best practices for API design?'
+              }
+            ]
+          ),
           temperature: 0.5,
           stream: false,
           max_tokens: 100,
@@ -758,7 +774,14 @@ describe('integrations', () => {
             span,
             spanKind: 'llm',
             name: 'OpenAI.createChatCompletion',
-            inputMessages: baseMessages.concat([{"role": "user", "content": "How should I structure my database schema?"}]),
+            inputMessages: baseMessages.concat(
+              [
+                {
+                  role: 'user',
+                  content: 'How should I structure my database schema?'
+                }
+              ]
+            ),
             outputMessages: [
               { role: 'assistant', content: MOCK_STRING }
             ],
@@ -785,7 +808,7 @@ describe('integrations', () => {
 
         await openai.chat.completions.create({
           model: 'gpt-4o',
-          messages: baseMessages.concat([{"role": "user", "content": "How should I structure my database schema?"}]),
+          messages: baseMessages.concat([{ role: 'user', content: 'How should I structure my database schema?' }]),
           temperature: 0.5,
           stream: false,
           max_tokens: 100,
