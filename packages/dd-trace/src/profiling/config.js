@@ -49,7 +49,8 @@ class Config {
       DD_TAGS,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_URL,
-      DD_VERSION
+      DD_VERSION,
+      NODE_OPTIONS
     } = getEnvironmentVariables()
 
     const env = coalesce(options.env, DD_ENV)
@@ -218,20 +219,22 @@ class Config {
       that.asyncContextFrameEnabled = false
     }
 
+    const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
+
     this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ??
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false))
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false)
     if (this.asyncContextFrameEnabled) {
       if (satisfies(process.versions.node, '>=24.0.0')) {
-        if (process.execArgv.includes('--no-async-context-frame')) {
+        if (hasExecArg('--no-async-context-frame')) {
           turnOffAsyncContextFrame('with --no-async-context-frame')
         }
       } else if (satisfies(process.versions.node, '>=23.0.0')) {
-        if (!process.execArgv.includes('--experimental-async-context-frame')) {
+        if (!hasExecArg('--experimental-async-context-frame')) {
           turnOffAsyncContextFrame('without --experimental-async-context-frame')
         }
       } else {
-        // NOTE: technically, this should work starting with 22.7.0 but it would
-        // require a change in pprof-nodejs too.
+        // NOTE: technically, this should work starting with 22.7.0 which is when
+        // AsyncContextFrame debuted, but it would require a change in pprof-nodejs too.
         turnOffAsyncContextFrame('but it requires at least Node.js 23')
       }
     }
