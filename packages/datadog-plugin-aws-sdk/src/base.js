@@ -115,6 +115,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('aws.region', region)
       span.setTag('region', region)
 
+      const partition = getPartition(region)
+      if (partition) {
+        span.setTag('partition', partition)
+      }
+
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
       const hostname = getHostname(store, region)
@@ -315,6 +320,19 @@ function getHostname (store, region) {
         ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
         : `s3.${region}.amazonaws.com`
   }
+}
+
+function getPartition (region) {
+  if (!region) return
+
+  let partition = 'aws'
+  if (region.startsWith('cn-')) {
+    partition = 'aws-cn'
+  } else if (region.startsWith('us-gov-')) {
+    partition = 'aws-us-gov'
+  }
+
+  return partition
 }
 
 module.exports = BaseAwsSdkPlugin
