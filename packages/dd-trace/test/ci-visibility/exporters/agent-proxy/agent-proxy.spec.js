@@ -20,7 +20,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const tags = {}
 
   it('should query /info right when it is instantiated', async () => {
-    const scope = nock('http://localhost:8126')
+    const scope = nock('http://127.0.0.1:8126')
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
@@ -34,7 +34,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   it('should store traces and coverages as is until the query to /info is resolved', async () => {
-    nock('http://localhost:8126')
+    nock('http://127.0.0.1:8126')
       .get('/info')
       .delay(queryDelay)
       .reply(200, JSON.stringify({
@@ -68,7 +68,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
   describe('agent is evp compatible', () => {
     beforeEach(() => {
-      nock('http://localhost:8126')
+      nock('http://127.0.0.1:8126')
         .get('/info')
         .delay(queryDelay)
         .reply(200, JSON.stringify({
@@ -152,7 +152,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
   describe('agent is not evp compatible', () => {
     beforeEach(() => {
-      nock('http://localhost:8126')
+      nock('http://127.0.0.1:8126')
         .get('/info')
         .delay(queryDelay)
         .reply(200, JSON.stringify({
@@ -240,7 +240,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         flush: sinon.spy()
       }
 
-      nock('http://localhost:8126')
+      nock('http://127.0.0.1:8126')
         .get('/info')
         .delay(queryDelay)
         .reply(200, JSON.stringify({
@@ -264,7 +264,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         flush: sinon.spy()
       }
 
-      nock('http://localhost:8126')
+      nock('http://127.0.0.1:8126')
         .get('/info')
         .delay(queryDelay)
         .reply(200, JSON.stringify({
@@ -298,7 +298,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const mockCoverageWriter = {
         setUrl: sinon.spy()
       }
-      nock('http://localhost:8126')
+      nock('http://127.0.0.1:8126')
         .get('/info')
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2/']
@@ -322,7 +322,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
   describe('_isGzipCompatible', () => {
     it('should set _isGzipCompatible to true if the newest version is v4 or newer', async () => {
-      const scope = nock('http://localhost:8126')
+      const scope = nock('http://127.0.0.1:8126')
         .get('/info')
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/', '/evp_proxy/v5']
@@ -339,7 +339,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
 
     it('should set _isGzipCompatible to false if the newest version is v3 or older', async () => {
-      const scope = nock('http://localhost:8126')
+      const scope = nock('http://127.0.0.1:8126')
         .get('/info')
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3']
@@ -358,7 +358,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
 
   describe('evpProxyPrefix', () => {
     it('should set evpProxyPrefix to v2 if the newest version is v3', async () => {
-      const scope = nock('http://localhost:8126')
+      const scope = nock('http://127.0.0.1:8126')
         .get('/info')
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3']
@@ -375,7 +375,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
     })
 
     it('should set evpProxyPrefix to v4 if the newest version is v4', async () => {
-      const scope = nock('http://localhost:8126')
+      const scope = nock('http://127.0.0.1:8126')
         .get('/info')
         .reply(200, JSON.stringify({
           endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/']
