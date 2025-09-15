@@ -1,3 +1,5 @@
+'use strict'
+
 const cp = require('child_process')
 const os = require('os')
 const path = require('path')
@@ -16,7 +18,14 @@ const {
   GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('./tags')
 const {
   incrementCountMetric,
@@ -117,7 +126,7 @@ function getGitVersion () {
   }
 }
 
-function unshallowRepository () {
+function unshallowRepository (parentOnly = false) {
   const gitVersion = getGitVersion()
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
@@ -132,7 +141,7 @@ function unshallowRepository () {
 
   const baseGitOptions = [
     'fetch',
-    '--shallow-since="1 month ago"',
+    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
@@ -451,7 +460,8 @@ function getGitMetadata (ciMetadata) {
     commitMessage,
     authorName: ciAuthorName,
     authorEmail: ciAuthorEmail,
-    ciWorkspacePath
+    ciWorkspacePath,
+    headCommitSha
   } = ciMetadata
 
   // With stdio: 'pipe', errors in this command will not be output to the parent process,
@@ -470,7 +480,46 @@ function getGitMetadata (ciMetadata) {
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel']),
+  }
+
+  if (headCommitSha) {
+    if (isShallowRepository()) {
+      fetchHeadCommitSha(headCommitSha)
+    }
+
+    const [
+      gitHeadCommitSha,
+      headAuthorDate,
+      headAuthorName,
+      headAuthorEmail,
+      headCommitterDate,
+      headCommitterName,
+      headCommitterEmail,
+      headCommitMessage
+    ] = sanitizedExec(
+      'git',
+      [
+        'show',
+        '-s',
+        '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'',
+        headCommitSha
+      ],
+      null,
+      null,
+      null,
+      false
+    ).split('","')
+
+    if (gitHeadCommitSha) {
+      tags[GIT_COMMIT_HEAD_AUTHOR_DATE] = headAuthorDate
+      tags[GIT_COMMIT_HEAD_AUTHOR_EMAIL] = headAuthorEmail
+      tags[GIT_COMMIT_HEAD_AUTHOR_NAME] = headAuthorName
+      tags[GIT_COMMIT_HEAD_COMMITTER_DATE] = headCommitterDate
+      tags[GIT_COMMIT_HEAD_COMMITTER_EMAIL] = headCommitterEmail
+      tags[GIT_COMMIT_HEAD_COMMITTER_NAME] = headCommitterName
+      tags[GIT_COMMIT_HEAD_MESSAGE] = headCommitMessage
+    }
   }
 
   const entries = [
@@ -509,6 +558,26 @@ function getGitInformationDiscrepancy () {
   return { gitRepositoryUrl, gitCommitSHA }
 }
 
+function fetchHeadCommitSha (headSha) {
+  const remoteName = getGitRemoteName()
+
+  sanitizedExec(
+    'git',
+    [
+      'fetch',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      '--no-write-fetch-head',
+      remoteName,
+      headSha
+    ],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'fetch_head_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'fetch_head_commit_sha' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'fetch_head_commit_sha' } }
+  )
+}
+
 module.exports = {
   getGitMetadata,
   getLatestCommits,
@@ -526,5 +595,6 @@ module.exports = {
   checkAndFetchBranch,
   getLocalBranches,
   getMergeBase,
-  getCounts
+  getCounts,
+  fetchHeadCommitSha
 }

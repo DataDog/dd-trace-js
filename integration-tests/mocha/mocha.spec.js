@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { fork, exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -53,6 +54,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -1404,7 +1406,9 @@ describe('mocha CommonJS', function () {
 
     it('retries flaky tests', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -1471,7 +1475,9 @@ describe('mocha CommonJS', function () {
 
     it('does not retry new tests that are skipped', (done) => {
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 5
       receiver.setSettings({
@@ -1639,7 +1645,9 @@ describe('mocha CommonJS', function () {
 
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-      receiver.setKnownTests({})
+      receiver.setKnownTests({
+        mocha: {}
+      })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -1772,7 +1780,9 @@ describe('mocha CommonJS', function () {
     context('parallel mode', () => {
       it('retries new tests', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          mocha: {}
+        })
 
         // The total number of executions need to be an odd number, so that we
         // check that the EFD logic of ignoring failed executions is working.
@@ -1836,7 +1846,9 @@ describe('mocha CommonJS', function () {
 
       it('retries new tests when using the programmatic API', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          mocha: {}
+        })
 
         const NUM_RETRIES_EFD = 5
         receiver.setSettings({
@@ -1959,6 +1971,64 @@ describe('mocha CommonJS', function () {
             done()
           }).catch(done)
         })
+      })
+
+      it('does not detect new tests if the response is invalid', async () => {
+        const NUM_RETRIES_EFD = 5
+
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          'not-mocha': {
+            'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+          }
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              RUN_IN_PARALLEL: true,
+              TESTS_TO_RUN: JSON.stringify([
+                './test/ci-visibility-test.js',
+                './test/ci-visibility-test-2.js'
+              ])
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 
@@ -2400,7 +2470,7 @@ describe('mocha CommonJS', function () {
             retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
               .endsWith('ci-visibility/dynamic-instrumentation/dependency.js')
           )
-          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 4)
+          assert.equal(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
 
@@ -2423,7 +2493,7 @@ describe('mocha CommonJS', function () {
             level: 'error'
           })
           assert.equal(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -3106,12 +3176,13 @@ describe('mocha CommonJS', function () {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
           } else {
             assert.equal(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '4')
+            assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           }
           assert.equal(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
           assert.equal(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
+          assert.equal(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
           // capabilities logic does not overwrite test session name
           assert.equal(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
         })
@@ -3441,7 +3512,9 @@ describe('mocha CommonJS', function () {
       })
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            mocha: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {

@@ -13,8 +13,8 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       # NOTE: Ok this next bit seems unnecessary, right? The problem is that
       # this repo is currently incompatible with npm, at least with the
       # devDependencies. While this is intended to be corrected, it hasn't yet,
@@ -46,8 +46,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn lint
 
@@ -56,8 +56,8 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
@@ -67,12 +67,13 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     name: Datadog Static Analyzer
+    if: github.actor != 'dependabot[bot]'
     steps:
     - name: Checkout
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
     - name: Check code meets quality and security standards
       id: datadog-static-analysis
-      uses: DataDog/datadog-static-analyzer-github-action@v1
+      uses: DataDog/datadog-static-analyzer-github-action@2707598b1182dce1d1792186477b5b4132338e1c # v1.2.3
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
         dd_app_key: ${{ secrets.DD_APP_KEY }}
@@ -82,28 +83,35 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
 
-  verify-yaml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: node scripts/verify-ci-config.js
+  # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
+  # verify-yaml:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: ./.github/actions/node/latest
+  #     - uses: ./.github/actions/install
+  #     - run: node scripts/verify-ci-config.js
 
   yarn-dedupe:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js
-        uses: ./.github/actions/node/active-lts
+        uses: ./.github/actions/node/latest
 
       - name: Install dependencies
         uses: ./.github/actions/install
@@ -111,21 +119,9 @@ jobs:
       - name: Run yarn dependencies:dedupe
         run: yarn dependencies:dedupe
 
-      - name: Check if yarn.lock was modified
-        run: |
-          if git diff --exit-code yarn.lock; then
-            echo "✅ yarn.lock is already properly deduplicated"
-          else
-            echo "❌ The yarn.lock file needs deduplication!"
-            echo ""
-            echo "The yarn dedupe command has modified your yarn.lock file."
-            echo "This means there were duplicate dependencies that could be optimized."
-            echo ""
-            echo "To fix this issue:"
-            echo "1. Run 'yarn dependencies:dedupe' locally"
-            echo "2. Commit the updated yarn.lock file"
-            echo "3. Push your changes"
-            echo ""
-            echo "This helps keep the dependency tree clean."
-            exit 1
-          fi
+      - name: Run yarn dedupe check
+        run: ./.github/scripts/yarn-dedupe.sh
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}

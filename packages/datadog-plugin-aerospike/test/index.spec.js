@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -53,10 +57,11 @@ describe('Plugin', () => {
           withPeerService(
             () => tracer,
             'aerospike',
-            () => aerospike.connect(config).then(client => {
-              return client.put(key, { i: 123 })
-                .then(() => client.close(false))
-            }),
+            async () => {
+              const client = await aerospike.connect(config)
+              await client.put(key, { i: 123 })
+              return client.close(false)
+            },
             'test',
             'aerospike.namespace'
           )
@@ -284,10 +289,11 @@ describe('Plugin', () => {
               })
           })
           withNamingSchema(
-            () => aerospike.connect(config).then(client => {
-              return client.put(key, { i: 123 })
-                .then(() => client.close(false))
-            }),
+            async () => {
+              const client = await aerospike.connect(config)
+              await client.put(key, { i: 123 })
+              return client.close(false)
+            },
             rawExpectedSchema.command
           )
         })
@@ -318,10 +324,11 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => aerospike.connect(config).then(client => {
-            return client.put(key, { i: 123 })
-              .then(() => client.close(false))
-          }),
+          async () => {
+            const client = await aerospike.connect(config)
+            await client.put(key, { i: 123 })
+            return client.close(false)
+          },
           {
             v0: {
               opName: 'aerospike.command',

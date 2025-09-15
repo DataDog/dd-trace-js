@@ -167,6 +167,7 @@ interface Plugins {
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-functions": tracer.plugins.azure_functions;
+  "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -186,6 +187,7 @@ interface Plugins {
   "graphql": tracer.plugins.graphql;
   "grpc": tracer.plugins.grpc;
   "hapi": tracer.plugins.hapi;
+  "hono": tracer.plugins.hono;
   "http": tracer.plugins.http;
   "http2": tracer.plugins.http2;
   "ioredis": tracer.plugins.ioredis;
@@ -251,7 +253,7 @@ declare namespace tracer {
     /**
      * An array of span links
      */
-    links?: Array<{ context: SpanContext, attributes?: Object }>
+    links?: { context: SpanContext, attributes?: Object }[]
   }
 
   /**
@@ -266,11 +268,34 @@ declare namespace tracer {
 
     /**
      * Causally links another span to the current span
+     *
+     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
+     * This will be removed in the next major version.
      * @param {SpanContext} context The context of the span to link to.
      * @param {Object} attributes An optional key value pair of arbitrary values.
      * @returns {void}
      */
     addLink (context: SpanContext, attributes?: Object): void;
+
+    /**
+     * Adds a single link to the span.
+     *
+     * Links added after the creation will not affect the sampling decision.
+     * It is preferred span links be added at span creation.
+     *
+     * @param link the link to add.
+     */
+    addLink (link: { context: SpanContext, attributes?: Object }): void;
+
+    /**
+     * Adds multiple links to the span.
+     *
+     * Links added after the creation will not affect the sampling decision.
+     * It is preferred span links be added at span creation.
+     *
+     * @param links the links to add.
+     */
+    addLinks (links: { context: SpanContext, attributes?: Object }[]): void;
   }
 
   /**
@@ -484,10 +509,14 @@ declare namespace tracer {
     flushMinSpans?: number;
 
     /**
-     * Whether to enable runtime metrics.
+     * Whether to enable runtime metrics, or an object specifying whether to enable specific metric types.
      * @default false
      */
-    runtimeMetrics?: boolean
+    runtimeMetrics?: boolean | {
+      enabled?: boolean,
+      gc?: boolean,
+      eventLoop?: boolean
+    }
 
     /**
      * Custom function for DNS lookups when sending requests to the agent.
@@ -706,6 +735,16 @@ declare namespace tracer {
          * @default true
          */
         enabled?: boolean,
+
+        /** Whether to enable endpoint collection for API Security.
+         * @default true
+         */
+        endpointCollectionEnabled?: boolean,
+
+        /** Maximum number of endpoints that can be serialized per message.
+         * @default 300
+         */
+        endpointCollectionMessageLimit?: number,
       },
       /**
        * Configuration for RASP
@@ -1377,6 +1416,11 @@ declare namespace tracer {
     interface azure_functions extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * @azure/service-bus module
+     */
+    interface azure_service_bus extends Integration {}
+    /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
@@ -1598,6 +1642,12 @@ declare namespace tracer {
      * [hapi](https://hapijs.com/) module.
      */
     interface hapi extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
+     * [hono](https://hono.dev/) module.
+     */
+    interface hono extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
@@ -1935,6 +1985,10 @@ declare namespace tracer {
        * The database monitoring propagation mode to be used for this plugin.
        */
       dbmPropagationMode?: string;
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
     }
 
     /**
@@ -2280,11 +2334,33 @@ declare namespace tracer {
 
       /**
        * Causally links another span to the current span
+       *
+       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
        * @param {otel.SpanContext} context The context of the span to link to.
        * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
        * @returns {void}
        */
       addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
+
+      /**
+       * Adds a single link to the span.
+       *
+       * Links added after the creation will not affect the sampling decision.
+       * It is preferred span links be added at span creation.
+       *
+       * @param link the link to add.
+       */
+      addLink(link: otel.Link): this;
+
+      /**
+       * Adds multiple links to the span.
+       *
+       * Links added after the creation will not affect the sampling decision.
+       * It is preferred span links be added at span creation.
+       *
+       * @param links the links to add.
+       */
+      addLinks(links: otel.Link[]): this;
     }
 
     /**
@@ -2536,6 +2612,25 @@ declare namespace tracer {
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
 
       /**
+       * Register a processor to be called on each LLMObs span.
+       *
+       * This can be used to modify the span before it is sent to LLMObs. For example, you can modify the input/output.
+       * You can also return `null` to omit the span entirely from being sent to LLM Observability.
+       *
+       * Otherwise, if the return value from the processor is not an instance of `LLMObservabilitySpan`, the span will be dropped.
+       *
+       * To deregister the processor, call `llmobs.deregisterProcessor()`
+       * @param processor A function that will be called for each span.
+       * @throws {Error} If a processor is already registered.
+       */
+      registerProcessor (processor: ((span: LLMObservabilitySpan) => LLMObservabilitySpan | null)): void
+
+      /**
+       * Deregister a processor.
+       */
+      deregisterProcessor (): void
+
+      /**
        * Submits a custom evaluation metric for a given span ID and trace ID.
        * @param spanContext The span context of the span to submit the evaluation metric for.
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
@@ -2546,6 +2641,25 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    interface LLMObservabilitySpan {
+      /**
+       * The input content associated with the span.
+       */
+      input: { content: string, role?: string }[]
+
+      /**
+       * The output content associated with the span.
+       */
+      output: { content: string, role?: string }[]
+
+      /**
+       * Get a tag from the span.
+       * @param key The key of the tag to get.
+       * @returns The value of the tag, or `undefined` if the tag does not exist.
+       */
+      getTag (key: string): string | undefined
     }
 
     interface EvaluationOptions {

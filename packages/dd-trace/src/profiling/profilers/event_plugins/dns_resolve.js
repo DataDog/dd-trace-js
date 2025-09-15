@@ -1,11 +1,11 @@
+'use strict'
+
 const DNSPlugin = require('./dns')
 
 const queryNames = new Map()
 
 class DNSResolvePlugin extends DNSPlugin {
-  static get operation () {
-    return 'resolve'
-  }
+  static operation = 'resolve'
 
   extendEvent (event, startEvent) {
     const rrtype = startEvent.args[1]

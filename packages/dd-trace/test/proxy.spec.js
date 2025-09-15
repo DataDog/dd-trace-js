@@ -1,6 +1,11 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('./setup/core')
 
 describe('TracerProxy', () => {
   let Proxy
@@ -135,8 +140,12 @@ describe('TracerProxy', () => {
       remoteConfig: {
         enabled: true
       },
+      runtimeMetrics: {
+        enabled: false
+      },
       configure: sinon.spy(),
-      llmobs: {}
+      llmobs: {},
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -386,7 +395,7 @@ describe('TracerProxy', () => {
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
-        config.runtimeMetrics = true
+        config.runtimeMetrics.enabled = true
 
         proxy.init()
 

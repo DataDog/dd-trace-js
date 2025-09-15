@@ -43,6 +43,7 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
+const satisfies = require('semifies')
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -81,9 +82,13 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let modifiedTests = {}
 let numTestRetries = 0
-let knownTests = []
+let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+
+function isValidKnownTests (receivedKnownTests) {
+  return !!receivedKnownTests.cucumber
+}
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.includes('fail')) {
@@ -122,7 +127,10 @@ function getStatusFromResultLatest (result) {
 }
 
 function isNewTest (testSuite, testName) {
-  const testsForSuite = knownTests.cucumber?.[testSuite] || []
+  if (!isValidKnownTests(knownTests)) {
+    return false
+  }
+  const testsForSuite = knownTests.cucumber[testSuite] || []
   return !testsForSuite.includes(testName)
 }
 
@@ -224,7 +232,7 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
-function wrapRun (pl, isLatestVersion) {
+function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
   patched.add(pl)
@@ -398,9 +406,10 @@ function wrapRun (pl, isLatestVersion) {
         const promise = runStep.apply(this, arguments)
 
         promise.then((result) => {
-          const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result)
-            : getStatusFromResult(result)
+          const finalResult = satisfies(version, '>=12.0.0') ? result.result : result
+          const getStatus = satisfies(version, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
+
+          const { status, skipReason, errorMessage } = getStatus(finalResult)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage, ...ctx.currentStore })
         })
@@ -415,18 +424,18 @@ function wrapRun (pl, isLatestVersion) {
   })
 }
 
-function pickleHook (PickleRunner) {
+function pickleHook (PickleRunner, version) {
   const pl = PickleRunner.default
 
-  wrapRun(pl, false)
+  wrapRun(pl, false, version)
 
   return PickleRunner
 }
 
-function testCaseHook (TestCaseRunner) {
+function testCaseHook (TestCaseRunner, version) {
   const pl = TestCaseRunner.default
 
-  wrapRun(pl, true)
+  wrapRun(pl, true, version)
 
   return TestCaseRunner
 }
@@ -506,9 +515,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     if (isKnownTestsEnabled) {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
+      const isFaulty = !isValidKnownTests(knownTests) || getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
-        knownTests.cucumber || {},
+        knownTests.cucumber,
         earlyFlakeDetectionFaultyThreshold
       )
       if (isFaulty) {
@@ -590,6 +599,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return runTestCaseFunction.apply(this, arguments)
+    }
     const pickle = isNewerCucumberVersion
       ? arguments[0].pickle
       : this.eventDataCollector.getPickle(arguments[0])
@@ -745,6 +757,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
   return function (worker, message) {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return parseWorkerMessageFunction.apply(this, arguments)
+    }
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
     // or cucumber will throw an error
     // TODO: identify the message better
@@ -970,10 +985,17 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isKnownTestsEnabled) {
+    if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
+      this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    } else {
+      isEarlyFlakeDetectionEnabled = false
+      isKnownTestsEnabled = false
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
+      this.options.worldParameters._ddIsKnownTestsEnabled = false
+      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
     }
 
     if (isImpactedTestsEnabled) {
@@ -999,9 +1021,14 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      isKnownTestsEnabled = !!this.options.worldParameters._ddIsKnownTestsEnabled
       if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+        // if for whatever reason the worker does not receive valid known tests, we disable EFD and known tests
+        if (!isValidKnownTests(knownTests)) {
+          isKnownTestsEnabled = false
+          knownTests = {}
+        }
       }
       isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
       if (isEarlyFlakeDetectionEnabled) {

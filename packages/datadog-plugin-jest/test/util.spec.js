@@ -1,4 +1,10 @@
-const path = require('path')
+'use strict'
+
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
+const path = require('node:path')
+
 const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
 
 describe('getFormattedJestTestParameters', () => {

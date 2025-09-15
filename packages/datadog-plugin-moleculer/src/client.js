@@ -4,32 +4,38 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { moleculerTags } = require('./util')
 
 class MoleculerClientPlugin extends ClientPlugin {
-  static get id () { return 'moleculer' }
-  static get operation () { return 'call' }
+  static id = 'moleculer'
+  static operation = 'call'
 
-  start ({ actionName, opts }) {
+  bindStart (ctx) {
+    const { actionName, opts } = ctx
+
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
       resource: actionName,
       kind: 'client'
-    })
+    }, ctx)
 
     this.tracer.inject(span, 'text_map', opts.meta)
+
+    return ctx.currentStore
   }
 
-  finish ({ broker, ctx }) {
-    const span = this.activeSpan
+  finish (ctx) {
+    const { promiseCtx, broker } = ctx
 
-    if (ctx) {
-      const endpoint = ctx.endpoint || {}
+    const span = ctx.currentStore.span || this.activeSpan
+
+    if (promiseCtx) {
+      const endpoint = promiseCtx.endpoint || {}
       const node = endpoint.node || {}
 
-      this.addHost(node.hostname, node.port)
+      this.addHost({ hostname: node.hostname, port: node.port })
 
-      span.addTags(moleculerTags(broker, ctx, this.config))
+      span.addTags(moleculerTags(broker, promiseCtx, this.config))
     }
 
-    super.finish()
+    super.finish(ctx)
   }
 }
 

@@ -8,6 +8,7 @@ const {
   cookieParser,
   multerParser,
   fastifyBodyParser,
+  fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
@@ -33,7 +34,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
+const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -83,6 +84,7 @@ function enable (_config) {
     expressProcessParams.subscribe(onRequestProcessParams)
     fastifyBodyParser.subscribe(onRequestBodyParsed)
     fastifyQueryParams.subscribe(onRequestQueryParsed)
+    fastifyCookieParser.subscribe(onRequestCookieParser)
     fastifyPathParams.subscribe(onRequestProcessParams)
     routerParam.subscribe(onRequestProcessParams)
     responseBody.subscribe(onResponseBody)
@@ -304,8 +306,13 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
     storedResponseHeaders.set(req, responseHeaders)
   }
 
+  // TODO: do not call waf if inside block()
+  // if (isBlocking()) {
+  //   return
+  // }
+
   // avoid "write after end" error
-  if (isBlocked(res)) {
+  if (isBlocked(res) || callBlockDelegation(res)) {
     abortController?.abort()
     return
   }
@@ -377,6 +384,7 @@ function disable () {
   if (expressProcessParams.hasSubscribers) expressProcessParams.unsubscribe(onRequestProcessParams)
   if (fastifyBodyParser.hasSubscribers) fastifyBodyParser.unsubscribe(onRequestBodyParsed)
   if (fastifyQueryParams.hasSubscribers) fastifyQueryParams.unsubscribe(onRequestQueryParsed)
+  if (fastifyCookieParser.hasSubscribers) fastifyCookieParser.unsubscribe(onRequestCookieParser)
   if (fastifyPathParams.hasSubscribers) fastifyPathParams.unsubscribe(onRequestProcessParams)
   if (routerParam.hasSubscribers) routerParam.unsubscribe(onRequestProcessParams)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)

@@ -1,5 +1,10 @@
+'use strict'
+
+const { describe, it } = require('mocha')
+const assert = require('node:assert')
+
 describe('mocha-coverage', () => {
   it('can sum', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 })

@@ -1,12 +1,17 @@
 'use strict'
 
-const path = require('path')
-const agent = require('../../dd-trace/test/plugins/agent')
-const getPort = require('get-port')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
-const Readable = require('stream').Readable
+const getPort = require('get-port')
+
+const path = require('node:path')
+const Readable = require('node:stream').Readable
+
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
@@ -100,11 +105,11 @@ describe('Plugin', () => {
             withPeerService(
               () => tracer,
               'grpc',
-              async () => {
+              async (done) => {
                 const client = await buildClient({
                   getUnary: (_, callback) => callback()
                 })
-                client.getUnary({ first: 'foobar' }, () => {})
+                client.getUnary({ first: 'foobar' }, done)
               },
               'test.TestService', 'rpc.service')
 
@@ -276,6 +281,7 @@ describe('Plugin', () => {
                   expect(traces[0][0].meta).to.have.property('span.kind', 'client')
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
                   expect(traces[0][0].meta).to.have.property('component', 'grpc')
+                  expect(traces[0][0].meta).to.have.property('_dd.integration', 'grpc')
                 })
             })
 

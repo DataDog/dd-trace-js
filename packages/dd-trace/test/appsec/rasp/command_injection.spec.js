@@ -1,5 +1,7 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const addresses = require('../../../src/appsec/addresses')
 const { childProcessExecutionTracingChannel } = require('../../../src/appsec/channels')

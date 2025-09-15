@@ -1,6 +1,7 @@
 'use strict'
 
 const request = require('../../exporters/common/request')
+const { getEnvironmentVariable } = require('../../config-helper')
 const { URL, format } = require('node:url')
 const path = require('node:path')
 
@@ -17,8 +18,8 @@ const { parseResponseAndLog } = require('./util')
 
 class BaseLLMObsWriter {
   constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
-    this._interval = interval || 1000 // 1s
-    this._timeout = timeout || 5000 // 5s
+    this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
+    this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
     this._buffer = []
@@ -60,7 +61,7 @@ class BaseLLMObsWriter {
       return
     }
 
-    this._bufferSize += byteLength || Buffer.from(JSON.stringify(event)).byteLength
+    this._bufferSize += byteLength || Buffer.byteLength(JSON.stringify(event))
     this._buffer.push(event)
   }
 
@@ -76,7 +77,7 @@ class BaseLLMObsWriter {
     this._bufferSize = 0
     const payload = this._encode(this.makePayload(events))
 
-    log.debug('Encoded LLMObs payload:', payload)
+    log.debug('Encoded LLMObs payload: %s', payload)
 
     const options = this._getOptions()
 
@@ -119,7 +120,11 @@ class BaseLLMObsWriter {
     }
 
     const { hostname, port } = this._config
-    const base = this._config.url || new URL(format({
+
+    const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
+    const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
+
+    const base = overrideOriginUrl ?? this._config.url ?? new URL(format({
       protocol: 'http:',
       hostname,
       port

@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
 const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -11,35 +10,29 @@ const triggerMap = {
   get: 'Http',
   patch: 'Http',
   post: 'Http',
-  put: 'Http'
+  put: 'Http',
+  serviceBusQueue: 'ServiceBus',
+  serviceBusTopic: 'ServiceBus',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
-  static get id () { return 'azure-functions' }
-  static get operation () { return 'invoke' }
-  static get kind () { return 'server' }
-  static get type () { return 'serverless' }
-  static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
+  static id = 'azure-functions'
+  static operation = 'invoke'
+  static kind = 'server'
+  static type = 'serverless'
+  static prefix = 'tracing:datadog:azure:functions:invoke'
 
   bindStart (ctx) {
-    const { functionName, methodName, httpRequest } = ctx
-    const store = storage('legacy').getStore()
-    // httpRequest.headers is a map
-    const childOf = this._tracer.extract('http_headers', Object.fromEntries(httpRequest.headers))
+    const childOf = extractTraceContext(this._tracer, ctx)
+    const meta = getMetaForTrigger(ctx)
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
-      meta: {
-        'aas.function.name': functionName,
-        'aas.function.trigger': mapTriggerTag(methodName)
-      }
-    }, false)
+      meta,
+    }, ctx)
 
     ctx.span = span
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span }
-
     return ctx.currentStore
   }
 
@@ -49,21 +42,26 @@ class AzureFunctionsPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    const { httpRequest, result = {} } = ctx
-    const path = (new URL(httpRequest.url)).pathname
-    const req = {
-      method: httpRequest.method,
-      headers: Object.fromEntries(httpRequest.headers),
-      url: path
+    const { httpRequest, methodName, result = {} } = ctx
+    if (triggerMap[methodName] === 'Http') {
+      // If the method is an HTTP trigger, we need to patch the request and finish the span
+      const path = (new URL(httpRequest.url)).pathname
+      const req = {
+        method: httpRequest.method,
+        headers: Object.fromEntries(httpRequest.headers),
+        url: path
+      }
+      const context = web.patch(req)
+      context.config = this.config
+      context.paths = [path]
+      context.res = { statusCode: result.status }
+      context.span = ctx.currentStore.span
+
+      serverless.finishSpan(context)
+    // Fallback for other trigger types
+    } else {
+      super.finish()
     }
-
-    const context = web.patch(req)
-    context.config = this.config
-    context.paths = [path]
-    context.res = { statusCode: result.status }
-    context.span = ctx.currentStore.span
-
-    serverless.finishSpan(context)
   }
 
   configure (config) {
@@ -71,8 +69,39 @@ class AzureFunctionsPlugin extends TracingPlugin {
   }
 }
 
+function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
+  let meta = {
+    'aas.function.name': functionName,
+    'aas.function.trigger': mapTriggerTag(methodName)
+  }
+
+  if (triggerMap[methodName] === 'ServiceBus') {
+    const triggerEntity = invocationContext.options.trigger.queueName || invocationContext.options.trigger.topicName
+    meta = {
+      ...meta,
+      'messaging.message_id': invocationContext.triggerMetadata.messageId,
+      'messaging.operation': 'receive',
+      'messaging.system': 'servicebus',
+      'messaging.destination.name': triggerEntity,
+      'resource.name': `ServiceBus ${functionName}`,
+      'span.kind': 'consumer'
+    }
+  }
+
+  return meta
+}
+
 function mapTriggerTag (methodName) {
   return triggerMap[methodName] || 'Unknown'
+}
+
+function extractTraceContext (tracer, ctx) {
+  switch (String(triggerMap[ctx.methodName])) {
+    case 'Http':
+      return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
+    case 'ServiceBus':
+      return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
+  }
 }
 
 module.exports = AzureFunctionsPlugin

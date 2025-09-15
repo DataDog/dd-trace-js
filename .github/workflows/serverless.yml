@@ -1,0 +1,165 @@
+name: Serverless
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: 0 4 * * *
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+
+jobs:
+  lambda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:lambda:ci
+      - uses: ./.github/actions/node/newest-maintenance-lts
+      - run: yarn test:lambda:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:lambda:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:lambda:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: lambda
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+
+  aws-sdk:
+    strategy:
+      matrix:
+        node-version: [oldest, latest]
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:3.0.2
+        env:
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda,stepfunctions,events
+          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          AWS_DEFAULT_REGION: us-east-1
+          FORCE_NONINTERACTIVE: 'true'
+          LAMBDA_EXECUTOR: local
+          START_WEB: '0'
+        ports:
+          - 4566:4566
+      # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
+      # To-Do: Debug localstack / lambda and localstack / S3
+      localstack-legacy:
+        image: localstack/localstack:1.1.0
+        ports:
+          - "127.0.0.1:4567:4567" # Edge
+        env:
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
+          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          AWS_DEFAULT_REGION: us-east-1
+          FORCE_NONINTERACTIVE: 'true'
+          LAMBDA_EXECUTOR: local
+          START_WEB: '0'
+          GATEWAY_LISTEN: 127.0.0.1:4567
+          EDGE_PORT: 4567
+          EDGE_PORT_HTTP: 4567
+    env:
+      PLUGINS: aws-sdk
+      SERVICES: localstack localstack-legacy
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+
+  azure-functions:
+    runs-on: ubuntu-latest
+    services:
+        azurite:
+          image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+          ports:
+              - "127.0.0.1:10000:10000"
+              - "127.0.0.1:10001:10001"
+              - "127.0.0.1:10002:10002"
+        azureservicebusemulator:
+          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+          ports:
+              - "127.0.0.1:5672:5672"
+              - "127.0.0.1:5300:5300"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+              SQL_SERVER: azuresqledge
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+    env:
+      PLUGINS: azure-functions
+      SERVICES: azureservicebusemulator,azuresqledge
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: npm install -g azure-functions-core-tools@4.1.0
+      - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
+      - run: yarn test:plugins:ci
+
+  azure-service-bus:
+    runs-on: ubuntu-latest
+    services:
+        azureservicebusemulator:
+          image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+          ports:
+              - "127.0.0.1:5672:5672"
+              - "127.0.0.1:5300:5300"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+              SQL_SERVER: azuresqledge
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
+    env:
+      PLUGINS: azure-service-bus
+      SERVICES: azureservicebusemulator,azuresqledge
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+
+  google-cloud-pubsub:
+    runs-on: ubuntu-latest
+    services:
+      pubsub:
+        image: ghcr.io/ridedott/pubsub-emulator
+        ports:
+          - 8081:8081
+    env:
+      PLUGINS: google-cloud-pubsub
+      SERVICES: gpubsub
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test

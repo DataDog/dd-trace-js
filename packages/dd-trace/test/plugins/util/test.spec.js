@@ -1,9 +1,13 @@
 'use strict'
 
-require('../../setup/tap')
-
-const path = require('path')
+const { expect } = require('chai')
+const { describe, it, beforeEach, context } = require('tap').mocha
+const path = require('node:path')
 const istanbul = require('istanbul-lib-coverage')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const {
   getTestParametersString,
@@ -21,7 +25,6 @@ const {
   isModifiedTest
 } = require('../../../src/plugins/util/test')
 
-const proxyquire = require('proxyquire')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
@@ -592,7 +595,7 @@ describe('checkShaDiscrepancies', () => {
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('return true if the CI/Git Client commit SHA is different from the user provided commit SHA', () => {
@@ -634,7 +637,7 @@ describe('checkShaDiscrepancies', () => {
         discrepant_provider: discrepantProvider
       })
     })
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: false })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: false })
   })
 
   it('increment TELEMETRY_GIT_SHA_MATCH with match: true when all values match', () => {
@@ -663,6 +666,6 @@ describe('checkShaDiscrepancies', () => {
 
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
-    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { match: true })
+    expect(incrementCountMetricStub).to.have.been.calledWith(TELEMETRY_GIT_SHA_MATCH, { matched: true })
   })
 })

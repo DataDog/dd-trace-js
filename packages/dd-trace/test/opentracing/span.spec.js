@@ -1,11 +1,16 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
-const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
 
 describe('Span', () => {
@@ -15,20 +20,13 @@ describe('Span', () => {
   let processor
   let prioritySampler
   let now
-  let metrics
-  let handle
   let id
   let tagger
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
 
-    handle = { finish: sinon.spy() }
     now = sinon.stub().returns(0)
-
-    metrics = {
-      track: sinon.stub().returns(handle)
-    }
 
     id = sinon.stub()
     id.onFirstCall().returns('123')
@@ -48,15 +46,14 @@ describe('Span', () => {
       add: sinon.spy()
     }
 
-    Span = proxyquire('../src/opentracing/span', {
+    Span = proxyquire('../../src/opentracing/span', {
       perf_hooks: {
         performance: {
           now
         }
       },
       '../id': id,
-      '../tagger': tagger,
-      '../metrics': metrics
+      '../tagger': tagger
     })
   })
 
@@ -469,6 +466,15 @@ describe('Span', () => {
       span.finish()
 
       expect(processor.process).to.have.been.calledOnce
+    })
+
+    it('should add _dd.integration', () => {
+      processor.process.returns(Promise.resolve())
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.finish()
+
+      expect(span._spanContext._tags).to.include({ '_dd.integration': 'opentracing' })
     })
 
     describe('tracePropagationBehaviorExtract and Baggage', () => {

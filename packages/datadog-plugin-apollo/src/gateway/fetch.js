@@ -4,10 +4,8 @@ const { storage } = require('../../../datadog-core')
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
-  static get operation () { return 'fetch' }
-  static get prefix () {
-    return 'tracing:apm:apollo:gateway:fetch'
-  }
+  static operation = 'fetch'
+  static prefix = 'tracing:apm:apollo:gateway:fetch'
 
   bindStart (ctx) {
     const store = storage('legacy').getStore()

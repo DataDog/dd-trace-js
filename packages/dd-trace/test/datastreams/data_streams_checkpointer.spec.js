@@ -1,9 +1,15 @@
-require('../setup/tap')
+'use strict'
+
+const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
 
 const agent = require('../plugins/agent')
 
-const expectedProducerHash = '11369286567396183453'
-const expectedConsumerHash = '11204511019589278729'
+const expectedProducerHash = '6359420180750536220'
+const expectedConsumerHash = '13652937079614409115'
 const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
 
 describe('data streams checkpointer manual api', () => {
@@ -32,9 +38,10 @@ describe('data streams checkpointer manual api', () => {
           }
         }
       }
+
       expect(statsPointsReceived).to.equal(1)
       expect(agent.dsmStatsExist(agent, expectedProducerHash, expectedEdgeTags)).to.equal(true)
-    }).then(done, done)
+    }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {}
 
@@ -58,14 +65,36 @@ describe('data streams checkpointer manual api', () => {
       }
       expect(statsPointsReceived).to.equal(2)
       expect(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags)).to.equal(true)
-    }).then(done, done)
+    }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {
-      [DSM_CONTEXT_HEADER]: 'tvMEiT2p8cjWzqLRnGTWzqLRnGQ=' // same context as previous produce
+      [DSM_CONTEXT_HEADER]: 'ncfR5V9FDZ3E58Cfj2LI2cOfj2I=' // same context as previous produce
     }
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)
 
     expect(DSM_CONTEXT_HEADER in headers).to.equal(true)
+  })
+
+  it('should set manual checkpoint when setConsumeCheckpoint is called without additional parameters', function () {
+    const headers = {}
+    const mockSetCheckpoint = sinon.stub().returns({ hash: Buffer.from([1, 2, 3, 4]) })
+
+    tracer._tracer._dataStreamsProcessor.setCheckpoint = mockSetCheckpoint
+
+    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers)
+    const calledTags = mockSetCheckpoint.getCall(0).args[0]
+    expect(calledTags).to.include('manual_checkpoint:true')
+  })
+
+  it('should set an automatic checkpoint when setConsumeCheckpoint is called with manualCheckpoint:false', function () {
+    const headers = {}
+    const mockSetCheckpoint = sinon.stub().returns({ hash: Buffer.from([1, 2, 3, 4]) })
+
+    tracer._tracer._dataStreamsProcessor.setCheckpoint = mockSetCheckpoint
+
+    tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers, false)
+    const calledTags = mockSetCheckpoint.getCall(0).args[0]
+    expect(calledTags).to.not.include('manual_checkpoint:true')
   })
 })

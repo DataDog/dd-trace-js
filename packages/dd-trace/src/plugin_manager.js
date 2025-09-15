@@ -1,10 +1,19 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const { isFalse, normalizePluginEnvName } = require('./util')
+const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+
+// Test optimization plugins that should only be enabled when isCiVisibility is true
+const TEST_OPTIMIZATION_PLUGINS = new Set([
+  'jest',
+  'vitest',
+  'cucumber',
+  'mocha',
+  'playwright'
+])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -32,8 +41,7 @@ loadChannel.subscribe(({ name }) => {
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
-    const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-    const enabled = getEnvironmentVariable(normalizePluginEnvName(envName))
+    const enabled = getEnvEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
@@ -44,6 +52,11 @@ function maybeEnable (Plugin) {
       pluginClasses[Plugin.id] = Plugin
     }
   }
+}
+
+function getEnvEnabled (Plugin) {
+  const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
+  return getEnvironmentVariable(normalizePluginEnvName(envName))
 }
 
 // TODO this must always be a singleton.
@@ -70,11 +83,18 @@ module.exports = class PluginManager {
 
     if (!Plugin) return
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
+
+    // Check if this is a Test Optimization plugin and Test Optimization is not enabled
+    if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
+      log.debug('Plugin "%s" is not initialized because Test Optimization mode is not enabled.', name)
+      return
+    }
+
     if (!this._pluginsByName[name]) {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     const pluginConfig = this._configsByName[name] || {
-      enabled: this._tracerConfig.plugins !== false
+      enabled: this._tracerConfig.plugins !== false && (!Plugin.experimental || isTrue(getEnvEnabled(Plugin)))
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
@@ -141,7 +161,10 @@ module.exports = class PluginManager {
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
       isServiceUserProvided,
-      middlewareTracingEnabled
+      middlewareTracingEnabled,
+      traceWebsocketMessagesEnabled,
+      traceWebsocketMessagesInheritSampling,
+      traceWebsocketMessagesSeparateTraces
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -156,7 +179,10 @@ module.exports = class PluginManager {
       ciVisibilityTestSessionName,
       ciVisAgentlessLogSubmissionEnabled,
       isTestDynamicInstrumentationEnabled,
-      isServiceUserProvided
+      isServiceUserProvided,
+      traceWebsocketMessagesEnabled,
+      traceWebsocketMessagesInheritSampling,
+      traceWebsocketMessagesSeparateTraces
     }
 
     if (logInjection !== undefined) {

@@ -7,31 +7,20 @@ const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
-const { estimateTokens } = require('./token-estimator')
 
-const makeUtilities = require('../../dd-trace/src/plugins/util/llm')
-
-let normalize
+const {
+  convertBuffersToObjects,
+  constructCompletionResponseFromStreamedChunks,
+  constructChatCompletionResponseFromStreamedChunks
+} = require('./stream-helpers')
 
 const { DD_MAJOR } = require('../../../version')
 
-function safeRequire (path) {
-  try {
-    return require(path)
-  } catch {
-    return null
-  }
-}
-
-const encodingForModel = safeRequire('tiktoken')?.encoding_for_model
-
 class OpenAiTracingPlugin extends TracingPlugin {
-  static get id () { return 'openai' }
-  static get operation () { return 'request' }
-  static get system () { return 'openai' }
-  static get prefix () {
-    return 'tracing:apm:openai:request'
-  }
+  static id = 'openai'
+  static operation = 'request'
+  static system = 'openai'
+  static prefix = 'tracing:apm:openai:request'
 
   constructor (...args) {
     super(...args)
@@ -42,12 +31,38 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     this.sampler = new Sampler(0.1) // default 10% log sampling
 
-    // hoist the normalize function to avoid making all of these functions a class method
-    if (this._tracerConfig) {
-      const utilities = makeUtilities('openai', this._tracerConfig)
+    this.addSub('apm:openai:request:chunk', ({ ctx, chunk, done }) => {
+      if (!ctx.chunks) ctx.chunks = []
 
-      normalize = utilities.normalize
-    }
+      if (chunk) ctx.chunks.push(chunk)
+      if (!done) return
+
+      let chunks = ctx.chunks
+      if (chunks.length === 0) return
+
+      const firstChunk = chunks[0]
+      // OpenAI in legacy versions returns chunked buffers instead of objects.
+      // These buffers will need to be combined and coalesced into a list of object chunks.
+      if (firstChunk instanceof Buffer) {
+        chunks = convertBuffersToObjects(chunks)
+      }
+
+      const methodName = ctx.currentStore.normalizedMethodName
+      let n = 1
+      const prompt = ctx.args[0].prompt
+      if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
+        n *= prompt.length
+      }
+
+      let response = {}
+      if (methodName === 'createCompletion') {
+        response = constructCompletionResponseFromStreamedChunks(chunks, n)
+      } else if (methodName === 'createChatCompletion') {
+        response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
+      }
+
+      ctx.result = { data: response }
+    })
   }
 
   configure (config) {
@@ -59,7 +74,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    const { methodName, args, basePath, apiKey } = ctx
+    const { methodName, args } = ctx
     const payload = normalizeRequestPayload(methodName, args)
     const normalizedMethodName = normalizeMethodName(methodName)
 
@@ -78,27 +93,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
       kind: 'client',
       meta: {
         [MEASURED]: 1,
-        // Data that is always available with a request
-        'openai.user.api_key': truncateApiKey(apiKey),
-        'openai.api_base': basePath,
-        // The openai.api_type (openai|azure) is present in Python but not in Node.js
-        // Add support once https://github.com/openai/openai-node/issues/53 is closed
-
-        // Data that is common across many requests
-        'openai.request.best_of': payload.best_of,
-        'openai.request.echo': payload.echo,
-        'openai.request.logprobs': payload.logprobs,
-        'openai.request.max_tokens': payload.max_tokens,
-        'openai.request.model': payload.model, // vague model
-        'openai.request.n': payload.n,
-        'openai.request.presence_penalty': payload.presence_penalty,
-        'openai.request.frequency_penalty': payload.frequency_penalty,
-        'openai.request.stop': payload.stop,
-        'openai.request.suffix': payload.suffix,
-        'openai.request.temperature': payload.temperature,
-        'openai.request.top_p': payload.top_p,
-        'openai.request.user': payload.user,
-        'openai.request.file_id': payload.file_id // deleteFile, retrieveFile, downloadFile
+        // Only model is added to all requests
+        'openai.request.model': payload.model
       }
     }, false)
 
@@ -106,44 +102,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     const tags = {} // The remaining tags are added one at a time
 
-    // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
-    if (payload.prompt) {
-      const prompt = payload.prompt
-      openaiStore.prompt = prompt
-      if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
-        // This is a single prompt, either String or [Number]
-        tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
-      } else if (Array.isArray(prompt)) {
-        // This is multiple prompts, either [String] or [[Number]]
-        for (let i = 0; i < prompt.length; i++) {
-          tags[`openai.request.prompt.${i}`] = normalizeStringOrTokenArray(prompt[i], true)
-        }
-      }
-    }
-
-    // createEdit, createEmbedding, createModeration
-    if (payload.input) {
-      const normalized = normalizeStringOrTokenArray(payload.input, false)
-      tags['openai.request.input'] = normalize(normalized)
-      openaiStore.input = normalized
-    }
-
-    // createChatCompletion, createCompletion
-    if (payload.logit_bias !== null && typeof payload.logit_bias === 'object') {
-      for (const [tokenId, bias] of Object.entries(payload.logit_bias)) {
-        tags[`openai.request.logit_bias.${tokenId}`] = bias
-      }
-    }
-
     if (payload.stream) {
       tags['openai.request.stream'] = payload.stream
     }
 
     switch (normalizedMethodName) {
-      case 'createFineTune':
-        createFineTuneRequestExtraction(tags, payload)
-        break
-
       case 'createImage':
       case 'createImageEdit':
       case 'createImageVariation':
@@ -166,13 +129,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'retrieveModel':
         retrieveModelRequestExtraction(tags, payload)
-        break
-
-      case 'listFineTuneEvents':
-      case 'retrieveFineTune':
-      case 'deleteModel':
-      case 'cancelFineTune':
-        commonLookupFineTuneRequestExtraction(tags, payload)
         break
 
       case 'createEdit':
@@ -229,9 +185,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
       : {
           'openai.request.endpoint': endpoint,
           'openai.request.method': method.toUpperCase(),
-
-          'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
-          'openai.organization.name': headers['openai-organization'],
 
           'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
           'openai.response.id': body.id, // common creation value, numeric epoch
@@ -366,6 +319,7 @@ function normalizeMethodName (methodName) {
     case 'files.retrieve':
       return 'retrieveFile'
     case 'files.del':
+    case 'files.delete':
       return 'deleteFile'
     case 'files.retrieveContent':
     case 'files.content':
@@ -410,92 +364,15 @@ function normalizeMethodName (methodName) {
     case 'models.retrieve':
       return 'retrieveModel'
     case 'models.del':
+    case 'models.delete':
       return 'deleteModel'
     default:
       return methodName
   }
 }
 
-function countPromptTokens (methodName, payload, model) {
-  let promptTokens = 0
-  let promptEstimated = false
-  if (methodName === 'createChatCompletion') {
-    const messages = payload.messages
-    for (const message of messages) {
-      const content = message.content
-      if (typeof content === 'string') {
-        const { tokens, estimated } = countTokens(content, model)
-        promptTokens += tokens
-        promptEstimated = estimated
-      } else if (Array.isArray(content)) {
-        for (const c of content) {
-          if (c.type === 'text') {
-            const { tokens, estimated } = countTokens(c.text, model)
-            promptTokens += tokens
-            promptEstimated = estimated
-          }
-          // unsupported token computation for image_url
-          // as even though URL is a string, its true token count
-          // is based on the image itself, something onerous to do client-side
-        }
-      }
-    }
-  } else if (methodName === 'createCompletion') {
-    let prompt = payload.prompt
-    if (!Array.isArray(prompt)) prompt = [prompt]
-
-    for (const p of prompt) {
-      const { tokens, estimated } = countTokens(p, model)
-      promptTokens += tokens
-      promptEstimated = estimated
-    }
-  }
-
-  return { promptTokens, promptEstimated }
-}
-
-function countCompletionTokens (body, model) {
-  let completionTokens = 0
-  let completionEstimated = false
-  if (body?.choices) {
-    for (const choice of body.choices) {
-      const message = choice.message || choice.delta // delta for streamed responses
-      const text = choice.text
-      const content = text || message?.content
-
-      const { tokens, estimated } = countTokens(content, model)
-      completionTokens += tokens
-      completionEstimated = estimated
-    }
-  }
-
-  return { completionTokens, completionEstimated }
-}
-
-function countTokens (content, model) {
-  if (encodingForModel) {
-    try {
-      // try using tiktoken if it was available
-      const encoder = encodingForModel(model)
-      const tokens = encoder.encode(content).length
-      encoder.free()
-      return { tokens, estimated: false }
-    } catch {
-      // possible errors from tiktoken:
-      // * model not available for token counts
-      // * issue encoding content
-    }
-  }
-
-  return {
-    tokens: estimateTokens(content),
-    estimated: true
-  }
-}
-
 function createEditRequestExtraction (tags, payload, openaiStore) {
   const instruction = payload.instruction
-  tags['openai.request.instruction'] = instruction
   openaiStore.instruction = instruction
 }
 
@@ -508,13 +385,6 @@ function createChatCompletionRequestExtraction (tags, payload, openaiStore) {
   if (!defensiveArrayLength(messages)) return
 
   openaiStore.messages = payload.messages
-  for (let i = 0; i < payload.messages.length; i++) {
-    const message = payload.messages[i]
-    tagChatCompletionRequestContent(message.content, i, tags)
-    tags[`openai.request.messages.${i}.role`] = message.role
-    tags[`openai.request.messages.${i}.name`] = message.name
-    tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
-  }
 }
 
 function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
@@ -522,28 +392,18 @@ function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
   const img = payload.file || payload.image
   if (img !== null && typeof img === 'object' && img.path) {
     const file = path.basename(img.path)
-    tags['openai.request.image'] = file
     openaiStore.file = file
   }
 
   // createImageEdit
   if (payload.mask !== null && typeof payload.mask === 'object' && payload.mask.path) {
     const mask = path.basename(payload.mask.path)
-    tags['openai.request.mask'] = mask
     openaiStore.mask = mask
   }
-
-  tags['openai.request.size'] = payload.size
-  tags['openai.request.response_format'] = payload.response_format
-  tags['openai.request.language'] = payload.language
 }
 
 function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
   switch (methodName) {
-    case 'createModeration':
-      createModerationResponseExtraction(tags, body)
-      break
-
     case 'createCompletion':
     case 'createChatCompletion':
     case 'createEdit':
@@ -554,10 +414,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'listFineTunes':
     case 'listFineTuneEvents':
       commonListCountResponseExtraction(tags, body)
-      break
-
-    case 'createEmbedding':
-      createEmbeddingResponseExtraction(tags, body, openaiStore)
       break
 
     case 'createFile':
@@ -571,23 +427,6 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
 
     case 'downloadFile':
       downloadFileResponseExtraction(tags, body)
-      break
-
-    case 'createFineTune':
-    case 'retrieveFineTune':
-    case 'cancelFineTune':
-      commonFineTuneResponseExtraction(tags, body)
-      break
-
-    case 'createTranscription':
-    case 'createTranslation':
-      createAudioResponseExtraction(tags, body)
-      break
-
-    case 'createImage':
-    case 'createImageEdit':
-    case 'createImageVariation':
-      commonImageResponseExtraction(tags, body)
       break
 
     case 'listModels':
@@ -620,74 +459,16 @@ function retrieveModelResponseExtraction (tags, body) {
   tags['openai.response.permission.is_blocking'] = body.permission[0].is_blocking
 }
 
-function commonLookupFineTuneRequestExtraction (tags, body) {
-  tags['openai.request.fine_tune_id'] = body.fine_tune_id
-  tags['openai.request.stream'] = !!body.stream // listFineTuneEvents
-}
-
 function listModelsResponseExtraction (tags, body) {
   if (!body.data) return
 
   tags['openai.response.count'] = body.data.length
 }
 
-function commonImageResponseExtraction (tags, body) {
-  if (!body.data) return
-
-  tags['openai.response.images_count'] = body.data.length
-
-  for (let i = 0; i < body.data.length; i++) {
-    const image = body.data[i]
-    // exactly one of these two options is provided
-    tags[`openai.response.images.${i}.url`] = normalize(image.url)
-    tags[`openai.response.images.${i}.b64_json`] = image.b64_json && 'returned'
-  }
-}
-
-function createAudioResponseExtraction (tags, body) {
-  tags['openai.response.text'] = body.text
-  tags['openai.response.language'] = body.language
-  tags['openai.response.duration'] = body.duration
-  tags['openai.response.segments_count'] = defensiveArrayLength(body.segments)
-}
-
-function createFineTuneRequestExtraction (tags, body) {
-  tags['openai.request.training_file'] = body.training_file
-  tags['openai.request.validation_file'] = body.validation_file
-  tags['openai.request.n_epochs'] = body.n_epochs
-  tags['openai.request.batch_size'] = body.batch_size
-  tags['openai.request.learning_rate_multiplier'] = body.learning_rate_multiplier
-  tags['openai.request.prompt_loss_weight'] = body.prompt_loss_weight
-  tags['openai.request.compute_classification_metrics'] = body.compute_classification_metrics
-  tags['openai.request.classification_n_classes'] = body.classification_n_classes
-  tags['openai.request.classification_positive_class'] = body.classification_positive_class
-  tags['openai.request.classification_betas_count'] = defensiveArrayLength(body.classification_betas)
-}
-
-function commonFineTuneResponseExtraction (tags, body) {
-  tags['openai.response.events_count'] = defensiveArrayLength(body.events)
-  tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
-
-  const hyperparams = body.hyperparams || body.hyperparameters
-  const hyperparamsKey = body.hyperparams ? 'hyperparams' : 'hyperparameters'
-
-  if (hyperparams) {
-    tags[`openai.response.${hyperparamsKey}.n_epochs`] = hyperparams.n_epochs
-    tags[`openai.response.${hyperparamsKey}.batch_size`] = hyperparams.batch_size
-    tags[`openai.response.${hyperparamsKey}.prompt_loss_weight`] = hyperparams.prompt_loss_weight
-    tags[`openai.response.${hyperparamsKey}.learning_rate_multiplier`] = hyperparams.learning_rate_multiplier
-  }
-  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files || body.training_file)
-  tags['openai.response.result_files_count'] = defensiveArrayLength(body.result_files)
-  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files || body.validation_file)
-  tags['openai.response.updated_at'] = body.updated_at
-  tags['openai.response.status'] = body.status
-}
-
 // the OpenAI package appears to stream the content download then provide it all as a singular string
 function downloadFileResponseExtraction (tags, body) {
-  if (!body.file) return
-  tags['openai.response.total_bytes'] = body.file.length
+  if (typeof body.file !== 'string') return
+  tags['openai.response.total_bytes'] = Buffer.byteLength(body.file)
 }
 
 function deleteFileResponseExtraction (tags, body) {
@@ -695,12 +476,8 @@ function deleteFileResponseExtraction (tags, body) {
 }
 
 function commonCreateAudioRequestExtraction (tags, body, openaiStore) {
-  tags['openai.request.response_format'] = body.response_format
-  tags['openai.request.language'] = body.language
-
   if (body.file !== null && typeof body.file === 'object' && body.file.path) {
     const filename = path.basename(body.file.path)
-    tags['openai.request.filename'] = filename
     openaiStore.file = filename
   }
 }
@@ -724,140 +501,16 @@ function createRetrieveFileResponseExtraction (tags, body) {
   tags['openai.response.status_details'] = body.status_details
 }
 
-function createEmbeddingResponseExtraction (tags, body, openaiStore) {
-  usageExtraction(tags, body, openaiStore)
-
-  if (!body.data) return
-
-  tags['openai.response.embeddings_count'] = body.data.length
-  for (let i = 0; i < body.data.length; i++) {
-    tags[`openai.response.embedding.${i}.embedding_length`] = body.data[i].embedding.length
-  }
-}
-
 function commonListCountResponseExtraction (tags, body) {
   if (!body.data) return
   tags['openai.response.count'] = body.data.length
 }
 
-// TODO: Is there ever more than one entry in body.results?
-function createModerationResponseExtraction (tags, body) {
-  tags['openai.response.id'] = body.id
-  // tags[`openai.response.model`] = body.model // redundant, already extracted globally
-
-  if (!body.results) return
-
-  tags['openai.response.flagged'] = body.results[0].flagged
-
-  for (const [category, match] of Object.entries(body.results[0].categories)) {
-    tags[`openai.response.categories.${category}`] = match
-  }
-
-  for (const [category, score] of Object.entries(body.results[0].category_scores)) {
-    tags[`openai.response.category_scores.${category}`] = score
-  }
-}
-
 // createCompletion, createChatCompletion, createEdit
 function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
-  usageExtraction(tags, body, methodName, openaiStore)
-
   if (!body.choices) return
 
-  tags['openai.response.choices_count'] = body.choices.length
-
   openaiStore.choices = body.choices
-
-  for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
-    const choice = body.choices[choiceIdx]
-
-    // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
-    const specifiesLogProb = Object.keys(choice).includes('logprobs')
-
-    tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
-    tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
-    tags[`openai.response.choices.${choiceIdx}.text`] = normalize(choice.text)
-
-    // createChatCompletion only
-    const message = choice.message || choice.delta // delta for streamed responses
-    if (message) {
-      tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
-      tags[`openai.response.choices.${choiceIdx}.message.content`] = normalize(message.content)
-      tags[`openai.response.choices.${choiceIdx}.message.name`] = normalize(message.name)
-      if (message.tool_calls) {
-        const toolCalls = message.tool_calls
-        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.name`] =
-            toolCalls[toolIdx].function.name
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.arguments`] =
-            toolCalls[toolIdx].function.arguments
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.id`] =
-            toolCalls[toolIdx].id
-        }
-      }
-    }
-  }
-}
-
-// createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction (tags, body, methodName, openaiStore) {
-  let promptTokens = 0
-  let completionTokens = 0
-  let totalTokens = 0
-  if (body && body.usage) {
-    promptTokens = body.usage.prompt_tokens
-    completionTokens = body.usage.completion_tokens
-    totalTokens = body.usage.total_tokens
-  } else if (body.model && ['createChatCompletion', 'createCompletion'].includes(methodName)) {
-    // estimate tokens based on method name for completions and chat completions
-    const { model } = body
-
-    // prompt tokens
-    const payload = openaiStore
-    const promptTokensCount = countPromptTokens(methodName, payload, model)
-    promptTokens = promptTokensCount.promptTokens
-    const promptEstimated = promptTokensCount.promptEstimated
-
-    // completion tokens
-    const completionTokensCount = countCompletionTokens(body, model)
-    completionTokens = completionTokensCount.completionTokens
-    const completionEstimated = completionTokensCount.completionEstimated
-
-    // total tokens
-    totalTokens = promptTokens + completionTokens
-    if (promptEstimated) tags['openai.response.usage.prompt_tokens_estimated'] = true
-    if (completionEstimated) tags['openai.response.usage.completion_tokens_estimated'] = true
-  }
-
-  if (promptTokens != null) tags['openai.response.usage.prompt_tokens'] = promptTokens
-  if (completionTokens != null) tags['openai.response.usage.completion_tokens'] = completionTokens
-  if (totalTokens != null) tags['openai.response.usage.total_tokens'] = totalTokens
-}
-
-function truncateApiKey (apiKey) {
-  return apiKey && `sk-...${apiKey.slice(-4)}`
-}
-
-function tagChatCompletionRequestContent (contents, messageIdx, tags) {
-  if (typeof contents === 'string') {
-    tags[`openai.request.messages.${messageIdx}.content`] = normalize(contents)
-  } else if (Array.isArray(contents)) {
-    // content can also be an array of objects
-    // which represent text input or image url
-    for (const contentIdx in contents) {
-      const content = contents[contentIdx]
-      const type = content.type
-      tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
-      if (type === 'text') {
-        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = normalize(content.text)
-      } else if (type === 'image_url') {
-        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
-          normalize(content.image_url.url)
-      }
-      // unsupported type otherwise, won't be tagged
-    }
-  }
-  // unsupported type otherwise, won't be tagged
 }
 
 // The server almost always responds with JSON
@@ -952,6 +605,7 @@ function normalizeRequestPayload (methodName, args) {
 
     case 'deleteFile':
     case 'files.del':
+    case 'files.delete':
     case 'retrieveFile':
     case 'files.retrieve':
     case 'downloadFile':
@@ -972,6 +626,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'fine-tune.retrieve':
     case 'deleteModel':
     case 'models.del':
+    case 'models.delete':
     case 'cancelFineTune':
     case 'fine_tuning.jobs.cancel':
     case 'fine-tune.cancel':
@@ -1011,23 +666,6 @@ function normalizeRequestPayload (methodName, args) {
 
   // Remaining OpenAI methods take a single object argument
   return args[0]
-}
-
-/**
- * Converts an array of tokens to a string
- * If input is already a string it's returned
- * In either case the value is truncated
-
- * It's intentional that the array be truncated arbitrarily, e.g. "[999, 888, 77..."
-
- * "foo" -> "foo"
- * [1,2,3] -> "[1, 2, 3]"
- */
-function normalizeStringOrTokenArray (input, truncate) {
-  const normalized = Array.isArray(input)
-    ? `[${input.join(', ')}]` // "[1, 2, 999]"
-    : input // "foo"
-  return truncate ? normalize(normalized) : normalized
 }
 
 function defensiveArrayLength (maybeArray) {

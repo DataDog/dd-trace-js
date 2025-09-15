@@ -14,18 +14,20 @@ const LLM_SPAN_TYPES = new Set(['llm', 'chat_model', 'embedding'])
 const LLM = 'llm'
 const WORKFLOW = 'workflow'
 const EMBEDDING = 'embedding'
+const TOOL = 'tool'
+const RETRIEVAL = 'retrieval'
 
 const ChainHandler = require('./handlers/chain')
 const ChatModelHandler = require('./handlers/chat_model')
 const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
+const ToolHandler = require('./handlers/tool')
+const VectorStoreHandler = require('./handlers/vectorstore')
 
 class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
-  static get integration () { return 'langchain' }
-  static get id () { return 'langchain' }
-  static get prefix () {
-    return 'tracing:apm:langchain:invoke'
-  }
+  static integration = 'langchain'
+  static id = 'langchain'
+  static prefix = 'tracing:apm:langchain:invoke'
 
   constructor () {
     super(...arguments)
@@ -34,7 +36,9 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       chain: new ChainHandler(this._tagger),
       chat_model: new ChatModelHandler(this._tagger),
       llm: new LlmHandler(this._tagger),
-      embedding: new EmbeddingHandler(this._tagger)
+      embedding: new EmbeddingHandler(this._tagger),
+      tool: new ToolHandler(this._tagger),
+      similarity_search: new VectorStoreHandler(this._tagger)
     }
   }
 
@@ -45,7 +49,10 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const modelProvider = tags['langchain.request.provider'] // could be undefined
     const modelName = tags['langchain.request.model'] // could be undefined
     const kind = this.getKind(ctx.type, modelProvider)
-    const name = tags['resource.name']
+
+    const instance = ctx.instance || ctx.self
+    const handler = this._handlers[ctx.type]
+    const name = handler?.getName({ span, instance })
 
     return {
       modelProvider,
@@ -113,7 +120,14 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    return WORKFLOW
+    switch (type) {
+      case 'tool':
+        return TOOL
+      case 'similarity_search':
+        return RETRIEVAL
+      default:
+        return WORKFLOW
+    }
   }
 
   getIntegrationName (type, provider = 'custom') {
@@ -134,51 +148,57 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
 }
 
 class RunnableSequenceInvokePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_rs_invoke' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
-  }
+  static id = 'llmobs_langchain_rs_invoke'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_invoke'
 }
 
 class RunnableSequenceBatchPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_rs_batch' }
-  static get lcType () { return 'chain' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
-  }
+  static id = 'llmobs_langchain_rs_batch'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_batch'
 }
 
 class BaseChatModelGeneratePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_chat_model_generate' }
-  static get lcType () { return 'chat_model' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
-  }
+  static id = 'llmobs_langchain_chat_model_generate'
+  static lcType = 'chat_model'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseChatModel_generate'
 }
 
 class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_llm_generate' }
-  static get lcType () { return 'llm' }
-  static get prefix () {
-    return 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
-  }
+  static id = 'llmobs_langchain_llm_generate'
+  static lcType = 'llm'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseLLM_generate'
 }
 
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_embeddings_embed_query' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedQuery'
-  }
+  static id = 'llmobs_langchain_embeddings_embed_query'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedQuery'
 }
 
 class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
-  static get id () { return 'llmobs_langchain_embeddings_embed_documents' }
-  static get lcType () { return 'embedding' }
-  static get prefix () {
-    return 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
-  }
+  static id = 'llmobs_langchain_embeddings_embed_documents'
+  static lcType = 'embedding'
+  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+}
+
+class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
+  static id = 'llmobs_langchain_tool_invoke'
+  static lcType = 'tool'
+  static prefix = 'tracing:orchestrion:@langchain/core:Tool_invoke'
+}
+
+class VectorStoreSimilaritySearchPlugin extends BaseLangChainLLMObsPlugin {
+  static id = 'llmobs_langchain_vectorstore_similarity_search'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearch'
+}
+
+class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainLLMObsPlugin {
+  static id = 'llmobs_langchain_vectorstore_similarity_search_with_score'
+  static lcType = 'similarity_search'
+  static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
 }
 
 module.exports = [
@@ -187,5 +207,8 @@ module.exports = [
   BaseChatModelGeneratePlugin,
   BaseLLMGeneratePlugin,
   EmbeddingsEmbedQueryPlugin,
-  EmbeddingsEmbedDocumentsPlugin
+  EmbeddingsEmbedDocumentsPlugin,
+  ToolInvokePlugin,
+  VectorStoreSimilaritySearchPlugin,
+  VectorStoreSimilaritySearchWithScorePlugin
 ]

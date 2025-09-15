@@ -1,9 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../../setup/core')
 
 const { SchemaBuilder } = require('../../../src/datastreams/schemas/schema_builder')
-const { expect } = require('chai')
 
 class Iterator {
   iterateOverSchema (builder) {

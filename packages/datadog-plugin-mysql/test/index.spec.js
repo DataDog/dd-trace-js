@@ -1,7 +1,12 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -85,7 +90,8 @@ describe('Plugin', () => {
                 'db.name': 'db',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql'
+                component: 'mysql',
+                '_dd.integration': 'mysql'
               }
             })
             .then(done)
@@ -251,8 +257,10 @@ describe('Plugin', () => {
         withPeerService(
           () => tracer,
           'mysql',
-          () => pool.query('SELECT 1', (_) => {}),
-          'db', 'db.name')
+          (done) => pool.query('SELECT 1', (_) => done()),
+          'db',
+          'db.name'
+        )
 
         it('should do automatic instrumentation', done => {
           agent

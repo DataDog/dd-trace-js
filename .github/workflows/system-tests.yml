@@ -4,16 +4,23 @@ on:
   pull_request:
   push:
     branches: [master]
-  workflow_dispatch: {}
+  workflow_dispatch:
   schedule:
     - cron: 0 4 * * *
+
+concurrency:
+  # this ensures that only one workflow runs at a time for a given branch on pull requests
+  # as the group key is the workflow name and the branch name
+  # for scheduled runs and pushes to master, we use the run id to ensure that all runs are executed
+  group: ${{ (github.event_name == 'pull_request' && format('{0}-{1}', github.workflow, github.ref)) || format('{0}-{1}', github.workflow, github.run_id) }}
+  cancel-in-progress: true
 
 jobs:
   build-artifacts:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dd-trace-js
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
@@ -24,70 +31,20 @@ jobs:
           name: system_tests_binaries
           path: ./binaries/**/*
 
-  get-scenarios:
-    name: Get parameters
-    uses: DataDog/system-tests/.github/workflows/compute-workflow-parameters.yml@main
-    with:
-      library: nodejs
-      scenarios_groups: essentials,appsec_rasp,debugger,integrations
-
-  system-tests:
-    runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
-    needs:
-      - get-scenarios
-    strategy:
-      matrix:
-        weblog-variant: ${{fromJson(needs.get-scenarios.outputs.endtoend_weblogs)}}
-        scenario: ${{fromJson(needs.get-scenarios.outputs.endtoend_scenarios)}}
-
-    env:
-      TEST_LIBRARY: nodejs
-      WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
-
-    steps:
-      - name: Checkout system tests
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: 'DataDog/system-tests'
-          ref: 'main'
-      - name: Checkout dd-trace-js
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          path: 'binaries/dd-trace-js'
-      - name: Build runner
-        uses: ./.github/actions/install_runner
-      - name: Pull images
-        uses: ./.github/actions/pull_images
-        with:
-          library: nodejs
-          weblog: ${{ matrix.weblog-variant }}
-          scenarios: '["${{ matrix.scenario }}"]'
-          cleanup: false
-      - name: Build weblog
-        run: ./build.sh -i weblog
-      - name: Build agent
-        id: build-agent
-        run: ./build.sh -i agent
-      - name: Run scenario ${{ matrix.scenario }}
-        run: ./run.sh ${{ matrix.scenario }}
-      - name: Compress artifact
-        if: ${{ always() }}
-        run: tar -czvf artifact.tar.gz $(ls | grep logs)
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ always() }}
-        with:
-          name: logs_${{ matrix.weblog-variant }}-${{ matrix.scenario }}
-          path: artifact.tar.gz
-
-  parametric:
+  main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
     secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      job_count: 8
-      job_matrix: '[1,2,3,4,5,6,7,8]'
+      desired_execution_time: 300  # 5 minutes
+      scenarios_groups: tracer-release
+      excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
+      parametric_job_count: 8
+      skip_empty_scenarios: true

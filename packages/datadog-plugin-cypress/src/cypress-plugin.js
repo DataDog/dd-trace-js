@@ -1,3 +1,5 @@
+'use strict'
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -76,7 +78,8 @@ const {
   GIT_TAG,
   GIT_PULL_REQUEST_BASE_BRANCH_SHA,
   GIT_COMMIT_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_COMMIT_HEAD_MESSAGE
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -220,10 +223,31 @@ function getSuiteStatus (suiteStats) {
 }
 
 class CypressPlugin {
-  constructor () {
-    this._isInit = false
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
+  _isInit = false
+  testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
+  finishedTestsByFile = {}
+  testStatuses = {}
+
+  isTestsSkipped = false
+  isSuitesSkippingEnabled = false
+  isCodeCoverageEnabled = false
+  isFlakyTestRetriesEnabled = false
+  isEarlyFlakeDetectionEnabled = false
+  isKnownTestsEnabled = false
+  earlyFlakeDetectionNumRetries = 0
+  testsToSkip = []
+  skippedTests = []
+  hasForcedToRunSuites = false
+  hasUnskippableSuites = false
+  unskippableSuites = []
+  knownTests = []
+  isTestManagementTestsEnabled = false
+  testManagementAttemptToFixRetries = 0
+  isImpactedTestsEnabled = false
+  modifiedTests = []
+
+  constructor () {
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
       [GIT_COMMIT_SHA]: sha,
@@ -238,7 +262,8 @@ class CypressPlugin {
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [GIT_TAG]: tag,
       [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseSha,
-      [GIT_COMMIT_HEAD_SHA]: commitHeadSha
+      [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
+      [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot || process.cwd()
@@ -258,28 +283,9 @@ class CypressPlugin {
       commitMessage,
       tag,
       pullRequestBaseSha,
-      commitHeadSha
+      commitHeadSha,
+      commitHeadMessage
     }
-    this.finishedTestsByFile = {}
-    this.testStatuses = {}
-
-    this.isTestsSkipped = false
-    this.isSuitesSkippingEnabled = false
-    this.isCodeCoverageEnabled = false
-    this.isFlakyTestRetriesEnabled = false
-    this.isEarlyFlakeDetectionEnabled = false
-    this.isKnownTestsEnabled = false
-    this.earlyFlakeDetectionNumRetries = 0
-    this.testsToSkip = []
-    this.skippedTests = []
-    this.hasForcedToRunSuites = false
-    this.hasUnskippableSuites = false
-    this.unskippableSuites = []
-    this.knownTests = []
-    this.isTestManagementTestsEnabled = false
-    this.testManagementAttemptToFixRetries = 0
-    this.isImpactedTestsEnabled = false
-    this.modifiedTests = []
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -376,7 +382,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
   }
 
@@ -443,7 +450,8 @@ class CypressPlugin {
         ...testSpanMetadata,
         ...this.testEnvironmentMetadata,
         ...testSuiteTags
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
   }
 
@@ -474,8 +482,12 @@ class CypressPlugin {
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        // We use TEST_FRAMEWORK_NAME for the name of the module
-        this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        } else {
+          this.isEarlyFlakeDetectionEnabled = false
+          this.isKnownTestsEnabled = false
+        }
       }
     }
 
@@ -565,7 +577,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
@@ -575,7 +588,8 @@ class CypressPlugin {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
-      }
+      },
+      integrationName: TEST_FRAMEWORK_NAME
     })
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
 

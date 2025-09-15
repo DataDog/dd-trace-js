@@ -1,10 +1,15 @@
 'use strict'
 
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { AsyncLocalStorage } = require('async_hooks')
 
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
@@ -103,6 +108,7 @@ describe('Plugin', () => {
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code')
             expect(traces[0][0].meta).to.have.property('component', 'hapi')
+            expect(traces[0][0].meta).to.have.property('_dd.integration', 'hapi')
             expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
           })
           .then(done)

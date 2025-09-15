@@ -35,10 +35,25 @@ function executeKnexNestedRawQueryAsCallback (knex, taintedSql, sqlToFail, cb) {
   })
 }
 
+async function executeKnexAsyncNestedRawQuery (knex, taintedSql, notTaintedSql) {
+  await knex.raw(notTaintedSql)
+  await knex.raw(taintedSql)
+}
+
+async function executeKnexAsyncNestedRawQueryAsAsyncTryCatch (knex, taintedSql, sqlToFail) {
+  try {
+    await knex.raw(sqlToFail)
+  } catch (e) {
+    await knex.raw(taintedSql)
+  }
+}
+
 module.exports = {
   executeKnexRawQuery,
   executeKnexNestedRawQuery,
+  executeKnexAsyncNestedRawQuery,
   executeKnexNestedRawQueryOnRejectedInThen,
   executeKnexNestedRawQueryWitCatch,
-  executeKnexNestedRawQueryAsCallback
+  executeKnexNestedRawQueryAsCallback,
+  executeKnexAsyncNestedRawQueryAsAsyncTryCatch
 }

@@ -4,6 +4,7 @@ module.exports = {
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
@@ -25,6 +26,7 @@ module.exports = {
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
+  get ai () { return require('../../../datadog-plugin-ai/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
@@ -45,6 +47,7 @@ module.exports = {
   get graphql () { return require('../../../datadog-plugin-graphql/src') },
   get grpc () { return require('../../../datadog-plugin-grpc/src') },
   get hapi () { return require('../../../datadog-plugin-hapi/src') },
+  get hono () { return require('../../../datadog-plugin-hono/src') },
   get http () { return require('../../../datadog-plugin-http/src') },
   get http2 () { return require('../../../datadog-plugin-http2/src') },
   get https () { return require('../../../datadog-plugin-http/src') },
@@ -74,6 +77,7 @@ module.exports = {
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },
   get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },
+  get mongoose () { return require('../../../datadog-plugin-mongoose/src') },
   get mysql () { return require('../../../datadog-plugin-mysql/src') },
   get mysql2 () { return require('../../../datadog-plugin-mysql2/src') },
   get net () { return require('../../../datadog-plugin-net/src') },
@@ -99,5 +103,6 @@ module.exports = {
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
-  get winston () { return require('../../../datadog-plugin-winston/src') }
+  get winston () { return require('../../../datadog-plugin-winston/src') },
+  get ws () { return require('../../../datadog-plugin-ws/src') }
 }

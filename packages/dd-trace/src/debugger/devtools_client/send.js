@@ -7,7 +7,7 @@ const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
-const log = require('../../log')
+const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { getEnvironmentVariable } = require('../../config-helper')
 

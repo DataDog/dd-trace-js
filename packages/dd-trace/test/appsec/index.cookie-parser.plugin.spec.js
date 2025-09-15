@@ -1,12 +1,15 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert')
+const path = require('node:path')
 const axios = require('axios')
-const path = require('path')
+const sinon = require('sinon')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('Suspicious request blocking - cookie-parser', () => {

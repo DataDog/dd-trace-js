@@ -1,10 +1,13 @@
 'use strict'
 
-require('../setup/tap')
-const proxyquire = require('proxyquire')
-
-const { channel } = require('dc-polyfill')
 const { assert } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
+
+require('../setup/core')
+
 const standalone = require('../../src/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 const {

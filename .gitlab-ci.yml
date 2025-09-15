@@ -5,14 +5,20 @@ stages:
   - single-step-instrumentation-tests
   - macrobenchmarks
 
-# TODO(BridgeAR) Activate the gitlab CI job
-#
-# check_config_inversion_local_file:
-#   rules:
-#     - when: on_success
-#   extends: .check_config_inversion_local_file
-#   variables:
-#     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+validate_supported_configurations_local_file:
+  rules:
+    - when: on_success
+  extends: .validate_supported_configurations_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
+update_central_configurations_version_range:
+  extends: .update_central_configurations_version_range
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+    LANGUAGE_NAME: "nodejs"
+    MULTIPLE_RELEASE_LINES: "true"
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
@@ -34,7 +40,7 @@ variables:
 
 configure_system_tests:
   variables:
-    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,docker-ssi,lib-injection"
+    SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
 
 requirements_json_test:
   rules:

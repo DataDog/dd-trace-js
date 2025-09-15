@@ -1,11 +1,15 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
+
+require('../setup/core')
 
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
-const { channel } = require('dc-polyfill')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
@@ -35,8 +39,8 @@ describe('common Plugin behaviour', () => {
 
   after(() => agent.close({ ritmReset: false }))
   class CommonPlugin extends TracingPlugin {
-    static get id () { return 'commonPlugin' }
-    static get operation () { return 'dothings' }
+    static id = 'commonPlugin'
+    static operation = 'dothings'
 
     start () {
       return this.startSpan('common.operation', {
@@ -46,8 +50,8 @@ describe('common Plugin behaviour', () => {
   }
 
   class SuffixPlugin extends TracingPlugin {
-    static get id () { return 'suffixPlugin' }
-    static get operation () { return 'dothings' }
+    static id = 'suffixPlugin'
+    static operation = 'dothings'
     start () {
       return this.startSpan('common.operation', {
         service: this.config.service || `${this.tracer._service}-suffix`

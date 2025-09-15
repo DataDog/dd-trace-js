@@ -1,9 +1,14 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
+const { expect } = require('chai')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {

@@ -1,16 +1,20 @@
 'use strict'
 
-const { execSync } = require('child_process')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const chai = require('chai')
+const path = require('node:path')
+const { execSync } = require('node:child_process')
+
 const {
   FakeAgent,
   createSandbox,
   spawnProc
 } = require('../../../../../../integration-tests/helpers')
-const chai = require('chai')
-const path = require('path')
 const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+
+const { expect } = chai
 
 function check (expected, actual) {
   for (const expectedLLMObsSpanIdx in expected) {
@@ -55,7 +59,9 @@ const testCases = [
           spanKind: 'agent',
           tags: {
             ml_app: 'test',
-            language: 'javascript'
+            language: 'javascript',
+            foo: 'bar',
+            bar: 'baz'
           },
           inputValue: 'this is a',
           outputValue: 'test'
@@ -67,22 +73,14 @@ const testCases = [
   }
 ]
 
-// a bit of devex to show the version we're actually testing
-// so we don't need to know ahead of time
-function getLatestVersion (range) {
-  const command = `npm show typescript@${range} version`
-  const output = execSync(command, { encoding: 'utf-8' }).trim()
-  const versions = output.split('\n').map(line => line.split(' ')[1].replace(/'/g, ''))
-  return versions[versions.length - 1]
-}
-
 describe('typescript', () => {
   let agent
   let proc
   let sandbox
 
   for (const version of testVersions) {
-    context(`with version ${getLatestVersion(version)}`, () => {
+    // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
+    context(`with version ${version}`, () => {
       before(async function () {
         this.timeout(20000)
         sandbox = await createSandbox(
@@ -121,7 +119,7 @@ describe('typescript', () => {
 
           proc = await spawnProc(
             path.join(cwd, `${file}.js`),
-            { cwd, env: { DD_TRACE_AGENT_PORT: agent.port } }
+            { cwd, env: { DD_TRACE_AGENT_PORT: agent.port, DD_TAGS: 'foo:bar, bar:baz' } }
           )
 
           await Promise.all(waiters)

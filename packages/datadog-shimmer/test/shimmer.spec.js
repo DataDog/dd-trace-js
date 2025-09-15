@@ -139,6 +139,12 @@ describe('shimmer', () => {
       expect(obj.count(1)).to.equal(2)
     })
 
+    it('should bail, if not receiving a target', () => {
+      const fail = () => { throw new Error() }
+
+      shimmer.wrap(undefined, 'count', fail)
+    })
+
     it('should wrap the method from the prototype', () => {
       const count = inc => inc
       const obj = Object.create({ count })

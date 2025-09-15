@@ -1,23 +1,11 @@
+'use strict'
+
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['os.availableParallelism'] }] */
+
 const os = require('os')
 const perf = require('perf_hooks').performance
 const version = require('../../../../../package.json').version
-const { getEnvironmentVariable } = require('../../config-helper')
-
-const libuvThreadPoolSize = (() => {
-  const ss = getEnvironmentVariable('UV_THREADPOOL_SIZE')
-  if (ss === undefined) {
-    // Backend will apply the default size based on Node version.
-    return
-  }
-  // libuv uses atoi to parse the value, which is almost the same as parseInt, except that parseInt
-  // will return NaN on invalid input, while atoi will return 0. This is handled at return.
-  const s = Number.parseInt(ss)
-  // We don't interpret the value further here in the library. Backend will interpret the number
-  // based on Node version. In all currently known Node versions, 0 results in 1 worker thread,
-  // negative values (because they're assigned to an unsigned int) become very high positive values,
-  // and the value is finally capped at 1024.
-  return Number.isNaN(s) ? 0 : s
-})()
+const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
 
 class EventSerializer {
   constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
@@ -73,10 +61,7 @@ class EventSerializer {
           version
         },
         runtime: {
-          // os.availableParallelism only available in node 18.14.0/19.4.0 and above
-          available_processors: typeof os.availableParallelism === 'function'
-            ? os.availableParallelism()
-            : os.cpus().length,
+          available_processors: availableParallelism(),
           // Using `nodejs` for consistency with the existing `runtime` tag.
           // Note that the event `family` property uses `node`, as that's what's
           // proscribed by the Intake API, but that's an internal enum and is

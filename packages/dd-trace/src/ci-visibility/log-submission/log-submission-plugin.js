@@ -1,3 +1,5 @@
+'use strict'
+
 const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')
@@ -34,9 +36,7 @@ function getWinstonLogSubmissionParameters (config) {
 }
 
 class LogSubmissionPlugin extends Plugin {
-  static get id () {
-    return 'log-submission'
-  }
+  static id = 'log-submission'
 
   constructor (...args) {
     super(...args)

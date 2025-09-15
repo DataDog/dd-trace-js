@@ -1,14 +1,14 @@
 'use strict'
 
-const { mkdir, writeFile, readdir } = require('fs/promises')
+const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
-const childProcess = require('child_process')
 const semver = require('semver')
 const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -16,7 +16,6 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
-const versionListCache = new Map()
 const externalDeps = new Map()
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
@@ -30,6 +29,8 @@ run()
 
 async function run () {
   await assertPrerequisites()
+  install()
+  await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
 }
 
@@ -111,9 +112,8 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  const dependencies = { [name]: dependencyVersionRange }
-  if (externalDeps.has(name)) {
-    await addDependencies(dependencies, name, dependencyVersionRange)
+  const dependencies = {
+    [name]: getCappedRange(name, dependencyVersionRange)
   }
   const pkg = {
     name: [name, sha1(name).slice(0, 8), sha1(version)].filter(val => val).join('-'),
@@ -144,59 +144,52 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 }
 
 /**
- * @param {object} dependencies
- * @param {string} externalName
- * @param {string} versionRange
+ * @param {object} rootFolder
+ * @param {string} parent
  */
-async function addDependencies (dependencies, externalName, versionRange) {
-  const versionList = await getVersionList(externalName)
-  const version = semver.maxSatisfying(versionList, versionRange)
-  const pkgJson = await npmView(`${externalName}@${version}`)
-  for (const { dep, name } of externalDeps.get(externalName)) {
-    // do stuff with dep
-    for (const section of ['devDependencies', 'peerDependencies']) {
-      if (pkgJson[section] && name in pkgJson[section]) {
-        if (dep === externalName) {
-          dependencies[name] = version
-        } else if (pkgJson[section][name].includes('||')) {
-          // Use the first version in the list (as npm does by default)
-          dependencies[name] = pkgJson[section][name].split('||')[0].trim()
-        } else {
-          // Only one version available so use that.
-          dependencies[name] = pkgJson[section][name]
+async function assertPeerDependencies (rootFolder, parent = '') {
+  const entries = await readdir(rootFolder)
+
+  for (const entry of entries) {
+    const folder = join(rootFolder, entry)
+
+    if (!(await lstat(folder)).isDirectory()) continue
+    if (entry === 'node_modules') continue
+    if (entry.startsWith('@')) {
+      await assertPeerDependencies(folder, entry)
+      continue
+    }
+
+    const externalName = join(parent, entry.split('@')[0])
+
+    if (!externalDeps.has(externalName)) continue
+
+    const versionPkgJsonPath = join(folder, 'package.json')
+    const versionPkgJson = require(versionPkgJsonPath)
+
+    for (const { dep, name } of externalDeps.get(externalName)) {
+      const pkgJsonPath = require(folder).pkgJsonPath()
+      const pkgJson = require(pkgJsonPath)
+
+      for (const section of ['devDependencies', 'peerDependencies']) {
+        if (pkgJson[section]?.[name]) {
+          if (dep === externalName) {
+            versionPkgJson.dependencies[name] = pkgJson.version
+          } else {
+            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+              // Use the first version in the list (as npm does by default)
+              ? pkgJson[section][name].split('||')[0].trim()
+              // Only one version available so use that.
+              : pkgJson[section][name]
+          }
+
+          await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+          break
         }
-        break
       }
     }
   }
-}
-
-/**
- * @param {string} name
- * @returns {Promise<string[]>}
- */
-async function getVersionList (name) {
-  let list = versionListCache.get(name)
-  if (list) return list
-  list = await npmView(`${name} versions`)
-  versionListCache.set(name, list)
-  return list
-}
-
-/**
- * @param {string} input
- * @param {boolean} [retry=true]
- * @returns {Promise<any>}
- */
-function npmView (input, retry = true) {
-  return new Promise((resolve, reject) => {
-    childProcess.exec(`npm view ${input} --json`, (err, stdout) => {
-      if (err) {
-        return retry ? npmView(input, false).then(resolve, reject) : reject(err)
-      }
-      resolve(JSON.parse(stdout.toString()))
-    })
-  })
 }
 
 /**
@@ -211,6 +204,7 @@ const requirePackageJson = require('${requirePackageJsonPath}')
 module.exports = {
   get (id) { return require(id || '${name}') },
   getPath (id) { return require.resolve(id || '${name}' ) },
+  pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
   version () { return requirePackageJson('${name}', module).version }
 }
 `

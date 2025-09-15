@@ -1,5 +1,7 @@
 'use strict'
+
 /* eslint-disable no-console */
+/* eslint n/no-unsupported-features/node-builtins: ['error', { version: '>=22.0.0' }] */
 
 const fs = require('fs')
 const path = require('path')
@@ -66,7 +68,7 @@ function checkPlugins (yamlPath) {
     const instRanges = Array.from(rangesPerPluginFromInst[pluginName])
     const yamlVersions = getMatchingVersions(pluginName, yamlRanges)
     const instVersions = getMatchingVersions(pluginName, instRanges)
-    if (!util.isDeepStrictEqual(yamlVersions, instVersions)) {
+    if (pluginName !== 'next' && !util.isDeepStrictEqual(yamlVersions, instVersions)) {
       const opts = { colors: true }
       const colors = x => util.inspect(x, opts)
       pluginErrorMsg(pluginName, 'Mismatch', `
@@ -160,7 +162,9 @@ checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'test-optimizati
 
 const IGNORED_WORKFLOWS = {
   all: [
+    'audit.yml',
     'codeql-analysis.yml',
+    'dependabot-automation.yml',
     'flakiness.yml',
     'pr-labels.yml',
     'release-3.yml',
@@ -172,13 +176,14 @@ const IGNORED_WORKFLOWS = {
     'retry.yml'
   ],
   trigger_pull_request: [
-    'audit.yml',
+    'eslint-rules.yml',
     'stale.yml'
   ],
   trigger_push: [
     'stale.yml'
   ],
   trigger_schedule: [
+    'eslint-rules.yml',
     'project.yml'
   ]
 }

@@ -1,14 +1,17 @@
 'use strict'
 
-const Config = require('../src/config')
+const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const express = require('express')
-const getPort = require('get-port')
-const http = require('http')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
 
-require('./setup/tap')
+const http = require('node:http')
+
+require('./setup/core')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const Config = require('../src/config')
 
 const debugChannel = channel('datadog:log:debug')
 
@@ -23,7 +26,7 @@ describe('Flare', () => {
   let socket
   let handler
 
-  const createServer = () => {
+  const createServer = (done) => {
     const app = express()
 
     app.post('/tracer_flare/v1', upload.any(), (req, res) => {
@@ -36,7 +39,10 @@ describe('Flare', () => {
       socket = socket_
     })
 
-    listener = server.listen(port)
+    listener = server.listen(0, '127.0.0.1', () => {
+      port = server.address().port
+      done()
+    })
   }
 
   beforeEach(() => {
@@ -49,11 +55,9 @@ describe('Flare', () => {
     flare = proxyquire('../src/flare', {
       '../startup-log': startupLog
     })
-
-    return getPort().then(port_ => {
-      port = port_
-    })
   })
+
+  beforeEach(createServer)
 
   beforeEach(() => {
     tracerConfig = new Config({
@@ -65,8 +69,6 @@ describe('Flare', () => {
       hostname: 'myhostname',
       user_handle: 'user.name@datadoghq.com'
     }
-
-    createServer()
   })
 
   afterEach(done => {

@@ -1,13 +1,17 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const ddpv = require('mocha/package.json').version
 const sinon = require('sinon')
 const semver = require('semver')
+
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
-const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -93,6 +97,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
                 expect(span.meta).to.have.property('out.host', '127.0.0.1')
                 expect(span.meta).to.have.property('component', 'mongodb')
+                expect(span.meta).to.have.property('_dd.integration', 'mongodb')
               })
               .then(done)
               .catch(done)

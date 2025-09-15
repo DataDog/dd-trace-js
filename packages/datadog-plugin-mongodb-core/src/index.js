@@ -6,11 +6,11 @@ const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get id () { return 'mongodb-core' }
-  static get component () { return 'mongodb' }
+  static id = 'mongodb-core'
+  static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
-  static get peerServicePrecursors () { return [] }
+  static peerServicePrecursors = []
 
   configure (config) {
     super.configure(config)
@@ -24,7 +24,8 @@ class MongodbCorePlugin extends DatabasePlugin {
     )
   }
 
-  start ({ ns, ops, options = {}, name }) {
+  bindStart (ctx) {
+    const { ns, ops, options = {}, name } = ctx
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -44,11 +45,13 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.host': options.host,
         'out.port': options.port
       }
-    })
+    }, ctx)
     const comment = this.injectDbmComment(span, ops.comment, service)
     if (comment) {
       ops.comment = comment
     }
+
+    return ctx.currentStore
   }
 
   getPeerService (tags) {
@@ -86,11 +89,28 @@ function sanitizeBigInt (data) {
   return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
 }
 
+function extractQuery (statements) {
+  if (statements.length === 1 && statements[0].q) return statements[0].q
+
+  const extractedQueries = []
+  for (let i = 0; i < statements.length; i++) {
+    if (statements[i].q) {
+      extractedQueries.push(limitDepth(statements[i].q))
+    }
+  }
+
+  return extractedQueries
+}
+
 function getQuery (cmd) {
-  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
+  if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
+
+  if (Array.isArray(cmd)) return sanitizeBigInt(extractQuery(cmd))
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
   if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
+  if (cmd.deletes) return sanitizeBigInt(extractQuery(cmd.deletes))
+  if (cmd.updates) return sanitizeBigInt(extractQuery(cmd.updates))
 }
 
 function getResource (plugin, ns, query, operationName) {

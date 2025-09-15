@@ -102,6 +102,7 @@ tracer.use('pg', {
 <h5 id="undici"></h5>
 <h5 id="when"></h5>
 <h5 id="winston"></h5>
+<h5 id="ws"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
@@ -148,7 +149,7 @@ tracer.use('pg', {
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
-* [primsa](./interfaces/export_.plugins.prisma.html)
+* [prisma](./interfaces/export_.plugins.prisma.html)
 * [promise](./interfaces/export_.plugins.promise.html)
 * [promise-js](./interfaces/export_.plugins.promise_js.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
@@ -160,6 +161,7 @@ tracer.use('pg', {
 * [undici](./interfaces/export_.plugins.undici.html)
 * [when](./interfaces/export_.plugins.when.html)
 * [winston](./interfaces/export_.plugins.winston.html)
+* [ws](./interfaces/export_.plugins.ws.html)
 
 <h2 id="manual-instrumentation">Manual Instrumentation</h2>
 

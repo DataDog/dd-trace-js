@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -32,7 +36,7 @@ describe('Plugin', () => {
           opensearch = metaModule.get()
 
           client = new opensearch.Client({
-            node: 'http://localhost:9201'
+            node: 'http://127.0.0.1:9201'
           })
         })
 
@@ -66,7 +70,7 @@ describe('Plugin', () => {
                 'opensearch.url': '/docs/_search',
                 'opensearch.body': '{"query":{"match_all":{}}}',
                 component: 'opensearch',
-                'out.host': 'localhost'
+                'out.host': '127.0.0.1'
               }
             })
             .then(done)
@@ -99,6 +103,7 @@ describe('Plugin', () => {
               )
               expect(traces[0][0].meta).to.have.property('opensearch.params', '{"size":100}')
               expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+              expect(traces[0][0].meta).to.have.property('_dd.integration', 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -211,7 +216,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search({ index: 'logstash-2000.01.01', body: {} }),
+          () => {
+            client.search({ index: 'logstash-2000.01.01', body: {} })
+          },
           rawExpectedSchema.outbound
         )
       })
@@ -237,7 +244,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           opensearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new opensearch.Client({
-            node: 'http://localhost:9201'
+            node: 'http://127.0.0.1:9201'
           })
         })
 
@@ -253,8 +260,12 @@ describe('Plugin', () => {
                 match_all: {}
               }
             }
+          }).catch(() => {
+            // Ignore index_not_found_exception for peer service assertion
           }),
-          'localhost', 'out.host')
+          '127.0.0.1',
+          'out.host'
+        )
 
         it('should be configured with the correct values', done => {
           client.search({
@@ -285,7 +296,9 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => client.search({ index: 'logstash-2000.01.01', body: {} }),
+          () => {
+            client.search({ index: 'logstash-2000.01.01', body: {} })
+          },
           {
             v0: {
               opName: 'opensearch.query',

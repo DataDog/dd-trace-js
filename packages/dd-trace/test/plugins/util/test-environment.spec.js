@@ -1,11 +1,14 @@
 'use strict'
 
-require('../../setup/tap')
-
-const fs = require('fs')
-const path = require('path')
-
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const fs = require('node:fs')
+const path = require('node:path')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+require('../../setup/core')
+
 const execFileSyncStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
@@ -13,7 +16,7 @@ const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
   GIT_COMMIT_HEAD_SHA
 } = require('../../../src/plugins/util/tags')
 
@@ -51,17 +54,17 @@ describe('test environment data', () => {
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
         expect({
           pullRequestBaseBranch,
-          pullRequestBaseBranchSha,
+          pullRequestBaseBranchHeadSha,
           headCommitSha
         }).to.eql({
           pullRequestBaseBranch: 'datadog:main',
-          pullRequestBaseBranchSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
+          pullRequestBaseBranchHeadSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
           headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
         })
       })
@@ -71,12 +74,12 @@ describe('test environment data', () => {
         process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload_malformed.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
-          [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
+          [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
         expect(pullRequestBaseBranch).to.equal('datadog:main')
-        expect(pullRequestBaseBranchSha).to.be.undefined
+        expect(pullRequestBaseBranchHeadSha).to.be.undefined
         expect(headCommitSha).to.be.undefined
       })
     }

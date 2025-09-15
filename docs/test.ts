@@ -101,6 +101,11 @@ tracer.init({
 });
 
 tracer.init({
+  runtimeMetrics: {
+    enabled: true,
+    gc: true,
+    eventLoop: false
+  },
   appsec: {
     enabled: true,
     rules: './rules.json',
@@ -116,6 +121,8 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
+      endpointCollectionEnabled: true,
+      endpointCollectionMessageLimit: 300
     },
     rasp: {
       enabled: true,
@@ -334,6 +341,8 @@ tracer.use('grpc', { client: { metadata: [] } });
 tracer.use('grpc', { server: { metadata: [] } });
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
+tracer.use('hono');
+tracer.use('hono', httpServerOptions);
 tracer.use('http');
 tracer.use('http', {
   server: httpServerOptions
@@ -387,6 +396,7 @@ tracer.use('oracledb', { service: params => `${params.host}-${params.database}` 
 tracer.use('playwright');
 tracer.use('pg');
 tracer.use('pg', { service: params => `${params.host}-${params.database}` });
+tracer.use('pg', { appendComment: true });
 tracer.use('pino');
 tracer.use('prisma');
 tracer.use('protobufjs');
@@ -573,6 +583,12 @@ const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
+otelSpan.addLink({ context: spanContext })
+otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
+otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
+otelSpan.addLink(spanContext)
+otelSpan.addLink(spanContext, { foo: 'bar' })
+
 // -- LLM Observability --
 const llmobsEnableOptions = {
   mlApp: 'mlApp',
@@ -592,6 +608,27 @@ llmobs.enable({
 
 // manually disable
 llmobs.disable()
+
+// register a processor
+llmobs.registerProcessor((llmobsSpan) => {
+  const drop = llmobsSpan.getTag('drop')
+  if (drop) {
+    return null
+  }
+
+  const redactInput = llmobsSpan.getTag('redactInput')
+  if (redactInput) {
+    llmobsSpan.input = llmobsSpan.input.map(input => {
+      return {
+        ...input,
+      }
+    })
+  }
+
+  return llmobsSpan
+})
+
+llmobs.deregisterProcessor()
 
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})

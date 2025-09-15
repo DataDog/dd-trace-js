@@ -53,6 +53,5 @@ module.exports = {
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
     DOWNSTREAM: 'd'
-  }),
-  INSTRUMENTED_BY_SSI: Symbol('_dd.instrumented.by.ssi')
+  })
 }

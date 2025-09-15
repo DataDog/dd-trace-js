@@ -16,11 +16,14 @@ const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
+const registerUserSpanProcessorCh = channel('llmobs:register-processor')
 
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
+
+const util = require('node:util')
 
 /**
  * Setting writers and processor globally when LLMObs is enabled
@@ -54,6 +57,7 @@ function enable (config) {
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
+  registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
 
   // span processing
   spanProcessor = new LLMObsSpanProcessor(config)
@@ -75,6 +79,7 @@ function enable (config) {
     spanWriter?.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
+    log.debug(`[LLMObs] Enabled LLM Observability with configuration: ${util.inspect(config.llmobs)}`)
   })
 }
 
@@ -83,6 +88,7 @@ function disable () {
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanProcessCh.hasSubscribers) spanProcessCh.unsubscribe(handleSpanProcess)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
+  if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
   evalWriter?.destroy()
@@ -90,6 +96,8 @@ function disable () {
 
   spanWriter = null
   evalWriter = null
+
+  log.debug('[LLMObs] Disabled LLM Observability')
 }
 
 // since LLMObs traces can extend between services and be the same trace,
@@ -119,6 +127,10 @@ function handleFlush () {
     log.warn('Failed to flush LLMObs spans and evaluation metrics:', e.message)
   }
   telemetry.recordUserFlush(err)
+}
+
+function handleRegisterProcessor (userSpanProcessor) {
+  spanProcessor.setUserSpanProcessor(userSpanProcessor)
 }
 
 function handleSpanProcess (data) {

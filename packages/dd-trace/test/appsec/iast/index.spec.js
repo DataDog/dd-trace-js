@@ -1,7 +1,13 @@
+'use strict'
+
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const Config = require('../../../src/config')
 const agent = require('../../plugins/agent')
-const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
@@ -105,7 +111,6 @@ describe('IAST Index', () => {
     let mockOverheadController
     let appsecFsPlugin
     let analyzers
-    let standalone
 
     const config = new Config({
       experimental: {
@@ -136,16 +141,11 @@ describe('IAST Index', () => {
       analyzers = {
         enableAllAnalyzers: sinon.stub()
       }
-      standalone = {
-        configure: sinon.stub(),
-        disable: sinon.stub()
-      }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
         './overhead-controller': mockOverheadController,
         '../rasp/fs-plugin': appsecFsPlugin,
-        './analyzers': analyzers,
-        '../standalone': standalone
+        './analyzers': analyzers
       })
     })
 

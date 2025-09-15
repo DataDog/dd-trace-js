@@ -1,4 +1,18 @@
 {
+  "ai": [
+    {
+      "name": "ai",
+      "versions": ["4.0.2"]
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "versions": [">=1.3.23"]
+    },
+    {
+      "name": "zod",
+      "versions": [">=3.25.75"]
+    }
+  ],
   "apollo": [
     {
       "name": "@apollo/subgraph",
@@ -61,6 +75,12 @@
       "versions": ["^4"]
     }
   ],
+  "child_process": [
+    {
+      "name": "bluebird",
+      "versions": ["^3"]
+    }
+  ],
   "cookie-parser": [
     {
       "name": "express",
@@ -93,6 +113,10 @@
     {
       "name": "multer",
       "versions": ["^1.4.4-lts.1"]
+    },
+    {
+      "name": "ejs",
+      "versions": ["3.1.10"]
     }
   ],
   "express-mongo-sanitize": [
@@ -151,6 +175,18 @@
     {
       "name": "middie",
       "versions": ["5.1.0"]
+    },
+    {
+      "name": "@fastify/cookie",
+      "versions": [">=6"]
+    },
+    {
+      "name": "@fastify/multipart",
+      "versions": [">=6"]
+    },
+    {
+      "name": "pg",
+      "versions": ["8.7.3"]
     }
   ],
   "generic-pool": [
@@ -247,6 +283,12 @@
       "versions": ["9.1.4"]
     }
   ],
+  "hono": [
+    {
+      "name": "@hono/node-server",
+      "versions": ["1.15.0"]
+    }
+  ],
   "jest": [
     {
       "name": "jest",
@@ -299,11 +341,11 @@
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/openai",
+      "name": "@langchain/cohere",
       "versions": [">=0.1"]
     },
     {
-      "name": "@langchain/cohere",
+      "name": "langchain",
       "versions": [">=0.1"]
     }
   ],
@@ -484,6 +526,12 @@
     {
       "name": "sqlite3",
       "versions": ["^5.0.8"]
+    }
+  ],
+  "ws": [
+    {
+      "name":"ws",
+      "versions": [">=8.0.0"]
     }
   ]
 }

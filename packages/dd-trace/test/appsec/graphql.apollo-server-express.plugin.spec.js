@@ -5,7 +5,8 @@ const {
   schema,
   resolvers,
   graphqlCommonTests
-} = require('./graphq.test-utils')
+} = require('./graphql.test-utils')
+const { withVersions } = require('../setup/mocha')
 
 withVersions('apollo-server-core', 'express', '>=4', expressVersion => {
   withVersions('apollo-server-core', 'apollo-server-express', apolloServerExpressVersion => {

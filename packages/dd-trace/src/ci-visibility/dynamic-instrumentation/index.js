@@ -5,6 +5,7 @@ const { Worker, threadId: parentThreadId } = require('worker_threads')
 const { randomUUID } = require('crypto')
 const log = require('../../log')
 const { getEnvironmentVariables } = require('../../config-helper')
+const getDebuggerConfig = require('../../debugger/config')
 
 const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
@@ -62,7 +63,7 @@ class TestVisDynamicInstrumentation {
 
     log.debug('Starting Test Visibility - Dynamic Instrumentation client...')
 
-    const rcChannel = new MessageChannel() // mock channel
+    const probeChannel = new MessageChannel() // mock channel
     const configChannel = new MessageChannel() // mock channel
 
     this.worker = new Worker(
@@ -82,16 +83,16 @@ class TestVisDynamicInstrumentation {
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
         },
         workerData: {
-          config: this._config.serialize(),
+          config: getDebuggerConfig(this._config),
           parentThreadId,
-          rcPort: rcChannel.port1,
+          probePort: probeChannel.port1,
           configPort: configChannel.port1,
           breakpointSetChannel: this.breakpointSetChannel.port1,
           breakpointHitChannel: this.breakpointHitChannel.port1,
           breakpointRemoveChannel: this.breakpointRemoveChannel.port1
         },
         transferList: [
-          rcChannel.port1,
+          probeChannel.port1,
           configChannel.port1,
           this.breakpointSetChannel.port1,
           this.breakpointHitChannel.port1,

@@ -1,0 +1,76 @@
+interactions:
+- request:
+    body: '{"input":"I want to harm the robots"}'
+    headers:
+      Accept:
+      - application/json, text/plain, */*
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '37'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - OpenAI/NodeJS/3.3.0
+    method: POST
+    uri: https://api.openai.com/v1/moderations
+  response:
+    body:
+      string: "{\n  \"id\": \"modr-BkWEObamZdptfnhFjPJtkDLfGU7BT\",\n  \"model\":
+        \"text-moderation-007\",\n  \"results\": [\n    {\n      \"flagged\": true,\n
+        \     \"categories\": {\n        \"sexual\": false,\n        \"hate\": false,\n
+        \       \"harassment\": false,\n        \"self-harm\": false,\n        \"sexual/minors\":
+        false,\n        \"hate/threatening\": false,\n        \"violence/graphic\":
+        false,\n        \"self-harm/intent\": false,\n        \"self-harm/instructions\":
+        false,\n        \"harassment/threatening\": false,\n        \"violence\":
+        true\n      },\n      \"category_scores\": {\n        \"sexual\": 0.00003649308200692758,\n
+        \       \"hate\": 0.000206793614779599,\n        \"harassment\": 0.01880560629069805,\n
+        \       \"self-harm\": 9.369699910166673e-6,\n        \"sexual/minors\": 5.352579250939016e-7,\n
+        \       \"hate/threatening\": 0.00012469793728087097,\n        \"violence/graphic\":
+        4.941105999023421e-6,\n        \"self-harm/intent\": 3.630466153481393e-6,\n
+        \       \"self-harm/instructions\": 8.705083764937172e-9,\n        \"harassment/threatening\":
+        0.025648830458521843,\n        \"violence\": 0.9218947291374207\n      }\n
+        \   }\n  ]\n}"
+    headers:
+      CF-RAY:
+      - 952baa1ae8978f73-BOS
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 20 Jun 2025 13:38:05 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=zv1b3ZAlaOyWQ9.7YxkxGUPXsNZia4BXMry7LJSq7JI-1750426685-1.0.1.1-UqwnPe_5zDkeOSh3IGg9yL2FvOfaOZ3KsKFfYTdO_cUlOCn4MjlWDU7WJS_ILElLjOqtVXy2wSG4UtOpWbiTyaFTsnTlWTbzTXl.3kaQkTc;
+        path=/; expires=Fri, 20-Jun-25 14:08:05 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=dfzU1nBKTl7eSXfrjOOdnGPyjVTDeU49FBjU35142dc-1750426685063-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '198'
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-request-id:
+      - req_606a53c1fbf99a2b8a48a8aa52c98810
+    status:
+      code: 200
+      message: OK
+version: 1
