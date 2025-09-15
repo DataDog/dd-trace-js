@@ -1,11 +1,14 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const { mkdtempSync, readdirSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
+const { threadId } = require('node:worker_threads')
 
-const { mkdtempSync, readdirSync } = require('fs')
-const { tmpdir } = require('os')
-const { join } = require('path')
-const { threadId } = require('worker_threads')
+require('./setup/core')
+
 const { start } = require('../src/heap_snapshots')
 
 const destination = mkdtempSync(join(tmpdir(), 'dd-trace-heap-snapshot-'))

@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const { estimateTokens } = require('../src/token-estimator')
 
 describe('Plugin', () => {

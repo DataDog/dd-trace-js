@@ -2,10 +2,13 @@
 
 require('../../setup/mocha')
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
-
-const { hostname: getHostname } = require('os')
 const sinon = require('sinon')
+
+const { hostname: getHostname } = require('node:os')
+
 const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')

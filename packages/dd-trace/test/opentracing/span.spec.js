@@ -1,11 +1,16 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
-const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
 
 describe('Span', () => {
@@ -41,7 +46,7 @@ describe('Span', () => {
       add: sinon.spy()
     }
 
-    Span = proxyquire('../src/opentracing/span', {
+    Span = proxyquire('../../src/opentracing/span', {
       perf_hooks: {
         performance: {
           now

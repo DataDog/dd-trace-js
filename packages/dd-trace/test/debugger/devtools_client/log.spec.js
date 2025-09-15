@@ -1,10 +1,11 @@
 'use strict'
 
-require('../../setup/mocha')
-
+const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 
 const assert = require('node:assert')
+
+require('../../setup/mocha')
 
 describe('worker thread logger', function () {
   it('should log to the provided message channel', function (done) {

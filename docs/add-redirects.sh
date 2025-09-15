@@ -67,6 +67,7 @@ declare -a plugins=(
   "undici"
   "when"
   "winston"
+  "ws"
 )
 
 for i in "${plugins[@]}"

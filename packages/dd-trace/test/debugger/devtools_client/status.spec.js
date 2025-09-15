@@ -1,10 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 require('../../setup/mocha')
 
-const proxyquire = require('proxyquire')
-
-const sinon = require('sinon')
 const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 
