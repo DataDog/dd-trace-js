@@ -607,6 +607,65 @@ describe('integrations', () => {
 
         await checkSpan
       })
+
+      it('submits a chat completion span with cached token metrics', async () => {
+        const baseMessages = [{"role": "system", "content": "You are an expert software engineer ".repeat(200)}];
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: baseMessages.concat([{"role": "user", "content": "What are the best practices for API design?"}]),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        const checkSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: baseMessages.concat([{"role": "user", "content": "How should I structure my database schema?"}]),
+            outputMessages: [
+              { role: 'assistant', content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1220,
+              output_tokens: 100,
+              total_tokens: 1320,
+              cache_read_input_tokens: 1152,
+            },
+            modelName: 'gpt-4o',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+              user: 'dd-trace-test'
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: baseMessages.concat([{"role": "user", "content": "How should I structure my database schema?"}]),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        await checkSpan
+      })
     })
   })
 })
