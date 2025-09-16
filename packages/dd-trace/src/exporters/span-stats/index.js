@@ -1,18 +1,11 @@
 'use strict'
 
-const { URL, format } = require('url')
-
 const { Writer } = require('./writer')
-const defaults = require('../../config_defaults')
 
 class SpanStatsExporter {
   constructor (config) {
-    const { hostname = defaults.hostname, port = defaults.port, tags, url } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
+    const { tags, url } = config
+    this._url = url
     this._writer = new Writer({ url: this._url, tags })
   }
 

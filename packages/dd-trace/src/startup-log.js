@@ -4,7 +4,6 @@ const { info, warn } = require('./log/writer')
 
 const os = require('os')
 const { inspect } = require('util')
-const defaults = require('./config_defaults')
 const tracerVersion = require('../../../package.json').version
 
 const errors = {}
@@ -51,8 +50,6 @@ function startupLog ({ agentError } = {}) {
 }
 
 function tracerInfo () {
-  const url = config.url || `http://${config.hostname || defaults.hostname}:${config.port}`
-
   const out = {
     [inspect.custom] () {
       return String(this)
@@ -74,7 +71,7 @@ function tracerInfo () {
   out.env = config.env
   out.enabled = config.enabled
   out.service = config.service
-  out.agent_url = url
+  out.agent_url = config.url
   out.debug = !!config.debug
   out.sample_rate = config.sampler.sampleRate
   out.sampling_rules = samplingRules

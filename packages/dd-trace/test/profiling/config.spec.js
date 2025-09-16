@@ -17,6 +17,8 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
 
+const url = 'http://127.0.0.1:8126'
+
 describe('config', () => {
   let Config
   let env
@@ -38,7 +40,7 @@ describe('config', () => {
   })
 
   it('should have the correct defaults', () => {
-    const config = new Config()
+    const config = new Config({ url })
 
     expect(config).to.deep.include({
       service: 'node',
@@ -100,6 +102,7 @@ describe('config', () => {
   it('should filter out invalid profilers', () => {
     const errors = []
     const options = {
+      url,
       logger: {
         debug () {},
         info () {},
@@ -126,6 +129,7 @@ describe('config', () => {
       DD_PROFILING_PROFILERS: ''
     }
     const options = {
+      url,
       logger: nullLogger
     }
 
@@ -144,6 +148,7 @@ describe('config', () => {
       process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
+      url,
       logger: nullLogger
     }
 
@@ -167,6 +172,7 @@ describe('config', () => {
       DD_PROFILING_HEAP_ENABLED: '1'
     }
     const options = {
+      url,
       logger: nullLogger
     }
 
@@ -188,6 +194,7 @@ describe('config', () => {
     }
 
     const options = {
+      url,
       logger: nullLogger
     }
 
@@ -207,6 +214,7 @@ describe('config', () => {
       DD_PROFILING_WALLTIME_ENABLED: '1'
     }
     const options = {
+      url,
       logger: nullLogger
     }
 
@@ -230,6 +238,7 @@ describe('config', () => {
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
     }
     const options = {
+      url,
       logger: nullLogger,
       profilers: ['wall'],
       codeHotspotsEnabled: false,
@@ -260,6 +269,7 @@ describe('config', () => {
     }
     const warnings = []
     const options = {
+      url,
       logger: {
         debug () {},
         info () {},
@@ -282,6 +292,7 @@ describe('config', () => {
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
     const options = {
+      url,
       [property]: true
     }
 
@@ -325,7 +336,7 @@ describe('config', () => {
       env: 'dev'
     }
 
-    const config = new Config({ tags })
+    const config = new Config({ url, tags })
 
     expect(config.tags).to.include(tags)
   })
@@ -340,7 +351,7 @@ describe('config', () => {
       version: '3.2.1'
     }
 
-    const config = new Config({ env, service, version, tags })
+    const config = new Config({ url, env, service, version, tags })
 
     expect(config.tags).to.include({ env, service, version })
   })
@@ -350,6 +361,7 @@ describe('config', () => {
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
 
     const config = new Config({
+      url,
       repositoryUrl: DUMMY_REPOSITORY_URL,
       commitSHA: DUMMY_GIT_SHA
     })
@@ -358,22 +370,20 @@ describe('config', () => {
   })
 
   it('should support IPv6 hostname', () => {
-    const options = {
-      hostname: '::1'
-    }
+    const url = 'http://[::1]:8126/'
+    const options = { url }
 
     const config = new Config(options)
     const exporterUrl = config.exporters[0]._url.toString()
-    const expectedUrl = new URL('http://[::1]:8126').toString()
 
-    expect(exporterUrl).to.equal(expectedUrl)
+    expect(exporterUrl).to.equal(url)
   })
 
   it('should support OOM heap profiler configuration', () => {
     process.env = {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 'false'
     }
-    const config = new Config({})
+    const config = new Config({ url })
 
     expect(config.oomMonitoring).to.deep.equal({
       enabled: false,
@@ -385,7 +395,7 @@ describe('config', () => {
   })
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {
-    const config = new Config()
+    const config = new Config({ url })
 
     if (oomMonitoringSupported) {
       expect(config.oomMonitoring).to.deep.equal({
@@ -396,7 +406,7 @@ describe('config', () => {
         exportCommand: [
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://127.0.0.1:8126/',
+          url,
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'
         ]
@@ -415,7 +425,7 @@ describe('config', () => {
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
       }
 
-      const config = new Config({})
+      const config = new Config({ url })
 
       expect(config.oomMonitoring).to.deep.equal({
         enabled: true,
@@ -425,7 +435,7 @@ describe('config', () => {
         exportCommand: [
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://127.0.0.1:8126/',
+          url,
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'
         ]
@@ -448,7 +458,7 @@ describe('config', () => {
         },
         error () {}
       }
-      const config = new Config({ logger })
+      const config = new Config({ url, logger })
 
       if (warning) {
         expect(logger.warnings.length).to.equals(1)

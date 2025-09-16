@@ -35,6 +35,7 @@ function countStatusCode (statusCode) {
   counter.inc()
 }
 
+// TODO: Consider expecitng a url property instead of individual protocol, hostname, and port properties
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
@@ -91,7 +92,7 @@ class AgentExporter extends EventSerializer {
   constructor (config = {}) {
     super(config)
     const { url, logger, uploadTimeout } = config
-    this._url = url
+    this._url = url instanceof URL ? url : new URL(url)
     this._logger = logger
 
     const [backoffTries, backoffTime] = computeRetries(uploadTimeout)

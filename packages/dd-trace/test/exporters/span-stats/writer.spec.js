@@ -85,8 +85,7 @@ describe('span-stats writer', () => {
 
       writer.flush(() => {
         expect(request).to.have.been.calledWithMatch([expectedData], {
-          protocol: url.protocol,
-          hostname: url.hostname,
+          url,
           path: '/v0.6/stats',
           method: 'PUT',
           headers: {

@@ -1,6 +1,5 @@
 'use strict'
 
-const { URL, format } = require('url')
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
 const tracerVersion = require('../../../../package.json').version
@@ -11,7 +10,6 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
-const defaults = require('../config_defaults')
 
 const clientId = uuid()
 
@@ -30,11 +28,7 @@ class RemoteConfigManager extends EventEmitter {
 
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
-    this.url = config.url || new URL(format({
-      protocol: 'http:',
-      hostname: config.hostname || defaults.hostname,
-      port: config.port
-    }))
+    this.url = config.url
 
     tagger.add(config.tags, {
       '_dd.rc.client_id': clientId

@@ -17,9 +17,8 @@ const {
 } = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
-  constructor ({ url, evpProxyPrefix = '' }) {
+  constructor ({ evpProxyPrefix = '' }) {
     super(...arguments)
-    this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
     this._evpProxyPrefix = evpProxyPrefix
   }

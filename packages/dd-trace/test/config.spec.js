@@ -496,7 +496,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
-      { name: 'url', value: undefined, origin: 'default' },
+      { name: 'url', value: 'http://127.0.0.1:8126', origin: 'default' },
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' }
@@ -943,9 +943,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('url', 'https://agent2:7777/')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
@@ -1265,9 +1263,7 @@ describe('Config', () => {
       plugins: false
     })
 
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('url', 'https://agent2:7777/')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
@@ -1643,9 +1639,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '6218')
-    expect(config).to.have.nested.property('url.protocol', 'https:')
+    expect(config).to.have.property('url', 'https://agent2:6218/')
     expect(config).to.have.property('version', '1.0.0')
   })
 
@@ -1813,9 +1807,7 @@ describe('Config', () => {
       env: 'development'
     })
 
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent3')
-    expect(config).to.have.nested.property('url.port', '7778')
+    expect(config).to.have.property('url', 'https://agent3:7778/')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
@@ -2176,14 +2168,14 @@ describe('Config', () => {
         osType = 'Windows_NT'
         const config = new Config()
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://127.0.0.1:8126/')
       })
     })
     context('socket does not exist', () => {
       it('should not be used', () => {
         const config = new Config()
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://127.0.0.1:8126/')
       })
     })
     context('socket exists', () => {
@@ -2195,7 +2187,7 @@ describe('Config', () => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
-        expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
+        expect(config.url).to.equal('unix:///var/run/datadog/apm.socket')
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
@@ -2203,7 +2195,7 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when DD_TRACE_URL provided', () => {
@@ -2211,13 +2203,13 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when options.url provided', () => {
         const config = new Config({ url: 'https://example.com/' })
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
@@ -2225,13 +2217,13 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://127.0.0.1:12345/')
       })
 
       it('should not be used when options.port provided', () => {
         const config = new Config({ port: 12345 })
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://127.0.0.1:12345/')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -2239,7 +2231,7 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://example.com:8126/')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -2247,13 +2239,13 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://example.com:8126/')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = new Config({ hostname: 'example.com' })
 
-        expect(config.url).to.be.undefined
+        expect(config.url).to.equal('http://example.com:8126/')
       })
     })
   })

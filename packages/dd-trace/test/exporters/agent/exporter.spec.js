@@ -7,8 +7,6 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-const URL = require('url').URL
-
 describe('Exporter', () => {
   let url
   let flushInterval
@@ -20,7 +18,7 @@ describe('Exporter', () => {
   let span
 
   beforeEach(() => {
-    url = 'www.example.com'
+    url = 'http://www.example.com'
     flushInterval = 1000
     span = {}
     writer = {
@@ -60,9 +58,9 @@ describe('Exporter', () => {
 
   it('should support IPv6', () => {
     const stats = { enabled: true }
-    exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
+    exporter = new Exporter({ url: 'http://[::1]', flushInterval, stats }, prioritySampler)
     expect(Writer).to.have.been.calledWithMatch({
-      url: new URL('http://[::1]')
+      url: 'http://[::1]'
     })
   })
 
@@ -119,9 +117,9 @@ describe('Exporter', () => {
     })
 
     it('should set the URL on self and writer', () => {
-      exporter.setUrl('http://example2.com')
-      const url = new URL('http://example2.com')
-      expect(exporter._url).to.deep.equal(url)
+      const url = 'http://example2.com'
+      exporter.setUrl(url)
+      expect(exporter._url).to.equal(url)
       expect(writer.setUrl).to.have.been.calledWith(url)
     })
   })

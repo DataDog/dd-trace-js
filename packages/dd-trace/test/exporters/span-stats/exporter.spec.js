@@ -7,8 +7,6 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-const URL = require('url').URL
-
 describe('span-stats exporter', () => {
   let url
   let Exporter
@@ -39,20 +37,6 @@ describe('span-stats exporter', () => {
 
     expect(writer.append).to.have.been.called
     expect(writer.flush).to.have.been.called
-  })
-
-  it('should set url from hostname and port', () => {
-    const hostname = '0.0.0.0'
-    const port = '1234'
-    const url = new URL(`http://${hostname}:${port}`)
-
-    exporter = new Exporter({ hostname, port })
-
-    expect(exporter._url).to.be.deep.equal(url)
-    expect(Writer).to.have.been.calledWith({
-      url: exporter._url,
-      tags: undefined
-    })
   })
 
   it('should pass tags through to writer', () => {

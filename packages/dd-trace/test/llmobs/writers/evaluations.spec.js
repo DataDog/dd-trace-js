@@ -32,8 +32,7 @@ describe('LLMObsEvalMetricsWriter', () => {
 
   it('constructs the writer with the correct agent proxy values', () => {
     writer = new LLMObsEvalMetricsWriter({
-      port: 8126,
-      hostname: 'localhost'
+      url: 'http://localhost:8126/'
     })
     writer.setAgentless(false)
     expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')

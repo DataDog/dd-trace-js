@@ -4,7 +4,7 @@ const request = require('./request')
 const log = require('../../log')
 const { safeJSONStringify } = require('./util')
 
-class Writer {
+class BaseWriter {
   constructor ({ url }) {
     this._url = url
   }
@@ -44,4 +44,4 @@ class Writer {
   }
 }
 
-module.exports = Writer
+module.exports = BaseWriter

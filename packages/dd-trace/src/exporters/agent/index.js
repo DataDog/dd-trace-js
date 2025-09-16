@@ -1,21 +1,14 @@
 'use strict'
 
-const { URL, format } = require('url')
-const log = require('../../log')
 const Writer = require('./writer')
-const defaults = require('../../config_defaults')
 
 class AgentExporter {
   #timer
 
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname = defaults.hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
+    const { url, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    this._url = url
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {
@@ -37,13 +30,8 @@ class AgentExporter {
   }
 
   setUrl (url) {
-    try {
-      url = new URL(url)
-      this._url = url
-      this._writer.setUrl(url)
-    } catch (e) {
-      log.warn(e.stack)
-    }
+    this._url = url
+    this._writer.setUrl(url)
   }
 
   export (spans) {
