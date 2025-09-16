@@ -13,7 +13,6 @@ module.exports = {
       '_dd.code_origin.type': 'entry',
       '_dd.code_origin.frames.0.file': frame.file,
       '_dd.code_origin.frames.0.line': String(frame.line),
-      '_dd.code_origin.frames.0.column': frame.column,
     })
 
     assert.match(tags['_dd.code_origin.frames.0.column'], /^\d+$/)
