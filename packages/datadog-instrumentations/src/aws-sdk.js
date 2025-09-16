@@ -61,7 +61,6 @@ function wrapSmithySend (send) {
 
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
     const regionCh = channel(`apm:aws:request:region:${channelSuffix}`)
-    const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
     const responseStartChannel = channel(`apm:aws:response:start:${channelSuffix}`)
     const responseFinishChannel = channel(`apm:aws:response:finish:${channelSuffix}`)
 
@@ -87,7 +86,7 @@ function wrapSmithySend (send) {
         args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
-          completeChannel.publish(ctx)
+          handleCompletion(result, ctx, channelSuffix)
 
           const responseCtx = { request, response: ctx.response }
 
@@ -102,12 +101,12 @@ function wrapSmithySend (send) {
           .then(
             result => {
               addResponse(ctx, null, result)
-              completeChannel.publish(ctx)
+              handleCompletion(result, ctx, channelSuffix)
               return result
             },
             error => {
               addResponse(ctx, error)
-              completeChannel.publish(ctx)
+              handleCompletion(null, ctx, channelSuffix)
               throw error
             }
           )
@@ -116,6 +115,45 @@ function wrapSmithySend (send) {
       return send.call(this, command, ...args)
     })
   }
+}
+
+function handleCompletion (result, ctx, channelSuffix) {
+  const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
+  const streamedChunkChannel = channel(`apm:aws:response:streamed-chunk:${channelSuffix}`)
+
+  const iterator = result?.body?.[Symbol.asyncIterator]
+  if (!iterator) {
+    completeChannel.publish(ctx)
+    return
+  }
+
+  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+    return function () {
+      const iterator = asyncIterator.apply(this, arguments)
+      shimmer.wrap(iterator, 'next', function (next) {
+        return function () {
+          return next.apply(this, arguments)
+            .then(result => {
+              const { done, value: chunk } = result
+              streamedChunkChannel.publish({ ctx, chunk, done })
+
+              if (done) {
+                completeChannel.publish(ctx)
+              }
+
+              return result
+            })
+            .catch(err => {
+              addResponse(ctx, err)
+              completeChannel.publish(ctx)
+              throw err
+            })
+        }
+      })
+
+      return iterator
+    }
+  })
 }
 
 function wrapCb (cb, serviceName, ctx) {
