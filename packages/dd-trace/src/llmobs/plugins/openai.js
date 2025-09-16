@@ -87,7 +87,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const promptTokensDetails = tokenUsage.prompt_tokens_details
       if (promptTokensDetails) {
         const cachedTokens = promptTokensDetails.cached_tokens
-        if (cachedTokens) metrics.cachedTokens = cachedTokens
+        if (cachedTokens) metrics.cacheReadInputTokens = cachedTokens
       }
     }
 
