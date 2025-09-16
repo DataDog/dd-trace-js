@@ -11,6 +11,7 @@ register('./loader-hook.mjs', pathToFileURL(__filename), {
       /langsmith/,
       /openai\/_shims/,
       /openai\/resources\/chat\/completions\/messages/,
+      /openai\/agents-core\/dist\/shims/,
       /@anthropic-ai\/sdk\/_shims/
     ]
   }

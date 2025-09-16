@@ -23,6 +23,94 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+/**
+ * Coerce the chunks into a single response body.
+ *
+ * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
+ * @param {string} provider
+ * @returns {Object}
+ */
+function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
+  const modelProviderUpper = modelProvider.toUpperCase()
+
+  // streaming unsupported for AMAZON embedding models, COHERE embedding models, STABILITY
+  if (
+    (modelProviderUpper === PROVIDER.AMAZON && modelName.includes('embed')) ||
+    (modelProviderUpper === PROVIDER.COHERE && modelName.includes('embed')) ||
+    modelProviderUpper === PROVIDER.STABILITY
+  ) {
+    return {}
+  }
+
+  let message = ''
+  let inputTokens = 0
+  let outputTokens = 0
+
+  for (const { chunk: { bytes } } of chunks) {
+    const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
+
+    switch (modelProviderUpper) {
+      case PROVIDER.AMAZON: {
+        message += body?.outputText
+
+        inputTokens = body?.inputTextTokenCount
+        outputTokens = body?.totalOutputTextTokenCount
+
+        break
+      }
+      case PROVIDER.AI21: {
+        const content = body?.choices?.[0]?.delta?.content
+        if (content) {
+          message += content
+        }
+
+        break
+      }
+      case PROVIDER.ANTHROPIC: {
+        if (body.completion) {
+          message += body.completion
+        } else if (body.delta?.text) {
+          message += body.delta.text
+        }
+
+        if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
+        if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
+
+        break
+      }
+      case PROVIDER.COHERE: {
+        if (body?.event_type === 'stream-end') {
+          message = body.response?.text
+        }
+
+        break
+      }
+      case PROVIDER.META: {
+        message += body?.generation
+        break
+      }
+      case PROVIDER.MISTRAL: {
+        message += body?.outputs?.[0]?.text
+        break
+      }
+    }
+
+    // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
+    const invocationMetrics = body['amazon-bedrock-invocationMetrics']
+    if (invocationMetrics) {
+      inputTokens = invocationMetrics.inputTokenCount
+      outputTokens = invocationMetrics.outputTokenCount
+    }
+  }
+
+  return new Generation({
+    message,
+    role: 'assistant',
+    inputTokens,
+    outputTokens
+  })
+}
+
 class Generation {
   constructor ({
     message = '',
@@ -334,6 +422,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
 module.exports = {
   Generation,
   RequestParams,
+  extractTextAndResponseReasonFromStream,
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,
