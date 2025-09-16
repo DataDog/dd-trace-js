@@ -61,7 +61,7 @@ describe('esm', () => {
         agent.port,
         null,
         {
-          NODE_OPTIONS: '--import dd-trace/register.js',
+          NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         }
       )
 
