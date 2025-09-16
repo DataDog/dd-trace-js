@@ -33,7 +33,11 @@ require,shell-quote,mit,Copyright (c) 2013 James Halliday
 require,source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and contributors
 require,ttl-set,MIT,Copyright (c) 2024 Thomas Watson
 dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other contributors
-dev,@types/node,MIT,Copyright Authors
+dev,@types/chai,MIT,Copyright (c) Microsoft Corp.
+dev,@types/mocha,MIT,Copyright (c) Microsoft Corp.
+dev,@types/node,MIT,Copyright (c) Microsoft Corp.
+dev,@types/sinon,MIT,Copyright (c) Microsoft Corp.
+dev,@types/tap,MIT,Copyright (c) Microsoft Corp.
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
@@ -65,6 +69,7 @@ dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola
 dev,tap,ISC,Copyright 2011-2022 Isaac Z. Schlueter and Contributors
 dev,tiktoken,MIT,Copyright (c) 2022 OpenAI, Shantanu Jain
+dev,typescript,Apache license 2.0,Copyright Microsoft Corp.
 dev,workerpool,Apache license 2.0,Copyright (C) 2014-2024 Jos de Jong wjosdejong@gmail.com
 dev,yaml,ISC,Copyright Eemeli Aro <eemeli@gmail.com>
 dev,yarn-deduplicate,Apache license 2.0,Copyright [yyyy] [name of copyright owner]
