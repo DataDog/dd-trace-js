@@ -558,7 +558,7 @@ export default [
     }
   },
   {
-    name: 'dd-trace/tests/all',
+    name: 'dd-trace/test-optimization/relaxed',
     files: [
       'integration-tests/ci-visibility/**/*.js',
       'integration-tests/ci-visibility/**/*.mjs',
@@ -578,7 +578,7 @@ export default [
     }
   },
   {
-    name: 'dd-trace/tests/integration',
+    name: 'dd-trace/tests/integration-and-resources',
     plugins: {
       import: eslintPluginImport
     },
@@ -589,7 +589,8 @@ export default [
       'packages/*/test/integration-test/**/*.mjs',
       // TODO: Move the files in esm-test to integration-test
       'packages/datadog-plugin-graphql/test/esm-test/**/*.mjs',
-      'packages/dd-trace/test/appsec/**/*.js',
+      'packages/dd-trace/test/appsec/**/resources/**/*.js',
+      // TODO: Move the jest-test.js to integration-test
       'packages/datadog-plugin-jest/test/jest-test.js',
     ],
     rules: {
