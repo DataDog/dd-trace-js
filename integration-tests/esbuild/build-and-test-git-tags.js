@@ -46,7 +46,7 @@ esbuild.build({
     console.error(stderr.toString())
   }
   if (status) {
-    throw new Error('generated script failed to run')
+    throw new Error(`Generated script exited with unexpected exit code: ${status}`)
   }
   console.log('ok')
 }).catch((err) => {
