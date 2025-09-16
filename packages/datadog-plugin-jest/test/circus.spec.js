@@ -59,8 +59,8 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
 
       return {
         jestExecutable: isHappyDom
-        ? require('../../../versions/jest').get()
-        : require(`../../../versions/jest@${version}`).get(),
+          ? require('../../../versions/jest').get()
+          : require(`../../../versions/jest@${version}`).get(),
         jestCommonOptions: {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
@@ -69,8 +69,8 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
           silent: true,
           testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
           testRunner: isHappyDom
-          ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
-          : require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
+            ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
+            : require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
           cache: false,
           maxWorkers: '50%'
         }
