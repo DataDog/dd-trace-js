@@ -4,6 +4,7 @@ const coalesce = require('koalas')
 const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
+const satisfies = require('semifies')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -42,13 +43,15 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
       DD_TAGS,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_URL,
-      DD_VERSION
+      DD_VERSION,
+      NODE_OPTIONS
     } = getEnvironmentVariables()
 
     const env = coalesce(options.env, DD_ENV)
@@ -209,6 +212,35 @@ class Config {
     }
 
     this.uploadCompression = { method: uploadCompression, level }
+
+    const that = this
+    function turnOffAsyncContextFrame (msg) {
+      that.logger.warn(
+        `DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set ${msg}, it will have no effect.`)
+      that.asyncContextFrameEnabled = false
+    }
+
+    const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
+
+    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ??
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false)
+    if (this.asyncContextFrameEnabled) {
+      if (satisfies(process.versions.node, '>=24.0.0')) {
+        if (hasExecArg('--no-async-context-frame')) {
+          turnOffAsyncContextFrame('with --no-async-context-frame')
+        }
+      } else if (satisfies(process.versions.node, '>=23.0.0')) {
+        if (!hasExecArg('--experimental-async-context-frame')) {
+          turnOffAsyncContextFrame('without --experimental-async-context-frame')
+        }
+      } else {
+        // NOTE: technically, this should work starting with 22.7.0 which is when
+        // AsyncContextFrame debuted, but it would require a change in pprof-nodejs too.
+        turnOffAsyncContextFrame('but it requires at least Node.js 23')
+      }
+    }
+
+    this.heartbeatInterval = options.heartbeatInterval || 60 * 1000 // 1 minute
 
     this.profilers = ensureProfilers(profilers, this)
   }
