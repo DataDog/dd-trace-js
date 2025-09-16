@@ -1,12 +1,14 @@
 'use strict'
 
+const assert = require('assert')
+
 describe('jest-hook-failure', () => {
   beforeEach(() => {
     throw new Error('hey, hook error before')
   })
 
   it('will not run', () => {
-    expect(true).toEqual(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -16,6 +18,6 @@ describe('jest-hook-failure-after', () => {
   })
 
   it('will not run', () => {
-    expect(true).toEqual(true)
+    assert.strictEqual(true, true)
   })
 })

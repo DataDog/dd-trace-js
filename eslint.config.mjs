@@ -538,19 +538,12 @@ export default [
   {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
-    languageOptions: {
-      globals: {
-        sinon: 'readonly',
-        expect: 'readonly',
-        proxyquire: 'readonly',
-      }
-    },
     plugins: {
       mocha: eslintPluginMocha,
       n: eslintPluginN
     },
     rules: {
-      'mocha/max-top-level-suites': 'off',
+      'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-exports': 'off',
       'mocha/no-global-tests': 'off',
       'mocha/no-identical-title': 'off',
@@ -565,6 +558,26 @@ export default [
     }
   },
   {
+    name: 'dd-trace/tests/all',
+    files: [
+      'integration-tests/ci-visibility/**/*.js',
+      'integration-tests/ci-visibility/**/*.mjs',
+      'packages/datadog-plugin-jest/test/**/*.js',
+      'packages/datadog-plugin-mocha/test/**/*.js',
+      'packages/datadog-plugin-cucumber/test/**/*.js',
+      'packages/datadog-plugin-cypress/test/**/*.js',
+      'packages/datadog-plugin-playwright/test/**/*.js',
+      'packages/datadog-plugin-vitest/test/**/*.js',
+    ],
+    plugins: {
+      mocha: eslintPluginMocha,
+    },
+    rules: {
+      'no-undef': 'off',
+      'mocha/max-top-level-suites': 'off',
+    }
+  },
+  {
     name: 'dd-trace/tests/integration',
     plugins: {
       import: eslintPluginImport
@@ -573,7 +586,11 @@ export default [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
       'packages/*/test/integration-test/**/*.js',
-      'packages/*/test/integration-test/**/*.mjs'
+      'packages/*/test/integration-test/**/*.mjs',
+      // TODO: Move the files in esm-test to integration-test
+      'packages/datadog-plugin-graphql/test/esm-test/**/*.mjs',
+      'packages/dd-trace/test/appsec/**/*.js',
+      'packages/datadog-plugin-jest/test/jest-test.js',
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off'
