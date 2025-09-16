@@ -34,21 +34,20 @@ esbuild.build({
     env: { ...process.env, DD_TRACE_DEBUG: 'true' },
     encoding: 'utf8'
   })
-  if (stdout.length) {
-    const output = stdout.toString()
-    console.log(output)
-    const repositoryURL = output.match(/"_dd\.git\.repository_url":"([^"]+)"/)?.[1]
-    const commitSha = output.match(/"_dd\.git\.commit\.sha":"([^"]+)"/)?.[1]
-    assert.ok(repositoryURL, '_dd.git.repository_url should be present')
-    assert.ok(commitSha, '_dd.git.commit.sha should be present')
-    assert.equal(commitSha.length, 40, 'Git commit sha tag should be valid')
-  }
   if (stderr.length) {
-    console.error(stderr.toString())
+    console.error(stderr)
   }
   if (status) {
     throw new Error(`Generated script exited with unexpected exit code: ${status}`)
   }
+  if (stdout.length === 0) {
+    throw new Error('No debug output received. Git metadata may not be injected properly')
+  }
+  const repositoryURL = stdout.match(/"_dd\.git\.repository_url":"([^"]+)"/)?.[1]
+  const commitSha = stdout.match(/"_dd\.git\.commit\.sha":"([^"]+)"/)?.[1]
+  assert.ok(repositoryURL, '_dd.git.repository_url should be present')
+  assert.ok(commitSha, '_dd.git.commit.sha should be present')
+  assert.equal(commitSha.length, 40, 'Git commit sha tag should be valid')
   console.log('ok')
 }).catch((err) => {
   console.error(err)
