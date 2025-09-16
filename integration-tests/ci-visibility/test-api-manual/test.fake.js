@@ -25,7 +25,7 @@ describe('can run tests', () => {
     return new Promise((resolve) => {
       setTimeout(() => {
         assert.equal(1, 1)
-        resolve()
+        resolve(undefined)
       }, 10)
     })
   })
@@ -41,7 +41,7 @@ describe('can run tests', () => {
     return new Promise((resolve) => {
       setTimeout(() => {
         childSpan.finish()
-        resolve()
+        resolve(undefined)
       }, 10)
     })
   })

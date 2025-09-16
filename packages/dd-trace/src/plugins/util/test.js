@@ -49,6 +49,13 @@ const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
 
+/**
+ * JSDoc types for test environment metadata helpers.
+ *
+ * @typedef {{ service?: string, isServiceUserProvided?: boolean }} TestEnvironmentConfig
+ * @typedef {Record<string, string|number|undefined>} TestEnvironmentMetadata
+ */
+
 // session tags
 const TEST_SESSION_NAME = 'test_session.name'
 
@@ -331,6 +338,10 @@ function validateUrl (url) {
   }
 }
 
+/**
+ * @param {TestEnvironmentMetadata} metadata
+ * @returns {TestEnvironmentMetadata}
+ */
 function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL && !validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
@@ -444,6 +455,13 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   )
 }
 
+/**
+ * Build environment metadata for tests by merging CI, Git, runtime/OS and user-provided metadata.
+ *
+ * @param {string=} testFramework
+ * @param {TestEnvironmentConfig=} config
+ * @returns {TestEnvironmentMetadata}
+ */
 function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
   const ciMetadata = getCIMetadata()
   const userProvidedGitMetadata = getUserProviderGitMetadata()
@@ -479,6 +497,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     })
   }
 
+  /** @type {TestEnvironmentMetadata} */
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
   const metadata = {

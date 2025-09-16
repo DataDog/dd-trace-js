@@ -79,7 +79,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    * We use the tool description as the next best identifier for a tool.
    *
    * @param {string} toolDescription
-   * @returns {string}
+   * @returns {string | undefined}
    */
   findToolName (toolDescription) {
     for (const availableTool of this.#availableTools) {
@@ -90,6 +90,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
   getLLMObsSpanRegisterOptions (ctx) {
     const span = ctx.currentStore?.span
     const operation = getOperation(span)
@@ -99,6 +102,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     return { kind, name: operation }
   }
 
+  /**
+   * @override
+   */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -211,6 +217,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     this._tagger.tagMetadata(span, metadata)
   }
 
+  /**
+   * @param {import('../../../opentracing/span')} span
+   * @param {Record<string, unknown>} tags
+   */
   setLLMOperationTags (span, tags) {
     const toolsForModel = tags['ai.prompt.tools']?.map(getJsonStringValue)
 

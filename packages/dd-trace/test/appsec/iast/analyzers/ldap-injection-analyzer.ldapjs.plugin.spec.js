@@ -32,7 +32,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
             if (err) {
               reject(err)
             } else {
-              resolve()
+              resolve(undefined)
             }
           })
         })
@@ -97,7 +97,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                 const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
                 expect(iastCtxEnd).to.not.be.undefined
 
-                resolve()
+                resolve(undefined)
               }).on('error', reject)
             })
           })
@@ -126,7 +126,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
                 // if .off method wouldn't work the test will never reach this lines because it will loop forever :S
                 expect(searchResOnEndInvocations).to.be.eq(1)
-                resolve()
+                resolve(undefined)
               }
 
               searchRes.on('end', onSearchEnd)
@@ -157,7 +157,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                     const iastCtxEnd = iastContextFunctions.getIastContext(storeEnd)
                     expect(iastCtxEnd).to.not.be.undefined
 
-                    resolve()
+                    resolve(undefined)
                   }).on('error', reject)
                 })
               }

@@ -342,9 +342,9 @@ class Config {
         ''
       ))
 
-    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
-      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
-      options.cloudPayloadTagging?.maxDepth,
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = Number(
+      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH') ??
+      options.cloudPayloadTagging?.maxDepth ??
       10
     )
 

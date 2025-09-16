@@ -138,7 +138,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const resultPromise = new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
-        resolve()
+        resolve(undefined)
       }
       resultReject = (e) => {
         clearTimeout(timeoutObj)
@@ -202,7 +202,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const resultPromise = new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
-        resolve()
+        resolve(undefined)
       }
       resultReject = (e) => {
         clearTimeout(timeoutObj)
@@ -245,7 +245,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const resultPromise = new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
-        resolve()
+        resolve(undefined)
       }
       resultReject = (e) => {
         clearTimeout(timeoutObj)

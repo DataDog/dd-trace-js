@@ -26,7 +26,7 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
           if (code !== 0) {
             reject(new Error(`Process exited with unexpected status code ${code}.`))
           } else {
-            resolve()
+            resolve(undefined)
           }
         })
     })

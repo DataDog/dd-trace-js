@@ -8,12 +8,19 @@ const { addTraceSourceTag, hasTraceSourcePropagationTag } = require('./tracesour
 const { getProductRateLimiter } = require('./product')
 
 class TraceSourcePrioritySampler extends PrioritySampler {
+  /**
+   * @override
+   */
   configure (env, sampler, config) {
     // rules not supported
     this._env = env
     this._limiter = getProductRateLimiter(config)
   }
 
+  /**
+   * @override
+   * @returns {import('../priority_sampler').SamplingPriority|undefined}
+   */
   _getPriorityFromTags (tags, context) {
     if (Object.hasOwn(tags, MANUAL_KEEP) &&
       tags[MANUAL_KEEP] !== false &&
@@ -23,6 +30,9 @@ class TraceSourcePrioritySampler extends PrioritySampler {
     }
   }
 
+  /**
+   * @override
+   */
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
 
@@ -35,6 +45,9 @@ class TraceSourcePrioritySampler extends PrioritySampler {
     return this._isSampledByRateLimit(context) ? AUTO_KEEP : AUTO_REJECT
   }
 
+  /**
+   * @override
+   */
   setPriority (span, samplingPriority, product) {
     super.setPriority(span, samplingPriority, product)
 

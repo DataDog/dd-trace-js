@@ -35,10 +35,10 @@ describe('RASP', () => {
         execArgv,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_APPSEC_ENABLED: true,
-          DD_APPSEC_RASP_ENABLED: true,
+          DD_APPSEC_ENABLED: 'true',
+          DD_APPSEC_RASP_ENABLED: 'true',
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
-          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody)
         }
       }, stdOutputHandler, stdOutputHandler)
       axios = Axios.create({ baseURL: proc.url })
@@ -95,7 +95,7 @@ describe('RASP', () => {
           if (hasOutput) {
             reject(new Error('Unexpected output in stdout/stderr after blocking request'))
           } else {
-            resolve()
+            resolve(undefined)
           }
         }, 50)
       })
@@ -124,7 +124,7 @@ describe('RASP', () => {
             if (hasOutput) {
               reject(new Error('uncaughtExceptionCaptureCallback executed'))
             } else {
-              resolve()
+              resolve(undefined)
             }
           }, 10)
         })
@@ -143,7 +143,7 @@ describe('RASP', () => {
         return new Promise((resolve, reject) => {
           setTimeout(() => {
             if (hasOutput) {
-              resolve()
+              resolve(undefined)
             } else {
               reject(new Error('Output expected after crash'))
             }
@@ -173,7 +173,7 @@ describe('RASP', () => {
               if (hasOutput) {
                 reject(new Error('Unexpected output in stdout/stderr after blocking request'))
               } else {
-                resolve()
+                resolve(undefined)
               }
             }, 50)
           })
@@ -196,7 +196,7 @@ describe('RASP', () => {
               if (hasOutput) {
                 reject(new Error('Unexpected output in stdout/stderr after blocking request'))
               } else {
-                resolve()
+                resolve(undefined)
               }
             }, 50)
           })

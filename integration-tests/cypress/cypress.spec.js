@@ -138,7 +138,7 @@ moduleTypes.forEach(({
 
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
-        resolve()
+        resolve(undefined)
       }))
     })
 
