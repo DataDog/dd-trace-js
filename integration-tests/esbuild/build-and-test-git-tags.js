@@ -31,7 +31,8 @@ esbuild.build({
   ]
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT], {
-    env: { ...process.env, DD_TRACE_DEBUG: 'true' }
+    env: { ...process.env, DD_TRACE_DEBUG: 'true' },
+    encoding: 'utf8'
   })
   if (stdout.length) {
     const output = stdout.toString()
