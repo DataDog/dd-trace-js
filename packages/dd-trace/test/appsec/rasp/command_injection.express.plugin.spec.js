@@ -1,13 +1,16 @@
 'use strict'
 
+const Axios = require('axios')
+const assert = require('node:assert/strict')
+const { describe, it, before, beforeEach, after } = require('mocha')
+
+const path = require('node:path')
+
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const Axios = require('axios')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
-const { assert } = require('chai')
 
 describe('RASP - command_injection', () => {
   withVersions('express', 'express', expressVersion => {

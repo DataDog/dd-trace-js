@@ -10,6 +10,7 @@ const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 
+/** @type {import('../../src/index')} Proxy */
 class NoopProxy {
   constructor () {
     this._tracer = noop

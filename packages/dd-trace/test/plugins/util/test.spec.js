@@ -286,7 +286,9 @@ describe('parseAnnotations', () => {
 
   it('does not crash with invalid arguments', () => {
     const tags = parseAnnotations([
+      // @ts-expect-error: intentionally passing invalid types to test robustness
       {},
+      // @ts-expect-error: intentionally passing invalid types to test robustness
       'invalid',
       { type: 'DD_TAGS', description: 'yeah' },
       { type: 'DD_TAGS[v', description: 'invalid' },

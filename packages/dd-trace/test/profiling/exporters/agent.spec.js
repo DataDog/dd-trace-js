@@ -203,7 +203,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -216,7 +216,7 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
 
       startSpan.getCalls().forEach(call => {
         const [name, { tags }] = call.args
@@ -423,7 +423,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -436,7 +436,7 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
     })
   })
 
@@ -473,7 +473,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -486,7 +486,7 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
     })
   }, { skip: os.platform() === 'win32' })
 })

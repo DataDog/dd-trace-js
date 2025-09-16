@@ -11,6 +11,9 @@ class CompositePlugin extends Plugin {
     }
   }
 
+  /**
+   * @override
+   */
   configure (config) {
     super.configure(config)
     for (const name in this.constructor.plugins) {
