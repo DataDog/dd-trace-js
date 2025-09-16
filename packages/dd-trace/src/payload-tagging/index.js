@@ -14,8 +14,8 @@ const { tagsFromObject } = require('./tagging')
 /**
  * Given an identified value, attempt to parse it as JSON if relevant
  *
- * @param {any} value
- * @returns {any} the parsed object if parsing was successful, the input if not
+ * @param {unknown} value
+ * @returns {unknown} the parsed object if parsing was successful, the input if not
  */
 function maybeJSONParseValue (value) {
   if (typeof value !== 'string' || value[0] !== '{') {
@@ -32,8 +32,8 @@ function maybeJSONParseValue (value) {
 /**
  * Apply expansion to all expansion JSONPath queries
  *
- * @param {Object} object
- * @param {[String]} expansionRules list of JSONPath queries
+ * @param {Record<string, unknown>} object
+ * @param {string[]} expansionRules list of JSONPath queries
  */
 function expand (object, expansionRules) {
   for (const rule of expansionRules) {
@@ -46,8 +46,8 @@ function expand (object, expansionRules) {
 /**
  * Apply redaction to all redaction JSONPath queries
  *
- * @param {Object} object
- * @param {[String]} redactionRules
+ * @param {Record<string, unknown>} object
+ * @param {string[]} redactionRules
  */
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
@@ -65,15 +65,10 @@ function redact (object, redactionRules) {
  *    as there are leaf values in the object
  * This function performs side-effects on a _copy_ of the input object.
  *
- * @param {Object} config sdk configuration for the service
- * @param {[String]} config.expand expansion rules for the service
- * @param {[String]} config.request redaction rules for the request
- * @param {[String]} config.response redaction rules for the response
- * @param {Object} object the input object to generate tags from
- * @param {Object} opts tag generation options
- * @param {String} opts.prefix prefix for all generated tags
- * @param {number} opts.maxDepth maximum depth to traverse the object
- * @returns
+ * @param {{ expand: string[], request: string[], response: string[] }} config sdk configuration for the service
+ * @param {Record<string, unknown>} object the input object to generate tags from
+ * @param {{ prefix: string, maxDepth: number }} opts tag generation options
+ * @returns {Record<string, string|boolean>} Tags map
  */
 function computeTags (config, object, opts) {
   const payload = rfdc(object)
@@ -84,10 +79,26 @@ function computeTags (config, object, opts) {
   return tagsFromObject(payload, opts)
 }
 
+/**
+ * Compute request tags with the request prefix.
+ *
+ * @param {{ expand: string[], request: string[], response: string[] }} config
+ * @param {Record<string, unknown>} object
+ * @param {{ maxDepth: number }} opts
+ * @returns {Record<string, string|boolean>}
+ */
 function tagsFromRequest (config, object, opts) {
   return computeTags(config, object, { ...opts, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
 }
 
+/**
+ * Compute response tags with the response prefix.
+ *
+ * @param {{ expand: string[], request: string[], response: string[] }} config
+ * @param {Record<string, unknown>} object
+ * @param {{ maxDepth: number }} opts
+ * @returns {Record<string, string|boolean>}
+ */
 function tagsFromResponse (config, object, opts) {
   return computeTags(config, object, { ...opts, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
 }

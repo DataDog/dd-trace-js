@@ -11,7 +11,14 @@ const {
 // plugins instead of having dedicated DSM plugins that are themselves
 // lazy loaded.
 //
-// TODO: Remove this when DSM has been moved to dedicaed plugins.
+// TODO: Remove this when DSM has been moved to dedicated plugins.
+/**
+ * @template T extends new (...args: any[]) => any
+ * @param {() => T} classGetter
+ * @param {string[]} methods
+ * @param {string[]} staticMethods
+ * @returns {T}
+ */
 function lazyClass (classGetter, methods = [], staticMethods = []) {
   let constructorArgs
   let ActiveClass
@@ -50,22 +57,34 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
   return LazyClass
 }
 
+/**
+ * @type {typeof import('./pathway').DsmPathwayCodec}
+ */
 const DsmPathwayCodec = lazyClass(() => require('./pathway').DsmPathwayCodec, [], [
   'encode',
   'decode'
 ])
 
+/**
+ * @type {typeof import('./checkpointer').DataStreamsCheckpointer}
+ */
 const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataStreamsCheckpointer, [
   'setProduceCheckpoint',
   'setConsumeCheckpoint'
 ])
 
+/**
+ * @type {typeof import('./manager').DataStreamsManager}
+ */
 const DataStreamsManager = lazyClass(() => require('./manager').DataStreamsManager, [
   'setCheckpoint',
   'decodeDataStreamsContext'
 ])
 
 // TODO: Are all those methods actually public?
+/**
+ * @type {typeof import('./processor').DataStreamsProcessor}
+ */
 const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsProcessor, [
   'onInterval',
   'bucketFromTimestamp',
@@ -79,6 +98,9 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
   'getSchema'
 ])
 
+/**
+ * @type {typeof import('./schemas/schema_builder').SchemaBuilder}
+ */
 const SchemaBuilder = lazyClass(() => require('./schemas/schema_builder').SchemaBuilder, [
   'build',
   'addProperty',
