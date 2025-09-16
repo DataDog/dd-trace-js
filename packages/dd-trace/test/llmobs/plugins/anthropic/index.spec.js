@@ -6,7 +6,7 @@ const assert = require('node:assert')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const {
-  useLlmobs,
+  useLlmObs,
   expectedLLMObsLLMSpanEvent,
   deepEqualWithMockValues,
   MOCK_STRING,
@@ -45,14 +45,13 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
 
 describe('Plugin', () => {
   useEnv({
-    ANTHROPIC_API_KEY: '<not-a-real-key>',
-    _DD_LLMOBS_FLUSH_INTERVAL: 0
+    ANTHROPIC_API_KEY: '<not-a-real-key>'
   })
+
+  const getEvents = useLlmObs({ plugin: 'anthropic' })
 
   withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
     let client
-
-    const getEvents = useLlmobs({ plugin: 'anthropic' })
 
     before(() => {
       const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()

@@ -13,7 +13,7 @@ const {
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
   MOCK_STRING,
-  useLlmobs,
+  useLlmObs,
   MOCK_NUMBER,
   MOCK_OBJECT
 } = require('../../util')
@@ -30,14 +30,13 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
-    _DD_LLMOBS_FLUSH_INTERVAL: 0
   })
+
+  const getEvents = useLlmObs({ plugin: 'ai' })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
-
-    const getEvents = useLlmobs({ plugin: 'ai' })
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
