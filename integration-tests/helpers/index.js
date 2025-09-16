@@ -78,7 +78,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
     assert.strictEqual(telemetryType, 'library_entrypoint')
-    assert.deepStrictEqual(data.metadata, meta(pid))
+    assertMetadata(data.metadata, pid)
     points = points.concat(data.points)
   }
   const expectedPoints = getPoints(...expectedTelemetryPoints)
@@ -106,8 +106,8 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     return expectedPoints
   }
 
-  function meta (pid) {
-    return {
+  function assertMetadata (actualMetadata, pid) {
+    const expectedBasicMetadata = {
       language_name: 'nodejs',
       language_version: process.versions.node,
       runtime_name: 'nodejs',
@@ -115,6 +115,25 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
       tracer_version: require('../../package.json').version,
       pid: Number(pid)
     }
+
+    // Validate basic metadata
+    for (const key of Object.keys(expectedBasicMetadata)) {
+      assert.strictEqual(actualMetadata[key], expectedBasicMetadata[key])
+    }
+
+    // Validate result metadata is present and has valid values
+    assert(actualMetadata.result, 'result field should be present')
+    assert(actualMetadata.result_class, 'result_class field should be present')
+    assert(actualMetadata.result_reason, 'result_reason field should be present')
+
+    // Check that result metadata has expected values for telemetry scenarios
+    const validResults = ['success', 'abort', 'error', 'unknown']
+    const validResultClasses = ['success', 'incompatible_runtime', 'incompatible_library', 'internal_error', 'unknown']
+
+    assert(validResults.includes(actualMetadata.result), `Invalid result: ${actualMetadata.result}`)
+    assert(validResultClasses.includes(actualMetadata.result_class),
+      `Invalid result_class: ${actualMetadata.result_class}`)
+    assert(typeof actualMetadata.result_reason === 'string', 'result_reason should be a string')
   }
 }
 

@@ -20,6 +20,7 @@ const {
   NAME,
   PROPAGATED_PARENT_ID_KEY,
   ROOT_PARENT_ID,
+  CACHED_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -65,7 +66,8 @@ class LLMObsTagger {
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp
+      this._config.llmobs.mlApp ||
+      this._config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(
@@ -142,6 +144,9 @@ class LLMObsTagger {
           break
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
+          break
+        case 'cachedTokens':
+          processedKey = CACHED_TOKENS_METRIC_KEY
           break
       }
 

@@ -1,10 +1,14 @@
 'use strict'
 
-require('../../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 const nock = require('nock')
-const http = require('http')
-const zlib = require('zlib')
+const http = require('node:http')
+const zlib = require('node:zlib')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const FormData = require('../../../src/exporters/common/form-data')
 
@@ -48,7 +52,7 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       }
     }
-    request = proxyquire('../src/exporters/common/request', {
+    request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
       '../../log': log
     })

@@ -10,6 +10,7 @@ updates:
       - "/"
       - "/.github/actions/*"
       - "/.github/actions/*/*"
+      - "/.github/workflows/*"
     schedule:
       interval: "weekly"
     groups:
@@ -76,9 +77,9 @@ updates:
           - "@datadog/pprof"
           - "@datadog/sketches-js"
           - "@datadog/wasm-js-rewriter"
-          - "@opentelemetry/api"
   - package-ecosystem: "npm"
-    directory: "/packages/dd-trace/test/plugins/versions"
+    directories:
+      - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
@@ -87,6 +88,25 @@ updates:
       - dependencies
       - javascript
       - semver-patch
+    groups:
+      test-versions:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directories:
+      - "/integration-tests/esbuild"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 1
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    ignore:
+      - dependency-name: "express"
+        # Update express manually for now due to esbuild breaking otherwise
+        update-types: ["version-update:semver-major"]
     groups:
       test-versions:
         patterns:

@@ -1,13 +1,17 @@
 'use strict'
 
+const chai = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const semifies = require('semifies')
+const sinon = require('sinon')
+
 const agent = require('../../../plugins/agent')
 const Sampler = require('../../../../src/sampler')
 const { DogStatsDClient } = require('../../../../src/dogstatsd')
 const { NoopExternalLogger } = require('../../../../src/external-logger/src')
+const { withVersions } = require('../../../setup/mocha')
 
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_STRING, MOCK_NUMBER } = require('../../util')
-const chai = require('chai')
-const semifies = require('semifies')
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 const { expect } = chai

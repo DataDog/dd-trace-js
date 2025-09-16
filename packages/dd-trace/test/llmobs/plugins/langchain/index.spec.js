@@ -1,9 +1,14 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const agent = require('../../../../../dd-trace/test/plugins/agent')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
+const { withVersions } = require('../../../setup/mocha')
 
 const {
   expectedLLMObsLLMSpanEvent,

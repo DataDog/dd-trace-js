@@ -7,54 +7,55 @@ const { performance } = require('perf_hooks')
 // start/error/finish methods to the appropriate diagnostic channels.
 // TODO: Decouple this from TracingPlugin.
 class EventPlugin extends TracingPlugin {
+  #eventHandler
+  #eventFilter
+  #dataSymbol
+  #entryType
+
   constructor (eventHandler, eventFilter) {
     super()
-    this.eventHandler = eventHandler
-    this.eventFilter = eventFilter
-    this.contextData = new WeakMap()
-    this.entryType = this.constructor.entryType
+    this.#eventHandler = eventHandler
+    this.#eventFilter = eventFilter
+    this.#entryType = this.constructor.entryType
+    this.#dataSymbol = Symbol(`dd-trace.profiling.event.${this.#entryType}.${this.constructor.operation}`)
   }
 
   start (ctx) {
-    this.contextData.set(ctx, {
-      startEvent: ctx,
-      startTime: performance.now()
-    })
+    ctx[this.#dataSymbol] = performance.now()
   }
 
   error (ctx) {
-    const data = this.contextData.get(ctx)
-    if (data) {
-      data.error = true
-    }
+    // We don't emit perf events for failed operations
+    ctx[this.#dataSymbol] = undefined
   }
 
   finish (ctx) {
-    const data = this.contextData.get(ctx)
+    const startTime = ctx[this.#dataSymbol]
+    if (startTime === undefined) {
+      return
+    }
+    ctx[this.#dataSymbol] = undefined
 
-    if (!data) return
-
-    const { startEvent, startTime, error } = data
-    if (error || this.ignoreEvent(startEvent)) {
-      return // don't emit perf events for failed operations or ignored events
+    if (this.ignoreEvent(ctx)) {
+      return // don't emit perf events for ignored events
     }
 
     const duration = performance.now() - startTime
     const event = {
-      entryType: this.entryType,
+      entryType: this.#entryType,
       startTime,
       duration
     }
 
-    if (!this.eventFilter(event)) {
+    if (!this.#eventFilter(event)) {
       return
     }
 
     const context = (ctx.currentStore?.span || this.activeSpan)?.context()
-    event._ddSpanId = context?.toSpanId()
-    event._ddRootSpanId = context?._trace.started[0]?.context().toSpanId() || event._ddSpanId
+    event._ddSpanId = context?.toBigIntSpanId()
+    event._ddRootSpanId = context?._trace.started[0]?.context().toBigIntSpanId() || event._ddSpanId
 
-    this.eventHandler(this.extendEvent(event, startEvent))
+    this.#eventHandler(this.extendEvent(event, ctx))
   }
 
   ignoreEvent () {

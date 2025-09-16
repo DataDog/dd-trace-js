@@ -1,10 +1,15 @@
 'use strict'
 
-const { assert } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const assert = require('node:assert')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
-const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const users = [
   {
@@ -110,7 +115,7 @@ withVersions('passport', 'passport', version => {
       const res = await axios.get(`http://localhost:${port}/`, { headers: { cookie } })
 
       assert.strictEqual(res.status, 500)
-      assert.include(res.data, '*MOCK* Cannot deserialize user')
+      assert.match(res.data, /\*MOCK\* Cannot deserialize user/)
       sinon.assert.notCalled(subscriberStub)
     })
 

@@ -1,12 +1,16 @@
 'use strict'
-const fs = require('fs')
-const path = require('path')
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
 const semver = require('semver')
 
+const fs = require('node:fs')
+const path = require('node:path')
+
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -45,29 +49,33 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
     agent.setAvailableEndpoints([])
   }
   const isHappyDom = moduleName === '@happy-dom/jest-environment'
-  return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
-    global.__libraryName__ = moduleName
-    global.__libraryVersion__ = version
+  return agent.load(
+    ['jest', 'http'],
+    { service: 'test' },
+    { isCiVisibility: true, experimental: { exporter } })
+    .then(() => {
+      global.__libraryName__ = moduleName
+      global.__libraryVersion__ = version
 
-    return {
-      jestExecutable: isHappyDom
+      return {
+        jestExecutable: isHappyDom
         ? require('../../../versions/jest').get()
         : require(`../../../versions/jest@${version}`).get(),
-      jestCommonOptions: {
-        projects: [__dirname],
-        testPathIgnorePatterns: ['/node_modules/'],
-        coverageReporters: ['none'],
-        reporters: [],
-        silent: true,
-        testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
-        testRunner: isHappyDom
+        jestCommonOptions: {
+          projects: [__dirname],
+          testPathIgnorePatterns: ['/node_modules/'],
+          coverageReporters: ['none'],
+          reporters: [],
+          silent: true,
+          testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
+          testRunner: isHappyDom
           ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
           : require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
-        cache: false,
-        maxWorkers: '50%'
+          cache: false,
+          maxWorkers: '50%'
+        }
       }
-    }
-  })
+    })
 }
 
 describe('Plugin', function () {

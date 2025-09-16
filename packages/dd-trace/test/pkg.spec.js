@@ -1,10 +1,12 @@
 'use strict'
 
-require('./setup/tap')
-
-const os = require('os')
-const { execSync } = require('child_process')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const os = require('node:os')
+const { execSync } = require('node:child_process')
 const proxyquire = require('proxyquire').noPreserveCache()
+
+require('./setup/core')
 
 describe('pkg', () => {
   let pkg

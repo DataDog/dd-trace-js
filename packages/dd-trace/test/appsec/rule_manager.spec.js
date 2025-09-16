@@ -1,8 +1,12 @@
 'use strict'
 
-const { assert } = require('chai')
-const fs = require('fs')
-const path = require('path')
+const { expect, assert } = require('chai')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const fs = require('node:fs')
+const path = require('node:path')
+
 const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
@@ -145,7 +149,7 @@ describe('AppSec Rule Manager', () => {
       reportWafUpdate = sinon.stub()
       setDefaultBlockingActionParameters = sinon.stub()
 
-      RuleManager = proxyquire('../src/appsec/rule_manager', {
+      RuleManager = proxyquire('../../src/appsec/rule_manager', {
         './reporter': {
           reportWafUpdate
         },
@@ -191,9 +195,7 @@ describe('AppSec Rule Manager', () => {
         }]
       }
 
-      assert.doesNotThrow(() => {
-        RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
-      })
+      RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
 
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
       assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')

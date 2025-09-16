@@ -1,4 +1,18 @@
 {
+  "ai": [
+    {
+      "name": "ai",
+      "versions": ["4.0.2"]
+    },
+    {
+      "name": "@ai-sdk/openai",
+      "versions": [">=1.3.23"]
+    },
+    {
+      "name": "zod",
+      "versions": [">=3.25.75"]
+    }
+  ],
   "apollo": [
     {
       "name": "@apollo/subgraph",
@@ -169,6 +183,10 @@
     {
       "name": "@fastify/multipart",
       "versions": [">=6"]
+    },
+    {
+      "name": "pg",
+      "versions": ["8.7.3"]
     }
   ],
   "generic-pool": [
@@ -514,6 +532,12 @@
     {
       "name": "sqlite3",
       "versions": ["^5.0.8"]
+    }
+  ],
+  "ws": [
+    {
+      "name":"ws",
+      "versions": [">=8.0.0"]
     }
   ]
 }

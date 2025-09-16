@@ -1,8 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
 const { useEnv } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const isDdTrace = iastFilter.isDdTrace
 

@@ -1,0 +1,66 @@
+interactions:
+- request:
+    body: '{"inputText":"What is the capital of France?","textGenerationConfig":{"temperature":0.5,"maxTokenCount":512}}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '109'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-amzn-bedrock-accept
+      : - application/json
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.titan-text-lite-v1/invoke-with-response-stream
+  response:
+    body:
+      string: !!binary |
+        AAACJQAAAEvAxUYOCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0
+        aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SnZkWFJ3ZFhSVVpYaDBJ
+        am9pWEc1UVlYSnBjeUJwY3lCMGFHVWdZMkZ3YVhSaGJDQnZaaUJHY21GdVkyVXVJRkJoY21sekxD
+        QjBhR1VnWTJGd2FYUmhiQ0J2WmlCR2NtRnVZMlVzSUdseklHRWdZMmwwZVNCMGFHRjBJR2hoY3lC
+        aVpXVnVJR0VnWTJWdWRHVnlJRzltSUdGeWRDd2dZM1ZzZEhWeVpTd2dZVzVrSUdOMWFYTnBibVVn
+        Wm05eUlHTmxiblIxY21sbGN5NGdWR2hsSUdOcGRIa2dhWE1nYUc5dFpTQjBieUJ6YjIxbElHOW1J
+        SFJvWlNCM2IzSnNaQ2R6SUcxdmMzUWdabUZ0YjNWeklpd2lhVzVrWlhnaU9qQXNJblJ2ZEdGc1Qz
+        VjBjSFYwVkdWNGRGUnZhMlZ1UTI5MWJuUWlPbTUxYkd3c0ltTnZiWEJzWlhScGIyNVNaV0Z6YjI0
+        aU9tNTFiR3dzSW1sdWNIVjBWR1Y0ZEZSdmEyVnVRMjkxYm5RaU9qZDkiLCJwIjoiYWJjZGVmZ2hp
+        amtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNIn06tAr8AAACswAAAEueg5S+CzpldmVudC10
+        eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlw
+        ZQcABWV2ZW50eyJieXRlcyI6ImV5SnZkWFJ3ZFhSVVpYaDBJam9pSUd4aGJtUnRZWEpyY3l3Z2FX
+        NWpiSFZrYVc1bklIUm9aU0JGYVdabVpXd2dWRzkzWlhJc0lFNXZkSEpsSUVSaGJXVWdRMkYwYUdW
+        a2NtRnNMQ0JoYm1RZ2RHaGxJRXh2ZFhaeVpTQk5kWE5sZFcwdUlGQmhjbWx6SUdseklHRnNjMjhn
+        WVNCdFlXcHZjaUJwYm5SbGNtNWhkR2x2Ym1Gc0lHaDFZaUJtYjNJZ1luVnphVzVsYzNNc0lHWnBi
+        bUZ1WTJVc0lHRnVaQ0IwYjNWeWFYTnRMaUlzSW1sdVpHVjRJam93TENKMGIzUmhiRTkxZEhCMWRG
+        UmxlSFJVYjJ0bGJrTnZkVzUwSWpvM09Dd2lZMjl0Y0d4bGRHbHZibEpsWVhOdmJpSTZJa1pKVGts
+        VFNDSXNJbWx1Y0hWMFZHVjRkRlJ2YTJWdVEyOTFiblFpT201MWJHd3NJbUZ0WVhwdmJpMWlaV1J5
+        YjJOckxXbHVkbTlqWVhScGIyNU5aWFJ5YVdOeklqcDdJbWx1Y0hWMFZHOXJaVzVEYjNWdWRDSTZO
+        eXdpYjNWMGNIVjBWRzlyWlc1RGIzVnVkQ0k2Tnpnc0ltbHVkbTlqWVhScGIyNU1ZWFJsYm1ONUlq
+        b3pNalUzTENKbWFYSnpkRUo1ZEdWTVlYUmxibU41SWpveU5UWTVmWDA9IiwicCI6ImFiY2RlZmdo
+        aWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSUyJ9VK4OpA==
+    headers:
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/vnd.amazon.eventstream
+      Date:
+      - Tue, 09 Sep 2025 18:49:59 GMT
+      Transfer-Encoding:
+      - chunked
+      X-Amzn-Bedrock-Content-Type:
+      - application/json
+      x-amzn-RequestId:
+      - 7e6855f0-e369-4fe2-81e5-b01bff580f7a
+    status:
+      code: 200
+      message: OK
+version: 1

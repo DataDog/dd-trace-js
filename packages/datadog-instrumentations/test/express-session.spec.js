@@ -1,9 +1,14 @@
 'use strict'
 
-const { assert } = require('chai')
-const dc = require('dc-polyfill')
 const axios = require('axios')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const assert = require('node:assert')
+
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('express-session', 'express-session', version => {
   describe('express-session instrumentation', () => {

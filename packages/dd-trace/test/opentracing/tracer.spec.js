@@ -1,10 +1,17 @@
 'use strict'
 
-require('../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
 const opentracing = require('opentracing')
-const os = require('os')
+const proxyquire = require('proxyquire')
+
+const os = require('node:os')
+
+require('../setup/core')
+
 const SpanContext = require('../../src/opentracing/span_context')
+const formats = require('../../../../ext/formats')
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -25,6 +32,7 @@ describe('Tracer', () => {
   let TextMapPropagator
   let HttpPropagator
   let BinaryPropagator
+  let LogPropagator
   let propagator
   let config
   let log
@@ -58,6 +66,7 @@ describe('Tracer', () => {
     TextMapPropagator = sinon.stub()
     HttpPropagator = sinon.stub()
     BinaryPropagator = sinon.stub()
+    LogPropagator = sinon.stub()
     propagator = {
       inject: sinon.stub(),
       extract: sinon.stub()
@@ -82,7 +91,7 @@ describe('Tracer', () => {
 
     exporter = sinon.stub().returns(AgentExporter)
 
-    Tracer = proxyquire('../src/opentracing/tracer', {
+    Tracer = proxyquire('../../src/opentracing/tracer', {
       './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
@@ -90,6 +99,7 @@ describe('Tracer', () => {
       './propagation/text_map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
+      './propagation/log': LogPropagator,
       '../log': log,
       '../exporter': exporter
     })
@@ -367,6 +377,16 @@ describe('Tracer', () => {
       tracer.inject(spanContext, opentracing.FORMAT_TEXT_MAP, carrier)
 
       expect(prioritySampler.sample).to.have.been.calledWith(spanContext)
+    })
+
+    it('should not generate sampling priority for log injection', () => {
+      LogPropagator.returns(propagator)
+
+      tracer = new Tracer(config)
+      tracer.inject(spanContext, formats.LOG, carrier)
+
+      expect(prioritySampler.sample).to.not.have.been.called
+      expect(propagator.inject).to.have.been.calledWith(spanContext, carrier)
     })
   })
 

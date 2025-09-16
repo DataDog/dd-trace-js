@@ -1,11 +1,14 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const { expect } = require('chai')
+const { describe, beforeEach, afterEach } = require('mocha')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')

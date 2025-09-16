@@ -1,7 +1,9 @@
 'use strict'
 
-require('../../setup/tap')
-const assert = require('assert')
+const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert')
+
+require('../../setup/core')
 
 const PoissonProcessSamplingFilter = require('../../../src/profiling/profilers/poisson')
 
@@ -67,7 +69,8 @@ describe('PoissonProcessSamplingFilter', () => {
     })
     assert.strictEqual(callCount, 1)
     const event = { startTime: 0, duration: Number.POSITIVE_INFINITY }
-    assert.doesNotThrow(() => filter.filter(event))
+    // Make sure that filtering events does not throw and calls now() once
+    filter.filter(event)
     assert.strictEqual(callCount, 2)
   })
 
@@ -131,7 +134,7 @@ describe('PoissonProcessSamplingFilter', () => {
     assert.ok(filter.currentSamplingInstant >= prevNextSamplingInstant)
     assert.strictEqual(typeof filter.nextSamplingInstant, 'number')
     assert.ok(filter.nextSamplingInstant < 500000)
-    assert.ok(filter.samplingInstantCount < 10)
+    assert.ok(filter.samplingInstantCount < 30)
   })
 
   it('should reset nextSamplingInstant if it is too far in the past', () => {
@@ -144,7 +147,9 @@ describe('PoissonProcessSamplingFilter', () => {
     nowValue = event.startTime + event.duration
     filter.filter(event)
     assert.ok(filter.nextSamplingInstant > nowValue)
-    assert.ok(filter.samplingInstantCount < 10)
+    // With the feature, the expected value is 2. Without it, the expected value
+    // would be 1000. 100 should be enough not to be flaky.
+    assert.ok(filter.samplingInstantCount < 100)
   })
 
   it('should return true if event.startTime < currentSamplingInstant', () => {

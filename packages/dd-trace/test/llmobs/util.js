@@ -1,24 +1,29 @@
 'use strict'
 
+const { before, beforeEach, after } = require('mocha')
 const chai = require('chai')
 
 const tracerVersion = require('../../../../package.json').version
 
 const MOCK_STRING = Symbol('string')
 const MOCK_NUMBER = Symbol('number')
+const MOCK_OBJECT = Symbol('object')
 const MOCK_ANY = Symbol('any')
 
 function deepEqualWithMockValues (expected) {
   const actual = this._obj
 
-  for (const key in actual) {
+  for (const key of Object.keys(actual)) {
     if (expected[key] === MOCK_STRING) {
       new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('string')
     } else if (expected[key] === MOCK_NUMBER) {
       new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('number')
+    } else if (expected[key] === MOCK_OBJECT) {
+      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('object')
     } else if (expected[key] === MOCK_ANY) {
       new chai.Assertion(actual[key], `key ${key}`).to.exist
     } else if (Array.isArray(expected[key])) {
+      assert.ok(Array.isArray(actual[key]), `key "${key}" is not an array`)
       const sortedExpected = [...expected[key].sort()]
       const sortedActual = [...actual[key].sort()]
       new chai.Assertion(sortedActual, `key: ${key}`).to.deepEqualWithMockValues(sortedExpected)
@@ -190,11 +195,78 @@ function fromBuffer (spanProperty, isNumber = false) {
   return isNumber ? Number(strVal) : strVal
 }
 
+const agent = require('../plugins/agent')
+const assert = require('node:assert')
+
+/**
+ * @param {Object} options
+ * @param {string} options.plugin
+ * @param {Object} options.tracerConfigOptions
+ * @param {Object} options.closeOptions
+ * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
+ */
+function useLlmobs ({
+  plugin,
+  tracerConfigOptions = {
+    llmobs: {
+      mlApp: 'test',
+      agentlessEnabled: false
+    }
+  },
+  closeOptions = { ritmReset: false, wipe: true }
+}) {
+  if (!plugin) {
+    throw new TypeError(
+      '`plugin` is required when using `useLlmobs`'
+    )
+  }
+
+  if (!tracerConfigOptions.llmobs) {
+    throw new TypeError(
+      '`loadOptions.llmobs` is required when using `useLlmobs`'
+    )
+  }
+
+  let apmTracesPromise
+  let llmobsTracesPromise
+
+  before(() => {
+    return agent.load(plugin, {}, tracerConfigOptions)
+  })
+
+  beforeEach(() => {
+    apmTracesPromise = agent.assertSomeTraces(apmTraces => {
+      return apmTraces
+        .flatMap(trace => trace)
+        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
+    })
+
+    llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
+      return llmobsTraces
+        .flatMap(trace => trace)
+        .map(trace => trace.spans[0])
+        .sort((a, b) => a.start_ns - b.start_ns)
+    })
+  })
+
+  after(() => {
+    return agent.close(closeOptions)
+  })
+
+  return async function () {
+    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+
+    return { apmSpans, llmobsSpans }
+  }
+}
+
 module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
+  useLlmobs,
   MOCK_ANY,
   MOCK_NUMBER,
-  MOCK_STRING
+  MOCK_STRING,
+  MOCK_OBJECT
 }
