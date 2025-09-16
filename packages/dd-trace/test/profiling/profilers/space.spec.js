@@ -60,6 +60,15 @@ describe('profilers/native/space', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
+  it('should provide info', () => {
+    const profiler = new NativeSpaceProfiler()
+
+    const info = profiler.getInfo()
+    expect(info.settings.oomMonitoring).to.not.be.undefined
+    expect(info.settings.samplingInterval).to.not.be.undefined
+    expect(info.settings.stackDepth).to.not.be.undefined
+  })
+
   it('should collect profiles from the pprof space profiler', () => {
     const profiler = new NativeSpaceProfiler()
 

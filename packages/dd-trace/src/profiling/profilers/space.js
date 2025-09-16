@@ -32,7 +32,7 @@ class NativeSpaceProfiler {
         this._oomMonitoring.maxHeapExtensionCount,
         strategies.includes(oomExportStrategies.LOGS),
         strategies.includes(oomExportStrategies.PROCESS) ? this._oomMonitoring.exportCommand : [],
-        (profile) => nearOOMCallback(this.type, this._pprof.encodeSync(profile)),
+        (profile) => nearOOMCallback(this.type, this._pprof.encodeSync(profile), this.getInfo()),
         strategiesToCallbackMode(strategies, this._pprof.heap.CallbackMode)
       )
     }
@@ -46,6 +46,18 @@ class NativeSpaceProfiler {
       this.stop()
     }
     return profile
+  }
+
+  getInfo () {
+    const oomMonitoring = { ...this._oomMonitoring }
+    delete oomMonitoring.exportCommand
+    return {
+      settings: {
+        oomMonitoring,
+        samplingInterval: this._samplingInterval,
+        stackDepth: this._stackDepth,
+      }
+    }
   }
 
   encode (profile) {

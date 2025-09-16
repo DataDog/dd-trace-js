@@ -383,17 +383,20 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
-  type = 'events'
-  #maxSamples
+  #maxSamples = 0
+  #timelineSamplingEnabled = false
   #eventSerializer
   #eventSources
 
+  get type () { return 'events' }
+
   constructor (options = {}) {
     this.#maxSamples = getMaxSamples(options)
+    this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
-    const eventFilter = options.timelineSamplingEnabled
+    const eventFilter = this.#timelineSamplingEnabled
       ? createPoissonProcessSamplingFilter(options.samplingInterval)
       : () => true
     const filteringEventHandler = event => {
@@ -430,6 +433,15 @@ class EventsProfiler {
     const thatEventSerializer = this.#eventSerializer
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
     return () => thatEventSerializer.createProfile(startDate, endDate)
+  }
+
+  getInfo () {
+    return {
+      settings: {
+        maxSamples: this.#maxSamples,
+        timelineSamplingEnabled: this.#timelineSamplingEnabled
+      }
+    }
   }
 
   encode (profile) {

@@ -65,6 +65,7 @@ describe('profiler', function () {
       start: sinon.stub(),
       stop: sinon.stub(),
       profile: sinon.stub().returns('profile'),
+      getInfo: sinon.stub().returns({}),
       encode: sinon.stub().returns(wallProfilePromise)
     }
 
@@ -75,6 +76,7 @@ describe('profiler', function () {
       start: sinon.stub(),
       stop: sinon.stub(),
       profile: sinon.stub().returns('profile'),
+      getInfo: sinon.stub().returns({}),
       encode: sinon.stub().returns(spaceProfilePromise)
     }
 

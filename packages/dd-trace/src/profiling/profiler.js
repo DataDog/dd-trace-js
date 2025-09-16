@@ -41,6 +41,16 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+function processInfo (infos, info, type) {
+  // transpose e.g. info.wall.settings to info.settings.wall. That way
+  // we have functional groupings first, then profiler type.
+  infos.settings[type] = info.settings
+  delete info.settings
+  // take over rest of info without transposition
+  if (Object.keys(info).length > 0) {
+    infos[type] = info
+  }
+}
 class Profiler extends EventEmitter {
   #compressionFn
   #compressionOptions
@@ -158,12 +168,16 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #nearOOMExport (profileType, encodedProfile) {
+  #nearOOMExport (profileType, encodedProfile, info) {
     const start = this.#lastStart
     const end = new Date()
+    const infos = {
+      settings: {}
+    }
+    processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile
-    }, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
@@ -232,25 +246,25 @@ class Profiler extends EventEmitter {
   async _collect (snapshotKind, restart = true) {
     if (!this.enabled) return
 
-    const startDate = this.#lastStart
-    const endDate = new Date()
-    const profiles = []
-    const encodedProfiles = {}
-
     try {
       if (this._config.profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
+      const startDate = this.#lastStart
+      const endDate = new Date()
+      const profiles = []
+
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
         for (const profiler of this._config.profilers) {
+          const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
             this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
           }
           if (!profile) continue
-          profiles.push({ profiler, profile })
+          profiles.push({ profiler, profile, info })
         }
       })
 
@@ -260,14 +274,20 @@ class Profiler extends EventEmitter {
 
       let hasEncoded = false
 
+      const encodedProfiles = {}
+      const infos = {
+        settings: {}
+      }
+
       // encode and export asynchronously
-      await Promise.all(profiles.map(async ({ profiler, profile }) => {
+      await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
           const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
             ? await this.#compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
             const profileJson = JSON.stringify(profile, (key, value) => {
               return typeof value === 'bigint' ? value.toString() : value
@@ -283,7 +303,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
         this.#logger.debug('Submitted profiles')
       }
@@ -293,7 +313,7 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #submit (profiles, start, end, snapshotKind) {
+  #submit (profiles, infos, start, end, snapshotKind) {
     const { tags } = this._config
 
     // Flatten endpoint counts
@@ -305,7 +325,7 @@ class Profiler extends EventEmitter {
 
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
-    const exportSpec = { profiles, start, end, tags, endpointCounts }
+    const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
     const tasks = this._config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
         if (this.#logger) {
