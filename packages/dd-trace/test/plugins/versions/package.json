@@ -5,6 +5,8 @@
   "private": true,
   "dependencies": {
     "@ai-sdk/openai": "2.0.27",
+    "@openai/agents": "0.1.0",
+    "@openai/agents-core": "0.1.0",
     "@apollo/gateway": "2.11.2",
     "@apollo/server": "5.0.0",
     "@apollo/subgraph": "2.11.2",
@@ -184,8 +186,6 @@
     "workerpool": "9.3.3",
     "ws": "8.18.3",
     "yarn": "1.22.22",
-    "zod": "4.1.5",
-    "@openai/agents": "0.1.0",
-    "@openai/agents-core": "0.1.0"
+    "zod": "4.1.5"
   }
 }
