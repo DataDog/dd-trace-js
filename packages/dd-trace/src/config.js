@@ -373,7 +373,7 @@ class Config {
     this._applyFleetStableConfig()
     this._applyOptions(options)
     this._applyCalculated()
-    this._applyRemote({})
+    this._applyRemote()
     this._merge()
 
     tagger.add(this.tags, {
@@ -1208,21 +1208,28 @@ class Config {
   _applyRemote (options) {
     const opts = setHiddenProperty(this, '_remote', this._remote || {})
     setHiddenProperty(this, '_remoteUnprocessed', {})
-    const tags = {}
-    const headerTags = options.tracing_header_tags
+
+    if (options === undefined) {
+      // During tracer init, there's no remote options. We use this as a signal to abort early, as it would otherwise
+      // produce misleading telemetry
+      return
+    }
+
+    opts.headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
         return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
       })
       : undefined
 
+    const tags = {}
     tagger.add(tags, options.tracing_tags)
     if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+    this._setTags(opts, 'tags', tags)
 
     this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    opts.headerTags = headerTags
-    this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
+
     this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
     this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
   }
@@ -1338,7 +1345,17 @@ class Config {
   }
 
   _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
-    set(this, name, value)
+    if (value != null || origin === 'default') {
+      // fields should not have their value set to null or undefined, unless it's coming from the default origin
+      set(this, name, value)
+    } else if (!(origin === 'remote_config' && value === null)) {
+      return
+    }
+
+    // We continue here only in one of the following conditions:
+    // - the origin is `default`
+    // - the origin is `remote_config` and the value is `null` (we track these, as they are used for unsetting fields)
+    // - the value is not `null` or `undefined` (i.e. it's being set)
 
     if (!changeTracker[name]) {
       changeTracker[name] = {}
@@ -1347,7 +1364,7 @@ class Config {
     const originExists = origin in changeTracker[name]
     const oldValue = changeTracker[name][origin]
 
-    if (!originExists || oldValue !== value) {
+    if (!originExists || valuesDiffer(oldValue, value)) {
       changeTracker[name][origin] = value
       changes.push({
         name,
@@ -1369,17 +1386,14 @@ class Config {
       // Use reverse order for merge (lowest priority first)
       for (let i = sourcesOrder.length - 1; i >= 0; i--) {
         const { containerProperty, origin, unprocessedProperty } = sourcesOrder[i]
-        const container = this[containerProperty]
-        const value = container[name]
-        if (value != null || container === this._defaults) {
-          this._setAndTrackChange({
-            name,
-            value,
-            origin,
-            unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
-            changes
-          })
-        }
+        const value = this[containerProperty][name]
+        this._setAndTrackChange({
+          name,
+          value,
+          origin,
+          unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
+          changes
+        })
       }
     }
     this.sampler.sampleRate = this.sampleRate
@@ -1445,6 +1459,41 @@ function setHiddenProperty (obj, name, value) {
     writable: true
   })
   return obj[name]
+}
+
+function isPlainObject (obj) {
+  if (obj === null || typeof obj !== 'object') return false
+  const proto = Object.getPrototypeOf(obj)
+  return proto === Object.prototype || proto === null
+}
+
+function valuesDiffer (a, b) {
+  if (a === b) return false
+  if (a instanceof URL) a = a.href
+  if (b instanceof URL) b = b.href
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return true
+    for (let i = 0; i < a.length; i++) {
+      if (valuesDiffer(a[i], b[i])) return true
+    }
+    return false
+  }
+
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const aKeys = Object.keys(a)
+    const bKeys = Object.keys(b)
+    if (aKeys.length !== bKeys.length) return true
+    for (const key of aKeys) {
+      if (!Object.hasOwn(b, key)) return true
+      if (valuesDiffer(a[key], b[key])) return true
+    }
+    return false
+  }
+
+  if (Number.isNaN(a) && Number.isNaN(b)) return false
+
+  return a !== b
 }
 
 module.exports = Config

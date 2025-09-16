@@ -2037,9 +2037,36 @@ describe('Config', () => {
       tracing_sampling_rate: 0
     }, true)
 
+    expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
     ])
+  })
+
+  it('should not send telemetry updates if the agent URL href is not changed', () => {
+    const config = new Config({ url: new URL('https://example.com/') })
+
+    config.configure({
+      url: new URL('https://example.com/')
+    })
+
+    expect(updateConfig).to.be.calledTwice
+    expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
+  })
+
+  it('should not send telemetry updates if a complex object does not contain any changes', () => {
+    const config = new Config()
+
+    config.configure({
+      tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
+    }, true)
+
+    config.configure({
+      tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
+    }, true)
+
+    expect(updateConfig).to.be.calledThrice
+    expect(updateConfig.getCall(2).args[0]).to.deep.equal([])
   })
 
   it('should reformat tags from sampling rules when set through remote configuration', () => {
