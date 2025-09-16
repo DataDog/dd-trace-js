@@ -462,19 +462,19 @@ function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
   let gitMetadata = {}
 
   // We won't execute git in the test workers since it's slow and the information is in the parent process
-  if (!isWorker) {
-    gitMetadata = getGitMetadata({
-      commitSHA,
-      branch,
-      repositoryUrl,
-      tag,
-      authorName,
-      authorEmail,
-      commitMessage,
-      ciWorkspacePath,
-      headCommitSha
-    })
-  }
+  // if (!isWorker) {
+  //   gitMetadata = getGitMetadata({
+  //     commitSHA,
+  //     branch,
+  //     repositoryUrl,
+  //     tag,
+  //     authorName,
+  //     authorEmail,
+  //     commitMessage,
+  //     ciWorkspacePath,
+  //     headCommitSha
+  //   })
+  // }
 
   const userProvidedGitMetadata = getUserProviderGitMetadata()
 

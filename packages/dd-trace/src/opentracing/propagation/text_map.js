@@ -84,12 +84,12 @@ class TextMapPropagator {
       extractCh.publish({ spanContext, carrier })
     }
 
-    log.debug(() => {
-      const keys = JSON.stringify(pick(carrier, logKeys))
-      const styles = this._config.tracePropagationStyle.extract.join(', ')
+    // log.debug(() => {
+    //   const keys = JSON.stringify(pick(carrier, logKeys))
+    //   const styles = this._config.tracePropagationStyle.extract.join(', ')
 
-      return `Extract from carrier (${styles}): ${keys}.`
-    })
+    //   return `Extract from carrier (${styles}): ${keys}.`
+    // })
 
     return spanContext
   }

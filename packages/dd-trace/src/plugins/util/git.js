@@ -301,7 +301,7 @@ function checkAndFetchBranch (branch, remoteName) {
       }
     } catch (e) {
       // branch does not exist or couldn't be fetched, so we can't do anything
-      log.error('Git plugin error checking and fetching branch', e)
+      log.debug(`Could not fetch branch ${branch} from remote ${remoteName}`, e)
       return false
     }
   }
