@@ -6,6 +6,7 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
+const FFE = require('./ffe')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -154,6 +155,23 @@ class Tracer extends NoopProxy {
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
+        }
+
+        if (config.ffe.enabled) {
+          FFE.enable(config)
+          rc.setProductHandler('FFE_FLAG_CONFIGURATION_RULES', (action, conf, configId) => {
+            if (action === 'apply') {
+              // Store UFC config - conf is the parsed UFC JSON
+              FFE.setConfig(configId, conf)
+            } else if (action === 'modify') {
+              // Modify stored UFC config - conf is the parsed UFC JSON
+              FFE.modifyConfig(configId, conf)
+            } else if (action === 'unapply') {
+              // Remove config when no longer needed
+              FFE.removeConfig(configId)
+            }
+          })
+          this._modules.ffe = FFE // Expose for testing
         }
       }
 
