@@ -7,6 +7,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const assert = require('node:assert')
 
 const serviceName = 'bedrock-service-name-test'
 
@@ -68,6 +69,35 @@ describe('Plugin', () => {
             })
 
             await bedrockRuntimeClient.send(command)
+            await tracesPromise
+          })
+
+          it(`should invoke model for provider with streaming: ${model.provider} (ModelId: ${model.modelId})`, async () => { // eslint-disable-line @stylistic/max-len
+            const request = {
+              body: JSON.stringify(model.requestBody),
+              contentType: 'application/json',
+              accept: 'application/json',
+              modelId: model.modelId
+            }
+
+            const command = new AWS.InvokeModelWithResponseStreamCommand(request)
+
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              expect(span.meta).to.include({
+                'aws.operation': 'invokeModelWithResponseStream',
+                'aws.bedrock.request.model': model.modelId.split('.')[1],
+                'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
+              })
+            })
+
+            const stream = await bedrockRuntimeClient.send(command)
+            for await (const chunk of stream.body) {
+              const decoded = Buffer.from(chunk.chunk.bytes).toString('utf8')
+              const body = JSON.parse(decoded)
+              assert.ok(body)
+            }
+
             await tracesPromise
           })
         })
