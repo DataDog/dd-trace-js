@@ -1,0 +1,53 @@
+interactions:
+- request:
+    body: '{"prompt":"What is the capital of France?","max_tokens":512,"temperature":0.5}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '78'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/mistral.mistral-7b-instruct-v0:2/invoke
+  response:
+    body:
+      string: "{\"outputs\":[{\"text\":\" Paris is the capital city of France. It
+        is the most populous city in France and is considered one of the cultural,
+        artistic, and intellectual centers of Europe. Paris is known for its iconic
+        landmarks such as the Eiffel Tower, the Louvre Museum, and the Notre-Dame
+        Cathedral. It is also famous for its cuisine, fashion, and cafe culture. Paris
+        has a rich history and is home to many world-renowned institutions, including
+        the Sorbonne University and the \xC9cole Normale Sup\xE9rieure. It is a popular
+        tourist destination and attracts millions of visitors every year.\",\"stop_reason\":\"stop\"}]}"
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '610'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 03 Sep 2025 17:56:30 GMT
+      X-Amzn-Bedrock-Input-Token-Count:
+      - '8'
+      X-Amzn-Bedrock-Invocation-Latency:
+      - '1299'
+      X-Amzn-Bedrock-Output-Token-Count:
+      - '129'
+      x-amzn-RequestId:
+      - a6ead51e-3afd-44aa-a2b1-4eca54a6bb09
+    status:
+      code: 200
+      message: OK
+version: 1

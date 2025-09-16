@@ -177,7 +177,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.31.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
       - "127.0.0.1:9126:9126"
     environment:
@@ -186,6 +186,7 @@ services:
       - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
       - PORT=9126
       - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
+      # - AWS_SECRET_ACCESS_KEY # uncomment this line for generating aws service cassettes
     volumes:
       # when there are other products not using the cassette feature from the test agent,
       # we can move this directory to a shared location here, and change the above
