@@ -1,10 +1,12 @@
 'use strict'
 
+const { promisify } = require('util')
 const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const execPromise = promisify(exec)
 
 const { assert } = require('chai')
 
@@ -118,7 +120,7 @@ moduleTypes.forEach(({
     }
 
     this.retries(2)
-    this.timeout(60000)
+    this.timeout(70000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
@@ -129,6 +131,11 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
+
+      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // Install cypress' browser before running the tests
+      await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
+
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
         resolve()
@@ -197,6 +204,8 @@ moduleTypes.forEach(({
 
       receiver.assertPayloadReceived(() => {
         const error = new Error('it should not report test events')
+        // eslint-disable-next-line no-console
+        console.log('it should never be executed')
         done(error)
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
@@ -222,23 +231,21 @@ moduleTypes.forEach(({
         testOutput += chunk.toString()
       })
 
-      // TODO: remove once we find the source of flakiness
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
-
       childProcess.on('exit', () => {
         assert.notInclude(testOutput, 'TypeError')
         // TODO: remove try/catch once we find the source of flakiness
         try {
           assert.include(testOutput, '1 of 1 failed')
+          done()
         } catch (e) {
           // eslint-disable-next-line no-console
           console.log('---- Actual test output -----')
           // eslint-disable-next-line no-console
           console.log(testOutput)
-          throw e
+          // eslint-disable-next-line no-console
+          console.log('---- finish actual test output -----')
+          done(e)
         }
-        done()
       })
     })
 
