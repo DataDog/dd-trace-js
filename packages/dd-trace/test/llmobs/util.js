@@ -204,7 +204,7 @@ const assert = require('node:assert')
  * @param {Object} options.closeOptions
  * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
  */
-function useLlmobs ({
+function useLlmObs ({
   plugin,
   tracerConfigOptions = {
     llmobs: {
@@ -212,7 +212,7 @@ function useLlmobs ({
       agentlessEnabled: false
     }
   },
-  closeOptions = { ritmReset: false, wipe: true }
+  closeOptions = { ritmReset: false }
 }) {
   if (!plugin) {
     throw new TypeError(
@@ -263,7 +263,7 @@ module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
-  useLlmobs,
+  useLlmObs,
   MOCK_ANY,
   MOCK_NUMBER,
   MOCK_STRING,

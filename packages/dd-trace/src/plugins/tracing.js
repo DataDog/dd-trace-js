@@ -8,7 +8,6 @@ const { COMPONENT } = require('../constants')
 class TracingPlugin extends Plugin {
   constructor (...args) {
     super(...args)
-    console.log('Creating TracingPlugin', this.constructor.name)
 
     this.component = this.constructor.component || this.constructor.id
     this.operation = this.constructor.operation
@@ -92,7 +91,6 @@ class TracingPlugin extends Plugin {
 
   addTraceBind (eventName, transform) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
-    console.log('Adding trace bind for', this.constructor.name, `${prefix}:${eventName}`)
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
