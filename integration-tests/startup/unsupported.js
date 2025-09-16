@@ -2,6 +2,7 @@
 
 const assert = require('assert')
 
+/* eslint-disable-next-line n/no-missing-import */
 import('d3-format').then(({ format }) => {
   const siFormat = format('.4~s')
 
