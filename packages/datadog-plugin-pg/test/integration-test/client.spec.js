@@ -23,13 +23,13 @@ describe('esm', () => {
       sandbox = await createSandbox([`'pg@${version}'`], false, [
         './packages/datadog-plugin-pg/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
-        default: `import pg from 'pg'`,
-        star: semver.satisfies(realVersion, '<8.15.0') ?
-          `import * as mod from 'pg'; const pg = { Client: mod.Client || mod.default.Client }` :
-          `import * as pg from 'pg';`,
-        destructure: semver.satisfies(realVersion, '<8.15.0') ?
-          `import { default as pg } from 'pg';` :
-          `import { Client } from 'pg'; const pg = { Client }`
+        default: 'import pg from \'pg\'',
+        star: semver.satisfies(realVersion, '<8.15.0')
+          ? 'import * as mod from \'pg\'; const pg = { Client: mod.Client || mod.default.Client }'
+          : 'import * as pg from \'pg\';',
+        destructure: semver.satisfies(realVersion, '<8.15.0')
+          ? 'import { default as pg } from \'pg\';'
+          : 'import { Client } from \'pg\'; const pg = { Client }'
       })
     })
 
