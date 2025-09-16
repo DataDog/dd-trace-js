@@ -2,8 +2,11 @@
 
 const { randomUUID } = require('crypto')
 const { expect } = require('chai')
-const semver = require('semver')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')

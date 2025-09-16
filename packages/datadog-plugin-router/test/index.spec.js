@@ -1,10 +1,12 @@
 'use strict'
 
-// TODO: move tests from express since it uses the router plugin now
-
 const axios = require('axios')
-const http = require('http')
-const { once } = require('events')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const http = require('node:http')
+const { once } = require('node:events')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

@@ -1,13 +1,15 @@
 'use strict'
 
+const axios = require('axios')
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
 const Config = require('../../../../src/config')
 const iast = require('../../../../src/appsec/iast')
 const agent = require('../../../plugins/agent')
-const axios = require('axios')
 const { testInRequest } = require('../utils')
 
 describe('Telemetry', () => {

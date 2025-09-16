@@ -1,7 +1,12 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
@@ -25,7 +30,6 @@ const {
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
-const axios = require('axios')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
@@ -34,9 +38,9 @@ const addresses = require('../../src/appsec/addresses')
 const resultActions = {
   actions: {
     block_request: {
-      status_code: '401',
+      status_code: 401,
       type: 'auto',
-      grpc_status_code: '10'
+      grpc_status_code: 10
     }
   }
 }
@@ -54,7 +58,6 @@ describe('AppSec Index', function () {
   let graphql
   let apiSecuritySampler
   let rasp
-  let standalone
   let serverless
 
   const RULES = { rules: [{ a: 1 }] }
@@ -98,7 +101,8 @@ describe('AppSec Index', function () {
     }
 
     blocking = {
-      setTemplates: sinon.stub()
+      setTemplates: sinon.stub(),
+      callBlockDelegation: sinon.stub()
     }
 
     UserTracking = {
@@ -133,11 +137,6 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
-    standalone = {
-      configure: sinon.stub(),
-      disable: sinon.stub()
-    }
-
     serverless = {
       isInServerlessEnvironment: sinon.stub()
     }
@@ -152,7 +151,6 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      './standalone': standalone,
       '../serverless': serverless
     })
 
@@ -1122,6 +1120,7 @@ describe('AppSec Index', function () {
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
         expect(res.constructor.prototype.end).to.have.been.calledOnce
+        expect(blocking.callBlockDelegation).to.have.been.calledOnce
 
         abortController.abort.resetHistory()
 
@@ -1130,6 +1129,17 @@ describe('AppSec Index', function () {
         expect(waf.run).to.have.been.calledOnce
         expect(abortController.abort).to.have.been.calledOnce
         expect(res.constructor.prototype.end).to.have.been.calledOnce
+        expect(blocking.callBlockDelegation).to.have.been.calledOnce
+      })
+
+      it('should call abortController if blocking delegate is successful', () => {
+        blocking.callBlockDelegation.returns(true)
+
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders: {} })
+
+        expect(blocking.callBlockDelegation).to.have.been.calledOnceWithExactly(res)
+        expect(abortController.abort).to.have.been.calledOnce
+        expect(waf.run).to.not.have.been.called
       })
 
       it('should not call the WAF if response was already analyzed', () => {

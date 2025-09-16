@@ -1,14 +1,17 @@
 'use strict'
 
-require('../setup/tap')
-
-const tracerVersion = require('../../../../package.json').version
-const proxyquire = require('proxyquire').noPreserveCache()
-const http = require('http')
-const { once } = require('events')
-const { storage } = require('../../../datadog-core')
-const os = require('os')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
+const http = require('node:http')
+const { once } = require('node:events')
+const os = require('node:os')
+
+require('../setup/core')
+
+const { storage } = require('../../../datadog-core')
+const tracerVersion = require('../../../../package.json').version
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
@@ -228,7 +231,6 @@ describe('telemetry', () => {
         server.close()
         done()
       }, 10)
-      clearTimeout()
     })
   })
 
