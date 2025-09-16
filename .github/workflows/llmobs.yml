@@ -124,8 +124,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: ai
-      DD_TRACE_DEBUG: true
-      DD_REMOTE_CONFIGURATION_ENABLED: false
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
