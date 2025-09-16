@@ -117,7 +117,7 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.banner ??= {}
     build.initialOptions.banner.js ??= ''
 
-    build.initialOptions.banner.js = `if (typeof process !== 'undefined' && process.env) {
+    build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null && process.env !== null && typeof process.env === 'object') {
   ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
   ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
 }
