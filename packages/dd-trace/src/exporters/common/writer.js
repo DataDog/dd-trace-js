@@ -30,7 +30,7 @@ class Writer {
       return
     }
 
-    log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
+    // log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)
   }

@@ -447,17 +447,17 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
 function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
   // TODO: eventually these will come from the tracer (generally available)
   const ciMetadata = getCIMetadata()
-  const {
-    [GIT_COMMIT_SHA]: commitSHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: repositoryUrl,
-    [GIT_TAG]: tag,
-    [GIT_COMMIT_AUTHOR_NAME]: authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-    [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath,
-    [GIT_COMMIT_HEAD_SHA]: headCommitSha
-  } = ciMetadata
+  // const {
+  //   [GIT_COMMIT_SHA]: commitSHA,
+  //   [GIT_BRANCH]: branch,
+  //   [GIT_REPOSITORY_URL]: repositoryUrl,
+  //   [GIT_TAG]: tag,
+  //   [GIT_COMMIT_AUTHOR_NAME]: authorName,
+  //   [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+  //   [GIT_COMMIT_MESSAGE]: commitMessage,
+  //   [CI_WORKSPACE_PATH]: ciWorkspacePath,
+  //   [GIT_COMMIT_HEAD_SHA]: headCommitSha
+  // } = ciMetadata
 
   let gitMetadata = {}
 

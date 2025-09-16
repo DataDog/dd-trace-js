@@ -70,7 +70,7 @@ class Tracer extends NoopProxy {
     this._initialized = false
     this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
-    this.dogstatsd = new NoopDogStatsDClient()
+    // this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
     this._flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem
@@ -106,10 +106,10 @@ class Tracer extends NoopProxy {
 
       telemetry.start(config, this._pluginManager)
 
-      if (config.dogstatsd) {
-        // Custom Metrics
-        lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
-      }
+      // if (config.dogstatsd) {
+      //   // Custom Metrics
+      //   lazyProxy(this, 'dogstatsd', config, () => require('./dogstatsd').CustomMetrics, config)
+      // }
 
       if (config.spanLeakDebug > 0) {
         const spanleak = require('./spanleak')

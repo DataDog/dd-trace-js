@@ -716,57 +716,11 @@ addHook({
   return vitestPackage
 })
 
-// There are multiple index* files across different versions of vitest,
-// so we check for the existence of BaseSequencer to determine if we are in the right file
-addHook({
-  name: 'vitest',
-  versions: ['>=1.6.0 <2.0.0'],
-  filePattern: 'dist/vendor/index.*'
-}, (vitestPackage) => {
-  if (isReporterPackage(vitestPackage)) {
-    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
-  }
-
-  return vitestPackage
-})
-
-addHook({
-  name: 'vitest',
-  versions: ['>=2.0.0 <2.0.5'],
-  filePattern: 'dist/vendor/index.*'
-}, (vitestPackage) => {
-  if (isReporterPackageNew(vitestPackage)) {
-    shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
-  }
-
-  return vitestPackage
-})
-
-addHook({
-  name: 'vitest',
-  versions: ['>=2.0.5 <2.1.0'],
-  filePattern: 'dist/chunks/index.*'
-}, (vitestPackage) => {
-  if (isReporterPackageNewest(vitestPackage)) {
-    shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
-  }
-
-  return vitestPackage
-})
-
-addHook({
-  name: 'vitest',
-  versions: ['>=2.1.0 <3.0.0'],
-  filePattern: 'dist/chunks/RandomSequencer.*'
-}, (randomSequencerPackage) => {
-  shimmer.wrap(randomSequencerPackage.B.prototype, 'sort', getSortWrapper)
-  return randomSequencerPackage
-})
 
 addHook({
   name: 'vitest',
   versions: ['>=3.0.9'],
-  filePattern: 'dist/chunks/coverage.*'
+  file: 'dist/chunks/coverage.DL5VHqXY.js'
 }, (coveragePackage) => {
   if (isBaseSequencer(coveragePackage)) {
     shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
@@ -776,24 +730,8 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=3.0.0 <3.0.9'],
-  filePattern: 'dist/chunks/resolveConfig.*'
-}, (resolveConfigPackage) => {
-  shimmer.wrap(resolveConfigPackage.B.prototype, 'sort', getSortWrapper)
-  return resolveConfigPackage
-})
-
-// Can't specify file because compiled vitest includes hashes in their files
-addHook({
-  name: 'vitest',
-  versions: ['>=1.6.0 <2.0.5'],
-  filePattern: 'dist/vendor/cac.*'
-}, getCreateCliWrapper)
-
-addHook({
-  name: 'vitest',
   versions: ['>=2.0.5'],
-  filePattern: 'dist/chunks/cac.*'
+  file: 'dist/chunks/cac.Cb-PYCCB.js'
 }, getCreateCliWrapper)
 
 // test suite start and finish
