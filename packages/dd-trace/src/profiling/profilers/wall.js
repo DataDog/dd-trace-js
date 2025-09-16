@@ -215,12 +215,13 @@ class NativeWallProfiler {
   #setupTelemetryMetrics () {
     const contextCountGauge = profilerTelemetryMetrics.gauge('wall.sample_contexts')
 
-    const that = this
     this._contextCountGaugeUpdater = setInterval(() => {
-      contextCountGauge.mark(that._profilerState[kCPEDContextCount])
-    }, that.#telemetryHeartbeatIntervalMillis)
+      contextCountGauge.mark(this.#CPEDContextCount)
+    }, this.#telemetryHeartbeatIntervalMillis)
     this._contextCountGaugeUpdater.unref()
   }
+
+  get #CPEDContextCount () { return this._profilerState?.[kCPEDContextCount] ?? 0 }
 
   #enter () {
     if (!this.#started) return
@@ -408,6 +409,20 @@ class NativeWallProfiler {
 
   profile (restart) {
     return this.#stop(restart)
+  }
+
+  getInfo () {
+    return {
+      asyncContextCount: this.#CPEDContextCount,
+      settings: {
+        asyncContextFrameEnabled: this.#asyncContextFrameEnabled,
+        codeHotspotsEnabled: this.#codeHotspotsEnabled,
+        cpuProfilingEnabled: this.#cpuProfilingEnabled,
+        endpointCollectionEnabled: this.#endpointCollectionEnabled,
+        timelineEnabled: this.#timelineEnabled,
+        v8ProfilerBugWorkaroundEnabled: this.#v8ProfilerBugWorkaroundEnabled
+      }
+    }
   }
 
   encode (profile) {
