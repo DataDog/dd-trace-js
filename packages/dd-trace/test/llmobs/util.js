@@ -197,6 +197,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 
 const agent = require('../plugins/agent')
 const assert = require('node:assert')
+const { useEnv } = require('../../../../integration-tests/helpers')
 
 /**
  * @param {Object} options
@@ -229,6 +230,10 @@ function useLlmObs ({
 
   let apmTracesPromise
   let llmobsTracesPromise
+
+  useEnv({
+    _DD_LLMOBS_FLUSH_INTERVAL: 0
+  })
 
   before(() => {
     return agent.load(plugin, {}, tracerConfigOptions)

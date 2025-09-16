@@ -29,8 +29,7 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
 
 describe('Plugin', () => {
   useEnv({
-    OPENAI_API_KEY: '<not-a-real-key>',
-    _DD_LLMOBS_FLUSH_INTERVAL: 0
+    OPENAI_API_KEY: '<not-a-real-key>'
   })
 
   const getEvents = useLlmObs({ plugin: 'ai' })
