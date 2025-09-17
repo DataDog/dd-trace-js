@@ -379,6 +379,126 @@ The following attributes are available to override Datadog-specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
+<h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry logs, implementing the [OpenTelemetry Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/) specification. This allows you to send structured log data using the OpenTelemetry standard.
+
+#### Configuration
+
+Enable OpenTelemetry logs using standard OpenTelemetry environment variables:
+
+```bash
+# Enable OpenTelemetry logs
+export OTEL_LOGS_EXPORTER=otlp
+
+# OTLP endpoint URL
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
+
+# Optional headers (JSON format)
+export OTEL_EXPORTER_OTLP_LOGS_HEADERS='{"Authorization": "Bearer token"}'
+
+# Request timeout in milliseconds
+export OTEL_EXPORTER_OTLP_TIMEOUT=10000
+
+# Batch timeout in milliseconds
+export OTEL_BSP_SCHEDULE_DELAY=5000
+
+# Maximum number of log records per batch
+export OTEL_BSP_MAX_EXPORT_BATCH_SIZE=512
+
+# Maximum queue size
+export OTEL_BSP_MAX_QUEUE_SIZE=2048
+
+# Export timeout in milliseconds
+export OTEL_BSP_EXPORT_TIMEOUT=30000
+```
+
+#### LoggerProvider
+
+The LoggerProvider is the main entry point for creating loggers. It follows the [OpenTelemetry LoggerProvider specification](https://opentelemetry.io/docs/specs/otel/logs/sdk/#loggerprovider):
+
+```javascript
+const tracer = require('dd-trace').init()
+const { logs } = require('@opentelemetry/api-logs')
+
+// Get a logger from OpenTelemetry API
+const logger = logs.getLogger('my-service', '1.0.0')
+```
+
+#### Logger Usage
+
+Loggers support the standard OpenTelemetry log levels and methods:
+
+```javascript
+// Different log levels
+logger.emit({
+  severityText: 'DEBUG',
+  severityNumber: 5,
+  body: 'Debug message',
+  attributes: { debug: 'info' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'INFO',
+  severityNumber: 9,
+  body: 'Info message',
+  attributes: { user: 'john' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'WARN',
+  severityNumber: 13,
+  body: 'Warning message',
+  attributes: { warning: 'deprecated' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'ERROR',
+  severityNumber: 17,
+  body: 'Error message',
+  attributes: { error: 'connection failed' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'FATAL',
+  severityNumber: 21,
+  body: 'Fatal message',
+  attributes: { error: 'system crash' },
+  timestamp: Date.now() * 1000000
+})
+
+// Custom log record
+logger.emit({
+  severityText: 'INFO',
+  severityNumber: 9, // INFO level
+  body: 'Custom log message',
+  attributes: { custom: 'data' },
+  timestamp: Date.now() * 1000000 // nanoseconds
+})
+```
+
+#### OTLP Export
+
+Logs are exported using the [OTLP (OpenTelemetry Protocol)](https://opentelemetry.io/docs/specs/otlp/) over HTTP. The implementation includes:
+
+- **Batch Processing**: Logs are batched for efficient transmission
+- **Protobuf Serialization**: Uses Protocol Buffers for compact data format
+- **Automatic Retries**: Built-in retry logic for failed exports
+- **Resource Attributes**: Automatic service metadata injection
+
+#### References
+
+For more information about OpenTelemetry logs:
+
+* [OpenTelemetry Logs Overview](https://opentelemetry.io/docs/specs/otel/logs/overview/)
+* [OpenTelemetry JavaScript Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/)
+* [OTLP Protocol Specification](https://opentelemetry.io/docs/specs/otlp/)
+* [OpenTelemetry Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/)
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>

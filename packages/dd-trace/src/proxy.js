@@ -201,6 +201,13 @@ class Tracer extends NoopProxy {
         }
       }
 
+      // Initialize OpenTelemetry logs if enabled via environment variable
+      try {
+        this._initializeOpenTelemetryLogs(config)
+      } catch (error) {
+        log.error('Error initializing OpenTelemetry logs:', error)
+      }
+
       if (config.isTestDynamicInstrumentationEnabled) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
@@ -261,6 +268,55 @@ class Tracer extends NoopProxy {
     }
   }
 
+  _initializeOpenTelemetryLogs (config) {
+    try {
+      // Check if OpenTelemetry logs are enabled via config or environment variable
+      if (!config.otelLogsEnabled) {
+        return
+      }
+
+      const { LoggerProvider, BatchLogProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
+      const { logs } = require('@opentelemetry/api-logs')
+      
+      // Create logger provider
+      const loggerProvider = new LoggerProvider({
+        resource: {
+          attributes: {
+            'service.name': config.service,
+            'service.version': config.version,
+            'deployment.environment': config.env
+          }
+        }
+      })
+
+      // Create OTLP exporter using config values with environment variable fallbacks
+      const exporter = new OtlpHttpLogExporter({
+        url: config.otelLogsUrl || process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+        headers: config.otelLogsHeaders || (process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS ? 
+          JSON.parse(process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS) : {}),
+        timeout: config.otelLogsTimeout || parseInt(process.env.OTEL_EXPORTER_OTLP_TIMEOUT) || 10000
+      })
+
+      // Create batch processor using config values with environment variable fallbacks
+      const processor = new BatchLogProcessor([exporter], {
+        batchTimeout: config.otelLogsBatchTimeout || parseInt(process.env.OTEL_BSP_SCHEDULE_DELAY) || 5000,
+        maxExportBatchSize: config.otelLogsMaxExportBatchSize || parseInt(process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE) || 512,
+        maxQueueSize: config.otelLogsMaxQueueSize || parseInt(process.env.OTEL_BSP_MAX_QUEUE_SIZE) || 2048,
+        exportTimeoutMillis: config.otelLogsExportTimeoutMillis || parseInt(process.env.OTEL_BSP_EXPORT_TIMEOUT) || 30000
+      })
+
+      // Add processor to logger provider
+      loggerProvider.addLogProcessor(processor)
+
+      // Register the logger provider globally with OpenTelemetry API
+      logs.setGlobalLoggerProvider(loggerProvider)
+
+      log.debug('OpenTelemetry logs initialized successfully')
+    } catch (error) {
+      log.error('Failed to initialize OpenTelemetry logs:', error)
+    }
+  }
+
   profilerStarted () {
     if (!this._profilerStarted) {
       // injection hardening: this is only ever invoked from tests.
@@ -277,6 +333,7 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
+
 }
 
 module.exports = Tracer

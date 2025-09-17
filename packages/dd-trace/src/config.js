@@ -568,6 +568,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOGS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -649,7 +650,15 @@ class Config {
       OTEL_RESOURCE_ATTRIBUTES,
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
-      OTEL_TRACES_SAMPLER_ARG
+      OTEL_TRACES_SAMPLER_ARG,
+      OTEL_LOGS_EXPORTER,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_BSP_SCHEDULE_DELAY,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_BSP_MAX_QUEUE_SIZE,
+      OTEL_BSP_EXPORT_TIMEOUT
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -778,6 +787,14 @@ class Config {
     this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
     this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
+    this._setBoolean(env, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
+    this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS)
+    this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT)
+    this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
+    this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    this._setUnit(env, 'otelLogsMaxQueueSize', OTEL_BSP_MAX_QUEUE_SIZE)
+    this._setUnit(env, 'otelLogsExportTimeoutMillis', OTEL_BSP_EXPORT_TIMEOUT)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this._setBoolean(env, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
@@ -1185,6 +1202,8 @@ class Config {
       calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
+
+
     calc['dogstatsd.hostname'] = this._getHostname()
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))

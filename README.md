@@ -94,6 +94,80 @@ If you would like to trace your bundled application then please read this page o
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
 
 
-## Datadog With OpenTelemetery
+## Datadog With OpenTelemetry
 
 Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js.
+
+### OpenTelemetry Logs Support
+
+dd-trace-js includes experimental support for OpenTelemetry logs, allowing you to send log data using the OpenTelemetry Logs API. This implementation is based on the [OpenTelemetry Logs specification](https://opentelemetry.io/docs/specs/otel/logs/overview/) and follows the [OpenTelemetry JavaScript Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/).
+
+#### Configuration
+
+Enable OpenTelemetry logs using standard OpenTelemetry environment variables:
+
+```bash
+# Enable OpenTelemetry logs
+export OTEL_LOGS_EXPORTER=otlp
+
+# OTLP endpoint URL
+export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
+
+# Optional headers (JSON format)
+export OTEL_EXPORTER_OTLP_LOGS_HEADERS='{"Authorization": "Bearer token"}'
+
+# Request timeout in milliseconds
+export OTEL_EXPORTER_OTLP_TIMEOUT=10000
+
+# Batch timeout in milliseconds
+export OTEL_BSP_SCHEDULE_DELAY=5000
+
+# Maximum number of log records per batch
+export OTEL_BSP_MAX_EXPORT_BATCH_SIZE=512
+
+# Maximum queue size
+export OTEL_BSP_MAX_QUEUE_SIZE=2048
+
+# Export timeout in milliseconds
+export OTEL_BSP_EXPORT_TIMEOUT=30000
+```
+
+#### Usage
+
+```javascript
+const tracer = require('dd-trace').init()
+const { logs } = require('@opentelemetry/api-logs')
+
+// Get a logger from OpenTelemetry API
+const logger = logs.getLogger('my-service', '1.0.0')
+
+// Log messages
+logger.emit({
+  severityText: 'INFO',
+  severityNumber: 9,
+  body: 'Application started',
+  attributes: { version: '1.0.0' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'ERROR',
+  severityNumber: 17,
+  body: 'Database connection failed',
+  attributes: { error: 'timeout' },
+  timestamp: Date.now() * 1000000
+})
+
+logger.emit({
+  severityText: 'DEBUG',
+  severityNumber: 5,
+  body: 'Processing request',
+  attributes: { requestId: '123' },
+  timestamp: Date.now() * 1000000
+})
+```
+
+For more information about OpenTelemetry logs, see:
+- [OpenTelemetry Logs Overview](https://opentelemetry.io/docs/specs/otel/logs/overview/)
+- [OpenTelemetry JavaScript Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/)
+- [OTLP Protocol](https://opentelemetry.io/docs/specs/otlp/)
