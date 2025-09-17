@@ -107,58 +107,66 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
 }
 
 class NativeWallProfiler {
-  type = 'wall'
-  _mapper
-  _pprof
-  _started = false
   #asyncContextFrameEnabled = false
+  #captureSpanData = false
+  #codeHotspotsEnabled = false
+  #cpuProfilingEnabled = false
+  #endpointCollectionEnabled = false
+  #flushIntervalMillis = 0
+  #logger
+  #mapper
+  #pprof
+  #samplingIntervalMicros = 0
+  #started = false
   #telemetryHeartbeatIntervalMillis = 0
+  #timelineEnabled = false
+  #v8ProfilerBugWorkaroundEnabled = false
+  #withContexts = false
+
+  // Bind these to this so they can be used as callbacks
+  #boundEnter = this.#enter.bind(this)
+  #boundSpanFinished = this.#spanFinished.bind(this)
+  #boundGenerateLabels = this._generateLabels.bind(this)
+
+  get type () { return 'wall' }
 
   constructor (options = {}) {
-    this._samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
-    this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this._timelineEnabled = !!options.timelineEnabled
-    this._cpuProfilingEnabled = !!options.cpuProfilingEnabled
     this.#asyncContextFrameEnabled = !!options.asyncContextFrameEnabled
+    this.#codeHotspotsEnabled = !!options.codeHotspotsEnabled
+    this.#cpuProfilingEnabled = !!options.cpuProfilingEnabled
+    this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
+    this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
+    this.#logger = options.logger
+    this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
     this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
+    this.#timelineEnabled = !!options.timelineEnabled
+    this.#v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
 
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
-    this._captureSpanData = this._codeHotspotsEnabled || this._endpointCollectionEnabled
+    this.#captureSpanData = this.#codeHotspotsEnabled || this.#endpointCollectionEnabled
     // We need to run the pprof wall profiler with sample contexts if we're either
     // capturing span data or timeline is enabled (so we need sample timestamps, and for now
     // timestamps require the sample contexts feature in the pprof wall profiler), or
     // cpu profiling is enabled.
-    this._withContexts = this._captureSpanData || this._timelineEnabled || this._cpuProfilingEnabled
-    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
-
-    // Bind these to this so they can be used as callbacks
-    if (this._withContexts && this._captureSpanData) {
-      this._enter = this._enter.bind(this)
-      this._spanFinished = this._spanFinished.bind(this)
-    }
-    this._generateLabels = this._generateLabels.bind(this)
-
-    this._logger = options.logger
+    this.#withContexts = this.#captureSpanData || this.#timelineEnabled || this.#cpuProfilingEnabled
   }
 
   codeHotspotsEnabled () {
-    return this._codeHotspotsEnabled
+    return this.#codeHotspotsEnabled
   }
 
   endpointCollectionEnabled () {
-    return this._endpointCollectionEnabled
+    return this.#endpointCollectionEnabled
   }
 
   start ({ mapper } = {}) {
-    if (this._started) return
+    if (this.#started) return
 
-    this._mapper = mapper
-    this._pprof = require('@datadog/pprof')
-    kSampleCount = this._pprof.time.constants.kSampleCount
-    kCPEDContextCount = this._pprof.time.constants.kCPEDContextCount
+    this.#mapper = mapper
+    this.#pprof = require('@datadog/pprof')
+    kSampleCount = this.#pprof.time.constants.kSampleCount
+    kCPEDContextCount = this.#pprof.time.constants.kCPEDContextCount
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
@@ -168,24 +176,24 @@ class NativeWallProfiler {
       process._stopProfilerIdleNotifier = () => {}
     }
 
-    this._pprof.time.start({
-      intervalMicros: this._samplingIntervalMicros,
-      durationMillis: this._flushIntervalMillis,
-      sourceMapper: this._mapper,
-      withContexts: this._withContexts,
+    this.#pprof.time.start({
+      collectCpuTime: this.#cpuProfilingEnabled,
+      durationMillis: this.#flushIntervalMillis,
+      intervalMicros: this.#samplingIntervalMicros,
       lineNumbers: false,
-      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled,
-      collectCpuTime: this._cpuProfilingEnabled,
-      useCPED: this.#asyncContextFrameEnabled
+      sourceMapper: this.#mapper,
+      useCPED: this.#asyncContextFrameEnabled,
+      withContexts: this.#withContexts,
+      workaroundV8Bug: this.#v8ProfilerBugWorkaroundEnabled
     })
 
-    if (this._withContexts) {
+    if (this.#withContexts) {
       if (!this.#asyncContextFrameEnabled) {
-        this._setNewContext()
+        this.#setNewContext()
       }
 
-      if (this._captureSpanData) {
-        this._profilerState = this._pprof.time.getState()
+      if (this.#captureSpanData) {
+        this._profilerState = this.#pprof.time.getState()
         this._lastSampleCount = 0
 
         ensureChannelsActivated(this.#asyncContextFrameEnabled)
@@ -193,14 +201,14 @@ class NativeWallProfiler {
         if (this.#asyncContextFrameEnabled) {
           this.#setupTelemetryMetrics()
         } else {
-          beforeCh.subscribe(this._enter)
+          beforeCh.subscribe(this.#boundEnter)
         }
-        enterCh.subscribe(this._enter)
-        spanFinishCh.subscribe(this._spanFinished)
+        enterCh.subscribe(this.#boundEnter)
+        spanFinishCh.subscribe(this.#boundSpanFinished)
       }
     }
 
-    this._started = true
+    this.#started = true
   }
 
   #setupTelemetryMetrics () {
@@ -213,11 +221,11 @@ class NativeWallProfiler {
     this._contextCountGaugeUpdater.unref()
   }
 
-  _enter () {
-    if (!this._started) return
+  #enter () {
+    if (!this.#started) return
 
     const span = getActiveSpan()
-    const sampleContext = span ? this._getProfilingContext(span) : {}
+    const sampleContext = span ? this.#getProfilingContext(span) : {}
 
     // Note that we store the sample context differently with and without the
     // async context frame. With the async context frame, we tell the profiler
@@ -234,13 +242,13 @@ class NativeWallProfiler {
     // context -- we simply can't tell which one it might've been across all
     // possible async context frames.
     if (this.#asyncContextFrameEnabled) {
-      this._pprof.time.setContext(sampleContext)
+      this.#pprof.time.setContext(sampleContext)
     } else {
       const sampleCount = this._profilerState[kSampleCount]
       if (sampleCount !== this._lastSampleCount) {
         this._lastSampleCount = sampleCount
         const context = this._currentContext.ref
-        this._setNewContext()
+        this.#setNewContext()
 
         updateContext(context)
       }
@@ -249,7 +257,7 @@ class NativeWallProfiler {
     }
   }
 
-  _getProfilingContext (span) {
+  #getProfilingContext (span) {
     let profilingContext = span[ProfilingContext]
     if (profilingContext === undefined) {
       const context = span.context()
@@ -257,13 +265,13 @@ class NativeWallProfiler {
 
       let spanId
       let rootSpanId
-      if (this._codeHotspotsEnabled) {
+      if (this.#codeHotspotsEnabled) {
         spanId = context._spanId
         rootSpanId = startedSpans.length ? startedSpans[0].context()._spanId : context._spanId
       }
 
       let webTags
-      if (this._endpointCollectionEnabled) {
+      if (this.#endpointCollectionEnabled) {
         const tags = context._tags
         if (isWebServerSpan(tags)) {
           webTags = tags
@@ -273,7 +281,7 @@ class NativeWallProfiler {
           for (let i = startedSpans.length; --i >= 0;) {
             const ispan = startedSpans[i]
             if (ispan.context()._spanId === parentId) {
-              webTags = this._getProfilingContext(ispan).webTags
+              webTags = this.#getProfilingContext(ispan).webTags
               break
             }
           }
@@ -286,36 +294,36 @@ class NativeWallProfiler {
     return profilingContext
   }
 
-  _setNewContext () {
-    this._pprof.time.setContext(
+  #setNewContext () {
+    this.#pprof.time.setContext(
       this._currentContext = {
         ref: {}
       }
     )
   }
 
-  _spanFinished (span) {
+  #spanFinished (span) {
     if (span[ProfilingContext] !== undefined) {
       span[ProfilingContext] = undefined
     }
   }
 
-  _reportV8bug (maybeBug) {
-    const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
+  #reportV8bug (maybeBug) {
+    const tag = `v8_profiler_bug_workaround_enabled:${this.#v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
-    this._logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    this.#logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
     // report as runtime metric (can be removed in the future when telemetry is mature)
     runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
     // report as telemetry metric
     profilerTelemetryMetrics.count(metric, [tag]).inc()
   }
 
-  _stop (restart) {
-    if (!this._started) return
+  #stop (restart) {
+    if (!this.#started) return
 
-    if (this._captureSpanData && !this.#asyncContextFrameEnabled) {
+    if (this.#captureSpanData && !this.#asyncContextFrameEnabled) {
       // update last sample context if needed
-      this._enter()
+      this.#enter()
       this._lastSampleCount = 0
     }
 
@@ -323,24 +331,24 @@ class NativeWallProfiler {
     const lowCardinalityLabels = Object.keys(getThreadLabels())
     lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
 
-    const profile = this._pprof.time.stop(restart, this._generateLabels, lowCardinalityLabels)
+    const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
 
     if (restart) {
-      const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
+      const v8BugDetected = this.#pprof.time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
-        this._reportV8bug(v8BugDetected === 1)
+        this.#reportV8bug(v8BugDetected === 1)
       }
     } else {
       clearInterval(this._contextCountGaugeUpdater)
-      if (this._captureSpanData) {
+      if (this.#captureSpanData) {
         if (!this.#asyncContextFrameEnabled) {
-          beforeCh.unsubscribe(this._enter)
+          beforeCh.unsubscribe(this.#boundEnter)
         }
-        enterCh.unsubscribe(this._enter)
-        spanFinishCh.unsubscribe(this._spanFinished)
+        enterCh.unsubscribe(this.#boundEnter)
+        spanFinishCh.unsubscribe(this.#boundSpanFinished)
         this._profilerState = undefined
       }
-      this._started = false
+      this.#started = false
     }
 
     return profile
@@ -349,7 +357,7 @@ class NativeWallProfiler {
   _generateLabels ({ node, context }) {
     // check for special node that represents CPU time all non-JS threads.
     // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
-    if (node.name === this._pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
+    if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {
       return getNonJSThreadsLabels()
     }
 
@@ -361,7 +369,7 @@ class NativeWallProfiler {
 
     const labels = { ...getThreadLabels() }
 
-    if (this._timelineEnabled) {
+    if (this.#timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
       labels[END_TIMESTAMP_LABEL] = context.timestamp * 1000n
     }
@@ -398,7 +406,7 @@ class NativeWallProfiler {
   }
 
   profile (restart) {
-    return this._stop(restart)
+    return this.#stop(restart)
   }
 
   encode (profile) {
@@ -406,11 +414,11 @@ class NativeWallProfiler {
   }
 
   stop () {
-    this._stop(false)
+    this.#stop(false)
   }
 
   isStarted () {
-    return this._started
+    return this.#started
   }
 }
 
