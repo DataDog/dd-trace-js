@@ -5,7 +5,7 @@ const { describe, it, before } = require('mocha')
 
 const { withVersions } = require('../../../setup/mocha')
 
-const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, useLlmobs } = require('../../util')
+const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, useLlmObs } = require('../../util')
 const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
@@ -19,9 +19,10 @@ describe('Plugin', () => {
   describe('aws-sdk (bedrockruntime)', function () {
     useEnv({
       AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-      AWS_ACCESS_KEY_ID: '00000000000000000000',
-      _DD_LLMOBS_FLUSH_INTERVAL: 0
+      AWS_ACCESS_KEY_ID: '00000000000000000000'
     })
+
+    const getEvents = useLlmObs({ plugin: 'aws-sdk' })
 
     withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
       let AWS
@@ -31,8 +32,6 @@ describe('Plugin', () => {
         moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-runtime' : 'aws-sdk'
 
       describe('with configuration', () => {
-        const getEvents = useLlmobs({ plugin: 'aws-sdk' })
-
         before(() => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
