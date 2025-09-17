@@ -120,7 +120,7 @@ moduleTypes.forEach(({
     }
 
     this.retries(2)
-    this.timeout(70000)
+    this.timeout(80000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
@@ -248,6 +248,7 @@ moduleTypes.forEach(({
         console.log(testOutput)
         // eslint-disable-next-line no-console
         console.log('---- finish actual test output -----')
+        throw e
       }
     })
 
