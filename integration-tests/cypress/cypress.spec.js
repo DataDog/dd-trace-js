@@ -202,11 +202,10 @@ moduleTypes.forEach(({
         ...restEnvVars
       } = getCiVisAgentlessConfig(receiver.port)
 
-      receiver.assertPayloadReceived(() => {
-        const error = new Error('it should not report test events')
-        // eslint-disable-next-line no-console
-        console.log('it should never be executed')
-        done(error)
+      let hasReceivedEvents = false
+
+      const eventsPromise = receiver.assertPayloadReceived(() => {
+        hasReceivedEvents = true
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
       let testOutput = ''
@@ -235,8 +234,10 @@ moduleTypes.forEach(({
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
         once(childProcess, 'exit'),
-      ]);
+        eventsPromise
+      ])
 
+      assert.isFalse(hasReceivedEvents)
       // TODO: remove try/catch once we find the source of flakiness
       try {
         assert.notInclude(testOutput, 'TypeError')
