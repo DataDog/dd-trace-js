@@ -83,24 +83,12 @@ function wrapAppRoute (route) {
     const routeObj = route.apply(this, arguments)
 
     if (routeAddedChannel.hasSubscribers && typeof path === 'string') {
-      // Wrap the .all() first
-      if (typeof routeObj.all === 'function') {
-        shimmer.wrap(routeObj, 'all', (original) => function wrappedRouteAll () {
-          routeAddedChannel.publish({
-            method: '*',
-            path
-          })
-
-          return original.apply(this, arguments)
-        })
-      }
-
       // Wrap each HTTP method
-      METHODS.forEach(method => {
+      ['all', ...METHODS].forEach(method => {
         if (typeof routeObj[method] === 'function') {
           shimmer.wrap(routeObj, method, (original) => function wrapMethod () {
             routeAddedChannel.publish({
-              method,
+              method: method === 'all' ? '*' : method,
               path
             })
 
@@ -147,18 +135,10 @@ function collectRoutesFromRouter (router, prefix) {
       const route = layer.route
       const fullPath = joinPath(prefix, route.path)
 
-      Object.keys(route.methods).forEach(method => {
-        if (route.methods[method] && method !== '_all') {
-          routeAddedChannel.publish({
-            method,
-            path: fullPath
-          })
-        }
-      })
-
-      if (route.methods._all) {
+      for (const [method, enabled] of Object.entries(route.methods)) {
+        if (!enabled) continue
         routeAddedChannel.publish({
-          method: '*',
+          method: method === '_all' ? '*' : method,
           path: fullPath
         })
       }
