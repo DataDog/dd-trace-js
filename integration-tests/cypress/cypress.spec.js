@@ -195,7 +195,7 @@ moduleTypes.forEach(({
       })
     }
 
-    it('does not crash if badly init', (done) => {
+    it('does not crash if badly init', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
@@ -209,7 +209,7 @@ moduleTypes.forEach(({
         done(error)
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
-      let testOutput
+      let testOutput = ''
 
       childProcess = exec(
         testCommand,
@@ -231,22 +231,24 @@ moduleTypes.forEach(({
         testOutput += chunk.toString()
       })
 
-      childProcess.on('exit', () => {
+      await Promise.all([
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        once(childProcess, 'exit'),
+      ]);
+
+      // TODO: remove try/catch once we find the source of flakiness
+      try {
         assert.notInclude(testOutput, 'TypeError')
-        // TODO: remove try/catch once we find the source of flakiness
-        try {
-          assert.include(testOutput, '1 of 1 failed')
-          done()
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log('---- Actual test output -----')
-          // eslint-disable-next-line no-console
-          console.log(testOutput)
-          // eslint-disable-next-line no-console
-          console.log('---- finish actual test output -----')
-          done(e)
-        }
-      })
+        assert.include(testOutput, '1 of 1 failed')
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.log('---- Actual test output -----')
+        // eslint-disable-next-line no-console
+        console.log(testOutput)
+        // eslint-disable-next-line no-console
+        console.log('---- finish actual test output -----')
+      }
     })
 
     it('catches errors in hooks', (done) => {
