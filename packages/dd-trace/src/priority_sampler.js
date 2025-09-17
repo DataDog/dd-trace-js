@@ -107,23 +107,27 @@ class PrioritySampler {
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
     if (!root) return // noop span
 
-    const tag = this._getPriorityFromTags(context._tags, context)
-
-    // if the sampling priority is already set from a tag, do not override it
-    if (tag && context._sampling.priority === tag) return
-
     log.trace(span, auto)
 
+    console.log('sampling span, current sampling priority:', context._sampling.priority, ', sampling mechanism:', context._sampling.mechanism, ', auto:', auto)
+
+    const tag = this._getPriorityFromTags(context._tags, context)
+
     if (this.validate(tag)) {
+      console.log('setting sampling priority to:', tag)
       context._sampling.priority = tag
       context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
-      context._sampling.priority = this._getPriorityFromAuto(root)
+      const autoPriority = this._getPriorityFromAuto(root)
+      console.log('setting sampling priority to:', autoPriority)
+      context._sampling.priority = autoPriority
     } else {
       return
     }
 
     this.#addDecisionMaker(root)
+
+    console.log('final sampling priority:', context._sampling.priority, ', sampling mechanism:', context._sampling.mechanism)
   }
 
   /**
