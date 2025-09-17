@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert')
-const path = require('node:path')
-const fsPromises = require('node:fs/promises')
 const { execSync } = require('node:child_process')
 
 const { describe, it, beforeEach, before, after, afterEach } = require('mocha')
