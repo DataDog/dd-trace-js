@@ -21,6 +21,10 @@ function Hook (modules, hookOptions, onrequire) {
   const patched = new WeakMap()
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (patched.has(moduleExports)) {
+      return patched.get(moduleExports)
+    }
+
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (
