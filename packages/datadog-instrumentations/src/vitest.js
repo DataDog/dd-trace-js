@@ -40,6 +40,19 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
+let isFlakyTestRetriesEnabled = false
+let flakyTestRetriesCount = 0
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let isEarlyFlakeDetectionFaulty = false
+let isKnownTestsEnabled = false
+let isTestManagementTestsEnabled = false
+let isImpactedTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
+let isDiEnabled = false
+let testCodeCoverageLinesTotal
+
+
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -187,16 +200,6 @@ function getSortWrapper (sort, frameworkVersion) {
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
-    let isFlakyTestRetriesEnabled = false
-    let flakyTestRetriesCount = 0
-    let isEarlyFlakeDetectionEnabled = false
-    let earlyFlakeDetectionNumRetries = 0
-    let isEarlyFlakeDetectionFaulty = false
-    let isKnownTestsEnabled = false
-    let isTestManagementTestsEnabled = false
-    let isImpactedTestsEnabled = false
-    let testManagementAttemptToFixRetries = 0
-    let isDiEnabled = false
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
@@ -312,8 +315,6 @@ function getSortWrapper (sort, frameworkVersion) {
       }
     }
 
-    let testCodeCoverageLinesTotal
-
     if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
         const totalCodeCoverage = await generateCoverage.apply(this, arguments)
@@ -327,36 +328,65 @@ function getSortWrapper (sort, frameworkVersion) {
       })
     }
 
-    shimmer.wrap(this.ctx, 'exit', exit => async function () {
-      let onFinish
-
-      const flushPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
-      const failedSuites = this.state.getFailedFilepaths()
-      let error
-      if (failedSuites.length) {
-        error = new Error(`Test suites failed: ${failedSuites.length}.`)
-      }
-
-      testSessionFinishCh.publish({
-        status: getSessionStatus(this.state),
-        testCodeCoverageLinesTotal,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onFinish
-      })
-
-      await flushPromise
-
-      return exit.apply(this, arguments)
-    })
+    shimmer.wrap(this.ctx, 'exit', getFinishWrapper)
+    shimmer.wrap(this.ctx, 'close', getFinishWrapper)
 
     return sort.apply(this, arguments)
   }
 }
+
+function getFinishWrapper (exitOrClose) {
+  let isClosed = false
+  return async function () {
+    if (isClosed) { // needed because exit calls close
+      return exitOrClose.apply(this, arguments)
+    }
+    isClosed = true
+    let onFinish
+
+    const flushPromise = new Promise(resolve => {
+      onFinish = resolve
+    })
+    const failedSuites = this.state.getFailedFilepaths()
+    let error
+    if (failedSuites.length) {
+      error = new Error(`Test suites failed: ${failedSuites.length}.`)
+    }
+
+    testSessionFinishCh.publish({
+      status: getSessionStatus(this.state),
+      testCodeCoverageLinesTotal,
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      onFinish
+    })
+
+    await flushPromise
+
+    return exitOrClose.apply(this, arguments)
+  }
+}
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.0.9'],
+  // TODO: change this to .*
+  file: 'dist/chunks/cli-api.BkDphVBG.js'
+}, (cliPackage, frameworkVersion) => {
+  // startVitest is async
+  shimmer.wrap(cliPackage, 's', oldStartVitest => function () {
+    if (!testSessionStartCh.hasSubscribers) {
+      return oldStartVitest.apply(this, arguments)
+    }
+    const processArgv = process.argv.slice(2).join(' ')
+    // TODO: check if session is already started through createCLI (weird but technically possible)
+    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
+    return oldStartVitest.apply(this, arguments)
+  })
+  return cliPackage
+})
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
