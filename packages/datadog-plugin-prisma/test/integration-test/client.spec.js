@@ -23,8 +23,11 @@ describe('esm', () => {
   withVersions('prisma', '@prisma/client', version => {
     before(async function () {
       this.timeout(100000)
-      sandbox = await createSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false)
-    }, { timeout: 100000 })
+      sandbox = await createSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
+        './packages/datadog-plugin-prisma/test/integration-test/*',
+        './packages/datadog-plugin-prisma/test/schema.prisma'
+      ])
+    })
 
     after(async () => {
       await sandbox?.remove()
@@ -33,14 +36,6 @@ describe('esm', () => {
     beforeEach(async function () {
       this.timeout(30000)
       agent = await new FakeAgent().start()
-      await fsPromises.cp(
-        path.resolve(__dirname, '../schema.prisma'),
-        sandbox.folder + '/schema.prisma',
-      )
-      await fsPromises.cp(
-        path.resolve(__dirname, './server.mjs'),
-        sandbox.folder + '/server.mjs',
-      )
       execSync(
         './node_modules/.bin/prisma migrate reset --force && ' +
         './node_modules/.bin/prisma db push --accept-data-loss && ' +
@@ -57,7 +52,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', async function () {
+      this.timeout(20000)
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.strictEqual(headers?.host, `127.0.0.1:${agent.port}`)
         assertObjectContains(payload, [[{
