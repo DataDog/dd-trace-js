@@ -19,7 +19,7 @@ describe('AgentInfoExporter', () => {
   const port = 8126
 
   it('should query /info when getAgentInfo is called', (done) => {
-    const scope = nock('http://localhost:8126')
+    const scope = nock('http://127.0.0.1:8126')
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
@@ -36,7 +36,7 @@ describe('AgentInfoExporter', () => {
   })
 
   it('should store traces as is when export is called', (done) => {
-    nock('http://localhost:8126')
+    nock('http://127.0.0.1:8126')
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
@@ -55,7 +55,7 @@ describe('AgentInfoExporter', () => {
   })
 
   it('should export if a writer is initialized', (done) => {
-    nock('http://localhost:8126')
+    nock('http://127.0.0.1:8126')
       .get('/info')
       .reply(200, JSON.stringify({
         endpoints: ['/evp_proxy/v2']
