@@ -4,6 +4,7 @@ const coalesce = require('koalas')
 const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
+const satisfies = require('semifies')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -16,7 +17,7 @@ const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
 const { getEnvironmentVariables } = require('../config-helper')
-const satisfies = require('semifies')
+const defaults = require('../config_defaults')
 
 class Config {
   constructor (options = {}) {
@@ -115,8 +116,8 @@ class Config {
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND, true))
-    const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
-    const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126
+    const hostname = coalesce(options.hostname, DD_AGENT_HOST) || defaults.hostname
+    const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || defaults.port
     this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
       protocol: 'http:',
       hostname,
