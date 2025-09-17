@@ -1,5 +1,4 @@
 'use strict'
-
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -36,7 +35,14 @@ function Hook (modules, hookOptions, onrequire) {
       newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    if (newExports && (typeof newExports === 'object' || typeof newExports === 'function')) {
+    /**
+     * TODO: Find a way to deal with modules that have barrel files, and
+     * add contents after each require, which break our moduleExport caching mechanism 
+     * (example: protobufjs)
+     */
+    if (newExports &&
+      (typeof newExports === 'object' || typeof newExports === 'function') &&
+      (moduleName === 'protobufjs' || !moduleName.includes('protobuf'))) {
       patched.set(moduleExports, newExports)
     }
 
