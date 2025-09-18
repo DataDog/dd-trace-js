@@ -1,21 +1,23 @@
 'use strict'
 
+const assert = require('node:assert')
+const { execSync } = require('node:child_process')
+
+const { describe, it, beforeEach, before, after, afterEach } = require('mocha')
+
 const {
   FakeAgent,
   createSandbox,
-  checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   assertObjectContains
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const { execSync } = require('child_process')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
-  // test against later versions because server.mjs uses newer package syntax
+
   withVersions('prisma', '@prisma/client', version => {
     before(async function () {
       this.timeout(100000)
@@ -26,33 +28,37 @@ describe('esm', () => {
     })
 
     after(async () => {
-      await sandbox.remove()
+      await sandbox?.remove()
     })
 
     beforeEach(async function () {
       this.timeout(30000)
       agent = await new FakeAgent().start()
-      execSync('npx prisma generate', { cwd: sandbox.folder, stdio: 'inherit' })
-      execSync('npx prisma migrate reset --force', { cwd: sandbox.folder, stdio: 'inherit' })
-      execSync('npx prisma db push --accept-data-loss', { cwd: sandbox.folder, stdio: 'inherit' })
+      execSync(
+        './node_modules/.bin/prisma migrate reset --force && ' +
+        './node_modules/.bin/prisma db push --accept-data-loss && ' +
+        './node_modules/.bin/prisma generate',
+        {
+          cwd: sandbox.folder, // Ensure the current working directory is where the schema is located
+          stdio: 'inherit'
+        }
+      )
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', async function () {
+      this.timeout(20000)
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'prisma.client'), true)
-        assertObjectContains(payload[0][0], {
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assertObjectContains(payload, [[{
           name: 'prisma.client',
           resource: 'User.create',
           service: 'node-prisma',
-        })
-        assertObjectContains(payload[1][4], {
+        }], [{
           name: 'prisma.engine',
           service: 'node-prisma',
           meta: {
@@ -60,12 +66,20 @@ describe('esm', () => {
             'db.name': 'postgres',
             'db.type': 'postgres',
           }
-        })
+        }]])
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      // TODO: Integrate the assertions into the spawn command by adding a
+      // callback. It should end the process when the assertions are met. That
+      // way we can remove the Promise.all and the procPromise.then().
+      const procPromise = spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
-      await res
-    }).timeout(20000)
+      await Promise.all([
+        procPromise.then((res) => {
+          proc = res
+        }),
+        res
+      ])
+    })
   })
 })
