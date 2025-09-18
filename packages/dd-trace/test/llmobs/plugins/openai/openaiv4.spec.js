@@ -518,7 +518,7 @@ describe('integrations', () => {
         expect(llmobsSpans[0].meta).to.have.property('model_provider', 'deepseek')
       })
 
-      it.only('submits a completion span with cached token metrics', async () => {
+      it.skip('submits a completion span with cached token metrics', async () => {
         const basePrompt = 'You are an expert software engineer '.repeat(200) +
         'What are the best practices for API design?'
 
