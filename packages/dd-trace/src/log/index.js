@@ -5,7 +5,7 @@ const { inspect } = require('util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
-const { Log, LogConfig } = require('./log')
+const { Log, LogConfig, NoTransmitError } = require('./log')
 const { memoize } = require('./utils')
 const { getEnvironmentVariable } = require('../config-helper')
 
@@ -15,11 +15,13 @@ const config = {
   logLevel: 'debug'
 }
 
+// in most places where we know we want to mute a log we use log.error() directly
 const NO_TRANSMIT = new LogConfig(false)
 
 const log = {
   LogConfig,
   NO_TRANSMIT,
+  NoTransmitError,
 
   /**
    * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
