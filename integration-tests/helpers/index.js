@@ -11,11 +11,52 @@ const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
+const crypto = require('crypto')
 const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
-const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+
+// Cache for packed packages
+const CACHE_DIR = path.join(os.tmpdir(), 'dd-trace-sandbox-cache')
+
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true })
+}
+
+/**
+ * Generate a cache key for the current package state
+ */
+function generateCacheKey () {
+  const packageJsonPath = path.join(__dirname, '../../package.json')
+  const packageJson = fs.readFileSync(packageJsonPath, 'utf8')
+  const packageHash = crypto.createHash('md5').update(packageJson).digest('hex')
+  return `dd-trace-${version}-${packageHash}.tgz`
+}
+
+/**
+ * Get cached package or create new one
+ */
+async function getCachedPackage (env) {
+  const cacheKey = generateCacheKey()
+  const cachedPath = path.join(CACHE_DIR, cacheKey)
+
+  if (fs.existsSync(cachedPath)) {
+    return cachedPath
+  }
+
+  // Create new package
+  await exec(`npm pack --silent --pack-destination ${CACHE_DIR}`, { env })
+
+  // Rename to include hash for cache invalidation
+  const tempPath = path.join(CACHE_DIR, `dd-trace-${version}.tgz`)
+  if (fs.existsSync(tempPath)) {
+    fs.renameSync(tempPath, cachedPath)
+  }
+
+  return cachedPath
+}
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -215,9 +256,6 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
@@ -225,24 +263,62 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  try {
-    await exec(addCommand, addOptions)
-  } catch (e) { // retry in case of server error from registry
-    await exec(addCommand, addOptions)
+    // Copy test files only
+    for (const testPath of integrationTestsPaths) {
+      if (process.platform === 'win32') {
+        await exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      } else {
+        await exec(`cp -R ${testPath} ${folder}`)
+      }
+    }
+
+    return { folder, remove: async () => rimraf(folder) }
   }
 
-  for (const path of integrationTestsPaths) {
+  const folder = path.join(os.tmpdir(), `dd-trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  fs.mkdirSync(folder, { recursive: true })
+
+  // Get cached package or create new one
+  const cachedPackagePath = await getCachedPackage(restOfEnv)
+  const allDependencies = [`file:${cachedPackagePath}`].concat(cappedDependencies)
+
+  // Parallel operations for better performance
+
+  // 1. Copy test files in parallel with package installation
+  const copyOperations = integrationTestsPaths.map(testPath => {
     if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      return exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await exec(`cp -R ${path} ${folder}`)
+      return exec(`cp -R ${testPath} ${folder}`)
     }
-  }
-  if (process.platform === 'win32') {
-    // On Windows, we can only sync entire filesystem volume caches.
-    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
-  } else {
-    await exec(`sync ${folder}`)
+  })
+
+  // 2. Install packages with optimizations
+  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
+
+  // CI-specific optimizations for package installation
+  const ciFlags = isCI ? ' --frozen-lockfile --prefer-offline --silent' : ' --silent'
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}${ciFlags}`
+  const addOptions = { cwd: folder, env: restOfEnv }
+
+  // Execute package installation and file copying in parallel
+  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
+    // Retry once on failure
+    // eslint-disable-next-line no-console
+    console.warn('Package installation failed, retrying...', e.message)
+    return exec(addCommand, addOptions)
+  })
+
+  // Wait for all operations to complete
+  await Promise.all([packageInstallPromise, ...copyOperations])
+
+  // Skip filesystem sync in CI environments (it's often unnecessary and slow)
+  if (!process.env.CI && !process.env.GITLAB_CI && !process.env.GITHUB_ACTIONS) {
+    if (process.platform === 'win32') {
+      await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+    } else {
+      await exec(`sync ${folder}`)
+    }
   }
 
   if (followUpCommand) {
@@ -512,6 +588,25 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
 
 function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
+}
+
+/**
+ * Clean up old cache entries (call this periodically)
+ */
+async function cleanupCache (maxAge = 24 * 60 * 60 * 1000) { // 24 hours default
+  if (!fs.existsSync(CACHE_DIR)) return
+
+  const files = fs.readdirSync(CACHE_DIR)
+  const now = Date.now()
+
+  for (const file of files) {
+    const filePath = path.join(CACHE_DIR, file)
+    const stats = fs.statSync(filePath)
+
+    if (now - stats.mtime.getTime() > maxAge) {
+      await rimraf(filePath)
+    }
+  }
 }
 
 module.exports = {

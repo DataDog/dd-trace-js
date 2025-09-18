@@ -17,7 +17,6 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('couchbase', 'couchbase', '>=4.0.0', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'couchbase@${version}'`], false, [
         './packages/datadog-plugin-couchbase/test/integration-test/*'])
     })
