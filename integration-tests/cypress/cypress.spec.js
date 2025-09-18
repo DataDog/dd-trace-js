@@ -237,7 +237,7 @@ moduleTypes.forEach(({
         eventsPromise
       ])
 
-      assert.isFalse(hasReceivedEvents)
+      assert.strictEqual(hasReceivedEvents, false)
       // TODO: remove try/catch once we find the source of flakiness
       try {
         assert.notInclude(testOutput, 'TypeError')
