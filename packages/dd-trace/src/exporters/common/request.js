@@ -7,7 +7,6 @@ const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
-const util = require('util')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
@@ -97,21 +96,22 @@ function request (data, options, callback) {
           callback(null, buffer.toString(), res.statusCode)
         }
       } else {
-        let errorMessage = 'Error from agent'
+        let errorMessage = ''
         try {
           const fullUrl = new URL(
             options.path,
             options.url || options.hostname || `http://localhost:${options.port}`
           ).href
-          errorMessage += util.format(
-            ', url=%s, status=%s %s',
-            fullUrl, res.statusCode, http.STATUS_CODES[res.statusCode]
-          )
+          errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
         } catch {
           // ignore error
         }
 
-        const error = new Error(errorMessage)
+        const responseData = buffer.toString()
+        if (responseData) {
+          errorMessage += ` Response from the endpoint: "${responseData}"`
+        }
+        const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
         callback(error, null, res.statusCode)

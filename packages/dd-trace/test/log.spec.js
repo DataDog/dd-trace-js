@@ -249,16 +249,6 @@ describe('log', () => {
         expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
         expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
       })
-
-      it('should work with a log config object', () => {
-        log.error('this is an error', new Error('cause'), log.NO_TELEMETRY)
-
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error')
-        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
-      })
     })
 
     describe('toggle', () => {

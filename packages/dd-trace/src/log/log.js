@@ -2,6 +2,9 @@
 
 const { format } = require('util')
 
+// other times we produce an Error in a central location and log it several other places
+class NoTransmitError extends Error {}
+
 class Log {
   constructor (message, args, cause, delegate, sendViaTelemetry = true) {
     this.message = message
@@ -37,6 +40,7 @@ class Log {
       const lastArg = args.at(-1)
       if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
         cause = args.pop()
+        if (cause instanceof NoTransmitError) sendViaTelemetry = false
       }
     }
 
@@ -71,5 +75,6 @@ class LogConfig {
 
 module.exports = {
   Log,
-  LogConfig
+  LogConfig,
+  NoTransmitError,
 }
