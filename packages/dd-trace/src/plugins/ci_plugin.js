@@ -71,11 +71,15 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   jest: 'jest'
 }
 
-const EXPORTER_TO_TEST_FRAMEWORK = {
-  vitest_worker: 'vitest'
+const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
+  vitest_worker: 'vitest',
+  jest_worker: 'jest',
+  cucumber_worker: 'cucumber',
+  mocha_worker: 'mocha',
+  playwright_worker: 'playwright'
 }
 
-const EXPORTERS_TO_SKIP_ENVIRONMENT_EXTRACTION = new Set([
+const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'vitest'
 ])
 
@@ -311,10 +315,16 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    const exporter = config.experimental?.exporter
-    const isTestWorker = EXPORTERS_TO_SKIP_ENVIRONMENT_EXTRACTION.has(EXPORTER_TO_TEST_FRAMEWORK[exporter])
+    const exporter = this.config.experimental?.exporter
+    const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
+    this.shouldSkipGitMetadataExtraction = workerTestFramework &&
+      TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
 
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config, isTestWorker)
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(
+      this.constructor.id,
+      this.config,
+      this.shouldSkipGitMetadataExtraction
+    )
 
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,

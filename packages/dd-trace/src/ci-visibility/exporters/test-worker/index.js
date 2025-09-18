@@ -74,8 +74,8 @@ class TestWorkerCiVisibilityExporter {
     this._coverageWriter.append(formattedCoverage)
   }
 
-  exportDiLogs (testConfiguration, logMessage) {
-    this._logsWriter.append({ testConfiguration, logMessage })
+  exportDiLogs (testEnvironmentMetadata, logMessage) {
+    this._logsWriter.append({ testEnvironmentMetadata, logMessage })
   }
 
   // TODO: add to other writers

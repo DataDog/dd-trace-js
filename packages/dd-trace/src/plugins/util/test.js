@@ -444,25 +444,28 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   )
 }
 
-function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
-  // TODO: eventually these will come from the tracer (generally available)
+function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
   const ciMetadata = getCIMetadata()
-  const {
-    [GIT_COMMIT_SHA]: commitSHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: repositoryUrl,
-    [GIT_TAG]: tag,
-    [GIT_COMMIT_AUTHOR_NAME]: authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-    [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath,
-    [GIT_COMMIT_HEAD_SHA]: headCommitSha
-  } = ciMetadata
+  const userProvidedGitMetadata = getUserProviderGitMetadata()
 
   let gitMetadata = {}
 
-  // We won't execute git in the test workers since it's slow and the information is in the parent process
-  if (!isWorker) {
+  // We don't execute git in test framework workers since the information is in the parent process
+  // and git metadata does not affect the execution of the tests
+  if (!shouldSkipGitMetadataExtraction) {
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+
+    const {
+      [GIT_COMMIT_SHA]: commitSHA,
+      [GIT_BRANCH]: branch,
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_TAG]: tag,
+      [GIT_COMMIT_AUTHOR_NAME]: authorName,
+      [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [CI_WORKSPACE_PATH]: ciWorkspacePath,
+      [GIT_COMMIT_HEAD_SHA]: headCommitSha
+    } = ciMetadata
     gitMetadata = getGitMetadata({
       commitSHA,
       branch,
@@ -474,12 +477,6 @@ function getTestEnvironmentMetadata (testFramework, config, isWorker = false) {
       ciWorkspacePath,
       headCommitSha
     })
-  }
-
-  const userProvidedGitMetadata = getUserProviderGitMetadata()
-
-  if (!isWorker) {
-    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
   }
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
@@ -1014,10 +1011,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     candidateBranches.push(pullRequestBaseBranch)
   } else {
     for (const branch of POSSIBLE_BASE_BRANCHES) {
-      const isSuccess = checkAndFetchBranch(branch, remoteName)
-      if (isSuccess) {
-        break
-      }
+      checkAndFetchBranch(branch, remoteName)
     }
 
     const localBranches = getLocalBranches(remoteName)

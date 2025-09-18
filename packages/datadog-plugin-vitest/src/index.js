@@ -435,8 +435,8 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:worker-report:logs', (logsPayloads) => {
-      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
-        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
+      JSON.parse(logsPayloads).forEach(({ logMessage }) => {
+        this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
       })
     })
   }
