@@ -184,10 +184,6 @@ ${build.initialOptions.banner.js}`
   })
 
   build.onLoad({ filter: /.*/ }, args => {
-    // if (!args.pluginData?.pkgOfInterest && !args.pluginData?.fileToRewrite) {
-    //   return
-    // }
-
     if (args.pluginData?.pkgOfInterest) {
       const data = args.pluginData
 
