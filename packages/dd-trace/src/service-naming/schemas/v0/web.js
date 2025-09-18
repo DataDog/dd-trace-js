@@ -24,6 +24,10 @@ const web = {
       opName: () => 'http.request',
       serviceName: httpPluginClientService
     },
+    genai: {
+      opName: () => 'google_genai.request',
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+    },
     aws: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
