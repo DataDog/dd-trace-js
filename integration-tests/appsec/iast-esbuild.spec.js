@@ -32,9 +32,9 @@ describe('esbuild support for IAST', () => {
       })
 
       // Install app deps
-      await exec('npm install', {
+      await exec('npm install || npm install', {
         cwd: applicationDir,
-        timeout: 3e3
+        timeout: 6e3
       })
 
       // Bundle the application
