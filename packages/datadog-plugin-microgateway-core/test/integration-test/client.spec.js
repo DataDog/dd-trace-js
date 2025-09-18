@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const {
   FakeAgent,
   createSandbox,
@@ -19,19 +20,10 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
     before(async function () {
-      // Use CI-optimized sandbox in CI environments
-      const isCI = process.env.CI || process.env.GITLAB_CI || process.env.GITHUB_ACTIONS
-      if (isCI) {
-        // Set a reasonable timeout for CI
-        this.timeout(15000)
-        sandbox = await createCISandbox([
-          './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
-      } else {
-        // Use regular sandbox for local development
-        this.timeout(20000)
-        sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
-          './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
-      }
+      // Use regular sandbox (automatically optimized for CI)
+      this.timeout(20000)
+      sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
+        './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
     })
 
     after(async () => {
@@ -48,7 +40,13 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      // Use correct path for server.mjs based on sandbox type
+      const isCI = process.env.CI || process.env.GITLAB_CI || process.env.GITHUB_ACTIONS
+      const serverPath = isCI
+        ? path.join(sandbox.folder, 'packages/datadog-plugin-microgateway-core/test/integration-test/server.mjs')
+        : 'server.mjs'
+
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, serverPath, agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
