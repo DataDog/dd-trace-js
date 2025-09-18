@@ -8,7 +8,6 @@ const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
 
-const { calculateDDBasePath } = require('../dd-trace/src/util')
 const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
 
 const rewriter = iastRewriter.getRewriter()
@@ -108,10 +107,9 @@ module.exports.setup = function (build) {
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (ddIastEnabled) {
-    const ddBasePath = calculateDDBasePath(__dirname)
     build.initialOptions.banner.js =
       `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
-      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${ddBasePath}';` : ''}
+      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
 ${build.initialOptions.banner.js}`
   }
   if (isESMBuild(build)) {
