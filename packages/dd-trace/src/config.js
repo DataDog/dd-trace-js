@@ -5,7 +5,6 @@ const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
 const log = require('./log')
-const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
@@ -15,11 +14,10 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
-const {
-  ORIGIN_KEY, GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES
-} = require('./constants')
+const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
+const defaults = require('./config_defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -134,12 +132,6 @@ function checkIfBothOtelAndDdEnvVarSet () {
   }
 }
 
-// eslint-disable-next-line @stylistic/max-len
-const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
 const runtimeId = uuid()
 
 function maybeFile (filepath) {
@@ -468,180 +460,7 @@ class Config {
 
   // for _merge to work, every config value must have a default value
   _applyDefaults () {
-    const {
-      AWS_LAMBDA_FUNCTION_NAME,
-      FUNCTION_NAME,
-      K_SERVICE,
-      WEBSITE_SITE_NAME
-    } = getEnvironmentVariables()
-
-    const service = AWS_LAMBDA_FUNCTION_NAME ||
-      FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
-      K_SERVICE || // Google Cloud Function Name set by newer runtimes
-      WEBSITE_SITE_NAME || // set by Azure Functions
-      pkg.name ||
-      'node'
-
-    const defaults = setHiddenProperty(this, '_defaults', {})
-
-    defaults.apmTracingEnabled = true
-    defaults['appsec.apiSecurity.enabled'] = true
-    defaults['appsec.apiSecurity.sampleDelay'] = 30
-    defaults['appsec.apiSecurity.endpointCollectionEnabled'] = true
-    defaults['appsec.apiSecurity.endpointCollectionMessageLimit'] = 300
-    defaults['appsec.blockedTemplateGraphql'] = undefined
-    defaults['appsec.blockedTemplateHtml'] = undefined
-    defaults['appsec.blockedTemplateJson'] = undefined
-    defaults['appsec.enabled'] = undefined
-    defaults['appsec.eventTracking.mode'] = 'identification'
-    defaults['appsec.extendedHeadersCollection.enabled'] = false
-    defaults['appsec.extendedHeadersCollection.redaction'] = true
-    defaults['appsec.extendedHeadersCollection.maxHeaders'] = 50
-    defaults['appsec.obfuscatorKeyRegex'] = defaultWafObfuscatorKeyRegex
-    defaults['appsec.obfuscatorValueRegex'] = defaultWafObfuscatorValueRegex
-    defaults['appsec.rasp.enabled'] = true
-    defaults['appsec.rasp.bodyCollection'] = false
-    defaults['appsec.rateLimit'] = 100
-    defaults['appsec.rules'] = undefined
-    defaults['appsec.sca.enabled'] = null
-    defaults['appsec.stackTrace.enabled'] = true
-    defaults['appsec.stackTrace.maxDepth'] = 32
-    defaults['appsec.stackTrace.maxStackTraces'] = 2
-    defaults['appsec.wafTimeout'] = 5e3 // µs
-    defaults.baggageMaxBytes = 8192
-    defaults.baggageMaxItems = 64
-    defaults.baggageTagKeys = 'user.id,session.id,account.id'
-    defaults.ciVisibilityTestSessionName = ''
-    defaults.clientIpEnabled = false
-    defaults.clientIpHeader = null
-    defaults['crashtracking.enabled'] = true
-    defaults['codeOriginForSpans.enabled'] = true
-    defaults['codeOriginForSpans.experimental.exit_spans.enabled'] = false
-    defaults.dbmPropagationMode = 'disabled'
-    defaults['dogstatsd.hostname'] = '127.0.0.1'
-    defaults['dogstatsd.port'] = '8125'
-    defaults.dsmEnabled = false
-    defaults['dynamicInstrumentation.enabled'] = false
-    defaults['dynamicInstrumentation.probeFile'] = undefined
-    defaults['dynamicInstrumentation.redactedIdentifiers'] = []
-    defaults['dynamicInstrumentation.redactionExcludedIdentifiers'] = []
-    defaults['dynamicInstrumentation.uploadIntervalSeconds'] = 1
-    defaults.env = undefined
-    defaults['experimental.enableGetRumData'] = false
-    defaults['experimental.exporter'] = undefined
-    defaults.flushInterval = 2000
-    defaults.flushMinSpans = 1000
-    defaults.gitMetadataEnabled = true
-    defaults.graphqlErrorExtensions = []
-    defaults['grpc.client.error.statuses'] = GRPC_CLIENT_ERROR_STATUSES
-    defaults['grpc.server.error.statuses'] = GRPC_SERVER_ERROR_STATUSES
-    defaults.headerTags = []
-    defaults['heapSnapshot.count'] = 0
-    defaults['heapSnapshot.destination'] = ''
-    defaults['heapSnapshot.interval'] = 3600
-    defaults.hostname = '127.0.0.1'
-    defaults['iast.dbRowsToTaint'] = 1
-    defaults['iast.deduplicationEnabled'] = true
-    defaults['iast.enabled'] = false
-    defaults['iast.maxConcurrentRequests'] = 2
-    defaults['iast.maxContextOperations'] = 2
-    defaults['iast.redactionEnabled'] = true
-    defaults['iast.redactionNamePattern'] = null
-    defaults['iast.redactionValuePattern'] = null
-    defaults['iast.requestSampling'] = 30
-    defaults['iast.securityControlsConfiguration'] = null
-    defaults['iast.telemetryVerbosity'] = 'INFORMATION'
-    defaults['iast.stackTrace.enabled'] = true
-    defaults.injectionEnabled = []
-    defaults.instrumentationSource = 'manual'
-    defaults.injectForce = null
-    defaults.isAzureFunction = false
-    defaults.isCiVisibility = false
-    defaults.isEarlyFlakeDetectionEnabled = false
-    defaults.isFlakyTestRetriesEnabled = false
-    defaults.flakyTestRetriesCount = 5
-    defaults.isGCPFunction = false
-    defaults.isGitUploadEnabled = false
-    defaults.isIntelligentTestRunnerEnabled = false
-    defaults.isManualApiEnabled = false
-    defaults['langchain.spanCharLimit'] = 128
-    defaults['langchain.spanPromptCompletionSampleRate'] = 1
-    defaults['llmobs.agentlessEnabled'] = undefined
-    defaults['llmobs.enabled'] = false
-    defaults['llmobs.mlApp'] = undefined
-    defaults.ciVisibilityTestSessionName = ''
-    defaults.ciVisAgentlessLogSubmissionEnabled = false
-    defaults.legacyBaggageEnabled = true
-    defaults.isTestDynamicInstrumentationEnabled = false
-    defaults.isServiceUserProvided = false
-    defaults.testManagementAttemptToFixRetries = 20
-    defaults.isTestManagementEnabled = false
-    defaults.isImpactedTestsEnabled = false
-    defaults.logInjection = true
-    defaults.lookup = undefined
-    defaults.inferredProxyServicesEnabled = false
-    defaults.memcachedCommandEnabled = false
-    defaults.middlewareTracingEnabled = true
-    defaults.openAiLogsEnabled = false
-    defaults['openai.spanCharLimit'] = 128
-    defaults.peerServiceMapping = {}
-    defaults.plugins = true
-    defaults.port = '8126'
-    defaults['profiling.enabled'] = undefined
-    defaults['profiling.exporters'] = 'agent'
-    defaults['profiling.sourceMap'] = true
-    defaults['profiling.longLivedThreshold'] = undefined
-    defaults.protocolVersion = '0.4'
-    defaults.queryStringObfuscation = qsRegex
-    defaults['remoteConfig.enabled'] = true
-    defaults['remoteConfig.pollInterval'] = 5 // seconds
-    defaults.reportHostname = false
-    defaults['runtimeMetrics.enabled'] = false
-    defaults['runtimeMetrics.eventLoop'] = true
-    defaults['runtimeMetrics.gc'] = true
-    defaults.runtimeMetricsRuntimeId = false
-    defaults.sampleRate = undefined
-    defaults['sampler.rateLimit'] = 100
-    defaults['sampler.rules'] = []
-    defaults['sampler.spanSamplingRules'] = []
-    defaults.scope = undefined
-    defaults.service = service
-    defaults.serviceMapping = {}
-    defaults.site = 'datadoghq.com'
-    defaults.spanAttributeSchema = 'v0'
-    defaults.spanComputePeerService = false
-    defaults.spanLeakDebug = 0
-    defaults.spanRemoveIntegrationFromService = false
-    defaults.startupLogs = false
-    defaults['stats.enabled'] = false
-    defaults.tags = {}
-    defaults.tagsHeaderMaxLength = 512
-    defaults['telemetry.debug'] = false
-    defaults['telemetry.dependencyCollection'] = true
-    defaults['telemetry.enabled'] = true
-    defaults['telemetry.heartbeatInterval'] = 60_000
-    defaults['telemetry.logCollection'] = true
-    defaults['telemetry.metrics'] = true
-    defaults.traceEnabled = true
-    defaults.traceId128BitGenerationEnabled = true
-    defaults.traceId128BitLoggingEnabled = true
-    defaults.tracePropagationExtractFirst = false
-    defaults.tracePropagationBehaviorExtract = 'continue'
-    defaults['tracePropagationStyle.inject'] = ['datadog', 'tracecontext', 'baggage']
-    defaults['tracePropagationStyle.extract'] = ['datadog', 'tracecontext', 'baggage']
-    defaults['tracePropagationStyle.otelPropagators'] = false
-    defaults.traceWebsocketMessagesEnabled = true
-    defaults.traceWebsocketMessagesInheritSampling = true
-    defaults.traceWebsocketMessagesSeparateTraces = true
-    defaults.tracing = true
-    defaults.url = undefined
-    defaults.version = pkg.version
-    defaults.instrumentation_config_id = undefined
-    defaults['vertexai.spanCharLimit'] = 128
-    defaults['vertexai.spanPromptCompletionSampleRate'] = 1
-    defaults['trace.aws.addSpanPointers'] = true
-    defaults['trace.dynamoDb.tablePrimaryKeys'] = undefined
-    defaults['trace.nativeSpanEvents'] = false
+    setHiddenProperty(this, '_defaults', defaults)
   }
 
   _applyLocalStableConfig () {
@@ -1264,9 +1083,9 @@ class Config {
     const DD_AGENT_HOST = coalesce(
       this._optionsArg.hostname,
       getEnvironmentVariable('DD_AGENT_HOST'),
-      '127.0.0.1'
+      defaults.hostname
     )
-    return DD_AGENT_HOST || (url && url.hostname)
+    return DD_AGENT_HOST || url?.hostname
   }
 
   _getSpanComputePeerService () {

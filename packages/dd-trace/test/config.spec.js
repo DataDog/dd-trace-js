@@ -43,8 +43,12 @@ describe('Config', () => {
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
+    const configDefaults = proxyquire('../src/config_defaults', {
+      './pkg': pkg
+    })
+
     Config = proxyquire('../src/config', {
-      './pkg': pkg,
+      './config_defaults': configDefaults,
       './log': log,
       './telemetry': { updateConfig },
       fs,
@@ -520,6 +524,7 @@ describe('Config', () => {
 
   it('should initialize from the default service', () => {
     pkg.name = 'test'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -529,6 +534,7 @@ describe('Config', () => {
 
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -2104,13 +2110,6 @@ describe('Config', () => {
   it('should skip appsec config files if they do not exist', () => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
-
-    const Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      fs,
-      os
-    })
 
     const config = new Config({
       appsec: {
