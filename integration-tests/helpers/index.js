@@ -10,99 +10,11 @@ const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
-const crypto = require('crypto')
 const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
+const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
-
-// Cache for packed packages
-const CACHE_DIR = path.join(os.tmpdir(), 'dd-trace-sandbox-cache')
-const DEP_CACHE_DIR = path.join(os.tmpdir(), 'dd-trace-dep-cache')
-
-// Ensure cache directories exist
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true })
-}
-if (!fs.existsSync(DEP_CACHE_DIR)) {
-  fs.mkdirSync(DEP_CACHE_DIR, { recursive: true })
-}
-
-/**
- * Generate a cache key for the current package state
- */
-function generateCacheKey () {
-  const packageJsonPath = path.join(__dirname, '../../package.json')
-  const packageJson = fs.readFileSync(packageJsonPath, 'utf8')
-  const packageHash = crypto.createHash('md5').update(packageJson).digest('hex')
-  return `dd-trace-${version}-${packageHash}.tgz`
-}
-
-/**
- * Get cached package or create new one
- */
-async function getCachedPackage (env) {
-  const cacheKey = generateCacheKey()
-  const cachedPath = path.join(CACHE_DIR, cacheKey)
-
-  if (fs.existsSync(cachedPath)) {
-    return cachedPath
-  }
-
-  // Create new package
-  await exec(`npm pack --silent --pack-destination ${CACHE_DIR}`, { env })
-
-  // Rename to include hash for cache invalidation
-  const tempPath = path.join(CACHE_DIR, `dd-trace-${version}.tgz`)
-  if (fs.existsSync(tempPath)) {
-    fs.renameSync(tempPath, cachedPath)
-  }
-
-  return cachedPath
-}
-
-/**
- * Get cached dependencies or install them
- */
-async function getCachedDependencies (dependencies, env) {
-  const depKey = dependencies.sort().join('|')
-  const depHash = crypto.createHash('md5').update(depKey).digest('hex')
-  const cachedDepPath = path.join(DEP_CACHE_DIR, `deps-${depHash}`)
-
-  if (fs.existsSync(cachedDepPath)) {
-    return cachedDepPath
-  }
-
-  // Create cache directory for these dependencies
-  fs.mkdirSync(cachedDepPath, { recursive: true })
-
-  // Create package.json
-  const packageJson = {
-    name: 'dd-trace-dep-cache',
-    version: '1.0.0',
-    type: 'module',
-    dependencies: {}
-  }
-
-  // Add dependencies
-  for (const dep of dependencies) {
-    const cleanDep = dep.replace(/['"]/g, '')
-    const match = cleanDep.match(/^(@?[^@]+)(@(.+))?$/)
-    if (match) {
-      const name = match[1]
-      const version = match[3] || 'latest'
-      packageJson.dependencies[name] = version
-    }
-  }
-
-  fs.writeFileSync(path.join(cachedDepPath, 'package.json'), JSON.stringify(packageJson, null, 2))
-
-  // Install dependencies
-  const installCommand = 'npm install --silent --no-save --prefer-offline --no-audit --no-fund'
-  await exec(installCommand, { cwd: cachedDepPath, env })
-
-  return cachedDepPath
-}
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -302,50 +214,29 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
+  const folder = path.join(os.tmpdir(), id().toString())
+  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
-  // CI-specific optimizations: Use pre-installed dependencies when possible
+  fs.mkdirSync(folder)
+
+  // Add CI-specific optimizations for faster installation
   const isCI = process.env.CI || process.env.GITLAB_CI || process.env.GITHUB_ACTIONS
-  if (isCI && process.env.CI_PREINSTALLED_DEPS === '1') {
-    // In CI with pre-installed deps, create minimal sandbox
-    const folder = path.join(os.tmpdir(), `dd-trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
-    fs.mkdirSync(folder, { recursive: true })
+  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
+  const ciFlags = isCI ? ' --frozen-lockfile --prefer-offline --silent' : ''
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}${ciFlags}`
+  const addOptions = { cwd: folder, env: restOfEnv }
 
-    // Copy test files only
-    for (const testPath of integrationTestsPaths) {
-      if (process.platform === 'win32') {
-        await exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-      } else {
-        await exec(`cp -R ${testPath} ${folder}`)
-      }
-    }
+  // Create npm package first
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
 
-    return { folder, remove: async () => rimraf(folder) }
-  }
+  // Run package installation and file copying in parallel for better performance
+  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
+    // retry in case of server error from registry
+    return exec(addCommand, addOptions)
+  })
 
-  // Universal CI optimization: Use no-sandbox mode for all CI environments
-  if (isCI) {
-    // For CI, use no-sandbox mode which is fastest and most reliable
-    // This works for ALL integration tests without requiring global installations
-    try {
-      await exec('yarn link')
-      await exec('yarn link dd-trace')
-    } catch (e) {
-      // Ignore errors if already linked
-    }
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
-  }
-
-  const folder = path.join(os.tmpdir(), `dd-trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
-  fs.mkdirSync(folder, { recursive: true })
-
-  // Get cached package or create new one
-  const cachedPackagePath = await getCachedPackage(restOfEnv)
-  const allDependencies = [`file:${cachedPackagePath}`].concat(cappedDependencies)
-
-  // Parallel operations for better performance
-
-  // 1. Copy test files in parallel with package installation
-  const copyOperations = integrationTestsPaths.map(testPath => {
+  const fileCopyPromises = integrationTestsPaths.map(testPath => {
     if (process.platform === 'win32') {
       return exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
@@ -353,37 +244,13 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     }
   })
 
-  // 2. Install packages with optimizations
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-
-  // CI-specific optimizations for package installation
-  const ciFlags = isCI ? ' --frozen-lockfile --prefer-offline --silent' : ' --silent'
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}${ciFlags}`
-  const addOptions = { cwd: folder, env: restOfEnv }
-
-  // Execute package installation and file copying in parallel
-  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
-    // Retry once on failure
-    // eslint-disable-next-line no-console
-    console.warn('Package installation failed, retrying...', e.message)
-    return exec(addCommand, addOptions)
-  })
-
-  // Add timeout for CI environments
-  const timeoutMs = isCI ? 10000 : 30000 // 10s in CI, 30s locally
-  const timeoutPromise = new Promise((resolve, reject) => {
-    setTimeout(() => reject(new Error(`Sandbox creation timed out after ${timeoutMs}ms`)), timeoutMs)
-  })
-
-  // Wait for all operations to complete with timeout
-  await Promise.race([
-    Promise.all([packageInstallPromise, ...copyOperations]),
-    timeoutPromise
-  ])
-
+  // Wait for both operations to complete
+  await Promise.all([packageInstallPromise, ...fileCopyPromises])
+  
   // Skip filesystem sync in CI environments (it's often unnecessary and slow)
-  if (!process.env.CI && !process.env.GITLAB_CI && !process.env.GITHUB_ACTIONS) {
+  if (!isCI) {
     if (process.platform === 'win32') {
+      // On Windows, we can only sync entire filesystem volume caches.
       await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
     } else {
       await exec(`sync ${folder}`)
@@ -395,39 +262,28 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 
   if (isGitRepo) {
-    await setupGitRepo(folder)
+    await exec('git init', { cwd: folder })
+    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    await exec('git config user.email "john@doe.com"', { cwd: folder })
+    await exec('git config user.name "John Doe"', { cwd: folder })
+    await exec('git config commit.gpgsign false', { cwd: folder })
+
+    // Create a unique local bare repo for this test
+    const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
+    if (!fs.existsSync(localRemotePath)) {
+      await exec(`git init --bare ${localRemotePath}`)
+    }
+
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
     folder,
     remove: async () => rimraf(folder)
   }
-}
-
-/**
- * Setup git repository for testing
- */
-async function setupGitRepo (folder) {
-  const gitOperations = [
-    exec('git init', { cwd: folder }),
-    exec('git config user.email "john@doe.com"', { cwd: folder }),
-    exec('git config user.name "John Doe"', { cwd: folder }),
-    exec('git config commit.gpgsign false', { cwd: folder })
-  ]
-
-  await Promise.all(gitOperations)
-
-  fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-
-  const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-  if (!fs.existsSync(localRemotePath)) {
-    await exec(`git init --bare ${localRemotePath}`)
-  }
-
-  await exec('git add -A', { cwd: folder })
-  await exec('git commit -m "first commit" --no-verify', { cwd: folder })
-  await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
-  await exec('git push --set-upstream origin HEAD', { cwd: folder })
 }
 
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
@@ -625,75 +481,6 @@ function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }
 
-/**
- * Clean up old cache entries (call this periodically)
- */
-async function cleanupCache (maxAge = 24 * 60 * 60 * 1000) { // 24 hours default
-  // Clean up package cache
-  if (fs.existsSync(CACHE_DIR)) {
-    const files = fs.readdirSync(CACHE_DIR)
-    const now = Date.now()
-
-    for (const file of files) {
-      const filePath = path.join(CACHE_DIR, file)
-      const stats = fs.statSync(filePath)
-
-      if (now - stats.mtime.getTime() > maxAge) {
-        await rimraf(filePath)
-      }
-    }
-  }
-
-  // Clean up dependency cache
-  if (fs.existsSync(DEP_CACHE_DIR)) {
-    const files = fs.readdirSync(DEP_CACHE_DIR)
-    const now = Date.now()
-
-    for (const file of files) {
-      const filePath = path.join(DEP_CACHE_DIR, file)
-      const stats = fs.statSync(filePath)
-
-      if (now - stats.mtime.getTime() > maxAge) {
-        await rimraf(filePath)
-      }
-    }
-  }
-}
-
-/**
- * Create a CI-optimized sandbox that uses cached dependencies
- */
-async function createCISandbox (integrationTestsPaths = ['./integration-tests/*'], dependencies = []) {
-  // For CI, create a minimal sandbox with pre-cached dependencies
-  const folder = path.join(os.tmpdir(), `dd-trace-ci-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
-  fs.mkdirSync(folder, { recursive: true })
-
-  // Copy test files
-  for (const testPath of integrationTestsPaths) {
-    if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-    } else {
-      await exec(`cp -R ${testPath} ${folder}`)
-    }
-  }
-
-  // Get cached dependencies
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
-  const cachedDepPath = await getCachedDependencies(dependencies, restOfEnv)
-
-  // Copy node_modules from cache
-  const nodeModulesPath = path.join(cachedDepPath, 'node_modules')
-  if (fs.existsSync(nodeModulesPath)) {
-    if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${nodeModulesPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-    } else {
-      await exec(`cp -R ${nodeModulesPath} ${folder}`)
-    }
-  }
-
-  return { folder, remove: async () => rimraf(folder) }
-}
-
 module.exports = {
   FakeAgent,
   hookFile,
@@ -713,9 +500,5 @@ module.exports = {
   useEnv,
   useSandbox,
   sandboxCwd,
-  setShouldKill,
-  cleanupCache,
-  getCachedPackage,
-  getCachedDependencies,
-  createCISandbox
+  setShouldKill
 }
