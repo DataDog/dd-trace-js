@@ -1,7 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, before, after, it } = require('mocha')
+
+const path = require('node:path')
+
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
-const path = require('path')
 
 describe('Endpoints collection', () => {
   let sandbox, cwd
@@ -124,7 +128,7 @@ describe('Endpoints collection', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
           DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10'
         }
       })
