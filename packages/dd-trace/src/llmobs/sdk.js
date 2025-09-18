@@ -53,23 +53,23 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const { mlApp, agentlessEnabled } = options
-
     const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
-
-    const llmobsConfig = {
-      mlApp,
-      agentlessEnabled
-    }
-
     const enabled = DD_LLMOBS_ENABLED == null || isTrue(DD_LLMOBS_ENABLED)
     if (!enabled) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
-    this._config.llmobs.enabled = true
-    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    const { mlApp, agentlessEnabled } = options
+
+    const llmobsConfig = {
+      ...this._config.llmobs,
+      enabled: true,
+      mlApp,
+      agentlessEnabled
+    }
+
+    this._config.configureLLMObs(llmobsConfig)
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)

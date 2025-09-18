@@ -2024,16 +2024,16 @@ describe('Config', () => {
   it('should send empty array when remote config is called on empty options', () => {
     const config = new Config()
 
-    config.configure({}, true)
+    config.configureRemoteConfig({}, true)
 
     expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
 
   it('should send remote config changes to telemetry', () => {
-    const config = new Config()
+    const config = new Config({ sampleRate: 1 })
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rate: 0
     }, true)
 
@@ -2043,25 +2043,14 @@ describe('Config', () => {
     ])
   })
 
-  it('should not send telemetry updates if the agent URL href is not changed', () => {
-    const config = new Config({ url: new URL('https://example.com/') })
-
-    config.configure({
-      url: new URL('https://example.com/')
-    })
-
-    expect(updateConfig).to.be.calledTwice
-    expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
-  })
-
   it('should not send telemetry updates if a complex object does not contain any changes', () => {
     const config = new Config()
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
     }, true)
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
     }, true)
 
@@ -2072,7 +2061,7 @@ describe('Config', () => {
   it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = new Config()
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rules: [
         {
           resource: '*',
@@ -2101,7 +2090,7 @@ describe('Config', () => {
   it('should have consistent runtime-id after remote configuration updates tags', () => {
     const config = new Config()
     const runtimeId = config.tags['runtime-id']
-    config.configure({
+    config.configureRemoteConfig({
       tracing_tags: { foo: 'bar' }
     }, true)
 

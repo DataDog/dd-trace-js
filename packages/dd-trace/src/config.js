@@ -243,6 +243,9 @@ const sourcesOrder = [
   { containerProperty: '_defaults', origin: 'default' }
 ]
 
+const REMOTE_CONFIG_NAMES = new Set(['headerTags', 'tags', 'sampleRate', 'logInjection', 'tracing', 'sampler.rules'])
+const LLMOBS_CONFIG_NAMES = new Set(['llmobs.agentlessEnabled', 'llmobs.mlApp', 'llmobs.enabled'])
+
 class Config {
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
@@ -427,17 +430,14 @@ class Config {
     return this.#parsedDdTags
   }
 
-  // Supports only a subset of options for now.
-  configure (options, remote) {
-    if (remote) {
-      this._applyRemote(options)
-    } else {
-      this._applyOptions(options)
-    }
+  configureLLMObs (options) {
+    this._applyOptionsLLMObs(options)
+    this._merge(LLMOBS_CONFIG_NAMES)
+  }
 
-    // TODO: test
-    this._applyCalculated()
-    this._merge()
+  configureRemoteConfig (options) {
+    this._applyRemote(options)
+    this._merge(REMOTE_CONFIG_NAMES)
   }
 
   _getDefaultPropagationStyle (options) {
@@ -890,7 +890,7 @@ class Config {
   }
 
   _applyOptions (options) {
-    const opts = setHiddenProperty(this, '_options', this._options || {})
+    const opts = setHiddenProperty(this, '_options', {})
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
 
@@ -1003,8 +1003,6 @@ class Config {
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
-    this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
-    this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     opts.lookup = options.lookup
     this._setBoolean(opts, 'middlewareTracingEnabled', options.middlewareTracingEnabled)
@@ -1051,13 +1049,22 @@ class Config {
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
     this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
 
+    this._applyOptionsLLMObs(options.llmobs)
+  }
+
+  _applyOptionsLLMObs (options) {
+    const opts = this._options
+
+    this._setBoolean(opts, 'llmobs.agentlessEnabled', options?.agentlessEnabled)
+    this._setString(opts, 'llmobs.mlApp', options?.mlApp)
+
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
-    // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
+    // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and LLMObs options is provided.
     const llmobsEnabledEnv = this._env['llmobs.enabled']
-    if (llmobsEnabledEnv == null && options.llmobs) {
-      this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
+    if (llmobsEnabledEnv == null && options) {
+      this._setBoolean(opts, 'llmobs.enabled', !!options)
     }
   }
 
@@ -1206,32 +1213,35 @@ class Config {
   }
 
   _applyRemote (options) {
-    const opts = setHiddenProperty(this, '_remote', this._remote || {})
+    const opts = setHiddenProperty(this, '_remote', {})
     setHiddenProperty(this, '_remoteUnprocessed', {})
 
-    if (options === undefined) {
-      // During tracer init, there's no remote options. We use this as a signal to abort early, as it would otherwise
-      // produce misleading telemetry
-      return
+    if (options == null) return // fast path
+
+    if ('tracing_header_tags' in options) {
+      opts.headerTags = options.tracing_header_tags?.map(
+        (tag) => tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+      )
     }
-
-    opts.headerTags = options.tracing_header_tags
-      ? options.tracing_header_tags.map(tag => {
-        return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-      })
-      : undefined
-
-    const tags = {}
-    tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
-    this._setTags(opts, 'tags', tags)
-
-    this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
-    this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
-    this._setBoolean(opts, 'tracing', options.tracing_enabled)
-
-    this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
-    this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
+    if ('tracing_tags' in options) {
+      const tags = {}
+      tagger.add(tags, options.tracing_tags)
+      if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
+      this._setTags(opts, 'tags', tags)
+    }
+    if ('tracing_sampling_rate' in options) {
+      this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
+    }
+    if ('log_injection_enabled' in options) {
+      this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
+    }
+    if ('tracing_enabled' in options) {
+      this._setBoolean(opts, 'tracing', options.tracing_enabled)
+    }
+    if ('tracing_sampling_rules' in options) {
+      this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+      this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
+    }
   }
 
   _reformatTags (samplingRules) {
@@ -1345,17 +1355,7 @@ class Config {
   }
 
   _setAndTrackChange ({ name, value, origin, unprocessedValue, changes }) {
-    if (value != null || origin === 'default') {
-      // fields should not have their value set to null or undefined, unless it's coming from the default origin
-      set(this, name, value)
-    } else if (!(origin === 'remote_config' && value === null)) {
-      return
-    }
-
-    // We continue here only in one of the following conditions:
-    // - the origin is `default`
-    // - the origin is `remote_config` and the value is `null` (we track these, as they are used for unsetting fields)
-    // - the value is not `null` or `undefined` (i.e. it's being set)
+    set(this, name, value)
 
     if (!changeTracker[name]) {
       changeTracker[name] = {}
@@ -1366,9 +1366,11 @@ class Config {
 
     if (!originExists || valuesDiffer(oldValue, value)) {
       changeTracker[name][origin] = value
+      // TODO: If the origin is `default` and the value is `undefined`, the JSON.stringify will remove the `value`
+      // field. Is this supported by the configuration telemetry backend?
       changes.push({
         name,
-        value: unprocessedValue || value,
+        value: unprocessedValue === undefined ? value : unprocessedValue,
         origin
       })
     }
@@ -1379,24 +1381,29 @@ class Config {
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
-  _merge () {
+  _merge (fields = Object.keys(this._defaults)) {
     const changes = []
 
-    for (const name in this._defaults) {
+    for (const name of fields) {
       // Use reverse order for merge (lowest priority first)
       for (let i = sourcesOrder.length - 1; i >= 0; i--) {
         const { containerProperty, origin, unprocessedProperty } = sourcesOrder[i]
-        const value = this[containerProperty][name]
-        this._setAndTrackChange({
-          name,
-          value,
-          origin,
-          unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
-          changes
-        })
+        const container = this[containerProperty]
+        const value = container[name]
+        if (value != null || container === this._defaults) {
+          this._setAndTrackChange({
+            name,
+            value,
+            origin,
+            unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
+            changes
+          })
+        }
       }
     }
+
     this.sampler.sampleRate = this.sampleRate
+
     updateConfig(changes, this)
   }
 
