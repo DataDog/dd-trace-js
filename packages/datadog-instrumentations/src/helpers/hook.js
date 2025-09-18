@@ -1,7 +1,7 @@
 'use strict'
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
-const path = require('path')
+// const path = require('path')
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
@@ -25,18 +25,23 @@ function Hook (modules, hookOptions, onrequire) {
       return patched.get(moduleExports)
     }
 
+    let defaultWrapResult
     if (
       isIitm &&
       moduleExports.default &&
       (typeof moduleExports.default === 'object' ||
         typeof moduleExports.default === 'function')
     ) {
-      moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
       if (moduleExports) patched.set(moduleExports, moduleExports)
-      if (moduleName.includes('express')) return moduleExports
+      if (moduleName.includes('express')) {
+        moduleExports.default = defaultWrapResult
+        return moduleExports
+      }
     }
 
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    if (defaultWrapResult) newExports.default = defaultWrapResult
     /**
      * TODO: Find a way to deal with modules that have barrel files, and
      * add contents after each require, which break our moduleExport caching mechanism
