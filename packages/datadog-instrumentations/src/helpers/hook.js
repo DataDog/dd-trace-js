@@ -1,6 +1,7 @@
 'use strict'
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
+const path = require('path')
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
@@ -18,13 +19,11 @@ function Hook (modules, hookOptions, onrequire) {
   }
 
   const patched = new WeakMap()
-
+  this._patched = Object.create(null)
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     if (patched.has(moduleExports)) {
       return patched.get(moduleExports)
     }
-
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (
       isIitm &&
@@ -32,25 +31,43 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof moduleExports.default === 'object' ||
         typeof moduleExports.default === 'function')
     ) {
-      newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      if (moduleExports) patched.set(moduleExports, moduleExports)
+      return moduleExports
     }
 
+    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
     /**
      * TODO: Find a way to deal with modules that have barrel files, and
-     * add contents after each require, which break our moduleExport caching mechanism 
+     * add contents after each require, which break our moduleExport caching mechanism
      * (example: protobufjs)
      */
     if (newExports &&
       (typeof newExports === 'object' || typeof newExports === 'function') &&
-      (moduleName === 'protobufjs' || !moduleName.includes('protobuf'))) {
+      (moduleName === 'protobufjs' || !moduleName.includes('protobuf')) && !moduleName.includes('aws-sdk')) {
       patched.set(moduleExports, newExports)
     }
 
     return newExports
   }
 
+  // const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  //   const parts = [moduleBaseDir, moduleName].filter(Boolean)
+  //   const filename = path.join(...parts)
+
+  //   if (this._patched[filename]) return moduleExports
+
+  //   this._patched[filename] = true
+
+  //   return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+  // }
+
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
+    // if (moduleExports && moduleExports.default) {
+    //   moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
+    //   return moduleExports
+    // }
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
 }
