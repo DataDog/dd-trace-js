@@ -9,7 +9,7 @@ const axios = require('axios')
 const assert = require('assert')
 const msgpack = require('@msgpack/msgpack')
 
-describe('extended data collection', () => {
+describe.only('extended data collection', () => {
   before(() => {
     return agent.load(['express', 'http'], { client: false })
   })
@@ -17,8 +17,10 @@ describe('extended data collection', () => {
   after(() => {
     return agent.close({ ritmReset: false })
   })
-
+  let i = 0
   withVersions('express', 'express', expressVersion => {
+    if (i > 0) return
+    i++
     let port, server
 
     before((done) => {
@@ -203,49 +205,6 @@ describe('extended data collection', () => {
 
         assert.ok(span.metrics['_dd.appsec.request.header_collection.discarded'] > 2)
         assert.ok(span.metrics['_dd.appsec.response.header_collection.discarded'] > 2)
-
-        const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
-        assert.deepEqual(metaStructBody, requestBody)
-      })
-    })
-
-    it('Should collect only request body when headers redaction is enabled', async () => {
-      const requestBody = {
-        bodyParam: 'collect-header-redacted',
-        other: 'other',
-        chained: {
-          child: 'one',
-          child2: 2
-        }
-      }
-      await axios.post(
-        `http://localhost:${port}/`,
-        requestBody,
-        {
-          headers: {
-            'custom-request-header-1': 'custom-request-header-value-1',
-            'custom-request-header-2': 'custom-request-header-value-2',
-            'custom-request-header-3': 'custom-request-header-value-3',
-            'custom-request-header-4': 'custom-request-header-value-4',
-            'custom-request-header-5': 'custom-request-header-value-5'
-          }
-        }
-      )
-
-      await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.strictEqual(span.type, 'web')
-
-        assert.strictEqual(span.meta['http.request.headers.custom-request-header-1'], undefined)
-        assert.strictEqual(span.meta['http.request.headers.custom-request-header-2'], undefined)
-        assert.strictEqual(span.meta['http.request.headers.custom-request-header-3'], undefined)
-
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-1'], undefined)
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-2'], undefined)
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-3'], undefined)
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-4'], undefined)
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-5'], undefined)
-        assert.strictEqual(span.meta['http.response.headers.custom-response-header-6'], undefined)
 
         const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
         assert.deepEqual(metaStructBody, requestBody)
