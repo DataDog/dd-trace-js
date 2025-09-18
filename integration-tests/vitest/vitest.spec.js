@@ -1262,6 +1262,8 @@ versions.forEach((version) => {
                 ddsource: 'dd_debugger',
                 level: 'error'
               })
+              assert.include(diLog.ddtags, 'git.repository_url:')
+              assert.include(diLog.ddtags, 'git.commit.sha:')
               assert.equal(diLog.debugger.snapshot.language, 'javascript')
               assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
                 a: {
