@@ -58,8 +58,7 @@ const otelDdEnvMapping = {
   OTEL_TRACES_EXPORTER: 'DD_TRACE_ENABLED',
   OTEL_METRICS_EXPORTER: 'DD_RUNTIME_METRICS_ENABLED',
   OTEL_RESOURCE_ATTRIBUTES: 'DD_TAGS',
-  OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED',
-  OTEL_LOGS_EXPORTER: undefined
+  OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED'
 }
 
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
@@ -111,7 +110,6 @@ function validateEnvVarType (envVar) {
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
     case 'OTEL_METRICS_EXPORTER':
-    case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() === 'none'
     default:
       return false
@@ -651,10 +649,12 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
-      OTEL_LOGS_EXPORTER,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_EXPORTERS_OTLP_ENDPOINT,
+      OTEL_EXPORTERS_OTLP_HEADERS,
+      OTEL_EXPORTERS_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
       OTEL_BSP_MAX_QUEUE_SIZE,
@@ -671,6 +671,18 @@ class Config {
     tagger.add(tags, this.#parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+
+    // OpenTelemetry logs configuration - processed after OTEL_RESOURCE_ATTRIBUTES
+    // Enable logs if DD_LOGS_OTEL_ENABLED is true
+    this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
+    this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTERS_OTLP_HEADERS)
+    this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT || OTEL_EXPORTERS_OTLP_TIMEOUT)
+    this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
+    this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    this._setUnit(env, 'otelLogsMaxQueueSize', OTEL_BSP_MAX_QUEUE_SIZE)
+    this._setUnit(env, 'otelLogsExportTimeoutMillis', OTEL_BSP_EXPORT_TIMEOUT)
 
     this._setBoolean(env, 'apmTracingEnabled', coalesce(
       DD_APM_TRACING_ENABLED,
@@ -787,14 +799,6 @@ class Config {
     this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
     this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
-    this._setBoolean(env, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
-    this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT)
-    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS)
-    this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT)
-    this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
-    this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
-    this._setUnit(env, 'otelLogsMaxQueueSize', OTEL_BSP_MAX_QUEUE_SIZE)
-    this._setUnit(env, 'otelLogsExportTimeoutMillis', OTEL_BSP_EXPORT_TIMEOUT)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this._setBoolean(env, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
@@ -1202,7 +1206,6 @@ class Config {
       calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
-
 
     calc['dogstatsd.hostname'] = this._getHostname()
     this._setBoolean(calc, 'isGitUploadEnabled',

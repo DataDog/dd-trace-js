@@ -277,7 +277,6 @@ class Tracer extends NoopProxy {
 
       const { LoggerProvider, BatchLogProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
       const { logs } = require('@opentelemetry/api-logs')
-      
       // Create logger provider
       const loggerProvider = new LoggerProvider({
         resource: {
@@ -289,20 +288,19 @@ class Tracer extends NoopProxy {
         }
       })
 
-      // Create OTLP exporter using config values with environment variable fallbacks
+      // Create OTLP exporter using resolved config values
       const exporter = new OtlpHttpLogExporter({
-        url: config.otelLogsUrl || process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
-        headers: config.otelLogsHeaders || (process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS ? 
-          JSON.parse(process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS) : {}),
-        timeout: config.otelLogsTimeout || parseInt(process.env.OTEL_EXPORTER_OTLP_TIMEOUT) || 10000
+        url: config.otelLogsUrl,
+        headers: config.otelLogsHeaders,
+        timeout: config.otelLogsTimeout
       })
 
-      // Create batch processor using config values with environment variable fallbacks
+      // Create batch processor using resolved config values
       const processor = new BatchLogProcessor([exporter], {
-        batchTimeout: config.otelLogsBatchTimeout || parseInt(process.env.OTEL_BSP_SCHEDULE_DELAY) || 5000,
-        maxExportBatchSize: config.otelLogsMaxExportBatchSize || parseInt(process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE) || 512,
-        maxQueueSize: config.otelLogsMaxQueueSize || parseInt(process.env.OTEL_BSP_MAX_QUEUE_SIZE) || 2048,
-        exportTimeoutMillis: config.otelLogsExportTimeoutMillis || parseInt(process.env.OTEL_BSP_EXPORT_TIMEOUT) || 30000
+        batchTimeout: config.otelLogsBatchTimeout,
+        maxExportBatchSize: config.otelLogsMaxExportBatchSize,
+        maxQueueSize: config.otelLogsMaxQueueSize,
+        exportTimeoutMillis: config.otelLogsExportTimeoutMillis
       })
 
       // Add processor to logger provider
@@ -333,7 +331,6 @@ class Tracer extends NoopProxy {
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
-
 }
 
 module.exports = Tracer
