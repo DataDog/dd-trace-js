@@ -1,5 +1,6 @@
 'use strict'
 
+const { before, beforeEach, after } = require('mocha')
 const chai = require('chai')
 
 const tracerVersion = require('../../../../package.json').version
@@ -196,6 +197,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 
 const agent = require('../plugins/agent')
 const assert = require('node:assert')
+const { useEnv } = require('../../../../integration-tests/helpers')
 
 /**
  * @param {Object} options
@@ -204,7 +206,7 @@ const assert = require('node:assert')
  * @param {Object} options.closeOptions
  * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
  */
-function useLlmobs ({
+function useLlmObs ({
   plugin,
   tracerConfigOptions = {
     llmobs: {
@@ -212,7 +214,7 @@ function useLlmobs ({
       agentlessEnabled: false
     }
   },
-  closeOptions = { ritmReset: false, wipe: true }
+  closeOptions = { ritmReset: false }
 }) {
   if (!plugin) {
     throw new TypeError(
@@ -228,6 +230,10 @@ function useLlmobs ({
 
   let apmTracesPromise
   let llmobsTracesPromise
+
+  useEnv({
+    _DD_LLMOBS_FLUSH_INTERVAL: 0
+  })
 
   before(() => {
     return agent.load(plugin, {}, tracerConfigOptions)
@@ -263,7 +269,7 @@ module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
-  useLlmobs,
+  useLlmObs,
   MOCK_ANY,
   MOCK_NUMBER,
   MOCK_STRING,
