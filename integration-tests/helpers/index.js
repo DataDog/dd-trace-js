@@ -19,10 +19,14 @@ const { getCappedRange } = require('../../packages/dd-trace/test/plugins/version
 
 // Cache for packed packages
 const CACHE_DIR = path.join(os.tmpdir(), 'dd-trace-sandbox-cache')
+const DEP_CACHE_DIR = path.join(os.tmpdir(), 'dd-trace-dep-cache')
 
-// Ensure cache directory exists
+// Ensure cache directories exist
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR, { recursive: true })
+}
+if (!fs.existsSync(DEP_CACHE_DIR)) {
+  fs.mkdirSync(DEP_CACHE_DIR, { recursive: true })
 }
 
 /**
@@ -56,6 +60,49 @@ async function getCachedPackage (env) {
   }
 
   return cachedPath
+}
+
+/**
+ * Get cached dependencies or install them
+ */
+async function getCachedDependencies (dependencies, env) {
+  const depKey = dependencies.sort().join('|')
+  const depHash = crypto.createHash('md5').update(depKey).digest('hex')
+  const cachedDepPath = path.join(DEP_CACHE_DIR, `deps-${depHash}`)
+
+  if (fs.existsSync(cachedDepPath)) {
+    return cachedDepPath
+  }
+
+  // Create cache directory for these dependencies
+  fs.mkdirSync(cachedDepPath, { recursive: true })
+
+  // Create package.json
+  const packageJson = {
+    name: 'dd-trace-dep-cache',
+    version: '1.0.0',
+    type: 'module',
+    dependencies: {}
+  }
+
+  // Add dependencies
+  for (const dep of dependencies) {
+    const cleanDep = dep.replace(/['"]/g, '')
+    const match = cleanDep.match(/^(@?[^@]+)(@(.+))?$/)
+    if (match) {
+      const name = match[1]
+      const version = match[3] || 'latest'
+      packageJson.dependencies[name] = version
+    }
+  }
+
+  fs.writeFileSync(path.join(cachedDepPath, 'package.json'), JSON.stringify(packageJson, null, 2))
+
+  // Install dependencies
+  const installCommand = 'npm install --silent --no-save --prefer-offline --no-audit --no-fund'
+  await exec(installCommand, { cwd: cachedDepPath, env })
+
+  return cachedDepPath
 }
 
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -275,13 +322,16 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return { folder, remove: async () => rimraf(folder) }
   }
 
-  // Aggressive CI optimization: Skip sandbox creation entirely in CI if dependencies are simple
-  if (isCI && dependencies.length <= 2 && dependencies.every(dep =>
-    dep.includes('microgateway-core') || dep.includes('get-port') || builtinModules.includes(dep.replace(/['"]/g, ''))
-  )) {
-    // For simple dependencies in CI, use no-sandbox mode
-    await exec('yarn link')
-    await exec('yarn link dd-trace')
+  // Universal CI optimization: Use no-sandbox mode for all CI environments
+  if (isCI) {
+    // For CI, use no-sandbox mode which is fastest and most reliable
+    // This works for ALL integration tests without requiring global installations
+    try {
+      await exec('yarn link')
+      await exec('yarn link dd-trace')
+    } catch (e) {
+      // Ignore errors if already linked
+    }
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
 
@@ -613,43 +663,65 @@ function assertUUID (actual, msg = 'not a valid UUID') {
  * Clean up old cache entries (call this periodically)
  */
 async function cleanupCache (maxAge = 24 * 60 * 60 * 1000) { // 24 hours default
-  if (!fs.existsSync(CACHE_DIR)) return
+  // Clean up package cache
+  if (fs.existsSync(CACHE_DIR)) {
+    const files = fs.readdirSync(CACHE_DIR)
+    const now = Date.now()
 
-  const files = fs.readdirSync(CACHE_DIR)
-  const now = Date.now()
+    for (const file of files) {
+      const filePath = path.join(CACHE_DIR, file)
+      const stats = fs.statSync(filePath)
 
-  for (const file of files) {
-    const filePath = path.join(CACHE_DIR, file)
-    const stats = fs.statSync(filePath)
+      if (now - stats.mtime.getTime() > maxAge) {
+        await rimraf(filePath)
+      }
+    }
+  }
 
-    if (now - stats.mtime.getTime() > maxAge) {
-      await rimraf(filePath)
+  // Clean up dependency cache
+  if (fs.existsSync(DEP_CACHE_DIR)) {
+    const files = fs.readdirSync(DEP_CACHE_DIR)
+    const now = Date.now()
+
+    for (const file of files) {
+      const filePath = path.join(DEP_CACHE_DIR, file)
+      const stats = fs.statSync(filePath)
+
+      if (now - stats.mtime.getTime() > maxAge) {
+        await rimraf(filePath)
+      }
     }
   }
 }
 
 /**
- * Create a CI-optimized sandbox that skips package installation
+ * Create a CI-optimized sandbox that uses cached dependencies
  */
-async function createCISandbox (integrationTestsPaths = ['./integration-tests/*']) {
-  // Ensure yarn linking is set up
-  try {
-    await exec('yarn link')
-    await exec('yarn link dd-trace')
-  } catch (e) {
-    // Ignore errors if already linked
-  }
-
-  // Create minimal sandbox with just test files
+async function createCISandbox (integrationTestsPaths = ['./integration-tests/*'], dependencies = []) {
+  // For CI, create a minimal sandbox with pre-cached dependencies
   const folder = path.join(os.tmpdir(), `dd-trace-ci-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
   fs.mkdirSync(folder, { recursive: true })
 
-  // Copy test files only
+  // Copy test files
   for (const testPath of integrationTestsPaths) {
     if (process.platform === 'win32') {
       await exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
       await exec(`cp -R ${testPath} ${folder}`)
+    }
+  }
+
+  // Get cached dependencies
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const cachedDepPath = await getCachedDependencies(dependencies, restOfEnv)
+
+  // Copy node_modules from cache
+  const nodeModulesPath = path.join(cachedDepPath, 'node_modules')
+  if (fs.existsSync(nodeModulesPath)) {
+    if (process.platform === 'win32') {
+      await exec(`Copy-Item -Recurse -Path "${nodeModulesPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+    } else {
+      await exec(`cp -R ${nodeModulesPath} ${folder}`)
     }
   }
 
