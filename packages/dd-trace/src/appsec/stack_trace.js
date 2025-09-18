@@ -1,6 +1,7 @@
 'use strict'
 
 const { ddBasePath } = require('../util')
+const { getOriginalPathAndLineFromSourceMap } = require('./iast/taint-tracking/rewriter')
 
 const LIBRARY_FRAMES_BUFFER = 20
 
@@ -33,10 +34,22 @@ function getCallSiteList (maxDepth = 100, constructorOpt) {
 
 function filterOutFramesFromLibrary (callSiteList) {
   return callSiteList.filter(callSite => {
-    if (globalThis.__DD_ESBUILD_IAST_WITH_SM || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
-      // Since it is bundled, it is not possible to discriminate the frame comes from library code or not
+    if (globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
+      // bundled and no SourceMap, not possible to discriminate if the frame comes from dd-trace code or not
       return true
     }
+
+    if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
+      // bundled with SourceMap, get original file and line to discriminate if comes from dd-trace or not
+      const callSiteLocation = {
+        path: callSite.getFileName(),
+        line: callSite.getLineNumber(),
+        column: callSite.getColumnNumber()
+      }
+      const { path } = getOriginalPathAndLineFromSourceMap(callSiteLocation)
+      return !path?.startsWith(ddBasePath)
+    }
+
     return !callSite.getFileName()?.startsWith(ddBasePath)
   })
 }
