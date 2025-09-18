@@ -24,25 +24,31 @@ function Hook (modules, hookOptions, onrequire) {
       return patched.get(moduleExports)
     }
 
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
-
+    let defaultWrapResult
     if (
       isIitm &&
       moduleExports.default &&
       (typeof moduleExports.default === 'object' ||
         typeof moduleExports.default === 'function')
     ) {
-      newExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      if (moduleName.includes('express')) {
+        moduleExports.default = defaultWrapResult
+        patched.set(moduleExports, moduleExports)
+        return moduleExports
+      }
     }
 
+    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    if (defaultWrapResult) newExports.default = defaultWrapResult
     /**
      * TODO: Find a way to deal with modules that have barrel files, and
-     * add contents after each require, which break our moduleExport caching mechanism 
+     * add contents after each require, which break our moduleExport caching mechanism
      * (example: protobufjs)
      */
     if (newExports &&
       (typeof newExports === 'object' || typeof newExports === 'function') &&
-      (moduleName === 'protobufjs' || !moduleName.includes('protobuf'))) {
+      (moduleName === 'protobufjs' || !moduleName.includes('protobuf')) && !moduleName.includes('aws-sdk')) {
       patched.set(moduleExports, newExports)
     }
 
