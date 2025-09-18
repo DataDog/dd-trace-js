@@ -43,9 +43,13 @@ const extendedDataCollectionRequest = new WeakMap()
 // following header lists are ordered in the same way the spec orders them, it doesn't matter but it's easier to compare
 const contentHeaderList = [
   'content-length',
-  'content-type',
   'content-encoding',
   'content-language'
+]
+
+const responseHeaderList = [
+  ...contentHeaderList,
+  'content-type'
 ]
 
 const identificationHeaders = [
@@ -77,12 +81,24 @@ const requestHeadersList = [
   ...identificationHeaders
 ]
 
+const authenticationHeadersList = [
+  'authorization',
+  'proxy-authorization',
+  'www-authenticate',
+  'proxy-authenticate',
+  'authentication-info',
+  'proxy-authentication-info',
+  'cookie',
+  'set-cookie'
+]
+
+
 // these request headers are always collected - it breaks the expected spec orders
 const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
-const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
@@ -134,7 +150,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = String(headerValue)
+      result[getHeaderTag(tagPrefix, headerName)] = authenticationHeadersList.includes(headerName) ? '<redacted>' : String(headerValue)
       counter++
     }
   }
@@ -164,11 +180,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to deleted in next major
 
   // should be standard if !redaction and no headers enabled
-  if (
-    (!config.headersExtendedCollectionEnabled || config.headersRedaction) &&
-    // TODO header_redaction is temporal name, tbd in the spec
-    (!extendedDataCollection || isTrue(extendedDataCollection.header_redaction))
-  ) {
+  if ((!config.headersExtendedCollectionEnabled || config.headersRedaction) && !extendedDataCollection) {
     // Standard collection
     return Object.assign(
       mandatoryCollectedHeaders,
@@ -177,18 +189,15 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
     )
   }
 
-  let maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
-  // TODO remove when libddwaf start returning non string data in actions
-  maxHeadersCollected = Number.parseInt(maxHeadersCollected)
+  const maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
 
   // Extended collection
-  const collectedHeaders = new Set(
-    ...Object.keys(mandatoryCollectedHeaders), ...Object.keys(requestEventCollectedHeaders)
-  )
+  // Set to avoid duplicates
+  const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length + Object.keys(requestEventCollectedHeaders).length
 
   const requestExtendedHeadersAvailableCount =
     maxHeadersCollected -
-    collectedHeaders.size
+    collectedHeadersCount
 
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
