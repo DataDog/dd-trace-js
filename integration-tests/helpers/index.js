@@ -244,14 +244,11 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   // Wait for both operations to complete
   await Promise.all([packageInstallPromise, ...fileCopyPromises])
-  // Skip filesystem sync in CI environments (it's often unnecessary and slow)
-  if (!isCI) {
-    if (process.platform === 'win32') {
-      // On Windows, we can only sync entire filesystem volume caches.
-      await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
-    } else {
-      await exec(`sync ${folder}`)
-    }
+  if (process.platform === 'win32') {
+    // On Windows, we can only sync entire filesystem volume caches.
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+  } else {
+    await exec(`sync ${folder}`)
   }
 
   if (followUpCommand) {
