@@ -208,23 +208,12 @@ const { useEnv } = require('../../../../integration-tests/helpers')
  */
 function useLlmObs ({
   plugin,
-  tracerConfigOptions = {
-    llmobs: {
-      mlApp: 'test',
-      agentlessEnabled: false
-    }
-  },
-  closeOptions = { ritmReset: false }
+  tracerConfigOptions = {},
+  closeOptions = {}
 }) {
   if (!plugin) {
     throw new TypeError(
       '`plugin` is required when using `useLlmobs`'
-    )
-  }
-
-  if (!tracerConfigOptions.llmobs) {
-    throw new TypeError(
-      '`loadOptions.llmobs` is required when using `useLlmobs`'
     )
   }
 
@@ -236,7 +225,12 @@ function useLlmObs ({
   })
 
   before(() => {
-    return agent.load(plugin, {}, tracerConfigOptions)
+    return agent.load(plugin, {}, Object.assign({
+      llmobs: {
+        mlApp: 'test',
+        agentlessEnabled: false
+      }
+    }, tracerConfigOptions))
   })
 
   beforeEach(() => {
@@ -255,7 +249,9 @@ function useLlmObs ({
   })
 
   after(() => {
-    return agent.close(closeOptions)
+    return agent.close(Object.assign({
+      ritmReset: false
+    }, closeOptions))
   })
 
   return async function () {
