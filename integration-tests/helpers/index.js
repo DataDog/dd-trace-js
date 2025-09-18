@@ -257,9 +257,12 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await exec('git config user.email "john@doe.com"', { cwd: folder })
-    await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
+    // Replace lines 260-262 with:
+    await Promise.all([
+      exec('git config user.email "john@doe.com"', { cwd: folder }),
+      exec('git config user.name "John Doe"', { cwd: folder }),
+      exec('git config commit.gpgsign false', { cwd: folder })
+    ])
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
