@@ -51,10 +51,13 @@ let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
-
-
+let isSessionStarted = false
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function getTestCommand () {
+  return `vitest ${process.argv.slice(2).join(' ')}`
+}
 
 function waitForHitProbe () {
   return new Promise(resolve => {
@@ -136,6 +139,10 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
+}
+
+function isCliApiPackage (vitestPackage) {
+  return vitestPackage.s?.name === 'startVitest'
 }
 
 function getSessionStatus (state) {
@@ -369,36 +376,31 @@ function getFinishWrapper (exitOrClose) {
   }
 }
 
-addHook({
-  name: 'vitest',
-  versions: ['>=3.0.9'],
-  // TODO: change this to .*
-  file: 'dist/chunks/cli-api.BkDphVBG.js'
-}, (cliPackage, frameworkVersion) => {
-  // startVitest is async
-  shimmer.wrap(cliPackage, 's', oldStartVitest => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldStartVitest.apply(this, arguments)
+function getCliOrStartVitestWrapper (frameworkVersion) {
+  return function (oldCliOrStartVitest) {
+    return function () {
+      if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
+        return oldCliOrStartVitest.apply(this, arguments)
+      }
+      isSessionStarted = true
+      testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
+      return oldCliOrStartVitest.apply(this, arguments)
     }
-    const processArgv = process.argv.slice(2).join(' ')
-    // TODO: check if session is already started through createCLI (weird but technically possible)
-    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    return oldStartVitest.apply(this, arguments)
-  })
-  return cliPackage
-})
+  }
+}
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
-    }
-    const processArgv = process.argv.slice(2).join(' ')
-    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    return oldCreateCli.apply(this, arguments)
-  })
+  shimmer.wrap(vitestPackage, 'c', getCliOrStartVitestWrapper(frameworkVersion))
 
   return vitestPackage
+}
+
+function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
+  if (!isCliApiPackage(cliApiPackage)) {
+    return cliApiPackage
+  }
+  shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+  return cliApiPackage
 }
 
 addHook({
@@ -774,6 +776,7 @@ addHook({
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
+// Following 3 wrappers are for test session start
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.5'],
@@ -785,6 +788,12 @@ addHook({
   versions: ['>=2.0.5'],
   filePattern: 'dist/chunks/cac.*'
 }, getCreateCliWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0'],
+  filePattern: 'dist/chunks/cli-api.*'
+}, getStartVitestWrapper)
 
 // test suite start and finish
 // only relevant for workers
