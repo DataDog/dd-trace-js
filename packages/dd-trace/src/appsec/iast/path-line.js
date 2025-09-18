@@ -2,7 +2,7 @@
 
 const path = require('path')
 const process = require('process')
-const { ddBasePath, calculateDDBasePath } = require('../../util')
+const { ddBasePath } = require('../../util')
 const { getOriginalPathAndLineFromSourceMap } = require('./taint-tracking/rewriter')
 const pathLine = {
   getNodeModulesPaths,
@@ -26,15 +26,6 @@ const EXCLUDED_PATH_PREFIXES = [
 function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
   if (!callSiteFrames) {
     return []
-  }
-
-  let { ddBasePath } = pathLine
-
-  // Recompute ddBasePath for bundled output
-  if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
-    const callsite = callSiteFrames[0]
-    callsite.path = getRelativePath(callsite.file)
-    ddBasePath = calculateDDBasePath(getOriginalPathAndLineFromSourceMap(callsite).path)
   }
 
   const result = []
