@@ -11,6 +11,7 @@ module.exports = {
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
+  get '@google/genai' () { return require('../../../datadog-plugin-google-genai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
   get '@happy-dom/jest-environment' () { return require('../../../datadog-plugin-jest/src') },

@@ -201,6 +201,12 @@
       "versions": ["3.5.7"]
     }
   ],
+  "genai": [
+    {
+      "name": "@google/genai",
+      "versions": [">=1.19.0"]
+    }
+  ],
   "graphql": [
     {
       "name": "apollo-server-core",

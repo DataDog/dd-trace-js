@@ -11,6 +11,7 @@ module.exports = {
   '@playwright/test': () => require('../playwright'),
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),
+  '@google/genai': () => require('../genai'),
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
   '@google-cloud/vertexai': () => require('../google-cloud-vertexai'),
   '@graphql-tools/executor': () => require('../graphql'),

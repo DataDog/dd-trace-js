@@ -16,6 +16,10 @@ const web = {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService
     },
+    genai: {
+      opName: () => 'google_genai.request',
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+    },
     fetch: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService
