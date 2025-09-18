@@ -53,7 +53,7 @@ describe('esm', () => {
     it('is instrumented', async function () {
       this.timeout(20000)
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers?.host, `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assertObjectContains(payload, [[{
           name: 'prisma.client',
           resource: 'User.create',
