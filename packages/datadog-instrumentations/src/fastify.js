@@ -265,8 +265,8 @@ function canPublishResponsePayload (payload) {
     !ArrayBuffer.isView(payload) // TypedArray
 }
 
-addHook({ name: 'fastify', versions: ['>=3'] }, (fastify, _1, _2, isIitm) => {
-  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(isIitm ? fastify.default : fastify, true))
+addHook({ name: 'fastify', versions: ['>=3'] }, (fastify) => {
+  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
   wrapped.default = wrapped
@@ -274,12 +274,12 @@ addHook({ name: 'fastify', versions: ['>=3'] }, (fastify, _1, _2, isIitm) => {
   return wrapped
 })
 
-addHook({ name: 'fastify', versions: ['2'] }, (fastify, _1, _2, isIitm) => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(isIitm ? fastify.default : fastify, true))
+addHook({ name: 'fastify', versions: ['2'] }, (fastify) => {
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 })
 
-addHook({ name: 'fastify', versions: ['1'] }, (fastify, _1, _2, isIitm) => {
-  return shimmer.wrapFunction(fastify, fastify => wrapFastify(isIitm ? fastify.default : fastify, false))
+addHook({ name: 'fastify', versions: ['1'] }, (fastify) => {
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
 
 function wrapReplyHeader (Reply) {
