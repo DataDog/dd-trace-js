@@ -791,7 +791,13 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.0.5'],
+  filePattern: 'dist/vendor/cli-api.*'
+}, getStartVitestWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
   filePattern: 'dist/chunks/cli-api.*'
 }, getStartVitestWrapper)
 
