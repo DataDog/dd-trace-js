@@ -242,6 +242,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(metrics.series[2].metric).to.be.eq('waf.config_errors')
         expect(metrics.series[2].tags).to.include('waf_version:0.0.1')
         expect(metrics.series[2].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[2].tags).to.include('action:init')
       })
     })
 
@@ -281,7 +282,8 @@ describe('Appsec Waf Telemetry metrics', () => {
 
         expect(count).to.have.been.calledOnceWithExactly('waf.config_errors', {
           waf_version: wafVersion,
-          event_rules_version: rulesVersion
+          event_rules_version: rulesVersion,
+          action: 'update'
         })
         expect(inc).to.have.been.calledOnce
       })
@@ -300,6 +302,7 @@ describe('Appsec Waf Telemetry metrics', () => {
         expect(metrics.series[1].points[0][1]).to.be.eq(3)
         expect(metrics.series[1].tags).to.include('waf_version:0.0.1')
         expect(metrics.series[1].tags).to.include('event_rules_version:0.0.2')
+        expect(metrics.series[1].tags).to.include('action:update')
       })
     })
 
