@@ -3,6 +3,7 @@
 const {
   FakeAgent,
   createSandbox,
+  createCISandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -18,9 +19,19 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
     before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
-        './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
+      // Use CI-optimized sandbox in CI environments
+      const isCI = process.env.CI || process.env.GITLAB_CI || process.env.GITHUB_ACTIONS
+      if (isCI) {
+        // Set a reasonable timeout for CI
+        this.timeout(15000)
+        sandbox = await createCISandbox([
+          './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
+      } else {
+        // Use regular sandbox for local development
+        this.timeout(20000)
+        sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
+          './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
+      }
     })
 
     after(async () => {

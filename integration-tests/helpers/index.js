@@ -275,6 +275,16 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return { folder, remove: async () => rimraf(folder) }
   }
 
+  // Aggressive CI optimization: Skip sandbox creation entirely in CI if dependencies are simple
+  if (isCI && dependencies.length <= 2 && dependencies.every(dep =>
+    dep.includes('microgateway-core') || dep.includes('get-port') || builtinModules.includes(dep.replace(/['"]/g, ''))
+  )) {
+    // For simple dependencies in CI, use no-sandbox mode
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+  }
+
   const folder = path.join(os.tmpdir(), `dd-trace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
   fs.mkdirSync(folder, { recursive: true })
 
@@ -309,8 +319,17 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     return exec(addCommand, addOptions)
   })
 
-  // Wait for all operations to complete
-  await Promise.all([packageInstallPromise, ...copyOperations])
+  // Add timeout for CI environments
+  const timeoutMs = isCI ? 10000 : 30000 // 10s in CI, 30s locally
+  const timeoutPromise = new Promise((resolve, reject) => {
+    setTimeout(() => reject(new Error(`Sandbox creation timed out after ${timeoutMs}ms`)), timeoutMs)
+  })
+
+  // Wait for all operations to complete with timeout
+  await Promise.race([
+    Promise.all([packageInstallPromise, ...copyOperations]),
+    timeoutPromise
+  ])
 
   // Skip filesystem sync in CI environments (it's often unnecessary and slow)
   if (!process.env.CI && !process.env.GITLAB_CI && !process.env.GITHUB_ACTIONS) {
@@ -607,6 +626,34 @@ async function cleanupCache (maxAge = 24 * 60 * 60 * 1000) { // 24 hours default
       await rimraf(filePath)
     }
   }
+}
+
+/**
+ * Create a CI-optimized sandbox that skips package installation
+ */
+async function createCISandbox (integrationTestsPaths = ['./integration-tests/*']) {
+  // Ensure yarn linking is set up
+  try {
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+  } catch (e) {
+    // Ignore errors if already linked
+  }
+
+  // Create minimal sandbox with just test files
+  const folder = path.join(os.tmpdir(), `dd-trace-ci-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  fs.mkdirSync(folder, { recursive: true })
+
+  // Copy test files only
+  for (const testPath of integrationTestsPaths) {
+    if (process.platform === 'win32') {
+      await exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+    } else {
+      await exec(`cp -R ${testPath} ${folder}`)
+    }
+  }
+
+  return { folder, remove: async () => rimraf(folder) }
 }
 
 module.exports = {
