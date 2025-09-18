@@ -2,7 +2,8 @@
 
 const path = require('path')
 const process = require('process')
-const { ddBasePath } = require('../../util')
+const { ddBasePath, calculateDDBasePath } = require('../../util')
+const { getOriginalPathAndLineFromSourceMap } = require('./taint-tracking/rewriter')
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
@@ -27,12 +28,31 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
     return []
   }
 
+  let { ddBasePath } = pathLine
+
+  // Recompute ddBasePath for bundled output
+  if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
+    const callsite = callSiteFrames[0]
+    callsite.path = getRelativePath(callsite.file)
+    ddBasePath = calculateDDBasePath(getOriginalPathAndLineFromSourceMap(callsite).path)
+  }
+
   const result = []
 
   for (const callsite of callSiteFrames) {
-    const filepath = callsite.file
-    if (!isExcluded(callsite, externallyExcludedPaths) && !filepath.includes(pathLine.ddBasePath)) {
-      callsite.path = getRelativePath(filepath)
+    let filepath = callsite.file
+    callsite.path = getRelativePath(filepath)
+    if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
+      const { path: originalPath, line, column } = getOriginalPathAndLineFromSourceMap(callsite)
+      callsite.path = filepath = originalPath
+      callsite.line = line
+      callsite.column = column
+    }
+
+    if (
+      !isExcluded(callsite, externallyExcludedPaths) &&
+      (!filepath.includes(ddBasePath) || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM)
+    ) {
       callsite.isInternal = !path.isAbsolute(filepath)
 
       result.push(callsite)
@@ -43,12 +63,12 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 }
 
 function getRelativePath (filepath) {
-  return path.relative(process.cwd(), filepath)
+  return filepath && path.relative(process.cwd(), filepath)
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {
   if (callsite.isNative) return true
-  const filename = callsite.file
+  const filename = globalThis.__DD_ESBUILD_IAST_WITH_SM ? callsite.path : callsite.file
   if (!filename) {
     return true
   }
