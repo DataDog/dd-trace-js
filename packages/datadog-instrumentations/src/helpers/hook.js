@@ -33,7 +33,7 @@ function Hook (modules, hookOptions, onrequire) {
     ) {
       moduleExports.default = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
       if (moduleExports) patched.set(moduleExports, moduleExports)
-      return moduleExports
+      if (moduleName.includes('express')) return moduleExports
     }
 
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
