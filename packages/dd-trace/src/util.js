@@ -90,5 +90,6 @@ module.exports = {
   globMatch,
   ddBasePath: calculateDDBasePath(__dirname),
   normalizeProfilingEnabledValue,
-  normalizePluginEnvName
+  normalizePluginEnvName,
+  calculateDDBasePath
 }

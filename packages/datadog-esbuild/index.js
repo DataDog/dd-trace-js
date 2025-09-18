@@ -7,6 +7,9 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
+const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
+
+const rewriter = iastRewriter.getRewriter()
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -96,10 +99,18 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
+  const ddIastEnabled = build.initialOptions.define?.__DD_IAST_ENABLED__ === 'true'
+  const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
+    ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
+  build.initialOptions.banner ??= {}
+  build.initialOptions.banner.js ??= ''
+  if (ddIastEnabled) {
+    build.initialOptions.banner.js =
+      `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
+${build.initialOptions.banner.js}`
+  }
   if (isESMBuild(build)) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
       build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
@@ -141,13 +152,6 @@ ${build.initialOptions.banner.js}`
     }
 
     // TODO: Should this also check for namespace === 'file'?
-    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
-      // This is local application code, not an instrumented package
-      if (DEBUG) console.log(`LOCAL: ${args.path}`)
-      return
-    }
-
-    // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
         args.path.startsWith('@') &&
         !args.importer.includes('node_modules/')) {
@@ -166,6 +170,25 @@ ${build.initialOptions.banner.js}`
       }
       return
     }
+
+    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
+      // It is local application code, not an instrumented package
+      if (DEBUG) console.log(`APP: ${args.path}`, args)
+
+      const ext = path.extname(args.path).toLowerCase()
+      const isJs = /\.[cm]?[jt]sx?$/.test(ext)
+      if (!isJs && ext) return
+
+      return {
+        path: fullPathToModule,
+        pluginData: {
+          path: args.path,
+          full: fullPathToModule,
+          applicationFile: true
+        }
+      }
+    }
+
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
     const internal = builtins.has(args.path)
@@ -215,22 +238,23 @@ ${build.initialOptions.banner.js}`
   })
 
   build.onLoad({ filter: /.*/ }, args => {
-    if (!args.pluginData?.pkgOfInterest) {
-      return
-    }
+    // if (!args.pluginData?.pkgOfInterest && !args.pluginData?.fileToRewrite) {
+    //   return
+    // }
 
-    const data = args.pluginData
+    if (args.pluginData?.pkgOfInterest) {
+      const data = args.pluginData
 
-    if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
+      if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
 
-    const pkgPath = data.raw !== data.pkg
-      ? `${data.pkg}/${data.path}`
-      : data.pkg
+      const pkgPath = data.raw !== data.pkg
+        ? `${data.pkg}/${data.path}`
+        : data.pkg
 
-    // Read the content of the module file of interest
-    const fileCode = fs.readFileSync(args.path, 'utf8')
+      // Read the content of the module file of interest
+      const fileCode = fs.readFileSync(args.path, 'utf8')
 
-    const contents = `
+      const contents = `
       (function() {
         ${fileCode}
       })(...arguments);
@@ -248,12 +272,25 @@ ${build.initialOptions.banner.js}`
         module.exports = payload.module;
     }
     `
+      // https://esbuild.github.io/plugins/#on-load-results
+      return {
+        contents,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
+      }
+    }
 
-    // https://esbuild.github.io/plugins/#on-load-results
-    return {
-      contents,
-      loader: 'js',
-      resolveDir: path.dirname(args.path)
+    if (args.pluginData?.applicationFile) {
+      if (ddIastEnabled) {
+        if (DEBUG) console.log(`REWRITE: ${args.path}`)
+        const fileCode = fs.readFileSync(args.path, 'utf8')
+        const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
+        return {
+          contents: rewritten.content,
+          loader: 'js',
+          resolveDir: path.dirname(args.path)
+        }
+      }
     }
   })
 }

@@ -32,7 +32,13 @@ function getCallSiteList (maxDepth = 100, constructorOpt) {
 }
 
 function filterOutFramesFromLibrary (callSiteList) {
-  return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
+  return callSiteList.filter(callSite => {
+    if (globalThis.__DD_ESBUILD_IAST_WITH_SM || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
+      // Since it is bundled, it is not possible to discriminate the frame comes from library code or not
+      return true
+    }
+    return !callSite.getFileName()?.startsWith(ddBasePath)
+  })
 }
 
 function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, callSiteListGetter = getCallSiteList) {
