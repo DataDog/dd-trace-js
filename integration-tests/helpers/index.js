@@ -220,11 +220,8 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   fs.mkdirSync(folder)
 
-  // Add CI-specific optimizations for faster installation
-  const isCI = process.env.CI || process.env.GITLAB_CI || process.env.GITHUB_ACTIONS
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const ciFlags = isCI ? ' --frozen-lockfile --prefer-offline --silent' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}${ciFlags}`
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
 
   // Create npm package first
@@ -246,14 +243,11 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   // Wait for both operations to complete
   await Promise.all([packageInstallPromise, ...fileCopyPromises])
-  // Skip filesystem sync in CI environments (it's often unnecessary and slow)
-  if (!isCI) {
-    if (process.platform === 'win32') {
-      // On Windows, we can only sync entire filesystem volume caches.
-      await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
-    } else {
-      await exec(`sync ${folder}`)
-    }
+  if (process.platform === 'win32') {
+    // On Windows, we can only sync entire filesystem volume caches.
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+  } else {
+    await exec(`sync ${folder}`)
   }
 
   if (followUpCommand) {
