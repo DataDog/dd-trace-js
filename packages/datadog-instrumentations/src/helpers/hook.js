@@ -32,7 +32,7 @@ function Hook (modules, hookOptions, onrequire) {
         typeof moduleExports.default === 'function')
     ) {
       defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
-      if (moduleName.includes('express')) {
+      if (moduleName === 'express') {
         moduleExports.default = defaultWrapResult
         patched.set(moduleExports, moduleExports)
         return moduleExports
@@ -42,9 +42,22 @@ function Hook (modules, hookOptions, onrequire) {
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
     if (defaultWrapResult) newExports.default = defaultWrapResult
     /**
-     * TODO: Find a way to deal with modules that have barrel files, and
-     * add contents after each require, which break our moduleExport caching mechanism
-     * (example: protobufjs)
+     * TODO: Handle modules that use barrel files or exhibit unique patching edge cases.
+     *
+     * Known issues:
+     * - protobufjs: This module performs barrel filing by adding exports dynamically.
+     *   The first export lacks the properties we want to wrap, which causes it to be marked
+     *   as patched even though it wasn’t correctly patched.
+     *
+     * - express: Fails when the outer moduleExports is wrapped, and then its `.default`
+     *   export is wrapped again, leading to ESM tests failing.
+     *
+     * - aws-sdk: Patching `AWS.config` fails because the SDK reinstates its value even after
+     *   being initially patched.
+     *
+     * NOTE: Many of these issues were previously hidden because our caching mechanism used
+     * filename based keys, which ended up in modules rentering patching even though they should
+     * have been cached.
      */
     if (newExports &&
       (typeof newExports === 'object' || typeof newExports === 'function') &&
