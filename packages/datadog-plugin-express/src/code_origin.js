@@ -15,7 +15,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
     this.addSub('apm:express:middleware:enter', ({ req, layer }) => {
       const tags = layerTags.get(layer)
       if (!tags) return
-      web.getContext(req).span?.addTags(tags)
+      web.getContext(req)?.span?.addTags(tags)
     })
 
     this.addSub('apm:express:route:added', ({ topOfStackFunc, layer }) => {
@@ -26,7 +26,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
     this.addSub('apm:router:middleware:enter', ({ req, layer }) => {
       const tags = layerTags.get(layer)
       if (!tags) return
-      web.getContext(req).span?.addTags(tags)
+      web.getContext(req)?.span?.addTags(tags)
     })
 
     this.addSub('apm:router:route:added', ({ topOfStackFunc, layer }) => {
