@@ -46,9 +46,9 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
 })
 
 addHook({ name: 'cassandra-driver', versions: ['>=4.4'] }, (cassandra, _1, _2, isIitm) => {
-  if (!cassandra.default && isIitm) {
-    return cassandra
-  }
+  // if (!cassandra.default && isIitm) {
+  //   return cassandra
+  // }
 
   shimmer.wrap(cassandra.Client.prototype, '_execute', _execute => function (query, params, execOptions, callback) {
     if (!startCh.hasSubscribers) {
@@ -73,9 +73,9 @@ const isValid = (args) => {
 }
 
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'] }, (cassandra, _1, _2, isIitm) => {
-  if (!cassandra.default && isIitm) {
-    return cassandra
-  }
+  // if (!cassandra.default && isIitm) {
+  //   return cassandra
+  // }
 
   shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {

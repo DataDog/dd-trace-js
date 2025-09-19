@@ -1,4 +1,6 @@
 'use strict'
+
+const path = require('path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -17,66 +19,37 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
-  const patched = new WeakMap()
+  this._patched = Object.create(null)
 
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    if (patched.has(moduleExports)) {
-      return patched.get(moduleExports)
-    }
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+    const parts = [moduleBaseDir, moduleName].filter(Boolean)
+    const filename = path.join(...parts)
 
-    let defaultWrapResult
-    if (
-      isIitm &&
-      moduleExports.default &&
-      (typeof moduleExports.default === 'object' ||
-        typeof moduleExports.default === 'function')
-    ) {
-      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
-      if (moduleName === 'express') {
-        moduleExports.default = defaultWrapResult
-        patched.set(moduleExports, moduleExports)
-        return moduleExports
-      }
-    }
+    if (this._patched[filename]) return moduleExports
 
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
-    if (defaultWrapResult) newExports.default = defaultWrapResult
-    /**
-     * TODO: Handle modules that use barrel files or exhibit unique patching edge cases.
-     *
-     * Known issues:
-     * - protobufjs: This module performs barrel filing by adding exports dynamically.
-     *   The first export lacks the properties we want to wrap, which causes it to be marked
-     *   as patched even though it wasn’t correctly patched.
-     *
-     * - express: Fails when the outer moduleExports is wrapped, and then its `.default`
-     *   export is wrapped again, leading to ESM tests failing.
-     *
-     * - aws-sdk: Patching `AWS.config` fails because the SDK reinstates its value even after
-     *   being initially patched.
-     *
-     * NOTE: Many of these issues were previously hidden because our caching mechanism used
-     * filename based keys, which ended up in modules rentering patching even though they should
-     * have been cached.
-     */
-    if (newExports &&
-      (typeof newExports === 'object' || typeof newExports === 'function') &&
-      (moduleName === 'protobufjs' || !moduleName.includes('protobuf')) && !moduleName.includes('aws-sdk')) {
-      patched.set(moduleExports, newExports)
-    }
+    this._patched[filename] = true
 
-    return newExports
+    return onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion)
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
+    // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
+    // modules and not ESM. In the meantime, all the modules we instrument are
+    // CommonJS modules for which the default export is always moved to
+    // `default` anyway.
+    if (moduleExports && moduleExports.default) {
+      moduleExports.default = safeHook(moduleExports.default, moduleName, moduleBaseDir)
+      // return moduleExports
+    }
+    return safeHook(moduleExports, moduleName, moduleBaseDir)
   })
 }
 
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
+  this._patched = Object.create(null)
 }
 
 module.exports = Hook

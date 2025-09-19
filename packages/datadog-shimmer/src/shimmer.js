@@ -13,6 +13,8 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+const patched = new WeakMap()
+
 /**
  * Copies properties from the original function to the wrapped function.
  *
@@ -73,9 +75,14 @@ function copyObjectProperties (original, wrapped, skipKey) {
  * @returns {Function} The wrapped function.
  */
 function wrapFunction (original, wrapper) {
+  if (patched.has(original)) {
+    return patched.get(original)
+  }
+
   const wrapped = wrapper(original)
 
   if (typeof original === 'function') {
+    patched.set(original, wrapped)
     assertNotClass(original)
     copyProperties(original, wrapped)
   }
@@ -133,12 +140,18 @@ function wrap (target, name, wrapper, options) {
   }
 
   const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
+  let wrapped
+  if (patched.has(original)) {
+    wrapped = patched.get(original)
+  } else {
+    assertMethod(target, name, original)
 
-  assertMethod(target, name, original)
+    wrapped = wrapper(original)
 
-  const wrapped = wrapper(original)
-
-  copyProperties(original, wrapped)
+    patched.set(wrapped, wrapped)
+    patched.set(original, wrapped)
+    copyProperties(original, wrapped)
+  }
 
   if (descriptor.writable) {
     // Fast path for assigned properties.
