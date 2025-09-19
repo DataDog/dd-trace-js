@@ -381,67 +381,36 @@ The following attributes are available to override Datadog-specific options:
 
 <h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
 
-dd-trace-js includes experimental support for OpenTelemetry logs, implementing the [OpenTelemetry Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/) specification. This allows you to send structured log data using the OpenTelemetry standard.
-
-#### Configuration
-
-Enable OpenTelemetry logs using standard OpenTelemetry environment variables:
-
-```bash
-# Enable OpenTelemetry logs
-export DD_LOGS_OTEL_ENABLED=true
-
-# OTLP endpoint URL
-export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs
-
-# Optional headers (JSON format)
-export OTEL_EXPORTER_OTLP_LOGS_HEADERS='{"Authorization": "Bearer token"}'
-
-# Request timeout in milliseconds
-export OTEL_EXPORTER_OTLP_TIMEOUT=10000
-
-# Batch timeout in milliseconds
-export OTEL_BSP_SCHEDULE_DELAY=5000
-
-# Maximum number of log records per batch
-export OTEL_BSP_MAX_EXPORT_BATCH_SIZE=512
-
-# Maximum queue size
-export OTEL_BSP_MAX_QUEUE_SIZE=2048
-
-# Export timeout in milliseconds
-export OTEL_BSP_EXPORT_TIMEOUT=30000
-```
-
-#### LoggerProvider
-
-The LoggerProvider is the main entry point for creating loggers. It follows the [OpenTelemetry LoggerProvider specification](https://opentelemetry.io/docs/specs/otel/logs/sdk/#loggerprovider):
+dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
 
 ```javascript
 const tracer = require('dd-trace').init()
 const { logs } = require('@opentelemetry/api-logs')
 
-// Get a logger from OpenTelemetry API OR logging library with builtin otel support
-// Ex: const logger = logs.getLogger('my-service', '1.0.0')
+const logger = logs.getLogger('my-service', '1.0.0')
+logger.emit({
+  severityText: 'INFO',
+  severityNumber: 9,
+  body: 'Application started',
+  attributes: { version: '1.0.0' },
+  timestamp: Date.now() * 1000000
+})
 ```
 
-#### OTLP Export
+#### Supported Configuration
 
-Logs are exported using the [OTLP (OpenTelemetry Protocol)](https://opentelemetry.io/docs/specs/otlp/) over HTTP. The implementation includes:
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
-- **Batch Processing**: Logs are batched for efficient transmission
-- **Protobuf Serialization**: Uses Protocol Buffers for compact data format
-- **Automatic Retries**: Built-in retry logic for failed exports
-- **Resource Attributes**: Automatic service metadata injection
+- `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL (default: `http://localhost:4318/v1/logs`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format (default: `{}`)
+- `OTEL_EXPORTER_OTLP_TIMEOUT` - Request timeout in milliseconds (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
+- `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum queue size (default: `2048`)
+- `OTEL_BSP_EXPORT_TIMEOUT` - Export timeout in milliseconds (default: `30000`)
 
-#### References
-
-For more information about OpenTelemetry logs:
-
-* [OpenTelemetry Logs Overview](https://opentelemetry.io/docs/specs/otel/logs/overview/)
-* [OpenTelemetry JavaScript Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/)
-* [OTLP Protocol Specification](https://opentelemetry.io/docs/specs/otlp/)
-* [OpenTelemetry Logs SDK](https://opentelemetry.io/docs/specs/otel/logs/sdk/)
+Logs are exported via OTLP over HTTP with protobuf serialization. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
