@@ -8,9 +8,7 @@ const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
 
-const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
-
-const rewriter = iastRewriter.getRewriter()
+let rewriter
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -101,6 +99,12 @@ function getGitMetadata () {
 
 module.exports.setup = function (build) {
   const ddIastEnabled = build.initialOptions.define?.__DD_IAST_ENABLED__ === 'true'
+
+  if (ddIastEnabled) {
+    const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
+    rewriter = iastRewriter.getRewriter()
+  }
+
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
