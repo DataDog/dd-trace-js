@@ -144,16 +144,16 @@ function wrap (target, name, wrapper, options) {
 
   const original = descriptor.value ?? options?.replaceGetter ? target[name] : descriptor.get
   let wrapped
-  if (patched.has(original)) {
-    process._rawDebug('Entered has ', name)
-    wrapped = patched.get(original)
+  const originalWrapper = patched.get(original)
+  if (originalWrapper && originalWrapper.toString() === wrapper.toString()) {
+    process._rawDebug(original.toString())
+    wrapped = original
   } else {
     assertMethod(target, name, original)
 
     wrapped = wrapper(original)
 
-    patched.set(wrapped, wrapped)
-    // patched.set(original, wrapped)
+    patched.set(wrapped, wrapper)
     copyProperties(original, wrapped)
   }
 
