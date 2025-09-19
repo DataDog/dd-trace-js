@@ -10,7 +10,7 @@ function exec (...args) {
     proc.on('error', reject)
     proc.on('exit', (code) => {
       if (code === 0) {
-        resolve()
+        resolve(undefined)
       } else {
         reject(new Error('Process exited with non-zero code.'))
       }

@@ -207,7 +207,7 @@ describe('exporters/agent', function () {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
-            resolve()
+            resolve(true)
           } catch (e) {
             reject(e)
           }
@@ -427,7 +427,7 @@ describe('exporters/agent', function () {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
-            resolve()
+            resolve(true)
           } catch (e) {
             reject(e)
           }
@@ -477,7 +477,7 @@ describe('exporters/agent', function () {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
-            resolve()
+            resolve(true)
           } catch (e) {
             reject(e)
           }

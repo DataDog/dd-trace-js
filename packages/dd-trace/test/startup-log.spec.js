@@ -58,11 +58,16 @@ describe('startup logging', () => {
       'rule2',
       new SamplingRule({ name: 'rule3', sampleRate: 1.4 })
     ])
+    // Use sinon's stub instance directly to avoid type errors
+    // eslint-disable-next-line no-console
+    const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+    // eslint-disable-next-line no-console
+    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     startupLog({ agentError: { message: 'Error: fake error' } })
-    firstStderrCall = console.info.firstCall /* eslint-disable-line no-console */
-    secondStderrCall = console.warn.firstCall /* eslint-disable-line no-console */
-    console.info.restore() /* eslint-disable-line no-console */
-    console.warn.restore() /* eslint-disable-line no-console */
+    firstStderrCall = infoStub.firstCall
+    secondStderrCall = warnStub.firstCall
+    infoStub.restore()
+    warnStub.restore()
   })
 
   it('startupLog should be formatted correctly', () => {
@@ -124,8 +129,9 @@ describe('profiling_enabled', () => {
       setStartupLogPluginManager({ _pluginsByName: {} })
       startupLog()
       /* eslint-disable-next-line no-console */
-      const logObj = JSON.parse(console.info.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
-      console.info.restore() /* eslint-disable-line no-console */
+      const infoStub = /** @type {sinon.SinonStub} */ (console.info)
+      const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
+      infoStub.restore()
       expect(logObj.profiling_enabled).to.equal(expected)
     })
   })

@@ -83,7 +83,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.meta).to.have.property('_dd.integration', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -103,7 +103,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -123,7 +123,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(span.meta).to.have.property(ERROR_STACK, error.stack)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -163,7 +163,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('amqp.routingKey', 'routingKey')
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -183,7 +183,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(span.meta).to.have.property(ERROR_STACK, error.stack)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -218,7 +218,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('span.kind', 'consumer')
                   expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 5)
+                })
                 .then(done)
                 .catch(done)
 
@@ -552,7 +552,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-custom-service')
               expect(traces[0][0]).to.have.property('resource', `queue.declare ${queue}`)
-            }, 2)
+            })
             .then(done)
             .catch(done)
 

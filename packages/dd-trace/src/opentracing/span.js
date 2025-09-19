@@ -146,7 +146,7 @@ class DatadogSpan {
   }
 
   /**
-   * @returns {DatadogSpanContext}
+   * @returns {import('../priority_sampler').DatadogSpanContext}
    */
   context () {
     return this._spanContext

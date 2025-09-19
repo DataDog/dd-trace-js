@@ -7,7 +7,7 @@ function waitForMemcached () {
   return new Promise((resolve, reject) => {
     const operation = new RetryOperation('memcached')
 
-    operation.attempt(currentAttempt => {
+    operation.attempt(() => {
       const memcached = new Memcached('localhost:11211', { retries: 0 })
 
       memcached.version((err, version) => {
@@ -15,7 +15,7 @@ function waitForMemcached () {
         if (err) return reject(err)
 
         memcached.end()
-        resolve()
+        resolve(undefined)
       })
     })
   })

@@ -1,5 +1,78 @@
 'use strict'
 
+/**
+ * AST node types and test case shapes for devtools condition expressions.
+ * These typedefs intentionally avoid the `any` type and aim to be as precise as practical.
+ *
+ * @typedef {{ ref: string }} RefExpression
+ * @typedef {{ getmember: [Expression, string|RefExpression] }} GetMemberExpression
+ * @typedef {{ index: [Expression, number|string|RefExpression] }} IndexExpression
+ * @typedef {{ len: Expression }} LenExpression
+ * @typedef {{ count: Expression }} CountExpression
+ * @typedef {{ isEmpty: Expression }} IsEmptyExpression
+ * @typedef {{ eq: [Expression, Expression] }} EqExpression
+ * @typedef {{ ne: [Expression, Expression] }} NeExpression
+ * @typedef {{ gt: [Expression, Expression] }} GtExpression
+ * @typedef {{ ge: [Expression, Expression] }} GeExpression
+ * @typedef {{ lt: [Expression, Expression] }} LtExpression
+ * @typedef {{ le: [Expression, Expression] }} LeExpression
+ * @typedef {{ substring: [Expression, number, (number|undefined)?] }} SubstringExpression
+ * @typedef {{ startsWith: [Expression, string|RefExpression] }} StartsWithExpression
+ * @typedef {{ endsWith: [Expression, string|RefExpression] }} EndsWithExpression
+ * @typedef {{ any: [Expression, Expression] }} AnyExpression
+ * @typedef {{ all: [Expression, Expression] }} AllExpression
+ * @typedef {{ or: [Expression, Expression] }} OrExpression
+ * @typedef {{ and: [Expression, Expression] }} AndExpression
+ * @typedef {{ filter: [Expression, Expression] }} FilterExpression
+ * @typedef {{ not: Expression }} NotExpression
+ * @typedef {{ contains: [Expression, Expression] }} ContainsExpression
+ * @typedef {{ matches: [Expression, string|Expression] }} MatchesExpression
+ * @typedef {{ instanceof: [Expression, string] }} InstanceofExpression
+ * @typedef {{ isDefined: Expression }} IsDefinedExpression
+ *
+ * @typedef {null|boolean|number|string|bigint} Literal
+ *
+ * @typedef {Literal|
+ *   RefExpression|
+ *   GetMemberExpression|
+ *   IndexExpression|
+ *   LenExpression|
+ *   CountExpression|
+ *   IsEmptyExpression|
+ *   EqExpression|
+ *   NeExpression|
+ *   GtExpression|
+ *   GeExpression|
+ *   LtExpression|
+ *   LeExpression|
+ *   SubstringExpression|
+ *   StartsWithExpression|
+ *   EndsWithExpression|
+ *   AnyExpression|
+ *   AllExpression|
+ *   OrExpression|
+ *   AndExpression|
+ *   FilterExpression|
+ *   NotExpression|
+ *   ContainsExpression|
+ *   MatchesExpression|
+ *   InstanceofExpression|
+ *   IsDefinedExpression} Expression
+ *
+ * @typedef {Object.<string, unknown>} VariableBindings
+ *
+ * @typedef {[Expression, VariableBindings, unknown]} TestCaseTuple
+ * @typedef {{
+ *   ast: Expression,
+ *   vars?: VariableBindings,
+ *   expected?: unknown,
+ *   execute?: boolean,
+ *   before?: () => void,
+ *   suffix?: string
+ * }} TestCaseObject
+ * @typedef {TestCaseTuple|TestCaseObject} TestCase
+ */
+
 class CustomObject {}
 class HasInstanceSideEffect {
   static [Symbol.hasInstance] () { throw new Error('This should never throw!') }
@@ -9,9 +82,15 @@ const objectWithToPrimitiveSymbol = Object.create(Object.prototype, {
   [Symbol.toPrimitive]: { value: () => { throw new Error('This should never throw!') } }
 })
 class EvilRegex extends RegExp {
-  exec () { throw new Error('This should never throw!') }
+  /**
+   * @override
+   * @param {string} string
+   * @returns {RegExpExecArray | null}
+   */
+  exec (string) { throw new Error('This should never throw!') }
 }
 
+/** @type {TestCase[]} */
 const literals = [
   [null, {}, null],
   [42, {}, 42],
@@ -19,6 +98,7 @@ const literals = [
   ['foo', {}, 'foo']
 ]
 
+/** @type {TestCase[]} */
 const references = [
   [{ ref: 'foo' }, { foo: 42 }, 42],
   [{ ref: 'foo' }, {}, new ReferenceError('foo is not defined')],
@@ -97,6 +177,7 @@ const references = [
   }
 ]
 
+/** @type {TestCase[]} */
 const propertyAccess = [
   [{ getmember: [{ ref: 'obj' }, 'foo'] }, { obj: { foo: 'test-me' } }, 'test-me'],
   [
@@ -175,6 +256,7 @@ const propertyAccess = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const sizes = [
   [{ len: { ref: 'str' } }, { str: 'hello' }, 5],
   [{ len: { ref: 'str' } }, { str: String('hello') }, 5],
@@ -242,6 +324,7 @@ const sizes = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const equality = [
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'foo' }, true],
   [{ eq: [{ ref: 'str' }, 'foo'] }, { str: 'bar' }, false],
@@ -396,6 +479,7 @@ const equality = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const stringManipulation = [
   [{ substring: [{ ref: 'str' }, 4, 7] }, { str: 'hello world' }, 'hello world'.substring(4, 7)],
   [{ substring: [{ ref: 'str' }, 4] }, { str: 'hello world' }, 'hello world'.substring(4)],
@@ -418,6 +502,7 @@ const stringManipulation = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const stringComparison = [
   [{ startsWith: [{ ref: 'str' }, 'hello'] }, { str: 'hello world!' }, true],
   [{ startsWith: [{ ref: 'str' }, 'world'] }, { str: 'hello world!' }, false],
@@ -476,6 +561,7 @@ const stringComparison = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const logicalOperators = [
   [{ any: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['foo', 'bar', ''] }, true],
   [{ any: [{ ref: 'arr' }, { isEmpty: { ref: '@it' } }] }, { arr: ['foo', 'bar', 'baz'] }, false],
@@ -498,6 +584,7 @@ const logicalOperators = [
   [{ and: [{ ref: 'bar' }, { ref: 'foo' }] }, { bar: 42 }, new ReferenceError('foo is not defined')]
 ]
 
+/** @type {TestCase[]} */
 const collectionOperations = [
   [{ filter: [{ ref: 'arr' }, { not: { isEmpty: { ref: '@it' } } }] }, { arr: ['foo', 'bar', ''] }, ['foo', 'bar']],
   [{ filter: [{ ref: 'tarr' }, { gt: [{ ref: '@it' }, 15] }] }, { tarr: new Int16Array([10, 20, 30]) }, [20, 30]],
@@ -518,6 +605,7 @@ const collectionOperations = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const membershipAndMatching = [
   [{ contains: [{ ref: 'str' }, 'world'] }, { str: 'hello world!' }, true],
   [{ contains: [{ ref: 'str' }, 'missing'] }, { str: 'hello world!' }, false],
@@ -625,6 +713,7 @@ const membershipAndMatching = [
   ]
 ]
 
+/** @type {TestCase[]} */
 const typeAndDefinitionChecks = [
   // Primitive types
   [{ instanceof: [{ ref: 'foo' }, 'string'] }, { foo: 'foo' }, true],
@@ -668,6 +757,14 @@ const typeAndDefinitionChecks = [
   { ast: { isDefined: { ref: 'foo' } }, suffix: '', expected: false }
 ]
 
+/**
+ * Define a getter on the provided object that throws on access.
+ *
+ * @template T extends object
+ * @param {T} obj
+ * @param {string} propName
+ * @returns {T}
+ */
 function overloadPropertyWithGetter (obj, propName) {
   Object.defineProperty(obj, propName, {
     get () { throw new Error('This should never throw!') }
@@ -675,11 +772,57 @@ function overloadPropertyWithGetter (obj, propName) {
   return obj
 }
 
+/**
+ * Overwrite a method/property on the object with a throwing function.
+ *
+ * @template T extends object
+ * @param {T} obj
+ * @param {PropertyKey} methodName
+ * @returns {T}
+ */
 function overloadMethod (obj, methodName) {
   obj[methodName] = () => { throw new Error('This should never throw!') }
   return obj
 }
 
+/**
+ * Create a subclass of the given built-in where the given property/method is overloaded
+ * in the prototype chain to throw, and return a further subclass constructor.
+ *
+ * @overload
+ * @param {StringConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {StringConstructor}
+ *
+ * @overload
+ * @param {ArrayConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {ArrayConstructor}
+ *
+ * @overload
+ * @param {Int16ArrayConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {Int16ArrayConstructor}
+ *
+ * @overload
+ * @param {Int32ArrayConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {Int32ArrayConstructor}
+ *
+ * @overload
+ * @param {SetConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {SetConstructor}
+ *
+ * @overload
+ * @param {MapConstructor} Builtin
+ * @param {PropertyKey} propName
+ * @returns {MapConstructor}
+ *
+ * @param {new (...args: unknown[]) => object} Builtin
+ * @param {PropertyKey} propName
+ * @returns {new (...args: unknown[]) => object}
+ */
 function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {
   class Klass extends Builtin {
     [propName] () { throw new Error('This should never throw!') }
@@ -690,6 +833,19 @@ function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {
   return SubKlass
 }
 
+/** @type {{
+ *  literals: TestCase[],
+ *  references: TestCase[],
+ *  propertyAccess: TestCase[],
+ *  sizes: TestCase[],
+ *  equality: TestCase[],
+ *  stringManipulation: TestCase[],
+ *  stringComparison: TestCase[],
+ *  logicalOperators: TestCase[],
+ *  collectionOperations: TestCase[],
+ *  membershipAndMatching: TestCase[],
+ *  typeAndDefinitionChecks: TestCase[]
+ * }} */
 module.exports = {
   literals,
   references,

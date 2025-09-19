@@ -81,7 +81,7 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: false
+          lOG_INJECTION: 'false'
         },
         stdio: 'pipe',
       })
