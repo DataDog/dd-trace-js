@@ -1,5 +1,6 @@
 'use strict'
 const iitm = require('../../../dd-trace/src/iitm')
+const path = require('path')
 const ritm = require('../../../dd-trace/src/ritm')
 
 /**
@@ -18,13 +19,15 @@ function Hook (modules, hookOptions, onrequire) {
   }
 
   const patched = new WeakMap()
+  this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    if (patched.has(moduleExports)) {
-      return patched.get(moduleExports)
-    }
+    const parts = [moduleBaseDir, moduleName].filter(Boolean)
+    const filename = path.join(...parts)
 
+    if (this._patched[filename] && patched.has(moduleExports)) return patched.get(moduleExports)
     let defaultWrapResult
+
     if (
       isIitm &&
       moduleExports.default &&
@@ -32,37 +35,16 @@ function Hook (modules, hookOptions, onrequire) {
         typeof moduleExports.default === 'function')
     ) {
       defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
-      if (moduleName === 'express') {
-        moduleExports.default = defaultWrapResult
-        patched.set(moduleExports, moduleExports)
-        return moduleExports
-      }
     }
 
     const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+
     if (defaultWrapResult) newExports.default = defaultWrapResult
-    /**
-     * TODO: Handle modules that use barrel files or exhibit unique patching edge cases.
-     *
-     * Known issues:
-     * - protobufjs: This module performs barrel filing by adding exports dynamically.
-     *   The first export lacks the properties we want to wrap, which causes it to be marked
-     *   as patched even though it wasn’t correctly patched.
-     *
-     * - express: Fails when the outer moduleExports is wrapped, and then its `.default`
-     *   export is wrapped again, leading to ESM tests failing.
-     *
-     * - aws-sdk: Patching `AWS.config` fails because the SDK reinstates its value even after
-     *   being initially patched.
-     *
-     * NOTE: Many of these issues were previously hidden because our caching mechanism used
-     * filename based keys, which ended up in modules rentering patching even though they should
-     * have been cached.
-     */
+
     if (newExports &&
-      (typeof newExports === 'object' || typeof newExports === 'function') &&
-      (moduleName === 'protobufjs' || !moduleName.includes('protobuf')) && !moduleName.includes('aws-sdk')) {
+      (typeof newExports === 'object' || typeof newExports === 'function')) {
       patched.set(moduleExports, newExports)
+      this._patched[filename] = true
     }
 
     return newExports
