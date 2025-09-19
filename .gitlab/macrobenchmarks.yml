@@ -78,8 +78,7 @@ only-tracing-with-runtime-metrics-enabled:
 
 check-slo-breaches:
   extends: .check-slo-breaches
-  stage: macrobenchmarks
-  needs: ["macrobenchmarks"]
+  stage: macrobenchmarks-gate
   when: always
   artifacts:
     name: "artifacts"
@@ -90,8 +89,7 @@ check-slo-breaches:
 
 notify-slo-breaches:
   extends: .notify-slo-breaches
-  stage: macrobenchmarks
-  needs: ["check-slo-breaches"]
+  stage: macrobenchmarks-notify
   when: always
   variables:
     CHANNEL: "notifications-apm-js"
