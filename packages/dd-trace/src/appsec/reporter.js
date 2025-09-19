@@ -92,7 +92,6 @@ const authenticationHeadersList = [
   'set-cookie'
 ]
 
-
 // these request headers are always collected - it breaks the expected spec orders
 const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
@@ -102,6 +101,7 @@ const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADE
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
+const AUTHENTICATION_HEADERS = new Set(authenticationHeadersList)
 
 function init (_config) {
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
@@ -150,17 +150,14 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = authenticationHeadersList.includes(headerName) ? '<redacted>' : String(headerValue)
+      result[getHeaderTag(tagPrefix, headerName)] = AUTHENTICATION_HEADERS.has(headerName)
+        ? '<redacted>'
+        : String(headerValue)
       counter++
     }
   }
 
   return result
-}
-
-// TODO remove when libddwaf start returning non string data in actions
-const isTrue = (val) => {
-  return typeof val === 'string' ? val.toLowerCase() === 'true' : val
 }
 
 function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}, extendedDataCollection) {
@@ -193,7 +190,8 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 
   // Extended collection
   // Set to avoid duplicates
-  const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length + Object.keys(requestEventCollectedHeaders).length
+  const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length +
+    Object.keys(requestEventCollectedHeaders).length
 
   const requestExtendedHeadersAvailableCount =
     maxHeadersCollected -
