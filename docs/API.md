@@ -421,64 +421,8 @@ The LoggerProvider is the main entry point for creating loggers. It follows the 
 const tracer = require('dd-trace').init()
 const { logs } = require('@opentelemetry/api-logs')
 
-// Get a logger from OpenTelemetry API
-const logger = logs.getLogger('my-service', '1.0.0')
-```
-
-#### Logger Usage
-
-Loggers support the standard OpenTelemetry log levels and methods:
-
-```javascript
-// Different log levels
-logger.emit({
-  severityText: 'DEBUG',
-  severityNumber: 5,
-  body: 'Debug message',
-  attributes: { debug: 'info' },
-  timestamp: Date.now() * 1000000
-})
-
-logger.emit({
-  severityText: 'INFO',
-  severityNumber: 9,
-  body: 'Info message',
-  attributes: { user: 'john' },
-  timestamp: Date.now() * 1000000
-})
-
-logger.emit({
-  severityText: 'WARN',
-  severityNumber: 13,
-  body: 'Warning message',
-  attributes: { warning: 'deprecated' },
-  timestamp: Date.now() * 1000000
-})
-
-logger.emit({
-  severityText: 'ERROR',
-  severityNumber: 17,
-  body: 'Error message',
-  attributes: { error: 'connection failed' },
-  timestamp: Date.now() * 1000000
-})
-
-logger.emit({
-  severityText: 'FATAL',
-  severityNumber: 21,
-  body: 'Fatal message',
-  attributes: { error: 'system crash' },
-  timestamp: Date.now() * 1000000
-})
-
-// Custom log record
-logger.emit({
-  severityText: 'INFO',
-  severityNumber: 9, // INFO level
-  body: 'Custom log message',
-  attributes: { custom: 'data' },
-  timestamp: Date.now() * 1000000 // nanoseconds
-})
+// Get a logger from OpenTelemetry API OR logging library with builtin otel support
+// Ex: const logger = logs.getLogger('my-service', '1.0.0')
 ```
 
 #### OTLP Export
