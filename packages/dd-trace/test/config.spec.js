@@ -2024,28 +2024,44 @@ describe('Config', () => {
   it('should send empty array when remote config is called on empty options', () => {
     const config = new Config()
 
-    config.configure({}, true)
+    config.configureRemoteConfig({}, true)
 
     expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
 
   it('should send remote config changes to telemetry', () => {
-    const config = new Config()
+    const config = new Config({ sampleRate: 1 })
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rate: 0
     }, true)
 
+    expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
     ])
   })
 
+  it('should not send telemetry updates if a complex object does not contain any changes', () => {
+    const config = new Config()
+
+    config.configureRemoteConfig({
+      tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
+    }, true)
+
+    config.configureRemoteConfig({
+      tracing_sampling_rules: [{ service: 'usersvc', sampleRate: 0.5 }]
+    }, true)
+
+    expect(updateConfig).to.be.calledThrice
+    expect(updateConfig.getCall(2).args[0]).to.deep.equal([])
+  })
+
   it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = new Config()
 
-    config.configure({
+    config.configureRemoteConfig({
       tracing_sampling_rules: [
         {
           resource: '*',
@@ -2074,7 +2090,7 @@ describe('Config', () => {
   it('should have consistent runtime-id after remote configuration updates tags', () => {
     const config = new Config()
     const runtimeId = config.tags['runtime-id']
-    config.configure({
+    config.configureRemoteConfig({
       tracing_tags: { foo: 'bar' }
     }, true)
 

@@ -126,9 +126,9 @@ class Tracer extends NoopProxy {
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
-            config.configure({}, true)
+            config.configureRemoteConfig()
           } else {
-            config.configure(conf.lib_config, true)
+            config.configureRemoteConfig(conf.lib_config)
           }
           this._enableOrDisableTracing(config)
         })
