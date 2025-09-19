@@ -20,7 +20,7 @@ function finish (ctx) {
   finishChannel.publish(ctx)
 }
 
-addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
+addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery, ...args) {
       if (!startChannel.hasSubscribers) {

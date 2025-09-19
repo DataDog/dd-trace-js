@@ -265,7 +265,7 @@ function canPublishResponsePayload (payload) {
     !ArrayBuffer.isView(payload) // TypedArray
 }
 
-addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
+addHook({ name: 'fastify', versions: ['>=3'] }, (fastify) => {
   const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
@@ -274,11 +274,11 @@ addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
   return wrapped
 })
 
-addHook({ name: 'fastify', versions: ['2'] }, fastify => {
+addHook({ name: 'fastify', versions: ['2'] }, (fastify) => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 })
 
-addHook({ name: 'fastify', versions: ['1'] }, fastify => {
+addHook({ name: 'fastify', versions: ['1'] }, (fastify) => {
   return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
 
