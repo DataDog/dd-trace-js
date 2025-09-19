@@ -100,7 +100,7 @@ const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
-const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
+const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
 const AUTHENTICATION_HEADERS = new Set(authenticationHeadersList)
 
 function init (_config) {
