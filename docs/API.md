@@ -379,6 +379,41 @@ The following attributes are available to override Datadog-specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
+<h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
+
+```javascript
+const tracer = require('dd-trace').init()
+const { logs } = require('@opentelemetry/api-logs')
+
+const logger = logs.getLogger('my-service', '1.0.0')
+logger.emit({
+  severityText: 'INFO',
+  severityNumber: 9,
+  body: 'Application started',
+  attributes: { version: '1.0.0' },
+  timestamp: Date.now() * 1000000
+})
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL (default: `http://localhost:4318/v1/logs`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format (default: `{}`)
+- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_PROTOCOL` - OTLP protocol fallback (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_TIMEOUT` - Request timeout in milliseconds (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
+- `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum queue size (default: `2048`)
+- `OTEL_BSP_EXPORT_TIMEOUT` - Export timeout in milliseconds (default: `30000`)
+
+Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>

@@ -568,6 +568,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOGS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -649,7 +650,19 @@ class Config {
       OTEL_RESOURCE_ATTRIBUTES,
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
-      OTEL_TRACES_SAMPLER_ARG
+      OTEL_TRACES_SAMPLER_ARG,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_PROTOCOL,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_EXPORTERS_OTLP_ENDPOINT,
+      OTEL_EXPORTERS_OTLP_HEADERS,
+      OTEL_EXPORTERS_OTLP_TIMEOUT,
+      OTEL_BSP_SCHEDULE_DELAY,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_BSP_MAX_QUEUE_SIZE,
+      OTEL_BSP_EXPORT_TIMEOUT
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -662,6 +675,28 @@ class Config {
     tagger.add(tags, this.#parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+
+    // OpenTelemetry logs configuration - processed after OTEL_RESOURCE_ATTRIBUTES
+    // Enable logs if DD_LOGS_OTEL_ENABLED is true
+    this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
+    this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTERS_OTLP_HEADERS)
+    // Handle OTLP protocol with grpc warning
+    const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
+    if (requestedProtocol === 'grpc') {
+      // eslint-disable-next-line no-console
+      console.warn('OTLP gRPC protocol is not supported for logs. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      this._setString(env, 'otelLogsProtocol', 'http/protobuf')
+    } else {
+      this._setString(env, 'otelLogsProtocol', requestedProtocol || 'http/protobuf')
+    }
+    this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT || OTEL_EXPORTERS_OTLP_TIMEOUT)
+    this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
+    this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    this._setUnit(env, 'otelLogsMaxQueueSize', OTEL_BSP_MAX_QUEUE_SIZE)
+    this._setUnit(env, 'otelLogsExportTimeoutMillis', OTEL_BSP_EXPORT_TIMEOUT)
 
     this._setBoolean(env, 'apmTracingEnabled', coalesce(
       DD_APM_TRACING_ENABLED,
@@ -1185,6 +1220,7 @@ class Config {
       calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
+
     calc['dogstatsd.hostname'] = this._getHostname()
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))

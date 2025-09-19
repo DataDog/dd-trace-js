@@ -7,6 +7,7 @@ require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
+require,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@isaacs/ttlcache,ISC,Copyright (c) 2022-2023 - Isaac Z. Schlueter and Contributors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
