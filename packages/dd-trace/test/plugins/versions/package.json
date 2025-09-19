@@ -178,6 +178,7 @@
     "sinon": "21.0.0",
     "sqlite3": "5.1.7",
     "tedious": "19.0.0",
+    "tinypool": "2.0.0",
     "typescript": "5.9.2",
     "undici": "7.16.0",
     "vitest": "3.2.4",

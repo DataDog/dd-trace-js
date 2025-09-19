@@ -68,7 +68,8 @@ versions.forEach((version) => {
       sandbox = await createSandbox([
         `vitest@${version}`,
         `@vitest/coverage-istanbul@${version}`,
-        `@vitest/coverage-v8@${version}`
+        `@vitest/coverage-v8@${version}`,
+        'tinypool'
       ], true)
       cwd = sandbox.folder
     })
@@ -1261,6 +1262,8 @@ versions.forEach((version) => {
                 ddsource: 'dd_debugger',
                 level: 'error'
               })
+              assert.include(diLog.ddtags, 'git.repository_url:')
+              assert.include(diLog.ddtags, 'git.commit.sha:')
               assert.equal(diLog.debugger.snapshot.language, 'javascript')
               assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
                 a: {
@@ -2103,6 +2106,25 @@ versions.forEach((version) => {
           })
           runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
+      })
+    })
+
+    it('does not blow up when tinypool is used outside of a test', (done) => {
+      childProcess = exec('node ./ci-visibility/run-tinypool.mjs', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'pipe'
+      })
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', (code) => {
+        assert.include(testOutput, 'result 10')
+        assert.equal(code, 0)
+        done()
       })
     })
 
