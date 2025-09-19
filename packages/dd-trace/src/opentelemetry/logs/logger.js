@@ -13,8 +13,8 @@ const { sanitizeAttributes } = require('@opentelemetry/core')
 /**
  * Logger provides methods to emit log records.
  *
- * This implementation follows the OpenTelemetry JavaScript SDK Logger:
- * https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk-logs.Logger.html
+ * This implementation follows the OpenTelemetry JavaScript API Logger:
+ * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api-logs.Logger.html
  *
  * @class Logger
  */
