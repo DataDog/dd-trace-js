@@ -51,20 +51,20 @@ describe('esm', () => {
         assert.propertyVal(payload[1][0].meta, 'messaging.system', 'eventhubs')
         assert.propertyVal(payload[1][0].meta, 'messaging.destination.name', 'eh1')
         assert.propertyVal(payload[1][0].meta, 'messaging.operation', 'send')
-        assert.propertyVal(payload[1][0].meta, 'network.destination.name', '127.0.0.1')
+        assert.propertyVal(payload[1][0].meta, 'network.destination.name', '127.0.0.1:5673')
         assert.propertyVal(payload[1][0].metrics, 'messaging.batch.message_count', 2)
         // list of AMPQ messages
         assert.propertyVal(payload[2][0].meta, 'messaging.system', 'eventhubs')
         assert.propertyVal(payload[2][0].meta, 'messaging.destination.name', 'eh1')
         assert.propertyVal(payload[2][0].meta, 'messaging.operation', 'send')
-        assert.propertyVal(payload[2][0].meta, 'network.destination.name', '127.0.0.1')
+        assert.propertyVal(payload[2][0].meta, 'network.destination.name', '127.0.0.1:5673')
         assert.propertyVal(payload[2][0].metrics, 'messaging.batch.message_count', 2)
         // Batch -> EventDataBatchImpl
         assert.propertyVal(payload[3][0].meta, 'messaging.system', 'eventhubs')
         assert.propertyVal(payload[3][0].meta, 'messaging.destination.name', 'eh1')
         assert.propertyVal(payload[3][0].meta, 'messaging.operation', 'send')
         assert.propertyVal(payload[3][0].meta, 'messaging.system', 'eventhubs')
-        assert.propertyVal(payload[3][0].meta, 'network.destination.name', '127.0.0.1')
+        assert.propertyVal(payload[3][0].meta, 'network.destination.name', '127.0.0.1:5673')
         assert.propertyVal(payload[3][0].metrics, 'messaging.batch.message_count', 4)
       })
 

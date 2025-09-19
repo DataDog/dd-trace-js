@@ -6,13 +6,13 @@ services:
   azurite:
     image: "mcr.microsoft.com/azure-storage/azurite:latest"
     ports:
-      - "127.0.0.1:10000:10000"
-      - "127.0.0.1:10001:10001"
-      - "127.0.0.1:10002:10002"
+        - "127.0.0.1:10000:10000"
+        - "127.0.0.1:10001:10001"
+        - "127.0.0.1:10002:10002"
   azureeventhubsemulator:
     image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     ports:
-      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:5673:5672"
       - "127.0.0.1:9092:9092"
     environment:
       BLOB_SERVER: azurite
@@ -21,17 +21,17 @@ services:
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     ports:
-        - "127.0.0.1:5672:5672"
-        - "127.0.0.1:5300:5300"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:5300:5300"
     environment:
-        ACCEPT_EULA: "Y"
-        MSSQL_SA_PASSWORD: "Localtestpass1!"
-        SQL_SERVER: azuresqledge
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Localtestpass1!"
+      SQL_SERVER: azuresqledge
   azuresqledge:
     image: mcr.microsoft.com/azure-sql-edge:1.0.7
     platform: linux/amd64
     ports:
-        - "127.0.0.1:1433:1433"
+      - "127.0.0.1:1433:1433"
     environment:
         ACCEPT_EULA: "Y"
         MSSQL_SA_PASSWORD: "Localtestpass1!"
