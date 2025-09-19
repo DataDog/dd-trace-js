@@ -219,24 +219,30 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
   fs.mkdirSync(folder)
+
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  try {
-    await exec(addCommand, addOptions)
-  } catch (e) { // retry in case of server error from registry
-    await exec(addCommand, addOptions)
-  }
+  // Create npm package first
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
 
-  for (const path of integrationTestsPaths) {
+  // Run package installation and file copying in parallel for better performance
+  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
+    // retry in case of server error from registry
+    return exec(addCommand, addOptions)
+  })
+
+  const fileCopyPromises = integrationTestsPaths.map(testPath => {
     if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      return exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await exec(`cp -R ${path} ${folder}`)
+      return exec(`cp -R ${testPath} ${folder}`)
     }
-  }
+  })
+
+  // Wait for both operations to complete
+  await Promise.all([packageInstallPromise, ...fileCopyPromises])
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
@@ -251,9 +257,10 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await exec('git config user.email "john@doe.com"', { cwd: folder })
-    await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
+    await exec(
+      'git config user.email "john@doe.com" && git config user.name "John Doe" && git config commit.gpgsign false',
+      { cwd: folder }
+    )
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
