@@ -1,0 +1,69 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-4.1\",\n  \"messages\": [\n    {\n      \"role\":
+      \"system\",\n      \"content\": \"You are a helpful assistant.\"\n    },\n    {\n
+      \     \"role\": \"user\",\n      \"content\": \"Hello, OpenAI!\"\n    }\n  ],\n
+      \ \"temperature\": 0.5,\n  \"stream\": false,\n  \"max_tokens\": 100,\n  \"n\":
+      1,\n  \"user\": \"dd-trace-test\"\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '297'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - AzureOpenAI/JS 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '0'
+    method: POST
+    uri: https://dd.openai.azure.com/openai/deployments/gpt-4.1/chat/completions?api-version=2024-05-01-preview
+  response:
+    body:
+      string: '{"error":{"code":"401","message":"Access denied due to invalid subscription
+        key or wrong API endpoint. Make sure to provide a valid key for an active
+        subscription and use a correct regional API endpoint for your resource."}}'
+    headers:
+      Content-Length:
+      - '224'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 20 Aug 2025 13:52:24 GMT
+      apim-request-id:
+      - b198bf3e-4771-4a89-896f-1ba58f66e45d
+    status:
+      code: 401
+      message: PermissionDenied
+version: 1

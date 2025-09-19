@@ -13,6 +13,10 @@ updates:
       - "/.github/workflows/*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     groups:
       gh-actions-packages:
         patterns:
@@ -27,6 +31,10 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies

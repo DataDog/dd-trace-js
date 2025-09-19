@@ -197,6 +197,11 @@ jobs:
         ports:
           - 9092:9092
           - 9093:9093
+        options: >-
+          --health-cmd "nc -z localhost 9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PLUGINS: confluentinc-kafka-javascript
       SERVICES: kafka
@@ -437,6 +442,11 @@ jobs:
         ports:
           - 9092:9092
           - 9093:9093
+        options: >-
+          --health-cmd "nc -z localhost 9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PLUGINS: kafkajs
       SERVICES: kafka
