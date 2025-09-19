@@ -1,7 +1,9 @@
 'use strict'
 
+const assert = require('assert')
+
 describe('jest-test-suite-visibility', () => {
   it('works', () => {
-    expect(true).toEqual(true)
+    assert.strictEqual(true, true)
   })
 })

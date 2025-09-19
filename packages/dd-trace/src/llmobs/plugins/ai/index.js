@@ -84,7 +84,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   findToolName (toolDescription) {
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
-      if (description === toolDescription) {
+      if (description === toolDescription && availableTool.id) {
         return availableTool.id
       }
     }

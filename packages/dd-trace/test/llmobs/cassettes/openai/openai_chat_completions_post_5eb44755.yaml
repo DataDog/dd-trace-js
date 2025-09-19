@@ -1,0 +1,216 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\":
+      \"system\",\n      \"content\": \"You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer You are an expert software engineer You are an expert
+      software engineer You are an expert software engineer You are an expert software
+      engineer You are an expert software engineer You are an expert software engineer
+      You are an expert software engineer You are an expert software engineer You
+      are an expert software engineer You are an expert software engineer You are
+      an expert software engineer \"\n    },\n    {\n      \"role\": \"user\",\n      \"content\":
+      \"What are the best practices for API design?\"\n    }\n  ],\n  \"temperature\":
+      0.5,\n  \"stream\": false,\n  \"max_tokens\": 100,\n  \"n\": 1,\n  \"user\":
+      \"dd-trace-test\"\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '7497'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v20.16.0
+    method: POST
+    uri: https://api.openai.com/v1/chat/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"chatcmpl-CG9zpl00q1Tkl1iq57Kg9uxl110AY\",\n  \"object\":
+        \"chat.completion\",\n  \"created\": 1757967709,\n  \"model\": \"gpt-4o-2024-08-06\",\n
+        \ \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\":
+        \"assistant\",\n        \"content\": \"Designing an API involves careful planning
+        to ensure it is efficient, scalable, and easy to use. Here are some best practices
+        for API design:\\n\\n1. **Consistency**: Use consistent naming conventions,
+        URL structures, and response formats. This helps users predict how the API
+        works and reduces the learning curve.\\n\\n2. **RESTful Principles**: If designing
+        a REST API, adhere to REST principles such as statelessness, resource-based
+        URLs, and using HTTP methods appropriately (GET, POST, PUT\",\n        \"refusal\":
+        null,\n        \"annotations\": []\n      },\n      \"logprobs\": null,\n
+        \     \"finish_reason\": \"length\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\":
+        1221,\n    \"completion_tokens\": 100,\n    \"total_tokens\": 1321,\n    \"prompt_tokens_details\":
+        {\n      \"cached_tokens\": 0,\n      \"audio_tokens\": 0\n    },\n    \"completion_tokens_details\":
+        {\n      \"reasoning_tokens\": 0,\n      \"audio_tokens\": 0,\n      \"accepted_prediction_tokens\":
+        0,\n      \"rejected_prediction_tokens\": 0\n    }\n  },\n  \"service_tier\":
+        \"default\",\n  \"system_fingerprint\": \"fp_f33640a400\"\n}\n"
+    headers:
+      CF-RAY:
+      - 97fad5255a5712f0-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 15 Sep 2025 20:21:51 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=wa_QeDTnmUHX9TLKoMTnkUN_wEt8xFD3soXKteMKkZM-1757967711-1.0.1.1-FirH7q6UFabyZ8znKAxaA3UpIBZ6qSkol1Tu9LFfBwMRsBSSt13LUgKSA._glAQknB6nIPLtmmMgcxoEgLkZM89fd0d_Rpz9Dg5O12EfMyg;
+        path=/; expires=Mon, 15-Sep-25 20:51:51 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=u_5JcjBltjvh8aFbjGdVQBVEEwzryucsSPuxmTbPzEQ-1757967711795-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-4
+      openai-processing-ms:
+      - '2642'
+      openai-project:
+      - proj_6cMiry5CHgK3zKotG0LtMb9H
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '2685'
+      x-openai-proxy-wasm:
+      - v0.1
+      x-ratelimit-limit-requests:
+      - '10000'
+      x-ratelimit-limit-tokens:
+      - '30000000'
+      x-ratelimit-remaining-requests:
+      - '9999'
+      x-ratelimit-remaining-tokens:
+      - '29998186'
+      x-ratelimit-reset-requests:
+      - 6ms
+      x-ratelimit-reset-tokens:
+      - 3ms
+      x-request-id:
+      - req_7ebf328d3bf7481387c7d622aa76c47d
+    status:
+      code: 200
+      message: OK
+version: 1

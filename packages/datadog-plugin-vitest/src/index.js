@@ -40,6 +40,7 @@ const {
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { DD_MAJOR } = require('../../../version')
+const id = require('../../dd-trace/src/id')
 
 // Milliseconds that we subtract from the error test duration
 // so that they do not overlap with the following test
@@ -55,8 +56,12 @@ class VitestPlugin extends CiPlugin {
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
+      if (!knownTests.vitest) {
+        return onDone(false)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testsForThisTestSuite = knownTests[testSuite] || []
+      const testsForThisTestSuite = knownTests.vitest[testSuite] || []
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
@@ -400,6 +405,39 @@ class VitestPlugin extends CiPlugin {
         autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
       this.tracer._exporter.flush(onFinish)
+    })
+
+    this.addSub('ci:vitest:worker-report:trace', (traces) => {
+      const formattedTraces = JSON.parse(traces)
+
+      for (const trace of formattedTraces) {
+        for (const span of trace) {
+          span.span_id = id(span.span_id)
+          span.trace_id = id(span.trace_id)
+          span.parent_id = id(span.parent_id)
+
+          if (span.name?.startsWith('vitest.')) {
+            // augment with git information (since it will not be available in the worker)
+            for (const key in this.testEnvironmentMetadata) {
+              // CAREFUL: this bypasses the metadata/metrics distinction
+              // Be careful not to pass numbers in `meta`
+              if (key.startsWith('git.')) {
+                span.meta[key] = this.testEnvironmentMetadata[key]
+              }
+            }
+          }
+        }
+      }
+
+      formattedTraces.forEach(trace => {
+        this.tracer._exporter.export(trace)
+      })
+    })
+
+    this.addSub('ci:vitest:worker-report:logs', (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ logMessage }) => {
+        this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
+      })
     })
   }
 

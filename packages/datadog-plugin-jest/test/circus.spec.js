@@ -48,25 +48,29 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
   if (!isEvpProxyTest) {
     agent.setAvailableEndpoints([])
   }
-  return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
-    global.__libraryName__ = moduleName
-    global.__libraryVersion__ = version
+  return agent.load(
+    ['jest', 'http'],
+    { service: 'test' },
+    { isCiVisibility: true, experimental: { exporter } })
+    .then(() => {
+      global.__libraryName__ = moduleName
+      global.__libraryVersion__ = version
 
-    return {
-      jestExecutable: require(`../../../versions/jest@${version}`).get(),
-      jestCommonOptions: {
-        projects: [__dirname],
-        testPathIgnorePatterns: ['/node_modules/'],
-        coverageReporters: ['none'],
-        reporters: [],
-        silent: true,
-        testEnvironment: path.join(__dirname, 'env.js'),
-        testRunner: require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
-        cache: false,
-        maxWorkers: '50%'
+      return {
+        jestExecutable: require(`../../../versions/jest@${version}`).get(),
+        jestCommonOptions: {
+          projects: [__dirname],
+          testPathIgnorePatterns: ['/node_modules/'],
+          coverageReporters: ['none'],
+          reporters: [],
+          silent: true,
+          testEnvironment: path.join(__dirname, 'env.js'),
+          testRunner: require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
+          cache: false,
+          maxWorkers: '50%'
+        }
       }
-    }
-  })
+    })
 }
 
 describe('Plugin', function () {

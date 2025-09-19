@@ -51,6 +51,7 @@ let remainingTestsByFile = {}
 let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let isEarlyFlakeDetectionFaulty = false
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
@@ -63,6 +64,10 @@ const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+
+function isValidKnownTests (receivedKnownTests) {
+  return !!receivedKnownTests.playwright
+}
 
 function getTestFullyQualifiedName (test) {
   const fullname = getTestFullname(test)
@@ -79,8 +84,11 @@ function getTestProperties (test) {
 }
 
 function isNewTest (test) {
+  if (!isValidKnownTests(knownTests)) {
+    return false
+  }
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
-  const testsForSuite = knownTests?.playwright?.[testSuite] || []
+  const testsForSuite = knownTests.playwright[testSuite] || []
 
   return !testsForSuite.includes(getTestFullname(test))
 }
@@ -557,6 +565,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         } else {
           knownTests = receivedKnownTests
         }
+        if (!isValidKnownTests(receivedKnownTests)) {
+          isEarlyFlakeDetectionFaulty = true
+          isEarlyFlakeDetectionEnabled = false
+          isKnownTestsEnabled = false
+        }
       } catch (err) {
         isEarlyFlakeDetectionEnabled = false
         isKnownTestsEnabled = false
@@ -652,6 +665,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     testSessionFinishCh.publish({
       status: STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       onDone
     })

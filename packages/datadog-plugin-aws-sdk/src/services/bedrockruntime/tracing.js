@@ -3,7 +3,7 @@
 const BaseAwsSdkPlugin = require('../../base')
 const { parseModelId } = require('./utils')
 
-const enabledOperations = new Set(['invokeModel'])
+const enabledOperations = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 
 class BedrockRuntime extends BaseAwsSdkPlugin {
   static id = 'bedrockruntime'
@@ -17,7 +17,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     return super.isEnabled(request)
   }
 
-  generateTags (params, operation, response) {
+  generateTags (params, operation) {
     const { modelProvider, modelName } = parseModelId(params.modelId)
 
     return {

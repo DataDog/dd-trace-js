@@ -2,8 +2,7 @@
 
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
-const tracingChannel = require('dc-polyfill').tracingChannel
+const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:express:request:handle')
 

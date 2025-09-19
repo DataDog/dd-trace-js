@@ -7,6 +7,7 @@ const isIP = require('net').isIP
 const log = require('./log')
 const { URL, format } = require('url')
 const Histogram = require('./histogram')
+const defaults = require('./config_defaults')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -28,9 +29,9 @@ class DogStatsDClient {
       }
     }
 
-    this._host = options.host || 'localhost'
+    this._host = options.host || defaults['dogstatsd.hostname']
     this._family = isIP(this._host)
-    this._port = options.port || 8125
+    this._port = options.port || defaults['dogstatsd.port']
     this._prefix = options.prefix || ''
     this._tags = options.tags || []
     this._queue = []
@@ -182,7 +183,7 @@ class DogStatsDClient {
     } else if (config.port) {
       clientConfig.metricsProxyUrl = new URL(format({
         protocol: 'http:',
-        hostname: config.hostname || 'localhost',
+        hostname: config.hostname || defaults.hostname,
         port: config.port
       }))
     }

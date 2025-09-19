@@ -1,5 +1,7 @@
-import 'dd-trace/init.js'
 import OpenAI from 'openai'
+
+// load in openai agents to test iitm functionality
+import { Agent, run } from '@openai/agents' // eslint-disable-line no-unused-vars
 
 const params = {
   model: 'gpt-3.5-turbo-instruct',

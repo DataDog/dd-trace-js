@@ -36,6 +36,7 @@ const {
   getModifiedTestsFromDiff,
   getPullRequestBaseBranch
 } = require('./util/test')
+const { getRepositoryRoot } = require('./util/git')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -69,6 +70,18 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   playwright: 'playwright test',
   jest: 'jest'
 }
+
+const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
+  vitest_worker: 'vitest',
+  jest_worker: 'jest',
+  cucumber_worker: 'cucumber',
+  mocha_worker: 'mocha',
+  playwright_worker: 'playwright'
+}
+
+const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
+  'vitest'
+])
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -298,7 +311,20 @@ module.exports = class CiPlugin extends Plugin {
       this.di = getDiClient()
     }
 
-    this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
+    if (this.testConfiguration) { // no need to recalculate as it's constant
+      return
+    }
+
+    const exporter = this.config.experimental?.exporter
+    const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
+    this.shouldSkipGitMetadataExtraction = workerTestFramework &&
+      TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
+
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(
+      this.constructor.id,
+      this.config,
+      this.shouldSkipGitMetadataExtraction
+    )
 
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
@@ -318,9 +344,9 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || process.cwd()
+    this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
 
-    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
+    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.ciProviderName = ciProviderName
 

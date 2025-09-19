@@ -5,7 +5,12 @@ const { Kafka } = require('../../../../../versions/kafkajs').get()
 
 const kafka = new Kafka({
   clientId: 'setup-client',
-  brokers: ['127.0.0.1:9092']
+  brokers: ['127.0.0.1:9092'],
+  connectionTimeout: 10000,
+  retry: {
+    initialRetryTime: 1000,
+    retries: 120
+  }
 })
 const admin = kafka.admin()
 const producer = kafka.producer()
