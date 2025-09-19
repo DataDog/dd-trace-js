@@ -264,6 +264,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @param {Object} [options] - An options object
  * @param {number} [options.timeoutMs=1000] - The timeout in ms.
  * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+ * @param {boolean} [options.deleteHandlerAfterUse=true] - If true, delete the handler after use.
  * @param {Set} [handlers] - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
@@ -292,7 +293,9 @@ function runCallbackAgainstTraces (callback, options, handlers) {
 
     try {
       const result = callback.apply(null, arguments)
-      handlers.delete(handlerPayload)
+      if (options?.deleteHandlerAfterUse) {
+        handlers.delete(handlerPayload)
+      }
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
@@ -476,6 +479,7 @@ module.exports = {
    * @param {Object} [options] - An options object
    * @param {number} [options.timeoutMs=1000] - The timeout in ms.
    * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @param {boolean} [options.deleteHandlerAfterUse=true] - If true, delete the handler after use.
    * @returns Promise
    */
   assertSomeTraces (callback, options) {
@@ -490,6 +494,7 @@ module.exports = {
    * @param {Object} [options] - An options object
    * @param {number} [options.timeoutMs=1000] - The timeout in ms.
    * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @param {boolean} [options.deleteHandlerAfterUse=true] - If true, delete the handler after use.
    * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {

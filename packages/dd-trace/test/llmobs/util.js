@@ -217,8 +217,17 @@ function useLlmObs ({
     )
   }
 
+  /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
+
+  /** @type {Promise<Array<Array<Object>>>} */
   let llmobsTracesPromise
+
+  /** @type {Array<Object>} */
+  let apmSpans
+
+  /** @type {Array<Object>} */
+  let llmobsSpans
 
   useEnv({
     _DD_LLMOBS_FLUSH_INTERVAL: 0
@@ -234,18 +243,21 @@ function useLlmObs ({
   })
 
   beforeEach(() => {
+    apmSpans = []
+    llmobsSpans = []
+
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
-      return apmTraces
+      apmSpans.push(...apmTraces
         .flatMap(trace => trace)
-        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    })
+        .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0)))
+    }, { deleteHandlerAfterUse: false })
 
     llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
-      return llmobsTraces
+      llmobsSpans.push(...llmobsTraces
         .flatMap(trace => trace)
         .map(trace => trace.spans[0])
-        .sort((a, b) => a.start_ns - b.start_ns)
-    })
+        .sort((a, b) => a.start_ns - b.start_ns))
+    }, { deleteHandlerAfterUse: false })
   })
 
   after(() => {
@@ -254,8 +266,19 @@ function useLlmObs ({
     }, closeOptions))
   })
 
-  return async function () {
-    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+  return async function (numLlmObsSpans) {
+    if (!numLlmObsSpans) {
+      await Promise.all([apmTracesPromise, llmobsTracesPromise])
+
+      return { apmSpans, llmobsSpans }
+    }
+
+    // Wait until we have the expected number of LLMObs spans
+    await Promise.all([apmTracesPromise, llmobsTracesPromise])
+
+    while (llmobsSpans.length < numLlmObsSpans) {
+      await new Promise(resolve => setTimeout(resolve, 10)) // Wait 10ms before checking again
+    }
 
     return { apmSpans, llmobsSpans }
   }
