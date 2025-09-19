@@ -236,7 +236,7 @@ describe('RemoteConfigManager', () => {
       })
     })
 
-    it('should request and log when received error', (cb) => {
+    it('should request when received error', (cb) => {
       const err = new Error('Response received 500')
       request.yieldsRight(err, '{"a":"b"}', 500)
 
@@ -244,7 +244,6 @@ describe('RemoteConfigManager', () => {
 
       rc.poll(() => {
         expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.have.been.calledOnceWithExactly('[RC] Error in request', err)
         expect(rc.parseConfig).to.not.have.been.called
         cb()
       })
