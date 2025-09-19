@@ -75,16 +75,16 @@ function copyObjectProperties (original, wrapped, skipKey) {
  * @returns {Function} The wrapped function.
  */
 function wrapFunction (original, wrapper) {
-  // if (patched.has(original)) {
-  //   process._rawDebug('Entered wrap function ', patched.get(original).toString())
-  //   return patched.get(original)
-  // }
+  if (patched.has(original)) {
+    process._rawDebug('Entered wrap function ', patched.get(original).toString())
+    return patched.get(original)
+  }
 
   const wrapped = wrapper(original)
 
   if (typeof original === 'function') {
     // patched.set(original, wrapped)
-    // patched.set(wrapped, wrapped)
+    patched.set(wrapped, wrapped)
     assertNotClass(original)
     copyProperties(original, wrapped)
   }
@@ -152,7 +152,7 @@ function wrap (target, name, wrapper, options) {
     wrapped = wrapper(original)
 
     patched.set(wrapped, wrapped)
-    patched.set(original, wrapped)
+    // patched.set(original, wrapped)
     copyProperties(original, wrapped)
   }
 
