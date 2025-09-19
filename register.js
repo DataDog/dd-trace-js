@@ -7,11 +7,11 @@ const { pathToFileURL } = require('node:url')
 
 register('./loader-hook.mjs', pathToFileURL(__filename), {
   data: {
-    exclude: [
-      /langsmith/,
-      /openai\/_shims/,
-      /openai\/resources\/chat\/completions\/messages/,
-      /happy-dom/,
+    include: [
+      /vitest\/dist\/chunks\/coverage/,
+      /vitest\/dist\/chunks\/cac/,
+      /@vitest\/runner\/dist\/index/,
+      /tinypool\/dist\/index/,
     ]
   }
 })

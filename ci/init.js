@@ -14,6 +14,8 @@ const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
 const isPlaywrightWorker = !!getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')
 
+const isTestWorker = isJestWorker || isCucumberWorker || isMochaWorker || isVitestWorker || isPlaywrightWorker
+
 const packageManagers = [
   'npm',
   'yarn',
@@ -32,7 +34,7 @@ const options = {
 
 let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
 
-if (isPackageManager()) {
+if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
   shouldInit = false
 }
