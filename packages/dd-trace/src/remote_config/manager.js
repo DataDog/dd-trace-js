@@ -11,6 +11,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
+const defaults = require('../config_defaults')
 
 const clientId = uuid()
 
@@ -31,7 +32,7 @@ class RemoteConfigManager extends EventEmitter {
 
     this.url = config.url || new URL(format({
       protocol: 'http:',
-      hostname: config.hostname || 'localhost',
+      hostname: config.hostname || defaults.hostname,
       port: config.port
     }))
 

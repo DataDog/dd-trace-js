@@ -1,6 +1,11 @@
 'use strict'
 
-const Writable = require('stream').Writable
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const { Writable } = require('node:stream')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 

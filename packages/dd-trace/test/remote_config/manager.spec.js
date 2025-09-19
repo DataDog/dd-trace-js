@@ -1,6 +1,11 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const Capabilities = require('../../src/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
@@ -41,7 +46,7 @@ describe('RemoteConfigManager', () => {
 
     extraServices = []
 
-    RemoteConfigManager = proxyquire('../src/remote_config/manager', {
+    RemoteConfigManager = proxyquire('../../src/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../package.json': { version: '3.0.0' },

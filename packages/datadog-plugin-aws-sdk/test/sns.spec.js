@@ -1,6 +1,9 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+
 const sinon = require('sinon')
 const semver = require('semver')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')

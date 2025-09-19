@@ -1,7 +1,12 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
@@ -25,7 +30,6 @@ const {
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
-const axios = require('axios')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')

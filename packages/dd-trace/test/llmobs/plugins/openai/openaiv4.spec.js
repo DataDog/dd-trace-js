@@ -1,5 +1,10 @@
 'use strict'
 
+const chai = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const semifies = require('semifies')
+const sinon = require('sinon')
+
 const agent = require('../../../plugins/agent')
 const Sampler = require('../../../../src/sampler')
 const { DogStatsDClient } = require('../../../../src/dogstatsd')
@@ -7,8 +12,6 @@ const { NoopExternalLogger } = require('../../../../src/external-logger/src')
 const { withVersions } = require('../../../setup/mocha')
 
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, MOCK_STRING, MOCK_NUMBER } = require('../../util')
-const chai = require('chai')
-const semifies = require('semifies')
 const LLMObsSpanWriter = require('../../../../src/llmobs/writers/spans')
 
 const { expect } = chai
@@ -52,8 +55,7 @@ describe('integrations', () => {
       return agent.close({ ritmReset: false, wipe: true })
     })
 
-    // TODO: Remove the range cap once we support openai 5
-    withVersions('openai', 'openai', '>=4 <5', version => {
+    withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
       let realVersion
 
@@ -72,13 +74,13 @@ describe('integrations', () => {
         const AzureOpenAI = OpenAI.AzureOpenAI ?? OpenAI
         if (OpenAI.AzureOpenAI) {
           azureOpenai = new AzureOpenAI({
-            endpoint: 'https://dd.openai.azure.com/',
+            endpoint: 'http://127.0.0.1:9126/vcr/azure-openai',
             apiKey: 'test',
             apiVersion: '2024-05-01-preview'
           })
         } else {
           azureOpenai = new OpenAI({
-            baseURL: 'https://dd.openai.azure.com/',
+            baseURL: 'http://127.0.0.1:9126/vcr/azure-openai',
             apiKey: 'test',
             apiVersion: '2024-05-01-preview'
           })
@@ -603,6 +605,217 @@ describe('integrations', () => {
         })
 
         await checkSpan
+      })
+
+      it('submits a completion span with cached token metrics', async () => {
+        const basePrompt = 'You are an expert software engineer '.repeat(200) +
+        'What are the best practices for API design?'
+
+        const firstCheckSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createCompletion',
+            inputMessages: [
+              { content: basePrompt }
+            ],
+            outputMessages: [
+              { content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1209,
+              output_tokens: 100,
+              total_tokens: 1309
+            },
+            modelName: 'gpt-3.5-turbo-instruct',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
+        await openai.completions.create({
+          model: 'gpt-3.5-turbo-instruct',
+          prompt: basePrompt,
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1
+        })
+
+        await firstCheckSpan
+
+        const secondPrompt = 'You are an expert software engineer '.repeat(200) +
+        'How should I structure my database schema?'
+
+        const secondCheckSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createCompletion',
+            inputMessages: [
+              { content: secondPrompt }
+            ],
+            outputMessages: [
+              { content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1208,
+              output_tokens: 100,
+              total_tokens: 1308,
+              cache_read_input_tokens: 1152
+            },
+            modelName: 'gpt-4o-mini',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
+        await openai.completions.create({
+          model: 'gpt-4o-mini',
+          prompt: secondPrompt,
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1
+        })
+
+        await secondCheckSpan
+      })
+
+      it('submits a chat completion span with cached token metrics', async () => {
+        const baseMessages = [{ role: 'system', content: 'You are an expert software engineer '.repeat(200) }]
+
+        const firstCheckSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(0).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: baseMessages.concat(
+              [
+                {
+                  role: 'user',
+                  content: 'What are the best practices for API design?'
+                }
+              ]
+            ),
+            outputMessages: [
+              { role: 'assistant', content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1221,
+              output_tokens: 100,
+              total_tokens: 1321
+            },
+            modelName: 'gpt-4o',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+              user: 'dd-trace-test'
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: baseMessages.concat(
+            [
+              {
+                role: 'user',
+                content: 'What are the best practices for API design?'
+              }
+            ]
+          ),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        await firstCheckSpan
+
+        const secondCheckSpan = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          const spanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
+
+          const expected = expectedLLMObsLLMSpanEvent({
+            span,
+            spanKind: 'llm',
+            name: 'OpenAI.createChatCompletion',
+            inputMessages: baseMessages.concat(
+              [
+                {
+                  role: 'user',
+                  content: 'How should I structure my database schema?'
+                }
+              ]
+            ),
+            outputMessages: [
+              { role: 'assistant', content: MOCK_STRING }
+            ],
+            tokenMetrics: {
+              input_tokens: 1220,
+              output_tokens: 100,
+              total_tokens: 1320,
+              cache_read_input_tokens: 1152,
+            },
+            modelName: 'gpt-4o',
+            modelProvider: 'openai',
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: false,
+              user: 'dd-trace-test'
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          })
+
+          expect(spanEvent).to.deepEqualWithMockValues(expected)
+        })
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: baseMessages.concat([{ role: 'user', content: 'How should I structure my database schema?' }]),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        await secondCheckSpan
       })
     })
   })

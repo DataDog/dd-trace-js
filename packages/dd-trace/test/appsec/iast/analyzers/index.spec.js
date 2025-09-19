@@ -1,6 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 describe('Analyzers index', () => {
   let fakeAnalyzers

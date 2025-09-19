@@ -17,6 +17,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TELEMETRY_TEST_SESSION,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -70,6 +71,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:session:finish', ({
       status,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       onDone
     }) => {
@@ -79,7 +81,9 @@ class PlaywrightPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
-
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
       if (this.numFailedSuites > 0) {
         let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
         if (this.numFailedTests > 0) {

@@ -56,7 +56,7 @@ jobs:
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -70,7 +70,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   amqp10:
     runs-on: ubuntu-latest
@@ -87,7 +87,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   amqplib:
@@ -101,7 +101,7 @@ jobs:
       PLUGINS: amqplib
       SERVICES: rabbitmq
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   apollo:
@@ -109,7 +109,7 @@ jobs:
     env:
       PLUGINS: apollo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   avsc:
@@ -118,7 +118,7 @@ jobs:
       PLUGINS: avsc
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   axios:
@@ -126,7 +126,7 @@ jobs:
     env:
       PLUGINS: axios
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/upstream
 
   bunyan:
@@ -134,7 +134,7 @@ jobs:
     env:
       PLUGINS: bunyan
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cassandra:
@@ -148,7 +148,7 @@ jobs:
       PLUGINS: cassandra-driver
       SERVICES: cassandra
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   child_process:
@@ -156,7 +156,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -166,7 +166,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   confluentinc-kafka-javascript:
     strategy:
@@ -197,14 +197,19 @@ jobs:
         ports:
           - 9092:9092
           - 9093:9093
+        options: >-
+          --health-cmd "nc -z localhost 9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PLUGINS: confluentinc-kafka-javascript
       SERVICES: kafka
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
@@ -213,13 +218,17 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   couchbase:
     strategy:
       matrix:
         node-version: [eol]
-        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+        range:
+          # - '^2.6.12' skipping due to bug with couchbase integration that is blocking CI.
+          # TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
+          - '^3.0.7'
+          - '>=4.0.0 <4.2.0'
         include:
           - node-version: 18
             range: '>=4.2.0'
@@ -236,7 +245,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
       DD_INJECT_FORCE: 'true'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -244,14 +253,14 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   connect:
     runs-on: ubuntu-latest
     env:
       PLUGINS: connect
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   dns:
@@ -259,7 +268,7 @@ jobs:
     env:
       PLUGINS: dns
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -274,7 +283,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -289,7 +298,7 @@ jobs:
       PLUGINS: elasticsearch
       SERVICES: elasticsearch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -298,14 +307,14 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   express:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -316,7 +325,7 @@ jobs:
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   fetch:
@@ -324,7 +333,7 @@ jobs:
     env:
       PLUGINS: fetch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   fs:
@@ -332,7 +341,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   graphql:
@@ -340,7 +349,7 @@ jobs:
     env:
       PLUGINS: graphql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   grpc:
@@ -348,7 +357,7 @@ jobs:
     env:
       PLUGINS: grpc
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   hapi:
@@ -356,7 +365,7 @@ jobs:
     env:
       PLUGINS: hapi
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   hono:
@@ -364,7 +373,7 @@ jobs:
     env:
       PLUGINS: hono
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   http:
@@ -375,7 +384,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -386,14 +395,14 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   http2:
     runs-on: ubuntu-latest
     env:
       PLUGINS: http2
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -408,7 +417,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   kafkajs:
     strategy:
@@ -433,11 +442,16 @@ jobs:
         ports:
           - 9092:9092
           - 9093:9093
+        options: >-
+          --health-cmd "nc -z localhost 9092"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       PLUGINS: kafkajs
       SERVICES: kafka
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -448,14 +462,14 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   koa:
     runs-on: ubuntu-latest
     env:
       PLUGINS: koa
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   limitd-client:
@@ -473,7 +487,7 @@ jobs:
       PLUGINS: limitd-client
       SERVICES: limitd
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mariadb:
@@ -490,7 +504,7 @@ jobs:
       PLUGINS: mariadb
       SERVICES: mariadb
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   memcached:
@@ -504,7 +518,7 @@ jobs:
       PLUGINS: memcached
       SERVICES: memcached
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   microgateway-core:
@@ -512,7 +526,7 @@ jobs:
     env:
       PLUGINS: microgateway-core
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   moleculer:
@@ -520,7 +534,7 @@ jobs:
     env:
       PLUGINS: moleculer
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mongodb:
@@ -535,7 +549,7 @@ jobs:
       PACKAGE_NAMES: mongodb
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mongodb-core:
@@ -550,7 +564,7 @@ jobs:
       PACKAGE_NAMES: mongodb-core,express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mongoose:
@@ -564,7 +578,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mysql:
@@ -581,7 +595,7 @@ jobs:
       PLUGINS: mysql
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   mysql2:
@@ -598,7 +612,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   net:
@@ -606,7 +620,7 @@ jobs:
     env:
       PLUGINS: net
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -621,7 +635,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # TODO: fix performance issues and test more Node versions
   next:
@@ -662,7 +676,7 @@ jobs:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -671,7 +685,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   opensearch:
     runs-on: ubuntu-latest
@@ -687,7 +701,7 @@ jobs:
       PLUGINS: opensearch
       SERVICES: opensearch
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   # TODO: Install the Oracle client on the host and test Node >=16.
@@ -699,6 +713,7 @@ jobs:
       volumes:
         - /node20217:/node20217:rw,rshared
         - /node20217:/__e/node20:ro,rshared
+        - /node20217:/__e/node24:ro,rshared
     services:
       oracledb:
         image: gvenzl/oracle-xe:18-slim
@@ -727,7 +742,7 @@ jobs:
         run: |
           curl -LO https://unofficial-builds.nodejs.org/download/release/v20.19.3/node-v20.19.3-linux-x64-glibc-217.tar.xz
           tar -xf node-v20.19.3-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: eol
@@ -735,7 +750,7 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -743,7 +758,7 @@ jobs:
     env:
       PLUGINS: pino
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -755,7 +770,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   postgres:
     runs-on: ubuntu-latest
@@ -771,7 +786,7 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
   prisma:
     runs-on: ubuntu-latest
@@ -786,7 +801,7 @@ jobs:
       PLUGINS: prisma
       SERVICES: prisma
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   protobufjs:
@@ -795,7 +810,7 @@ jobs:
       PLUGINS: protobufjs
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   redis:
@@ -809,7 +824,7 @@ jobs:
       PLUGINS: redis
       SERVICES: redis
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   ioredis:
@@ -823,7 +838,7 @@ jobs:
       PLUGINS: ioredis
       SERVICES: ioredis
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   valkey:
@@ -837,7 +852,7 @@ jobs:
       PLUGINS: iovalkey
       SERVICES: valkey
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
@@ -847,7 +862,7 @@ jobs:
     env:
       PLUGINS: restify
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -870,7 +885,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
@@ -878,7 +893,7 @@ jobs:
     env:
       PLUGINS: router
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   sharedb:
@@ -886,7 +901,7 @@ jobs:
     env:
       PLUGINS: sharedb
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -895,7 +910,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   tedious:
     runs-on: ubuntu-latest
@@ -912,7 +927,7 @@ jobs:
       PLUGINS: tedious
       SERVICES: mssql
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -922,14 +937,14 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   undici:
     runs-on: ubuntu-latest
     env:
       PLUGINS: undici
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   winston:
@@ -937,5 +952,13 @@ jobs:
     env:
       PLUGINS: winston
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+
+  ws:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: ws
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test

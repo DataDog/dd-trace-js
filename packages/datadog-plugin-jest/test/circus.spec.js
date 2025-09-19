@@ -1,9 +1,12 @@
 'use strict'
-const fs = require('fs')
-const path = require('path')
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
 const semver = require('semver')
+
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -45,25 +48,29 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
   if (!isEvpProxyTest) {
     agent.setAvailableEndpoints([])
   }
-  return agent.load(['jest', 'http'], { service: 'test' }, { experimental: { exporter } }).then(() => {
-    global.__libraryName__ = moduleName
-    global.__libraryVersion__ = version
+  return agent.load(
+    ['jest', 'http'],
+    { service: 'test' },
+    { isCiVisibility: true, experimental: { exporter } })
+    .then(() => {
+      global.__libraryName__ = moduleName
+      global.__libraryVersion__ = version
 
-    return {
-      jestExecutable: require(`../../../versions/jest@${version}`).get(),
-      jestCommonOptions: {
-        projects: [__dirname],
-        testPathIgnorePatterns: ['/node_modules/'],
-        coverageReporters: ['none'],
-        reporters: [],
-        silent: true,
-        testEnvironment: path.join(__dirname, 'env.js'),
-        testRunner: require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
-        cache: false,
-        maxWorkers: '50%'
+      return {
+        jestExecutable: require(`../../../versions/jest@${version}`).get(),
+        jestCommonOptions: {
+          projects: [__dirname],
+          testPathIgnorePatterns: ['/node_modules/'],
+          coverageReporters: ['none'],
+          reporters: [],
+          silent: true,
+          testEnvironment: path.join(__dirname, 'env.js'),
+          testRunner: require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
+          cache: false,
+          maxWorkers: '50%'
+        }
       }
-    }
-  })
+    })
 }
 
 describe('Plugin', function () {

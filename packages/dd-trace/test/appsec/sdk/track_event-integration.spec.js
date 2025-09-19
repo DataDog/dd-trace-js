@@ -1,7 +1,10 @@
 'use strict'
 
-const agent = require('../../plugins/agent')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
+const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const { USER_KEEP } = require('../../../../../ext/priority')
 

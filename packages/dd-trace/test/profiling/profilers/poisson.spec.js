@@ -1,7 +1,9 @@
 'use strict'
 
-require('../../setup/tap')
-const assert = require('assert')
+const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert')
+
+require('../../setup/core')
 
 const PoissonProcessSamplingFilter = require('../../../src/profiling/profilers/poisson')
 

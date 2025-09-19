@@ -40,8 +40,24 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
+let isFlakyTestRetriesEnabled = false
+let flakyTestRetriesCount = 0
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let isEarlyFlakeDetectionFaulty = false
+let isKnownTestsEnabled = false
+let isTestManagementTestsEnabled = false
+let isImpactedTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
+let isDiEnabled = false
+let testCodeCoverageLinesTotal
+let isSessionStarted = false
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function getTestCommand () {
+  return `vitest ${process.argv.slice(2).join(' ')}`
+}
 
 function waitForHitProbe () {
   return new Promise(resolve => {
@@ -49,6 +65,10 @@ function waitForHitProbe () {
       resolve()
     }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
   })
+}
+
+function isValidKnownTests (receivedKnownTests) {
+  return !!receivedKnownTests.vitest
 }
 
 function getProvidedContext () {
@@ -121,6 +141,10 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
   })
 }
 
+function isCliApiPackage (vitestPackage) {
+  return vitestPackage.s?.name === 'startVitest'
+}
+
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
@@ -183,16 +207,6 @@ function getSortWrapper (sort, frameworkVersion) {
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
-    let isFlakyTestRetriesEnabled = false
-    let flakyTestRetriesCount = 0
-    let isEarlyFlakeDetectionEnabled = false
-    let earlyFlakeDetectionNumRetries = 0
-    let isEarlyFlakeDetectionFaulty = false
-    let isKnownTestsEnabled = false
-    let isTestManagementTestsEnabled = false
-    let isImpactedTestsEnabled = false
-    let testManagementAttemptToFixRetries = 0
-    let isDiEnabled = false
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
@@ -235,28 +249,33 @@ function getSortWrapper (sort, frameworkVersion) {
 
         const testFilepaths = await getFilePaths.call(this.ctx)
 
-        isEarlyFlakeDetectionFaultyCh.publish({
-          knownTests: knownTests.vitest || {},
-          testFilepaths,
-          onDone: (isFaulty) => {
-            isEarlyFlakeDetectionFaulty = isFaulty
+        if (isValidKnownTests(knownTests)) {
+          isEarlyFlakeDetectionFaultyCh.publish({
+            knownTests: knownTests.vitest,
+            testFilepaths,
+            onDone: (isFaulty) => {
+              isEarlyFlakeDetectionFaulty = isFaulty
+            }
+          })
+          if (isEarlyFlakeDetectionFaulty) {
+            isEarlyFlakeDetectionEnabled = false
+            log.warn('New test detection is disabled because the number of new tests is too high.')
+          } else {
+            // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
+            // Note: setting this.ctx.config.provide directly does not work because it's cached
+            try {
+              const workspaceProject = this.ctx.getCoreWorkspaceProject()
+              workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
+              workspaceProject._provided._ddKnownTests = knownTests
+              workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+            } catch {
+              log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
+            }
           }
-        })
-        if (isEarlyFlakeDetectionFaulty) {
-          isEarlyFlakeDetectionEnabled = false
-          log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
-          // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
-          // Note: setting this.ctx.config.provide directly does not work because it's cached
-          try {
-            const workspaceProject = this.ctx.getCoreWorkspaceProject()
-            workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
-            workspaceProject._provided._ddKnownTests = knownTests.vitest || {}
-            workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-            workspaceProject._provided._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          } catch {
-            log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
-          }
+          isEarlyFlakeDetectionFaulty = true
+          isEarlyFlakeDetectionEnabled = false
         }
       }
     }
@@ -303,8 +322,6 @@ function getSortWrapper (sort, frameworkVersion) {
       }
     }
 
-    let testCodeCoverageLinesTotal
-
     if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
         const totalCodeCoverage = await generateCoverage.apply(this, arguments)
@@ -318,48 +335,72 @@ function getSortWrapper (sort, frameworkVersion) {
       })
     }
 
-    shimmer.wrap(this.ctx, 'exit', exit => async function () {
-      let onFinish
-
-      const flushPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
-      const failedSuites = this.state.getFailedFilepaths()
-      let error
-      if (failedSuites.length) {
-        error = new Error(`Test suites failed: ${failedSuites.length}.`)
-      }
-
-      testSessionFinishCh.publish({
-        status: getSessionStatus(this.state),
-        testCodeCoverageLinesTotal,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onFinish
-      })
-
-      await flushPromise
-
-      return exit.apply(this, arguments)
-    })
+    shimmer.wrap(this.ctx, 'exit', getFinishWrapper)
+    shimmer.wrap(this.ctx, 'close', getFinishWrapper)
 
     return sort.apply(this, arguments)
   }
 }
 
-function getCreateCliWrapper (vitestPackage, frameworkVersion) {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
+function getFinishWrapper (exitOrClose) {
+  let isClosed = false
+  return async function () {
+    if (isClosed) { // needed because exit calls close
+      return exitOrClose.apply(this, arguments)
     }
-    const processArgv = process.argv.slice(2).join(' ')
-    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    return oldCreateCli.apply(this, arguments)
-  })
+    isClosed = true
+    let onFinish
+
+    const flushPromise = new Promise(resolve => {
+      onFinish = resolve
+    })
+    const failedSuites = this.state.getFailedFilepaths()
+    let error
+    if (failedSuites.length) {
+      error = new Error(`Test suites failed: ${failedSuites.length}.`)
+    }
+
+    testSessionFinishCh.publish({
+      status: getSessionStatus(this.state),
+      testCodeCoverageLinesTotal,
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      onFinish
+    })
+
+    await flushPromise
+
+    return exitOrClose.apply(this, arguments)
+  }
+}
+
+function getCliOrStartVitestWrapper (frameworkVersion) {
+  return function (oldCliOrStartVitest) {
+    return function () {
+      if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
+        return oldCliOrStartVitest.apply(this, arguments)
+      }
+      isSessionStarted = true
+      testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
+      return oldCliOrStartVitest.apply(this, arguments)
+    }
+  }
+}
+
+function getCreateCliWrapper (vitestPackage, frameworkVersion) {
+  shimmer.wrap(vitestPackage, 'c', getCliOrStartVitestWrapper(frameworkVersion))
 
   return vitestPackage
+}
+
+function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
+  if (!isCliApiPackage(cliApiPackage)) {
+    return cliApiPackage
+  }
+  shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+  return cliApiPackage
 }
 
 addHook({
@@ -735,6 +776,7 @@ addHook({
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
+// Following 3 wrappers are for test session start
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.5'],
@@ -746,6 +788,18 @@ addHook({
   versions: ['>=2.0.5'],
   filePattern: 'dist/chunks/cac.*'
 }, getCreateCliWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <2.0.5'],
+  filePattern: 'dist/vendor/cli-api.*'
+}, getStartVitestWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/cli-api.*'
+}, getStartVitestWrapper)
 
 // test suite start and finish
 // only relevant for workers

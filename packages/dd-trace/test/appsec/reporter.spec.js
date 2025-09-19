@@ -1,8 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')

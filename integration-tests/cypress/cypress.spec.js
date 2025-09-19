@@ -1,9 +1,12 @@
 'use strict'
 
+const { promisify } = require('util')
+const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const execPromise = promisify(exec)
 
 const { assert } = require('chai')
 
@@ -117,7 +120,7 @@ moduleTypes.forEach(({
     }
 
     this.retries(2)
-    this.timeout(60000)
+    this.timeout(80000)
     let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
@@ -128,6 +131,11 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
+
+      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // Install cypress' browser before running the tests
+      await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
+
       await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
         resolve()
@@ -187,19 +195,20 @@ moduleTypes.forEach(({
       })
     }
 
-    it('does not crash if badly init', (done) => {
+    it('does not crash if badly init', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
         ...restEnvVars
       } = getCiVisAgentlessConfig(receiver.port)
 
-      receiver.assertPayloadReceived(() => {
-        const error = new Error('it should not report test events')
-        done(error)
+      let hasReceivedEvents = false
+
+      const eventsPromise = receiver.assertPayloadReceived(() => {
+        hasReceivedEvents = true
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
-      let testOutput
+      let testOutput = ''
 
       childProcess = exec(
         testCommand,
@@ -221,24 +230,27 @@ moduleTypes.forEach(({
         testOutput += chunk.toString()
       })
 
-      // TODO: remove once we find the source of flakiness
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
+      await Promise.all([
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
 
-      childProcess.on('exit', () => {
+      assert.strictEqual(hasReceivedEvents, false)
+      // TODO: remove try/catch once we find the source of flakiness
+      try {
         assert.notInclude(testOutput, 'TypeError')
-        // TODO: remove try/catch once we find the source of flakiness
-        try {
-          assert.include(testOutput, '1 of 1 failed')
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log('---- Actual test output -----')
-          // eslint-disable-next-line no-console
-          console.log(testOutput)
-          throw e
-        }
-        done()
-      })
+        assert.include(testOutput, '1 of 1 failed')
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.log('---- Actual test output -----')
+        // eslint-disable-next-line no-console
+        console.log(testOutput)
+        // eslint-disable-next-line no-console
+        console.log('---- finish actual test output -----')
+        throw e
+      }
     })
 
     it('catches errors in hooks', (done) => {
@@ -1255,7 +1267,10 @@ moduleTypes.forEach(({
           known_tests_enabled: true
         })
 
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          cypress: {}
+        })
+
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
           ...restEnvVars
@@ -1415,6 +1430,68 @@ moduleTypes.forEach(({
             done()
           }).catch(done)
         })
+      })
+
+      it('disables early flake detection if known tests response is invalid', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: false
+        })
+
+        receiver.setKnownTests({
+          'not-cypress': {
+            'cypress/e2e/spec.cy.js': [
+              'other context fails'
+            ]
+          }
+        })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            // new tests are not detected
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
       })
     })
 

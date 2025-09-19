@@ -1,15 +1,18 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { it, describe, beforeEach, afterEach, context } = require('tap').mocha
+const proxyquire = require('proxyquire')
+
+const { readFileSync } = require('node:fs')
+const assert = require('node:assert/strict')
+const { once } = require('node:events')
+
+require('./setup/core')
+
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { it, describe } = require('tap/lib/mocha.js')
-const assert = require('assert/strict')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { once } = require('events')
 
 describe('Config', () => {
   let Config
@@ -40,8 +43,12 @@ describe('Config', () => {
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
+    const configDefaults = proxyquire('../src/config_defaults', {
+      './pkg': pkg
+    })
+
     Config = proxyquire('../src/config', {
-      './pkg': pkg,
+      './config_defaults': configDefaults,
       './log': log,
       './telemetry': { updateConfig },
       fs,
@@ -517,6 +524,7 @@ describe('Config', () => {
 
   it('should initialize from the default service', () => {
     pkg.name = 'test'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -526,6 +534,7 @@ describe('Config', () => {
 
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -2102,13 +2111,6 @@ describe('Config', () => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
 
-    const Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      fs,
-      os
-    })
-
     const config = new Config({
       appsec: {
         enabled: true,
@@ -2441,10 +2443,10 @@ describe('Config', () => {
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:env-var/dd-trace-js.git'
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
-      expect(config).to.have.property('repositoryUrl', 'https://github.com:env-var/dd-trace-js.git')
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
     })
     it('still reads git.properties if one of the env vars is missing', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
