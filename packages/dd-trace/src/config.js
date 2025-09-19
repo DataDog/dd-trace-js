@@ -653,6 +653,8 @@ class Config {
       OTEL_TRACES_SAMPLER_ARG,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_EXPORTERS_OTLP_ENDPOINT,
       OTEL_EXPORTERS_OTLP_HEADERS,
@@ -680,6 +682,16 @@ class Config {
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
     this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT)
     this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTERS_OTLP_HEADERS)
+    // Handle OTLP protocol with grpc warning
+    const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
+    if (requestedProtocol === 'grpc') {
+      // eslint-disable-next-line no-console
+      console.warn('OTLP gRPC protocol is not supported for logs. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      this._setString(env, 'otelLogsProtocol', 'http/protobuf')
+    } else {
+      this._setString(env, 'otelLogsProtocol', requestedProtocol || 'http/protobuf')
+    }
     this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT || OTEL_EXPORTERS_OTLP_TIMEOUT)
     this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
     this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)

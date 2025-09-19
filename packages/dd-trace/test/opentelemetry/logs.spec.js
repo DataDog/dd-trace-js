@@ -182,4 +182,82 @@ describe('OpenTelemetry Logs', () => {
     expect(logger).to.exist
     expect(typeof logger.emit).to.equal('function')
   })
+
+  describe('OTLP Protocol Configuration', () => {
+    it('should use default protocol when no environment variables are set', () => {
+      const Config = require('../../src/config')
+      delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+
+      const config = new Config()
+      expect(config.otelLogsProtocol).to.equal('http/protobuf')
+    })
+
+    it('should use OTEL_EXPORTER_OTLP_LOGS_PROTOCOL when set', () => {
+      const Config = require('../../src/config')
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+
+      const config = new Config()
+      expect(config.otelLogsProtocol).to.equal('http/json')
+    })
+
+    it('should fallback to OTEL_EXPORTER_OTLP_PROTOCOL when logs protocol not set', () => {
+      const Config = require('../../src/config')
+      delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json'
+
+      const config = new Config()
+      expect(config.otelLogsProtocol).to.equal('http/json')
+    })
+
+    it('should prioritize logs protocol over generic protocol', () => {
+      const Config = require('../../src/config')
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
+
+      const config = new Config()
+      expect(config.otelLogsProtocol).to.equal('http/json')
+    })
+
+    it('should handle invalid protocol values', () => {
+      const Config = require('../../src/config')
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'invalid-protocol'
+
+      const config = new Config()
+      expect(config.otelLogsProtocol).to.equal('invalid-protocol')
+    })
+
+    it('should work with both http/protobuf and http/json protocols', () => {
+      const Config = require('../../src/config')
+
+      // Test protobuf protocol
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/protobuf'
+      const config1 = new Config()
+      expect(config1.otelLogsProtocol).to.equal('http/protobuf')
+
+      // Test JSON protocol
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      const config2 = new Config()
+      expect(config2.otelLogsProtocol).to.equal('http/json')
+    })
+
+    it('should warn and default to http/protobuf when grpc protocol is set', () => {
+      const Config = require('../../src/config')
+      const originalWarn = console.warn
+      let warningMessage = ''
+      // eslint-disable-next-line no-console
+      console.warn = (msg) => { warningMessage = msg }
+
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
+      const config = new Config()
+
+      expect(config.otelLogsProtocol).to.equal('http/protobuf')
+      expect(warningMessage).to.include('OTLP gRPC protocol is not supported for logs')
+      expect(warningMessage).to.include('Defaulting to http/protobuf')
+
+      // eslint-disable-next-line no-console
+      console.warn = originalWarn
+    })
+  })
 })

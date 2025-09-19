@@ -292,7 +292,8 @@ class Tracer extends NoopProxy {
       const exporter = new OtlpHttpLogExporter({
         url: config.otelLogsUrl,
         headers: config.otelLogsHeaders,
-        timeout: config.otelLogsTimeout
+        timeout: config.otelLogsTimeout,
+        protocol: config.otelLogsProtocol
       })
 
       // Create batch processor using resolved config values

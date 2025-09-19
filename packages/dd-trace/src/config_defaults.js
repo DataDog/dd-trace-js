@@ -122,6 +122,7 @@ module.exports = {
   otelLogsEnabled: false,
   otelLogsUrl: 'http://localhost:4318/v1/logs',
   otelLogsHeaders: {},
+  otelLogsProtocol: 'http/protobuf',
   otelLogsTimeout: 10_000,
   otelLogsBatchTimeout: 5000,
   otelLogsMaxExportBatchSize: 512,
