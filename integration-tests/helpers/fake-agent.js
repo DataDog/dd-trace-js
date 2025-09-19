@@ -277,6 +277,12 @@ function buildExpressServer (agent) {
   app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
+  app.get('/info', (req, res) => {
+    res.json({
+      endpoints: ['/evp_proxy/v2']
+    })
+  })
+
   app.put('/v0.4/traces', (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
@@ -400,6 +406,14 @@ function buildExpressServer (agent) {
   app.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
     res.status(200).send()
     agent.emit('llmobs', {
+      headers: req.headers,
+      payload: req.body
+    })
+  })
+
+  app.post('/evp_proxy/v2/api/v2/track/exposures', (req, res) => {
+    res.status(200).send()
+    agent.emit('exposures', {
       headers: req.headers,
       payload: req.body
     })

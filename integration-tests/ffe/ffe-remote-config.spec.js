@@ -1,11 +1,11 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
-const ufcPayloads = require('./ffe/fixtures/ufc-payloads')
-const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../packages/dd-trace/src/remote_config/apply_states')
+const ufcPayloads = require('./fixtures/ufc-payloads')
+const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const FFE_FLAG_CONFIGURATION_RULES = 'FFE_FLAG_CONFIGURATION_RULES'
 
 describe('FFE Remote Configuration', () => {
@@ -17,11 +17,11 @@ describe('FFE Remote Configuration', () => {
     sandbox = await createSandbox(
       ['express'],
       false,
-      [path.join(__dirname, 'ffe')]
+      [path.join(__dirname, 'app')]
     )
 
     cwd = sandbox.folder
-    appFile = path.join(cwd, 'ffe', 'index.js')
+    appFile = path.join(cwd, 'app', 'index.js')
   })
 
   after(async function () {
