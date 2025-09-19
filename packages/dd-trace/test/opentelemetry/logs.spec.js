@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const tracer = require('../../')
 
 describe('OpenTelemetry Logs', () => {

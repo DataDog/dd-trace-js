@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach } = require('tap').mocha
 const OtlpTransformer = require('../../src/opentelemetry/logs/otlp_transformer')
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 
