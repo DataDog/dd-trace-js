@@ -83,6 +83,7 @@ function wrapFunction (original, wrapper) {
 
   if (typeof original === 'function') {
     patched.set(original, wrapped)
+    patched.set(wrapped, wrapped)
     assertNotClass(original)
     copyProperties(original, wrapped)
   }
