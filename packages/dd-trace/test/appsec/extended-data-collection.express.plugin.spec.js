@@ -9,7 +9,7 @@ const axios = require('axios')
 const assert = require('assert')
 const msgpack = require('@msgpack/msgpack')
 
-describe.only('extended data collection', () => {
+describe('extended data collection', () => {
   before(() => {
     return agent.load(['express', 'http'], { client: false })
   })
