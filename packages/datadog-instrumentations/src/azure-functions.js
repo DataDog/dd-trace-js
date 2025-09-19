@@ -8,7 +8,8 @@ const dc = require('dc-polyfill')
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
-addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
+addHook({ name: '@azure/functions', versions: ['>=4'] }, (azureFunction, _1, _2, isIitm) => {
+  if (isIitm && !azureFunction.default) return azureFunction
   const { app } = azureFunction
 
   // Http triggers

@@ -24,7 +24,8 @@ function wrapAddQueue (addQueue) {
 
 addHook({
   name: 'mongoose',
-  versions: ['>=4.6.4 <5', '5', '6', '>=7']
+  versions: ['>=4.6.4 <5', '5', '6', '>=7'],
+  file: 'lib/index.js'
 }, mongoose => {
   // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
   if (mongoose.Promise && mongoose.Promise !== global.Promise) {
