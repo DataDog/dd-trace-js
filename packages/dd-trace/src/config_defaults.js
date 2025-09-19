@@ -72,6 +72,7 @@ module.exports = {
   'experimental.exporter': undefined,
   flushInterval: 2000,
   flushMinSpans: 1000,
+  'ffe.enabled': false,
   gitMetadataEnabled: true,
   graphqlErrorExtensions: [],
   'grpc.client.error.statuses': GRPC_CLIENT_ERROR_STATUSES,

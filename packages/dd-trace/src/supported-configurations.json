@@ -64,6 +64,7 @@
     "DD_ENV": ["A"],
     "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": ["A"],
     "DD_EXTERNAL_ENV": ["A"],
+    "DD_FFE_ENABLED": ["A"],
     "DD_GIT_BRANCH": ["A"],
     "DD_GIT_COMMIT_AUTHOR_DATE": ["A"],
     "DD_GIT_COMMIT_AUTHOR_EMAIL": ["A"],
