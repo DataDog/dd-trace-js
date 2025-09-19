@@ -124,7 +124,7 @@ describe('OpenTelemetry Logs', () => {
     // Access the logger through OpenTelemetry API
     const { logs } = require('@opentelemetry/api-logs')
     const loggerProvider = logs.getLoggerProvider()
-    const activeProcessor = loggerProvider.getActiveLogProcessor()
+    const activeProcessor = loggerProvider.getActiveLogRecordProcessor()
 
     expect(activeProcessor).to.exist
     expect(typeof activeProcessor.forceFlush).to.equal('function')
@@ -244,6 +244,7 @@ describe('OpenTelemetry Logs', () => {
 
     it('should warn and default to http/protobuf when grpc protocol is set', () => {
       const Config = require('../../src/config')
+      // eslint-disable-next-line no-console
       const originalWarn = console.warn
       let warningMessage = ''
       // eslint-disable-next-line no-console

@@ -275,7 +275,7 @@ class Tracer extends NoopProxy {
         return
       }
 
-      const { LoggerProvider, BatchLogProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
+      const { LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
       const { logs } = require('@opentelemetry/api-logs')
       // Create logger provider
       const loggerProvider = new LoggerProvider({
@@ -297,7 +297,7 @@ class Tracer extends NoopProxy {
       })
 
       // Create batch processor using resolved config values
-      const processor = new BatchLogProcessor([exporter], {
+      const processor = new BatchLogRecordProcessor([exporter], {
         batchTimeout: config.otelLogsBatchTimeout,
         maxExportBatchSize: config.otelLogsMaxExportBatchSize,
         maxQueueSize: config.otelLogsMaxQueueSize,
@@ -305,7 +305,7 @@ class Tracer extends NoopProxy {
       })
 
       // Add processor to logger provider
-      loggerProvider.addLogProcessor(processor)
+      loggerProvider.addLogRecordProcessor(processor)
 
       // Register the logger provider globally with OpenTelemetry API
       logs.setGlobalLoggerProvider(loggerProvider)
