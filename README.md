@@ -94,12 +94,6 @@ If you would like to trace your bundled application then please read this page o
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
 
 
-## Datadog With OpenTelemetry
-
-### OpenTelemetry Tracing Support
+## Datadog With OpenTelemetery
 
 Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js.
-
-### OpenTelemetry Logs Support
-
-dd-trace-js includes experimental support for OpenTelemetry logs, allowing you to send log data using the OpenTelemetry Logs API. This implementation is based on the [OpenTelemetry Logs specification](https://opentelemetry.io/docs/specs/otel/logs/overview/) and follows the [OpenTelemetry JavaScript Logs API](https://opentelemetry.io/docs/instrumentation/js/logs/).
