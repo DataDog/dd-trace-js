@@ -389,7 +389,7 @@ Enable OpenTelemetry logs using standard OpenTelemetry environment variables:
 
 ```bash
 # Enable OpenTelemetry logs
-export OTEL_LOGS_EXPORTER=otlp
+export DD_LOGS_OTEL_ENABLED=true
 
 # OTLP endpoint URL
 export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318/v1/logs

@@ -58,6 +58,7 @@ const otelDdEnvMapping = {
   OTEL_TRACES_EXPORTER: 'DD_TRACE_ENABLED',
   OTEL_METRICS_EXPORTER: 'DD_RUNTIME_METRICS_ENABLED',
   OTEL_RESOURCE_ATTRIBUTES: 'DD_TAGS',
+  OTEL_LOGS_EXPORTER: undefined,
   OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED'
 }
 
@@ -110,6 +111,7 @@ function validateEnvVarType (envVar) {
       return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
     case 'OTEL_TRACES_EXPORTER':
     case 'OTEL_METRICS_EXPORTER':
+    case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() === 'none'
     default:
       return false
