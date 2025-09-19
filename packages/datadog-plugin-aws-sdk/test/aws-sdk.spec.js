@@ -44,7 +44,8 @@ describe('Plugin', () => {
               region: 'us-east-1',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
+              partition: 'aws'
             })
           }).then(done, done)
 
@@ -111,7 +112,8 @@ describe('Plugin', () => {
               region: 'us-east-1',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
+              partition: 'aws'
             })
           }).then(done, done)
 
