@@ -80,6 +80,9 @@ function createWrapRouterMethod (name) {
 
       layerMatchers.set(layer, matchers)
 
+      // Save matchers to consume it later on express.js for endpoint discovery
+      layer.ddMatchers = matchers
+
       if (layer.route) {
         METHODS.forEach(method => {
           if (typeof layer.route.stack === 'function') {
