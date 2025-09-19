@@ -1,0 +1,26 @@
+# Example of measurements can be seen here: https://benchmarking.us1.prod.dog/benchmarks?projectId=1
+
+# Thresholds set based on guidance in https://datadoghq.atlassian.net/wiki/spaces/APMINT/pages/5070193198/How+to+set+up+pre-release+performance+quality+gates#How-to-choose-thresholds-and-warning-ranges%3F
+
+experiments:
+  - name: Run SLO breach check
+    steps:
+      - name: SLO breach check
+        run: fail_on_breach
+        warning_range: 7
+        scenarios:
+          # Macrobenchmarks
+          - name: normal_operation/only-tracing
+            thresholds:
+              - agg_http_req_duration_p50 < 2 ms
+              - agg_http_req_duration_p99 < 15 ms
+          - name: normal_operation/only-tracing-with-runtime-metrics-enabled
+            thresholds:
+              - agg_http_req_duration_p50 < 2 ms
+              - agg_http_req_duration_p99 < 16 ms
+          - name: high_load/only-tracing
+            thresholds:
+              - throughput > 400 op/s
+          - name: high_load/only-tracing-with-runtime-metrics-enabled
+            thresholds:
+              - throughput > 400 op/s
