@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package opentelemetry.proto.collector.logs.v1;
 
-import "opentelemetry/proto/logs/v1/logs.proto";
+import "logs.proto";
 
 option go_package = "go.opentelemetry.io/collector/pdata/plog/plogotlp";
 

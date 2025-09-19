@@ -3,24 +3,8 @@
 /**
  * @fileoverview OTLP Transformer for OpenTelemetry logs
  *
- * VERSION SUPPORT:
- * - OTLP Protocol: v1.7.0
- * - Protobuf Definitions: v1.7.0 (vendored from opentelemetry-proto)
- * - Other versions are not supported
- *
- * NOTE: The official @opentelemetry/otlp-transformer package is tightly coupled to the
- * OpenTelemetry SDK and requires @opentelemetry/sdk-logs as a dependency. To avoid
- * pulling in the full SDK, we provide our own implementation that is heavily inspired
- * by the existing OpenTelemetry prior art.
- *
- * This implementation is based on:
- * - Official SDK Documentation: https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_sdk-logs.html
- * - OTLP Transformer: https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-otlp-transformer
- * - OTLP Protocol Specification: https://opentelemetry.io/docs/specs/otlp/
- *
- * Reference implementation (heavily inspired by):
- * - https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-otlp-transformer
- * - https://github.com/open-telemetry/opentelemetry-proto (v1.7.0)
+ * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
+ * Based on OTLP Protocol v1.7.0.
  */
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
@@ -118,11 +102,11 @@ class OtlpTransformer {
   }
 
   _transformLogRecord (logRecord) {
-    // const { _severityNumber } = this._getProtobufTypes()
+    const timestamp = logRecord.timestamp || Date.now() * 1_000_000
 
     return {
-      timeUnixNano: logRecord.timestamp || Date.now() * 1_000_000,
-      observedTimeUnixNano: logRecord.timestamp || Date.now() * 1_000_000,
+      timeUnixNano: timestamp,
+      observedTimeUnixNano: timestamp,
       severityNumber: this._mapSeverityNumber(logRecord.severityNumber || SeverityNumber.INFO),
       severityText: logRecord.severityText || 'INFO',
       body: this._transformBody(logRecord.body),
@@ -137,35 +121,43 @@ class OtlpTransformer {
   _mapSeverityNumber (severityNumber) {
     const { _severityNumber } = this._getProtobufTypes()
 
-    // Map OpenTelemetry API severity numbers to protobuf enum values
-    const severityMap = {
-      [SeverityNumber.TRACE]: _severityNumber.SEVERITY_NUMBER_TRACE,
-      [SeverityNumber.TRACE2]: _severityNumber.SEVERITY_NUMBER_TRACE2,
-      [SeverityNumber.TRACE3]: _severityNumber.SEVERITY_NUMBER_TRACE3,
-      [SeverityNumber.TRACE4]: _severityNumber.SEVERITY_NUMBER_TRACE4,
-      [SeverityNumber.DEBUG]: _severityNumber.SEVERITY_NUMBER_DEBUG,
-      [SeverityNumber.DEBUG2]: _severityNumber.SEVERITY_NUMBER_DEBUG2,
-      [SeverityNumber.DEBUG3]: _severityNumber.SEVERITY_NUMBER_DEBUG3,
-      [SeverityNumber.DEBUG4]: _severityNumber.SEVERITY_NUMBER_DEBUG4,
-      [SeverityNumber.INFO]: _severityNumber.SEVERITY_NUMBER_INFO,
-      [SeverityNumber.INFO2]: _severityNumber.SEVERITY_NUMBER_INFO2,
-      [SeverityNumber.INFO3]: _severityNumber.SEVERITY_NUMBER_INFO3,
-      [SeverityNumber.INFO4]: _severityNumber.SEVERITY_NUMBER_INFO4,
-      [SeverityNumber.WARN]: _severityNumber.SEVERITY_NUMBER_WARN,
-      [SeverityNumber.WARN2]: _severityNumber.SEVERITY_NUMBER_WARN2,
-      [SeverityNumber.WARN3]: _severityNumber.SEVERITY_NUMBER_WARN3,
-      [SeverityNumber.WARN4]: _severityNumber.SEVERITY_NUMBER_WARN4,
-      [SeverityNumber.ERROR]: _severityNumber.SEVERITY_NUMBER_ERROR,
-      [SeverityNumber.ERROR2]: _severityNumber.SEVERITY_NUMBER_ERROR2,
-      [SeverityNumber.ERROR3]: _severityNumber.SEVERITY_NUMBER_ERROR3,
-      [SeverityNumber.ERROR4]: _severityNumber.SEVERITY_NUMBER_ERROR4,
-      [SeverityNumber.FATAL]: _severityNumber.SEVERITY_NUMBER_FATAL,
-      [SeverityNumber.FATAL2]: _severityNumber.SEVERITY_NUMBER_FATAL2,
-      [SeverityNumber.FATAL3]: _severityNumber.SEVERITY_NUMBER_FATAL3,
-      [SeverityNumber.FATAL4]: _severityNumber.SEVERITY_NUMBER_FATAL4
+    if (!_severityNumber) {
+      // eslint-disable-next-line no-console
+      console.error('_severityNumber is undefined')
+      return 9 // Default to INFO
     }
 
-    return severityMap[severityNumber] || _severityNumber.SEVERITY_NUMBER_INFO
+    const severityMap = this._createSeverityMap(_severityNumber)
+    return severityMap[severityNumber] || _severityNumber.values.SEVERITY_NUMBER_INFO
+  }
+
+  _createSeverityMap (severityEnum) {
+    const map = {}
+    map[SeverityNumber.TRACE] = severityEnum.values.SEVERITY_NUMBER_TRACE
+    map[SeverityNumber.TRACE2] = severityEnum.values.SEVERITY_NUMBER_TRACE2
+    map[SeverityNumber.TRACE3] = severityEnum.values.SEVERITY_NUMBER_TRACE3
+    map[SeverityNumber.TRACE4] = severityEnum.values.SEVERITY_NUMBER_TRACE4
+    map[SeverityNumber.DEBUG] = severityEnum.values.SEVERITY_NUMBER_DEBUG
+    map[SeverityNumber.DEBUG2] = severityEnum.values.SEVERITY_NUMBER_DEBUG2
+    map[SeverityNumber.DEBUG3] = severityEnum.values.SEVERITY_NUMBER_DEBUG3
+    map[SeverityNumber.DEBUG4] = severityEnum.values.SEVERITY_NUMBER_DEBUG4
+    map[SeverityNumber.INFO] = severityEnum.values.SEVERITY_NUMBER_INFO
+    map[SeverityNumber.INFO2] = severityEnum.values.SEVERITY_NUMBER_INFO2
+    map[SeverityNumber.INFO3] = severityEnum.values.SEVERITY_NUMBER_INFO3
+    map[SeverityNumber.INFO4] = severityEnum.values.SEVERITY_NUMBER_INFO4
+    map[SeverityNumber.WARN] = severityEnum.values.SEVERITY_NUMBER_WARN
+    map[SeverityNumber.WARN2] = severityEnum.values.SEVERITY_NUMBER_WARN2
+    map[SeverityNumber.WARN3] = severityEnum.values.SEVERITY_NUMBER_WARN3
+    map[SeverityNumber.WARN4] = severityEnum.values.SEVERITY_NUMBER_WARN4
+    map[SeverityNumber.ERROR] = severityEnum.values.SEVERITY_NUMBER_ERROR
+    map[SeverityNumber.ERROR2] = severityEnum.values.SEVERITY_NUMBER_ERROR2
+    map[SeverityNumber.ERROR3] = severityEnum.values.SEVERITY_NUMBER_ERROR3
+    map[SeverityNumber.ERROR4] = severityEnum.values.SEVERITY_NUMBER_ERROR4
+    map[SeverityNumber.FATAL] = severityEnum.values.SEVERITY_NUMBER_FATAL
+    map[SeverityNumber.FATAL2] = severityEnum.values.SEVERITY_NUMBER_FATAL2
+    map[SeverityNumber.FATAL3] = severityEnum.values.SEVERITY_NUMBER_FATAL3
+    map[SeverityNumber.FATAL4] = severityEnum.values.SEVERITY_NUMBER_FATAL4
+    return map
   }
 
   _hexToBytes (hexString) {
@@ -173,10 +165,7 @@ class OtlpTransformer {
       return Buffer.alloc(0)
     }
 
-    // Remove any '0x' prefix
     const cleanHex = hexString.startsWith('0x') ? hexString.slice(2) : hexString
-
-    // Ensure even length
     const paddedHex = cleanHex.length % 2 === 0 ? cleanHex : '0' + cleanHex
 
     return Buffer.from(paddedHex, 'hex')

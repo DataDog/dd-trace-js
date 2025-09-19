@@ -33,24 +33,18 @@ function loadProtobufDefinitions () {
   try {
     // Load the proto files
     const protoDir = __dirname
-    const commonProto = path.join(protoDir, 'common.proto')
-    const resourceProto = path.join(protoDir, 'resource.proto')
-    const logsProto = path.join(protoDir, 'logs.proto')
-    const otlpProto = path.join(protoDir, 'otlp.proto')
+    const protoFiles = [
+      'common.proto',
+      'resource.proto',
+      'logs.proto',
+      'payload.proto'
+    ].map(file => path.join(protoDir, file))
 
-    // Check if proto files exist
-    if (!fs.existsSync(commonProto) || !fs.existsSync(resourceProto) ||
-        !fs.existsSync(logsProto) || !fs.existsSync(otlpProto)) {
+    if (!protoFiles.every(file => fs.existsSync(file))) {
       throw new Error('Proto files not found')
     }
 
-    // Load the root
-    _root = protobuf.loadSync([
-      commonProto,
-      resourceProto,
-      logsProto,
-      otlpProto
-    ])
+    _root = protobuf.loadSync(protoFiles)
 
     // Get the message types
     _logsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')

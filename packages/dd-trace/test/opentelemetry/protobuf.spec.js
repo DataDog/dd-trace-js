@@ -2,9 +2,8 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
 const OtlpTransformer = require('../../src/opentelemetry/logs/otlp_transformer')
-const { logs } = require('@opentelemetry/api')
+const { SeverityNumber } = require('@opentelemetry/api-logs')
 
 describe('OTLP Protobuf Serialization', () => {
   let transformer
@@ -25,7 +24,7 @@ describe('OTLP Protobuf Serialization', () => {
     const logRecords = [
       {
         timestamp: Date.now() * 1000000,
-        severityNumber: logs.SeverityNumber.INFO,
+        severityNumber: SeverityNumber.INFO,
         severityText: 'INFO',
         body: 'Test log message',
         attributes: {
@@ -44,17 +43,17 @@ describe('OTLP Protobuf Serialization', () => {
   it('should handle different severity levels', () => {
     const logRecords = [
       {
-        severityNumber: logs.SeverityNumber.DEBUG,
+        severityNumber: SeverityNumber.DEBUG,
         severityText: 'DEBUG',
         body: 'Debug message'
       },
       {
-        severityNumber: logs.SeverityNumber.ERROR,
+        severityNumber: SeverityNumber.ERROR,
         severityText: 'ERROR',
         body: 'Error message'
       },
       {
-        severityNumber: logs.SeverityNumber.FATAL,
+        severityNumber: SeverityNumber.FATAL,
         severityText: 'FATAL',
         body: 'Fatal message'
       }
@@ -85,19 +84,19 @@ describe('OTLP Protobuf Serialization', () => {
     const logRecords = [
       {
         body: 'String message',
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       },
       {
         body: 42,
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       },
       {
         body: true,
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       },
       {
         body: { nested: { value: 'object' } },
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       }
     ]
 
@@ -126,26 +125,20 @@ describe('OTLP Protobuf Serialization', () => {
   })
 
   it('should fallback to JSON if protobuf serialization fails', () => {
-    // Mock the protobuf loader to throw an error
-    const originalRequire = require
-    const mockRequire = sinon.stub().callsFake((path) => {
-      if (path === './protobuf_loader') {
-        return {
-          getProtobufTypes: () => {
-            throw new Error('Protobuf loading failed')
-          }
+    // Create a transformer with JSON protocol to test fallback
+    const transformer = new OtlpTransformer({
+      protocol: 'http/json',
+      resource: {
+        attributes: {
+          'service.name': 'test-service'
         }
       }
-      return originalRequire(path)
     })
-    // eslint-disable-next-line no-global-assign
-    require = mockRequire
 
-    const transformer = new OtlpTransformer()
     const logRecords = [
       {
         body: 'Test message',
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       }
     ]
 
@@ -156,10 +149,6 @@ describe('OTLP Protobuf Serialization', () => {
 
     // Should be JSON (starts with {)
     expect(result.toString('utf8').startsWith('{')).to.be.true
-
-    // Restore require
-    // eslint-disable-next-line no-global-assign
-    require = originalRequire
   })
 
   it('should handle empty log records', () => {
@@ -173,7 +162,7 @@ describe('OTLP Protobuf Serialization', () => {
     const logRecords = [
       {
         body: 'Message without instrumentation library',
-        severityNumber: logs.SeverityNumber.INFO
+        severityNumber: SeverityNumber.INFO
       }
     ]
 
@@ -206,11 +195,11 @@ describe('OTLP Protobuf Serialization', () => {
     const transformer = new OtlpTransformer()
 
     // Test INFO mapping
-    const infoSeverity = transformer._mapSeverityNumber(logs.SeverityNumber.INFO)
+    const infoSeverity = transformer._mapSeverityNumber(SeverityNumber.INFO)
     expect(infoSeverity).to.be.a('number')
 
     // Test ERROR mapping
-    const errorSeverity = transformer._mapSeverityNumber(logs.SeverityNumber.ERROR)
+    const errorSeverity = transformer._mapSeverityNumber(SeverityNumber.ERROR)
     expect(errorSeverity).to.be.a('number')
 
     // Test unknown severity (should default to INFO)

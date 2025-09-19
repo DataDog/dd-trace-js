@@ -3,24 +3,8 @@
 /**
  * @fileoverview Logger implementation for OpenTelemetry logs
  *
- * VERSION SUPPORT:
- * - OTLP Protocol: v1.7.0
- * - Protobuf Definitions: v1.7.0 (vendored from opentelemetry-proto)
- * - Other versions are not supported
- *
- * NOTE: The official @opentelemetry/sdk-logs package is tightly coupled to the
- * OpenTelemetry SDK and includes many dependencies we don't need. To avoid
- * pulling in the full SDK, we provide our own implementation that is heavily inspired
- * by the existing OpenTelemetry prior art.
- *
- * This implementation is based on:
- * - Official SDK Documentation: https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_sdk-logs.html
- * - Logger Class: https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk-logs.Logger.html
- * - OpenTelemetry Logs API Specification: https://opentelemetry.io/docs/specs/otel/logs/api/
- *
- * Reference implementation (heavily inspired by):
- * - https://github.com/open-telemetry/opentelemetry-js/tree/v2.1.0/experimental/packages/sdk-logs
- * - https://github.com/open-telemetry/opentelemetry-proto/tree/v1.7.0
+ * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
+ * Based on OTLP Protocol v1.7.0.
  */
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
@@ -58,13 +42,6 @@ class Logger {
    * Emits a log record.
    *
    * @param {Object} logRecord - The log record to emit
-   * @param {string} logRecord.severityText - Severity text (e.g., 'INFO', 'ERROR')
-   * @param {number} logRecord.severityNumber - Severity number
-   * @param {string} logRecord.body - Log message body
-   * @param {Object} [logRecord.attributes] - Log attributes
-   * @param {number} [logRecord.timestamp] - Timestamp in nanoseconds
-   * @param {string} [logRecord.traceId] - Associated trace ID
-   * @param {string} [logRecord.spanId] - Associated span ID
    */
   emit (logRecord) {
     if (this._loggerProvider._isShutdown) {
@@ -76,62 +53,38 @@ class Logger {
       return
     }
 
-    // Sanitize attributes to ensure they conform to OpenTelemetry spec
     if (logRecord.attributes) {
       logRecord.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    // Add instrumentation library information
     logRecord.instrumentationLibrary = this.instrumentationLibrary
-
     processor.onEmit(logRecord)
   }
 
-  // Convenience methods for common log levels
   debug (message, attributes = {}) {
-    this.emit({
-      severityText: 'DEBUG',
-      severityNumber: SeverityNumber.DEBUG,
-      body: message,
-      attributes,
-      timestamp: Date.now() * 1_000_000 // Convert to nanoseconds
-    })
+    this._emitLog('DEBUG', SeverityNumber.DEBUG, message, attributes)
   }
 
   info (message, attributes = {}) {
-    this.emit({
-      severityText: 'INFO',
-      severityNumber: SeverityNumber.INFO,
-      body: message,
-      attributes,
-      timestamp: Date.now() * 1_000_000
-    })
+    this._emitLog('INFO', SeverityNumber.INFO, message, attributes)
   }
 
   warn (message, attributes = {}) {
-    this.emit({
-      severityText: 'WARN',
-      severityNumber: SeverityNumber.WARN,
-      body: message,
-      attributes,
-      timestamp: Date.now() * 1_000_000
-    })
+    this._emitLog('WARN', SeverityNumber.WARN, message, attributes)
   }
 
   error (message, attributes = {}) {
-    this.emit({
-      severityText: 'ERROR',
-      severityNumber: SeverityNumber.ERROR,
-      body: message,
-      attributes,
-      timestamp: Date.now() * 1_000_000
-    })
+    this._emitLog('ERROR', SeverityNumber.ERROR, message, attributes)
   }
 
   fatal (message, attributes = {}) {
+    this._emitLog('FATAL', SeverityNumber.FATAL, message, attributes)
+  }
+
+  _emitLog (severityText, severityNumber, message, attributes) {
     this.emit({
-      severityText: 'FATAL',
-      severityNumber: SeverityNumber.FATAL,
+      severityText,
+      severityNumber,
       body: message,
       attributes,
       timestamp: Date.now() * 1_000_000

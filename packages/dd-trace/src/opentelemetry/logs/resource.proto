@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package opentelemetry.proto.resource.v1;
 
-import "opentelemetry/proto/common/v1/common.proto";
+import "common.proto";
 
 option go_package = "go.opentelemetry.io/collector/pdata/pcommon";
 
