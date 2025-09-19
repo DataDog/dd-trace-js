@@ -44,7 +44,7 @@ function setGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, { getOr
     ? (path, line, column) => {
       // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
       // column because the sourcemap chaining is done during the rewriting process so we can skip it
-        return isPrivateModule(path) && !isDdTrace(path)
+        return !globalThis.__DD_ESBUILD_IAST_WITH_SM && isPrivateModule(path) && !isDdTrace(path)
           ? { path, line, column }
           : getOriginalPathAndLineFromSourceMap(path, line, column)
       }
@@ -170,7 +170,10 @@ function enableRewriter (telemetryVerbosity) {
       const rewriter = getRewriter(telemetryVerbosity)
       if (rewriter) {
         shimPrepareStackTrace()
-        shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+        if (!globalThis.__DD_ESBUILD_IAST_WITH_SM && !globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
+          // Avoid rewriting twice when application has been bundled
+          shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+        }
       }
     }
 
@@ -264,5 +267,5 @@ function enable (configArg) {
 }
 
 module.exports = {
-  enable, disable, getOriginalPathAndLineFromSourceMap
+  enable, disable, getOriginalPathAndLineFromSourceMap, getRewriter
 }
