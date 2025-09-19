@@ -133,7 +133,7 @@ describe('opentelemetry', () => {
         OTEL_RESOURCE_ATTRIBUTES: 'foo+bar13baz+qux1',
         DD_TRACE_PROPAGATION_STYLE: 'datadog, tracecontext',
         OTEL_PROPAGATORS: 'datadog, tracecontext',
-        DD_LOGS_OTEL_ENABLED: 'false',
+        OTEL_LOGS_EXPORTER: 'none',
         OTEL_SDK_DISABLED: 'false'
       }
     })
@@ -206,7 +206,7 @@ describe('opentelemetry', () => {
         OTEL_METRICS_EXPORTER: 'foo',
         OTEL_RESOURCE_ATTRIBUTES: 'foo',
         OTEL_PROPAGATORS: 'foo',
-        DD_LOGS_OTEL_ENABLED: 'foo',
+        OTEL_LOGS_EXPORTER: 'foo',
         OTEL_SDK_DISABLED: 'foo'
       }
     })
