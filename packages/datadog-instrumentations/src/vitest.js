@@ -3,6 +3,10 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const {
+  VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_LOGS_PAYLOAD_CODE
+} = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -30,6 +34,9 @@ const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detectio
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
 const impactedTestsCh = channel('ci:vitest:modified-tests')
 
+const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
+const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
 const newTasks = new WeakSet()
@@ -40,6 +47,7 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
+const workerProcesses = new WeakSet()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -394,6 +402,38 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
 
   return vitestPackage
 }
+
+function threadHandler (thread) {
+  if (workerProcesses.has(thread.process)) {
+    return
+  }
+  workerProcesses.add(thread.process)
+  thread.process.on('message', (message) => {
+    if (message.__tinypool_worker_message__ && message.data) {
+      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        workerReportTraceCh.publish(message.data)
+      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+        workerReportLogsCh.publish(message.data)
+      }
+    }
+  })
+}
+
+addHook({
+  name: 'tinypool',
+  versions: ['>=1.0.0'],
+  file: 'dist/index.js'
+}, (TinyPool) => {
+  shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
+    // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
+    this.threads.forEach(threadHandler)
+    const runResult = await run.apply(this, arguments)
+    this.threads.forEach(threadHandler)
+    return runResult
+  })
+
+  return TinyPool
+})
 
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (!isCliApiPackage(cliApiPackage)) {
@@ -911,7 +951,6 @@ addHook({
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
-    // TODO: fix too frequent flushes
     await onFinishPromise
 
     return startTestsResponse

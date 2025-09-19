@@ -300,7 +300,7 @@ function checkAndFetchBranch (branch, remoteName) {
       }
     } catch (e) {
       // branch does not exist or couldn't be fetched, so we can't do anything
-      log.error('Git plugin error checking and fetching branch', e)
+      log.debug('Git plugin error checking and fetching branch', e)
     }
   }
 }
@@ -450,6 +450,13 @@ function generatePackFilesForCommits (commitsToUpload) {
   return result
 }
 
+function getRepositoryRoot () {
+  return sanitizedExec(
+    'git',
+    ['rev-parse', '--show-toplevel']
+  )
+}
+
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
   const {
@@ -480,7 +487,7 @@ function getGitMetadata (ciMetadata) {
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%B'], null, null, null, false),
     [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
     [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel']),
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || getRepositoryRoot(),
   }
 
   if (headCommitSha) {
@@ -596,5 +603,6 @@ module.exports = {
   getLocalBranches,
   getMergeBase,
   getCounts,
-  fetchHeadCommitSha
+  fetchHeadCommitSha,
+  getRepositoryRoot
 }
