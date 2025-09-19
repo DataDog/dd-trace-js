@@ -531,22 +531,10 @@ describe('integrations', () => {
           n: 1
         })
 
-        const secondPrompt = 'You are an expert software engineer '.repeat(200) +
-        'How should I structure my database schema?'
-
-        await openai.completions.create({
-          model: 'gpt-4o-mini',
-          prompt: secondPrompt,
-          temperature: 0.5,
-          stream: false,
-          max_tokens: 100,
-          n: 1
-        })
-
-        const { apmSpans, llmobsSpans } = await getEvents(2)
+        let events = await getEvents()
 
         const expectedFirstLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: apmSpans[0],
+          span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
           inputMessages: [
@@ -571,8 +559,24 @@ describe('integrations', () => {
           tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
         })
 
+        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
+
+        const secondPrompt = 'You are an expert software engineer '.repeat(200) +
+        'How should I structure my database schema?'
+
+        await openai.completions.create({
+          model: 'gpt-4o-mini',
+          prompt: secondPrompt,
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1
+        })
+
+        events = await getEvents()
+
         const expectedSecondLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: apmSpans[1],
+          span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
           inputMessages: [
@@ -598,8 +602,7 @@ describe('integrations', () => {
           tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
         })
 
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
-        expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
+        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
       })
 
       it('submits a chat completion span with cached token metrics', async () => {
@@ -622,20 +625,10 @@ describe('integrations', () => {
           user: 'dd-trace-test'
         })
 
-        await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: baseMessages.concat([{ role: 'user', content: 'How should I structure my database schema?' }]),
-          temperature: 0.5,
-          stream: false,
-          max_tokens: 100,
-          n: 1,
-          user: 'dd-trace-test'
-        })
-
-        const { apmSpans, llmobsSpans } = await getEvents(2)
+        let events = await getEvents()
 
         const expectedFirstLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: apmSpans[0],
+          span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
           inputMessages: baseMessages.concat(
@@ -666,8 +659,22 @@ describe('integrations', () => {
           tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
         })
 
+        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: baseMessages.concat([{ role: 'user', content: 'How should I structure my database schema?' }]),
+          temperature: 0.5,
+          stream: false,
+          max_tokens: 100,
+          n: 1,
+          user: 'dd-trace-test'
+        })
+
+        events = await getEvents()
+
         const expectedSecondLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: apmSpans[1],
+          span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
           inputMessages: baseMessages.concat(
@@ -699,8 +706,7 @@ describe('integrations', () => {
           tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
         })
 
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
-        expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
+        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
       })
     })
   })

@@ -930,9 +930,11 @@ describe('integrations', () => {
         })
 
         describe('vectorstores', () => {
-          it.skip('submits a retrieval span with a child embedding span for similaritySearch', async () => {
+          let vectorstore
+
+          beforeEach(async () => {
             const embeddings = getLangChainOpenAiClient('embedding')
-            const vectorstore = new MemoryVectorStore(embeddings)
+            vectorstore = new MemoryVectorStore(embeddings)
 
             const document = {
               pageContent: 'The powerhouse of the cell is the mitochondria',
@@ -940,62 +942,67 @@ describe('integrations', () => {
             }
 
             await vectorstore.addDocuments([document])
-            await vectorstore.similaritySearch('Biology')
 
-            const { apmSpans, llmobsSpans } = await getEvents() // eslint-disable-line no-unused-vars
-
-            // first call was for the embedding span in the beforeEach
-            // const retrievalSpanEvent = LLMObsSpanWriter.prototype.append.getCall(1).args[0]
-            // const embeddingSpanEvent = LLMObsSpanWriter.prototype.append.getCall(2).args[0]
-
-            // expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
-            // expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
-
-            // const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
-            //   span: vectorstoreSpan,
-            //   spanKind: 'retrieval',
-            //   name: 'langchain.vectorstores.memory.MemoryVectorStore',
-            //   inputValue: 'Biology',
-            //   outputDocuments: [{
-            //     text: 'The powerhouse of the cell is the mitochondria',
-            //     name: 'https://example.com'
-            //   }],
-            //   tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
-            // })
-
-            // expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            // simple assert that the embedding span was created
+            // calling `getEvents` will also reset the traces promise for the upcoming tests
+            const events = await getEvents()
+            const embeddingSpanEvent = events.llmobsSpans[0]
+            expect(embeddingSpanEvent).to.exist
           })
 
-          it.skip('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
-            const embeddings = getLangChainOpenAiClient('embedding')
-            const vectorstore = new MemoryVectorStore(embeddings)
+          it('submits a retrieval span with a child embedding span for similaritySearch', async () => {
+            await vectorstore.similaritySearch('Biology')
 
-            const document = {
-              pageContent: 'The powerhouse of the cell is the mitochondria',
-              metadata: { source: 'https://example.com' }
-            }
+            const { apmSpans, llmobsSpans } = await getEvents()
 
-            await vectorstore.addDocuments([document])
+            // first call was for the embedding span in the beforeEach
+            const retrievalSpanEvent = llmobsSpans[0]
+            const embeddingSpanEvent = llmobsSpans[1]
+
+            expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+            expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+            const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+              span: apmSpans[0],
+              spanKind: 'retrieval',
+              name: 'langchain.vectorstores.memory.MemoryVectorStore',
+              inputValue: 'Biology',
+              outputDocuments: [{
+                text: 'The powerhouse of the cell is the mitochondria',
+                name: 'https://example.com'
+              }],
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+            })
+
+            expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+          })
+
+          it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
             await vectorstore.similaritySearchWithScore('Biology')
 
-            const { apmSpans, llmobsSpans } = await getEvents() // eslint-disable-line no-unused-vars
-            // expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
-            // expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+            const { apmSpans, llmobsSpans } = await getEvents()
 
-            // const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
-            //   span: vectorstoreSpan,
-            //   spanKind: 'retrieval',
-            //   name: 'langchain.vectorstores.memory.MemoryVectorStore',
-            //   inputValue: 'Biology',
-            //   outputDocuments: [{
-            //     text: 'The powerhouse of the cell is the mitochondria',
-            //     name: 'https://example.com',
-            //     score: 0.7882083567178202
-            //   }],
-            //   tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
-            // })
+            // first call was for the embedding span in the beforeEach
+            const retrievalSpanEvent = llmobsSpans[0]
+            const embeddingSpanEvent = llmobsSpans[1]
 
-            // expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
+            expect(embeddingSpanEvent.meta).to.have.property('span.kind', 'embedding')
+            expect(embeddingSpanEvent).to.have.property('parent_id', retrievalSpanEvent.span_id)
+
+            const expectedRetrievalEvent = expectedLLMObsNonLLMSpanEvent({
+              span: apmSpans[0],
+              spanKind: 'retrieval',
+              name: 'langchain.vectorstores.memory.MemoryVectorStore',
+              inputValue: 'Biology',
+              outputDocuments: [{
+                text: 'The powerhouse of the cell is the mitochondria',
+                name: 'https://example.com',
+                score: 0.7882083567178202
+              }],
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+            })
+
+            expect(retrievalSpanEvent).to.deepEqualWithMockValues(expectedRetrievalEvent)
           })
         })
       })
