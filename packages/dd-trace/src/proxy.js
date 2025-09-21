@@ -277,14 +277,29 @@ class Tracer extends NoopProxy {
 
       const { LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
       const { logs } = require('@opentelemetry/api-logs')
+      const os = require('os')
+
+      // Build resource attributes
+      const resourceAttributes = {
+        'service.name': config.service,
+        'service.version': config.version,
+        'deployment.environment': config.env
+      }
+
+      // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
+      if (config.tags && Object.keys(config.tags).length > 0) {
+        Object.assign(resourceAttributes, config.tags)
+      }
+
+      // Add host.name if reportHostname is enabled
+      if (config.reportHostname) {
+        resourceAttributes['host.name'] = os.hostname()
+      }
+
       // Create logger provider
       const loggerProvider = new LoggerProvider({
         resource: {
-          attributes: {
-            'service.name': config.service,
-            'service.version': config.version,
-            'deployment.environment': config.env
-          }
+          attributes: resourceAttributes
         }
       })
 
@@ -293,7 +308,10 @@ class Tracer extends NoopProxy {
         url: config.otelLogsUrl,
         headers: config.otelLogsHeaders,
         timeout: config.otelLogsTimeout,
-        protocol: config.otelLogsProtocol
+        protocol: config.otelLogsProtocol,
+        resource: {
+          attributes: resourceAttributes
+        }
       })
 
       // Create batch processor using resolved config values
