@@ -59,13 +59,10 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
+        partition: getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk'
-      }
-      const partition = getPartition(awsRegion)
-      if (partition) {
-        meta.partition = partition
       }
       if (this.requestTags) this.requestTags.set(request, meta)
 
