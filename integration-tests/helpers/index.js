@@ -426,6 +426,7 @@ function setShouldKill (value) {
   })
 }
 
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
