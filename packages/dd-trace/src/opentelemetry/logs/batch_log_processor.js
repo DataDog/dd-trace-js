@@ -1,14 +1,4 @@
 'use strict'
-
-/**
- * @fileoverview BatchLogRecordProcessor implementation for OpenTelemetry logs
- *
- * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
- * Based on OTLP Protocol v1.7.0.
- */
-
-const log = require('../../log')
-
 /**
  * BatchLogRecordProcessor processes log records in batches for efficient export.
  *
@@ -76,14 +66,7 @@ class BatchLogRecordProcessor {
 
     const logRecords = this._logRecords.splice(0, this._maxExportBatchSize)
     this._clearTimer()
-
-    if (this._processor) {
-      try {
-        this._processor.export(logRecords, () => {})
-      } catch (error) {
-        log.error('Error in log processor export:', error)
-      }
-    }
+    this._processor.export(logRecords, () => {})
 
     if (this._logRecords.length > 0) {
       this._startTimer()

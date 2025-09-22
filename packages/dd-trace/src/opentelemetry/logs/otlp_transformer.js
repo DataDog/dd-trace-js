@@ -1,12 +1,5 @@
 'use strict'
 
-/**
- * @fileoverview OTLP Transformer for OpenTelemetry logs
- *
- * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
- * Based on OTLP Protocol v1.7.0.
- */
-
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { getProtobufTypes } = require('./protobuf_loader')
 const tracerVersion = require('../../../../../package.json').version

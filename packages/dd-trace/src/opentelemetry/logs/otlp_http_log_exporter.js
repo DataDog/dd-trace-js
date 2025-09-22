@@ -1,12 +1,5 @@
 'use strict'
 
-/**
- * @fileoverview OTLP HTTP Log Exporter implementation for OpenTelemetry logs
- *
- * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
- * Serializes log records to OTLP Protocol v1.7.0 specification.
- */
-
 const https = require('https')
 const http = require('http')
 const { URL } = require('url')

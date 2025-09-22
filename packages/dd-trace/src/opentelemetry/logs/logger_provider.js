@@ -1,12 +1,4 @@
 'use strict'
-
-/**
- * @fileoverview LoggerProvider implementation for OpenTelemetry logs
- *
- * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
- * Based on OTLP Protocol v1.7.0.
- */
-
 const { logs } = require('@opentelemetry/api-logs')
 const Logger = require('./logger')
 const log = require('../../log')
