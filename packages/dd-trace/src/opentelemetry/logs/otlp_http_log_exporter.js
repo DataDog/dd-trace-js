@@ -12,6 +12,9 @@ const http = require('http')
 const { URL } = require('url')
 const log = require('../../log')
 const OtlpTransformer = require('./otlp_transformer')
+const telemetryMetrics = require('../../telemetry/metrics')
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 /**
  * OtlpHttpLogExporter exports log records via OTLP over HTTP.
@@ -48,6 +51,12 @@ class OtlpHttpLogExporter {
     }
     this._timeout = config.timeout || 10_000
     this._transformer = new OtlpTransformer(config)
+
+    // Pre-compute telemetry tags for efficiency
+    this._telemetryTags = [
+      `protocol:${this._protocol.startsWith('grpc') ? 'grpc' : 'http'}`,
+      `encoding:${this._protocol === 'http/json' ? 'json' : 'protobuf'}`
+    ]
   }
 
   /**
@@ -64,6 +73,15 @@ class OtlpHttpLogExporter {
 
     try {
       const payload = this._transformer.transformLogRecords(logRecords)
+
+      // Track telemetry metric for OTLP log records
+      try {
+        tracerMetrics.count('dd.instrumentation_telemetry_data.tracers.otel.log_records', this._telemetryTags)
+          .inc(logRecords.length)
+      } catch (telemetryError) {
+        log.debug('Error tracking OTLP log records telemetry:', telemetryError)
+      }
+
       this._sendPayload(payload, resultCallback)
     } catch (error) {
       log.error('Error transforming log records:', error)
