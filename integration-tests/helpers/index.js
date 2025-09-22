@@ -198,7 +198,7 @@ async function execHelper (addCommand, addOptions) {
     console.error('we caught, we retried ', e)
     try {
       const ranTwice = await exec(addCommand, addOptions)
-      console.log('Success it ran!', ranTwice)
+      console.log('Success on the second try!', ranTwice)
     } catch (retryE) {
       console.error('retry failed', retryE)
       finalE = retryE
