@@ -74,6 +74,7 @@ module.exports = {
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
   get vitest () { return require('../../../datadog-plugin-vitest/src') },
   get workerpool () { return require('../../../datadog-plugin-mocha/src') },
+  get tinypool () { return require('../../../datadog-plugin-vitest/src') },
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },
   get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },

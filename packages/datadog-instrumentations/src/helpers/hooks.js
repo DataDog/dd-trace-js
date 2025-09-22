@@ -131,6 +131,7 @@ module.exports = {
   sequelize: () => require('../sequelize'),
   sharedb: () => require('../sharedb'),
   tedious: () => require('../tedious'),
+  tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
   url: () => require('../url'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },

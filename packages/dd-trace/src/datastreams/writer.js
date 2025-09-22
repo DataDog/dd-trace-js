@@ -5,6 +5,7 @@ const log = require('../log')
 const request = require('../exporters/common/request')
 const { URL, format } = require('url')
 const { MsgpackEncoder } = require('../msgpack')
+const defaults = require('../config_defaults')
 const zlib = require('zlib')
 
 const msgpack = new MsgpackEncoder()
@@ -31,10 +32,10 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    const { hostname = '127.0.0.1', port = 8126, url } = config
+    const { hostname = defaults.hostname, port = defaults.port, url } = config
     this._url = url || new URL(format({
       protocol: 'http:',
-      hostname: hostname || 'localhost',
+      hostname,
       port
     }))
   }
