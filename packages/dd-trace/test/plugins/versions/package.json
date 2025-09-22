@@ -55,7 +55,7 @@
     "@opentelemetry/instrumentation-http": "0.205.0",
     "@opentelemetry/sdk-node": "0.205.0",
     "@playwright/test": "1.55.0",
-    "@prisma/client": "6.16.2",
+    "@prisma/client": "6.15.0",
     "@redis/client": "5.8.2",
     "@smithy/smithy-client": "4.6.3",
     "@vitest/coverage-istanbul": "3.2.4",
