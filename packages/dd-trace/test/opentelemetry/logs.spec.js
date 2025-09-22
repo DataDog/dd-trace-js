@@ -219,7 +219,7 @@ describe('OpenTelemetry Logs', () => {
       const telemetryMetrics = createMockedTelemetryMetrics()
       const OtlpHttpLogExporter = createMockedOtlpHttpLogExporter(telemetryMetrics)
 
-      const exporter = new OtlpHttpLogExporter({ protocol })
+      const exporter = new OtlpHttpLogExporter('http://localhost:4318/v1/logs', '', 1000, protocol, {})
       const mockLogRecords = [{
         body: 'Test message',
         severityNumber: 9,
@@ -269,7 +269,7 @@ describe('OpenTelemetry Logs', () => {
     // Helper function to test payload structure
     function testPayloadStructure (protocol, expectedStructure) {
       const { OtlpTransformer } = require('../../src/opentelemetry/logs')
-      const transformer = new OtlpTransformer({ protocol, ...testData })
+      const transformer = new OtlpTransformer(testData.resource, protocol)
 
       let result
       if (protocol === 'http/json') {
@@ -337,12 +337,13 @@ describe('OpenTelemetry Logs', () => {
     it('should parse OTLP headers from comma-separated key=value string', () => {
       const { OtlpHttpLogExporter } = require('../../src/opentelemetry/logs')
 
-      const exporter = new OtlpHttpLogExporter({
-        url: 'http://localhost:4318/v1/logs',
-        protocol: 'http/protobuf',
-        timeout: 1000,
-        otelLogsHeaders: 'api-key=key,other-config-value=value'
-      })
+      const exporter = new OtlpHttpLogExporter(
+        'http://localhost:4318/v1/logs',
+        'api-key=key,other-config-value=value',
+        1000,
+        'http/protobuf',
+        {}
+      )
 
       expect(exporter._headers).to.include({
         'api-key': 'key',

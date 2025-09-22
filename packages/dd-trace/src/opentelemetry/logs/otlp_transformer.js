@@ -13,13 +13,20 @@ const tracerVersion = require('../../../../../package.json').version
  * @class OtlpTransformer
  */
 class OtlpTransformer {
-  constructor (config = {}) {
-    this._resource = config.resource
-    this._protocol = config.protocol
+  /**
+   * Creates a new OtlpTransformer instance.
+   *
+   * @param {Object} resourceAttributes - Resource attributes
+   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
+   */
+  constructor (resourceAttributes, protocol) {
+    this._resourceAttributes = this._transformAttributes(resourceAttributes)
+    this._protocol = protocol
     this._protobufTypes = null
   }
 
   _getProtobufTypes () {
+    // Delay the loading of protobuf types to reduce startup overhead
     if (!this._protobufTypes) {
       this._protobufTypes = getProtobufTypes()
     }
@@ -62,7 +69,7 @@ class OtlpTransformer {
       resourceLogs: [{
         resource: this._transformResource(),
         scopeLogs: [{
-          scope: this._transformScope(logRecords[0]?.instrumentationLibrary),
+          scope: this._transformScope(),
           logRecords: logRecords.map(record => this._transformLogRecord(record))
         }]
       }]
@@ -70,27 +77,18 @@ class OtlpTransformer {
     return Buffer.from(JSON.stringify(logsData))
   }
 
-  _transformResource () {
+  _transformScope () {
     return {
-      attributes: this._transformAttributes(this._resource?.attributes || {}),
+      name: 'dd-trace-js',
+      version: tracerVersion,
+      attributes: [],
       droppedAttributesCount: 0
     }
   }
 
-  _transformScope (instrumentationLibrary) {
-    if (!instrumentationLibrary) {
-      return {
-        name: 'dd-trace-js',
-        version: tracerVersion,
-        attributes: [],
-        droppedAttributesCount: 0
-      }
-    }
-
+  _transformResource () {
     return {
-      name: instrumentationLibrary.name || 'dd-trace-js',
-      version: instrumentationLibrary.version || '1.0.0',
-      attributes: [],
+      attributes: this._resourceAttributes,
       droppedAttributesCount: 0
     }
   }
@@ -104,7 +102,7 @@ class OtlpTransformer {
       severityNumber: this._mapSeverityNumber(logRecord.severityNumber || SeverityNumber.INFO),
       severityText: logRecord.severityText || 'INFO',
       body: this._transformBody(logRecord.body),
-      attributes: this._transformAttributes(logRecord.attributes || {}),
+      attributes: this._transformAttributes(logRecord.attributes),
       droppedAttributesCount: 0,
       flags: logRecord.flags || 0,
       traceId: this._hexToBytes(logRecord.traceId || ''),
@@ -194,6 +192,9 @@ class OtlpTransformer {
   }
 
   _transformAttributes (attributes) {
+    if (!attributes) {
+      return {}
+    }
     return Object.entries(attributes).map(([key, value]) => ({
       key,
       value: this._transformAnyValue(value)

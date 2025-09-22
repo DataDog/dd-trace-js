@@ -21,15 +21,15 @@ class OtlpHttpLogExporter {
   /**
    * Creates a new OtlpHttpLogExporter instance.
    *
-   * @param {Object} config - Configuration options
-   * @param {string} config.url - OTLP endpoint URL
-   * @param {Object} config.headers - Additional HTTP headers
-   * @param {number} config.timeout - Request timeout in milliseconds
-   * @param {string} config.protocol - OTLP protocol (http/protobuf or http/json)
+   * @param {string} url - OTLP endpoint URL
+   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {number} timeout - Request timeout in milliseconds
+   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
+   * @param {Object} resource - Resource attributes
    */
-  constructor (config) {
-    this._url = config.url
-    this._protocol = config.protocol
+  constructor (url, headers, timeout, protocol, resource) {
+    this._url = url
+    this._protocol = protocol
 
     // Set Content-Type based on protocol
     const contentType = this._protocol === 'http/json'
@@ -38,10 +38,10 @@ class OtlpHttpLogExporter {
 
     this._headers = {
       'Content-Type': contentType,
-      ...this._parseAdditionalHeaders(config.otelLogsHeaders)
+      ...this._parseAdditionalHeaders(headers)
     }
-    this._timeout = config.timeout
-    this._transformer = new OtlpTransformer(config)
+    this._timeout = timeout
+    this._transformer = new OtlpTransformer(resource, protocol)
 
     // Pre-compute telemetry tags for efficiency
     this._telemetryTags = [

@@ -124,16 +124,12 @@ describe('OTLP Protobuf Serialization', () => {
     expect(result.length).to.be.greaterThan(0)
   })
 
-  it('should fallback to JSON if protobuf serialization fails', () => {
-    // Create a transformer with JSON protocol to test fallback
+  it('hould serialize log records to json format', () => {
     const transformer = new OtlpTransformer({
-      protocol: 'http/json',
-      resource: {
-        attributes: {
-          'service.name': 'test-service'
-        }
+      attributes: {
+        'service.name': 'test-service'
       }
-    })
+    }, 'http/json')
 
     const logRecords = [
       {
