@@ -79,7 +79,6 @@ only-tracing-with-runtime-metrics-enabled:
 check-slo-breaches:
   extends: .check-slo-breaches
   stage: macrobenchmarks-gate
-  when: always
   needs:
     - baseline
     - only-tracing
@@ -94,7 +93,6 @@ check-slo-breaches:
 notify-slo-breaches:
   extends: .notify-slo-breaches
   stage: macrobenchmarks-notify
-  when: always
   needs:
     - check-slo-breaches
   variables:
