@@ -96,7 +96,7 @@ class OtlpHttpLogExporter {
 
     const options = {
       hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 80),
+      port: url.port || (isHttps ? 443 : 4318),
       path: url.pathname + url.search,
       method: 'POST',
       headers: {

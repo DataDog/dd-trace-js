@@ -680,7 +680,11 @@ class Config {
     // Enable logs if DD_LOGS_OTEL_ENABLED is true
     this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
-    this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT)
+    // Only set if there's a custom URL, otherwise let calc phase handle the default
+    const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT
+    if (customOtelLogsUrl) {
+      this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
+    }
     this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTERS_OTLP_HEADERS)
     // Handle OTLP protocol with grpc warning
     const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
@@ -1222,6 +1226,11 @@ class Config {
     }
 
     calc['dogstatsd.hostname'] = this._getHostname()
+
+    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    const agentHostname = this._getHostname()
+    calc.otelLogsUrl = `http://${agentHostname}:4318/v1/logs`
+
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())

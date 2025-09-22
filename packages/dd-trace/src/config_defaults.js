@@ -120,7 +120,7 @@ module.exports = {
   isImpactedTestsEnabled: false,
   logInjection: true,
   otelLogsEnabled: false,
-  otelLogsUrl: 'http://localhost:4318/v1/logs',
+  otelLogsUrl: undefined, // Will be computed using agent host
   otelLogsHeaders: '',
   otelLogsProtocol: 'http/protobuf',
   otelLogsTimeout: 10_000,

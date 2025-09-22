@@ -298,4 +298,38 @@ describe('OpenTelemetry Logs', () => {
       })
     })
   })
+
+  describe('OTLP Endpoint Configuration', () => {
+    it('should use environment value when set', () => {
+      const Config = require('../../src/config')
+
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://explicit-agent:4318/v1/logs'
+      process.env.DD_AGENT_HOST = 'different-agent.example.com'
+
+      const config = new Config()
+      expect(config.otelLogsUrl).to.equal('http://explicit-agent:4318/v1/logs')
+    })
+
+    it('should use calculated default when no environment variables are set', () => {
+      const Config = require('../../src/config')
+
+      delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      delete process.env.OTEL_EXPORTERS_OTLP_ENDPOINT
+      process.env.DD_AGENT_HOST = 'default-agent.example.com'
+
+      const config = new Config()
+      expect(config.otelLogsUrl).to.equal('http://default-agent.example.com:4318/v1/logs')
+    })
+
+    it('should use fallback default when no environment variables and no DD_AGENT_HOST', () => {
+      const Config = require('../../src/config')
+
+      delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      delete process.env.OTEL_EXPORTERS_OTLP_ENDPOINT
+      delete process.env.DD_AGENT_HOST
+
+      const config = new Config()
+      expect(config.otelLogsUrl).to.equal('http://127.0.0.1:4318/v1/logs')
+    })
+  })
 })
