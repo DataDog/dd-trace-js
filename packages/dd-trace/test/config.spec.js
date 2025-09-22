@@ -359,6 +359,8 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.property('tracing', true)
+    expect(config).to.have.nested.deep.property('aiguard.enabled', false)
+    expect(config).to.have.nested.deep.property('aiguard.endpoint', undefined)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -655,6 +657,9 @@ describe('Config', () => {
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = 50
     process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
+    process.env.DD_AI_GUARD_ENABLED = 'true'
+    process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
+    process.env.DD_APP_KEY = 'myAppKey'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -768,6 +773,9 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.nested.property('aiguard.enabled', true)
+    expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce
 
@@ -1001,6 +1009,11 @@ describe('Config', () => {
       { sampleRate: 0.1 }
     ]
     const config = new Config({
+      aiguard: {
+        enabled: true,
+        endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard'
+      },
+      appKey: 'myAppKey',
       appsec: false,
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1183,6 +1196,9 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.property('version', '0.1.0')
+    expect(config).to.have.nested.property('aiguard.enabled', true)
+    expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce
 

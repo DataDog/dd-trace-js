@@ -140,6 +140,11 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
+   * AI Guard SDK
+   */
+  aiguard: tracer.aiguard.AIGuard;
+
+  /**
    * @experimental
    * Provide same functionality as OpenTelemetry Baggage:
    * https://opentelemetry.io/docs/concepts/signals/baggage/
@@ -867,6 +872,8 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
+
+    aiguard?: aiguard.Options
   }
 
   /**
@@ -1057,6 +1064,60 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  export namespace aiguard {
+
+    export interface Options {
+      enabled: boolean,
+      endpoint: string
+    }
+
+    export interface ToolCall {
+      id: string,
+      function: {
+        name: string,
+        arguments: string
+      }
+    }
+
+    export interface TextMessage {
+      role: string;
+      content: string;
+    }
+
+    export interface AssistantTextMessage {
+      role: "assistant";
+      content: string;
+      tool_calls?: never;
+    }
+
+    export interface AssistantToolCallMessage {
+      role: "assistant";
+      tool_calls: ToolCall[];
+      content?: never;
+    }
+
+    export interface ToolMessage {
+      role: "tool";
+      tool_call_id: string;
+      content: string;
+    }
+
+    export type Message =
+      | TextMessage
+      | AssistantTextMessage
+      | AssistantToolCallMessage
+      | ToolMessage;
+
+    export interface Evaluation {
+      action: 'ALLOW' | 'DENY' | 'ABORT'
+      reason: string
+    }
+
+    export interface AIGuard {
+      evaluate (messages: Message[], opts?: { block: boolean }): Promise<Evaluation>;
+    }
   }
 
   /** @hidden */
