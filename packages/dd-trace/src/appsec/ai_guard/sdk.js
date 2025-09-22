@@ -65,7 +65,8 @@ class AIGuard extends NoopAIGuard {
   }
 
   _truncate (messages) {
-    return messages
+    // TODO truncate the messages and return a safe copy to be used in the meta-struct
+    return [...messages]
   }
 
   async evaluate (messages, opts) {
