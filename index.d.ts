@@ -873,7 +873,19 @@ declare namespace tracer {
      */
     llmobs?: llmobs.LLMObsEnableOptions
 
-    aiguard?: aiguard.Options
+    /**
+     * Configuration options for AI Guard
+     */
+    aiguard?: {
+      /**
+       * Set to `true` to enable the SDK.
+       */
+      enabled?: boolean,
+      /**
+       * URL of the AI Guard REST API endpoint.
+       */
+      endpoint?: string
+    }
   }
 
   /**
@@ -914,7 +926,7 @@ declare namespace tracer {
     scope?: string,
 
     /**
-     * Custom fields to attach to the user (RBAC, Oauth, etc…).
+     * Custom fields to attach to the user (RBAC, Oauth, etc...).
      */
     [key: string]: string | undefined
   }
@@ -1068,39 +1080,95 @@ declare namespace tracer {
 
   export namespace aiguard {
 
-    export interface Options {
-      enabled: boolean,
-      endpoint: string
-    }
-
+    /**
+     * Represents a tool call made by an AI assistant in an agentic workflow.
+     */
     export interface ToolCall {
-      id: string,
+      /**
+       * Unique identifier for this specific tool call instance used to correlate the call with its response.
+       */
+      id: string;
+      /**
+       * Details about the function being invoked.
+       */
       function: {
-        name: string,
-        arguments: string
-      }
+        /**
+         * The name of the tool/function to be called.
+         */
+        name: string;
+        /**
+         * String containing the arguments to pass to the tool.
+         */
+        arguments: string;
+      };
     }
 
+    /**
+     * A standard conversational message exchanged with a Large Language Model (LLM).
+     */
     export interface TextMessage {
+      /**
+       * The role of the message sender in the conversation (e.g.: 'system', 'user', 'assistant').
+       */
       role: string;
+      /**
+       * The textual content of the message.
+       */
       content: string;
     }
 
+    /**
+     * A message from an AI assistant containing only textual content.
+     */
     export interface AssistantTextMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
       role: "assistant";
+      /**
+       * The textual response content from the assistant.
+       */
       content: string;
+      /**
+       * Explicitly excluded when content is present to maintain type safety.
+       */
       tool_calls?: never;
     }
 
+    /**
+     * A message from an AI assistant that initiates one or more tool calls.
+     */
     export interface AssistantToolCallMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
       role: "assistant";
+      /**
+       * Array of tool calls that the assistant wants to execute.
+       */
       tool_calls: ToolCall[];
+      /**
+       * Explicitly excluded when tool calls are present to maintain type safety.
+       */
       content?: never;
     }
 
+    /**
+     * A message containing the result of a tool invocation.
+     */
     export interface ToolMessage {
+      /**
+       * The role identifier, always set to 'tool' for tool execution results.
+       */
       role: "tool";
+      /**
+       * The unique identifier linking this result to the original tool call.
+       * Must correspond to a ToolCall.id from a previous AssistantToolCallMessage.
+       */
       tool_call_id: string;
+      /**
+       * The output returned by the tool execution.
+       */
       content: string;
     }
 
@@ -1110,13 +1178,67 @@ declare namespace tracer {
       | AssistantToolCallMessage
       | ToolMessage;
 
+    /**
+     * The result returned by AI Guard after evaluating a conversation.
+     */
     export interface Evaluation {
-      action: 'ALLOW' | 'DENY' | 'ABORT'
-      reason: string
+      /**
+       * The security action determined by AI Guard:
+       * - 'ALLOW': The conversation is safe to proceed
+       * - 'DENY': The current conversation exchange should be blocked
+       * - 'ABORT': The full workflow should be terminated immediately
+       */
+      action: 'ALLOW' | 'DENY' | 'ABORT';
+      /**
+       * Human-readable explanation for why this action was chosen.
+       */
+      reason: string;
     }
 
+    /**
+     * Error thrown when AI Guard evaluation determines that a conversation should be blocked
+     * and the client is configured to enforce blocking mode.
+     */
+    export interface AIGuardAbortError extends Error {
+      /**
+       * Human-readable explanation from AI Guard describing why the conversation was blocked.
+       */
+      reason: string;
+    }
+
+    /**
+     * Error thrown when the AI Guard SDK encounters communication failures or API errors while attempting to
+     * evaluate conversations.
+     */
+    export interface AIGuardClientError extends Error {
+      /**
+       * Detailed error information returned by the AI Guard API, formatted according to the JSON:API error
+       * specification.
+       */
+      errors?: unknown[];
+      /**
+       * The underlying error that caused the communication failure, such as network timeouts, connection refused,
+       * or JSON parsing errors.
+       */
+      cause?: Error;
+    }
+
+    /**
+     * AI Guard security client for evaluating AI conversations.
+     */
     export interface AIGuard {
-      evaluate (messages: Message[], opts?: { block: boolean }): Promise<Evaluation>;
+      /**
+       * Evaluates a conversation thread.
+       *
+       * @param messages - Array of conversation messages
+       * @param opts - Optional configuration object:
+       *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
+       *              and the AI Guard service has blocking mode enabled.
+       * @returns Promise resolving to an Evaluation with the security decision and reasoning
+       * @throws AIGuardAbortError when `opts.block` is true and the evaluation result would block the request
+       * @throws AIGuardClientError when communication with the AI Guard service fails
+       */
+      evaluate(messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
     }
   }
 
