@@ -193,12 +193,12 @@ async function execHelper (addCommand, addOptions) {
   let finalErr
   try {
     const ran = await exec(addCommand, addOptions)
-    console.log('Success it ran!', ran) // eslint-disable-line no-console
+    console.log('Success it ran!') // eslint-disable-line no-console
   } catch (e) {
     console.error('we caught, we retried ', e) // eslint-disable-line no-console
     try {
       const ranTwice = await exec(addCommand, addOptions)
-      console.log('Success on the second try!', ranTwice) // eslint-disable-line no-console
+      console.log('Success on the second try!') // eslint-disable-line no-console
     } catch (retryErr) {
       console.error('retry failed', retryErr) // eslint-disable-line no-console
       finalErr = retryErr
@@ -267,21 +267,21 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 
   if (isGitRepo) {
-    await exec('git init', { cwd: folder })
-    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await exec('git config user.email "john@doe.com"', { cwd: folder })
-    await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
+    await execHelper('git init', { cwd: folder })
+    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    await execHelper('git config user.email "john@doe.com"', { cwd: folder })
+    await execHelper('git config user.name "John Doe"', { cwd: folder })
+    await execHelper('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-    if (!existsSync(localRemotePath)) {
-      await exec(`git init --bare ${localRemotePath}`)
+    if (!fs.existsSync(localRemotePath)) {
+      await execHelper(`git init --bare ${localRemotePath}`)
     }
 
-    await exec('git add -A', { cwd: folder })
-    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
-    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await execHelper('git add -A', { cwd: folder })
+    await execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
+    await execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
     await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
