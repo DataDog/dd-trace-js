@@ -4,7 +4,7 @@
  * @fileoverview OTLP HTTP Log Exporter implementation for OpenTelemetry logs
  *
  * Custom implementation to avoid pulling in the full OpenTelemetry SDK.
- * Based on OTLP Protocol v1.7.0.
+ * Serializes log records to OTLP Protocol v1.7.0 specification.
  */
 
 const https = require('https')
@@ -43,12 +43,9 @@ class OtlpHttpLogExporter {
       ? 'application/json'
       : 'application/x-protobuf'
 
-    // Parse OTLP headers from comma-separated key=value string
-    const headers = this._parseAdditionalHeaders(config.otelLogsHeaders)
-
     this._headers = {
       'Content-Type': contentType,
-      ...headers
+      ...this._parseAdditionalHeaders(config.otelLogsHeaders)
     }
     this._timeout = config.timeout
     this._transformer = new OtlpTransformer(config)

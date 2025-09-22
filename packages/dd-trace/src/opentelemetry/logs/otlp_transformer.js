@@ -9,6 +9,7 @@
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { getProtobufTypes } = require('./protobuf_loader')
+const tracerVersion = require('../../../../../package.json').version
 
 /**
  * OtlpTransformer transforms log records to OTLP format.
@@ -20,7 +21,7 @@ const { getProtobufTypes } = require('./protobuf_loader')
  */
 class OtlpTransformer {
   constructor (config = {}) {
-    this._config = config
+    this._resource = config.resource
     this._protocol = config.protocol
     this._protobufTypes = null
   }
@@ -78,7 +79,7 @@ class OtlpTransformer {
 
   _transformResource () {
     return {
-      attributes: this._transformAttributes(this._config.resource?.attributes || {}),
+      attributes: this._transformAttributes(this._resource?.attributes || {}),
       droppedAttributesCount: 0
     }
   }
@@ -87,7 +88,7 @@ class OtlpTransformer {
     if (!instrumentationLibrary) {
       return {
         name: 'dd-trace-js',
-        version: '1.0.0',
+        version: tracerVersion,
         attributes: [],
         droppedAttributesCount: 0
       }

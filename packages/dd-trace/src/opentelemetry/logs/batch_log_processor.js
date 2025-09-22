@@ -21,25 +21,23 @@ class BatchLogRecordProcessor {
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
-   * @param {Array} processors - Array of log processors to process batches
-   * @param {Object} config - Configuration options
-   * @param {number} [config.batchTimeout=5000] - Timeout in milliseconds for batch processing
-   * @param {number} [config.maxExportBatchSize=512] - Maximum number of log records per batch
-   * @param {number} [config.maxQueueSize=2048] - Maximum number of log records in queue
-   * @param {number} [config.exportTimeoutMillis=30000] - Timeout for export operations
+   * @param {Object} processor - Log processor to process batches
+   * @param {number} batchTimeout - Timeout in milliseconds for batch processing
+   * @param {number} maxExportBatchSize - Maximum number of log records per batch
+   * @param {number} maxQueueSize - Maximum number of log records in queue
+   * @param {number} exportTimeoutMillis - Timeout for export operations
    */
-  constructor (processors, config) {
-    this._processors = processors
-    this._config = config
-    this._isShutdown = false
-    this._batchTimeout = config.batchTimeout
-    this._maxExportBatchSize = config.maxExportBatchSize
-    this._maxQueueSize = config.maxQueueSize
-    this._exportTimeoutMillis = config.exportTimeoutMillis
+  constructor (processor, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
+    this._processor = processor
+    this._batchTimeout = batchTimeout
+    this._maxExportBatchSize = maxExportBatchSize
+    this._maxQueueSize = maxQueueSize
+    this._exportTimeoutMillis = exportTimeoutMillis
 
     this._logRecords = []
     this._timer = null
     this._shutdownPromise = null
+    this._isShutdown = false
   }
 
   /**
@@ -79,9 +77,9 @@ class BatchLogRecordProcessor {
     const logRecords = this._logRecords.splice(0, this._maxExportBatchSize)
     this._clearTimer()
 
-    for (const processor of this._processors) {
+    if (this._processor) {
       try {
-        processor.export(logRecords, () => {})
+        this._processor.export(logRecords, () => {})
       } catch (error) {
         log.error('Error in log processor export:', error)
       }
@@ -122,11 +120,7 @@ class BatchLogRecordProcessor {
 
       this._export()
 
-      const shutdownPromises = this._processors.map(processor => {
-        return typeof processor.shutdown === 'function'
-          ? processor.shutdown()
-          : Promise.resolve()
-      })
+      const shutdownPromises = this._processor ? [this._processor.shutdown()] : []
 
       Promise.all(shutdownPromises).then(resolve)
     })

@@ -290,9 +290,7 @@ class Tracer extends NoopProxy {
 
       // Create logger provider
       const loggerProvider = new LoggerProvider({
-        resource: {
-          attributes: resourceAttributes
-        }
+        attributes: resourceAttributes
       })
 
       // Create OTLP exporter using resolved config values
@@ -307,12 +305,13 @@ class Tracer extends NoopProxy {
       })
 
       // Create batch processor using resolved config values
-      const processor = new BatchLogRecordProcessor([exporter], {
-        batchTimeout: config.otelLogsBatchTimeout,
-        maxExportBatchSize: config.otelLogsMaxExportBatchSize,
-        maxQueueSize: config.otelLogsMaxQueueSize,
-        exportTimeoutMillis: config.otelLogsExportTimeoutMillis
-      })
+      const processor = new BatchLogRecordProcessor(
+        exporter,
+        config.otelLogsBatchTimeout,
+        config.otelLogsMaxExportBatchSize,
+        config.otelLogsMaxQueueSize,
+        config.otelLogsExportTimeoutMillis
+      )
 
       // Add processor to logger provider
       loggerProvider.addLogRecordProcessor(processor)

@@ -23,15 +23,13 @@ class LoggerProvider {
   /**
    * Creates a new LoggerProvider instance.
    *
-   * @param {Object} [config={}] - Configuration options
-   * @param {Object} [config.resource] - Resource attributes
-   * @param {Object} [config.resource.attributes] - Resource attribute key-value pairs
-   * @param {Array} [config.processors] - Array of LogRecordProcessor instances
+   * @param {Object} [resource] - Resource attributes
+   * @param {Object} [resource.attributes] - Resource attribute key-value pairs
+   * @param {Array} [processors] - Array of LogRecordProcessor instances
    */
-  constructor (config = {}) {
-    this.config = config
-    this.resource = config.resource
-    this._processors = config.processors || []
+  constructor (resource, processors = []) {
+    this.resource = resource
+    this._processors = processors
     this._loggers = new Map()
     this._activeProcessor = null
     this._isShutdown = false
@@ -52,11 +50,7 @@ class LoggerProvider {
 
     const key = `${name}@${version}`
     if (!this._loggers.has(key)) {
-      this._loggers.set(key, new Logger(
-        { ...options, name, version },
-        this.config,
-        this
-      ))
+      this._loggers.set(key, new Logger(this))
     }
     return this._loggers.get(key)
   }
@@ -86,7 +80,7 @@ class LoggerProvider {
     return this._activeProcessor
   }
 
-  register (config = {}) {
+  register () {
     if (this._isShutdown) {
       log.warn('Cannot register after shutdown')
       return

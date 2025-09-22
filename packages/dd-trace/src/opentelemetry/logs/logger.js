@@ -22,16 +22,10 @@ class Logger {
   /**
    * Creates a new Logger instance.
    *
-   * @param {Object} library - Instrumentation library information
-   * @param {string} library.name - Library name
-   * @param {string} library.version - Library version
-   * @param {Object} config - Logger configuration
    * @param {LoggerProvider} loggerProvider - Parent logger provider
    */
-  constructor (library, config, loggerProvider) {
-    this._config = config
+  constructor (loggerProvider) {
     this._loggerProvider = loggerProvider
-    this.instrumentationLibrary = library
   }
 
   get resource () {
