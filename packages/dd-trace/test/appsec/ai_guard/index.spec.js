@@ -30,12 +30,12 @@ describe('AIGuard SDK', () => {
     { role: 'user', content: 'What is 2 + 2' },
     {
       role: 'assistant',
-      toolCalls: [
+      tool_calls: [
         {
           id: 'call_1',
           function: {
             name: 'calc',
-            arguments: { operator: '+', args: [2, 2] }
+            arguments: '{ operator: "+", args: [2, 2] }'
           }
         },
       ],
@@ -44,7 +44,7 @@ describe('AIGuard SDK', () => {
 
   const prompt = [
     ...toolCall,
-    { role: 'tool', toolCallId: 'call_1', content: '5' },
+    { role: 'tool', tool_call_id: 'call_1', content: '5' },
     { role: 'assistant', content: '2 + 2 is 5' },
     { role: 'user', content: 'Are you sure?' },
   ]
