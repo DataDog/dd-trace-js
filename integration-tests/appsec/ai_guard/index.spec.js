@@ -45,45 +45,26 @@ describe('AIGuard SDK integration tests', () => {
     await agent.stop()
   })
 
-  it('test evaluate with ALLOW response', async () => {
-    const response = await executeRequest(`${url}/allow`)
-    expect(response.status).to.equal(200)
-    expect(response.body).to.have.nested.property('action', 'ALLOW')
-    expect(response.body).to.have.nested.property('reason', 'The prompt looks harmless')
-    await agent.assertMessageReceived(({ headers, payload }) => {
-      const span = payload[0].find(span => span.name === 'ai_guard')
-      expect(span).not.to.be.null
-    })
-  })
+  const testSuite = [
+    { endpoint: '/allow', action: 'ALLOW', reason: 'The prompt looks harmless' },
+    { endpoint: '/deny', action: 'DENY', reason: 'I am feeling suspicious today' },
+    { endpoint: '/abort', action: 'ABORT', reason: 'The user is trying to destroy me' }
+  ].flatMap(r => [
+    { ...r, blocking: true },
+    { ...r, blocking: false },
+  ])
 
-  for (const blocking of [true, false]) {
-    it(`test evaluate with DENY response (blocking ${blocking})`, async () => {
+  for (const { endpoint, action, reason, blocking } of testSuite) {
+    it(`test evaluate with ${action} response (blocking ${blocking})`, async () => {
       const headers = blocking ? { 'x-blocking-enabled': true } : null
-      const response = await executeRequest(`${url}/deny`, 'GET', headers)
-      if (blocking) {
+      const response = await executeRequest(`${url}${endpoint}`, 'GET', headers)
+      if (blocking && action !== 'ALLOW') {
         expect(response.status).not.to.equal(200)
-        expect(response.body).to.contain('I am feeling suspicious today')
+        expect(response.body).to.contain(reason)
       } else {
         expect(response.status).to.equal(200)
-        expect(response.body).to.have.nested.property('action', 'DENY')
-        expect(response.body).to.have.nested.property('reason', 'I am feeling suspicious today')
-      }
-      await agent.assertMessageReceived(({ headers, payload }) => {
-        const span = payload[0].find(span => span.name === 'ai_guard')
-        expect(span).not.to.be.null
-      })
-    })
-
-    it(`test evaluate with ABORT response (blocking ${blocking})`, async () => {
-      const headers = blocking ? { 'x-blocking-enabled': true } : null
-      const response = await executeRequest(`${url}/abort`, 'GET', headers)
-      if (blocking) {
-        expect(response.status).not.to.equal(200)
-        expect(response.body).to.contain('The user is trying to destroy me')
-      } else {
-        expect(response.status).to.equal(200)
-        expect(response.body).to.have.nested.property('action', 'ABORT')
-        expect(response.body).to.have.nested.property('reason', 'The user is trying to destroy me')
+        expect(response.body).to.have.nested.property('action', action)
+        expect(response.body).to.have.nested.property('reason', reason)
       }
       await agent.assertMessageReceived(({ headers, payload }) => {
         const span = payload[0].find(span => span.name === 'ai_guard')
