@@ -191,10 +191,11 @@ describe('AIGuard SDK', () => {
     })
   })
 
-  it('test noop implementation', () => {
+  it('test noop implementation', async () => {
     const noop = new NoopAIGuard()
-    const evaluation = noop.evaluate(prompt)
-    expect(evaluation.action).to.equal('ALLOW')
-    expect(evaluation.reason).to.equal('AI Guard is not enabled')
+    await rejects(
+      () => noop.evaluate(prompt),
+      err => err.message === 'AI Guard is not enabled'
+    )
   })
 })
