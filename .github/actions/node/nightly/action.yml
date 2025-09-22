@@ -1,0 +1,8 @@
+name: Node.js Latest
+description: Install the latest version of Node.js
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/node
+      with:
+        version: nightly
