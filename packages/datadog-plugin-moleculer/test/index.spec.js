@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const assert = require('node:assert')
-const getPort = require('get-port')
 const os = require('node:os')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -14,6 +13,11 @@ const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 describe('Plugin', () => {
   let broker
   let port
+  let getPort
+
+  before(async () => {
+    getPort = (await import('get-port')).default
+  })
 
   describe('moleculer', () => {
     withVersions('moleculer', 'moleculer', version => {
