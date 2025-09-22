@@ -88,14 +88,17 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
 ])
 
 function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
+  const testSuiteSpanContext = testSuiteSpan.context()
+
   const suiteTags = {
-    [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
-    [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-    [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+    [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
+    [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
+    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
     [TEST_MODULE]: testFramework
   }
-  if (testSuiteSpan.context()._parentId) {
-    suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
+
+  if (testSuiteSpanContext._parentId) {
+    suiteTags[TEST_MODULE_ID] = testSuiteSpanContext._parentId.toString(10)
   }
   return suiteTags
 }
@@ -321,7 +324,7 @@ module.exports = class CiPlugin extends Plugin {
           // test session, test module and test suite ids. We have to update them here.
           if (span.name === 'cucumber.test' || span.name === 'mocha.test') {
             const testSuite = span.meta[TEST_SUITE]
-            const testSuiteSpan = this._testSuiteSpansByTestSuite[testSuite]
+            const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
             if (!testSuiteSpan) {
               log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
               continue
