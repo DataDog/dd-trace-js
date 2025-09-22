@@ -63,10 +63,6 @@ function request (data, options, callback) {
       dataArray = [data]
     }
     options.headers['Content-Length'] = byteLength(dataArray)
-
-    // TODO: Remove before merge
-    const payload = dataArray.map(d => d.toString()).join('')
-    log.debug('Request payload:', payload.length > 1000 ? payload.slice(0, 1000) + '...' : payload)
   }
 
   docker.inject(options.headers)
@@ -84,12 +80,6 @@ function request (data, options, callback) {
     res.on('end', () => {
       activeRequests--
       const buffer = Buffer.concat(chunks)
-
-      // TODO: Remove before merge - Log response for debugging
-      const responseData = buffer.toString()
-      log.debug('Response status:', res.statusCode)
-      log.debug('Response headers:', JSON.stringify(res.headers))
-      log.debug('Response body:', responseData.length > 1000 ? responseData.slice(0, 1000) + '...' : responseData)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
         const isGzip = res.headers['content-encoding'] === 'gzip'
