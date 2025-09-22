@@ -283,12 +283,6 @@
       "versions": ["9.1.4"]
     }
   ],
-  "happy-dom": [
-    {
-      "name": "@happy-dom/jest-environment",
-      "versions": [">=10.0.0"]
-    }
-  ],
   "hono": [
     {
       "name": "@hono/node-server",
