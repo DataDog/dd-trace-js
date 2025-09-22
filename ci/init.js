@@ -14,6 +14,8 @@ const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
 const isPlaywrightWorker = !!getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')
 
+const isTestWorker = isJestWorker || isCucumberWorker || isMochaWorker || isVitestWorker || isPlaywrightWorker
+
 const packageManagers = [
   'npm',
   'yarn',
@@ -31,58 +33,56 @@ const options = {
 }
 
 let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
+const isAgentlessEnabled = isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
-if (isPackageManager()) {
+if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
   shouldInit = false
 }
 
-const isAgentlessEnabled = isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
-
-if (isAgentlessEnabled) {
-  if (getEnvironmentVariable('DD_API_KEY')) {
+if (isTestWorker) {
+  options.telemetry = {
+    enabled: false
+  }
+  if (isJestWorker) {
     options.experimental = {
-      exporter: 'datadog'
+      exporter: 'jest_worker'
     }
-  } else {
-    console.error('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
-      'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
-      'dd-trace will not be initialized.')
-    shouldInit = false
+  } else if (isCucumberWorker) {
+    options.experimental = {
+      exporter: 'cucumber_worker'
+    }
+  } else if (isMochaWorker) {
+    options.experimental = {
+      exporter: 'mocha_worker'
+    }
+  } else if (isPlaywrightWorker) {
+    options.experimental = {
+      exporter: 'playwright_worker'
+    }
+  } else if (isVitestWorker) {
+    options.experimental = {
+      exporter: 'vitest_worker'
+    }
   }
 } else {
-  options.experimental = {
-    exporter: 'agent_proxy'
-  }
-}
-
-if (isJestWorker) {
-  options.experimental = {
-    exporter: 'jest_worker'
-  }
-}
-
-if (isCucumberWorker) {
-  options.experimental = {
-    exporter: 'cucumber_worker'
-  }
-}
-
-if (isMochaWorker) {
-  options.experimental = {
-    exporter: 'mocha_worker'
-  }
-}
-
-if (isPlaywrightWorker) {
-  options.experimental = {
-    exporter: 'playwright_worker'
-  }
-}
-
-if (isVitestWorker) {
-  options.experimental = {
-    exporter: 'vitest_worker'
+  // If a test worker is running, it will not communicate with the intake
+  // or the agent, so this logic only applies to non-test workers.
+  if (isAgentlessEnabled) {
+    if (getEnvironmentVariable('DD_API_KEY')) {
+      options.experimental = {
+        exporter: 'datadog'
+      }
+    } else {
+      console.error('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
+        'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
+        'dd-trace will not be initialized.')
+      shouldInit = false
+    }
+  } else {
+    options.experimental = {
+      exporter: 'agent_proxy'
+    }
   }
 }
 
