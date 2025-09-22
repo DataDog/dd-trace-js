@@ -76,7 +76,7 @@ class OtlpHttpLogExporter {
 
       // Track telemetry metric for OTLP log records
       try {
-        tracerMetrics.count('dd.instrumentation_telemetry_data.tracers.otel.log_records', this._telemetryTags)
+        tracerMetrics.count('otel.log_records', this._telemetryTags)
           .inc(logRecords.length)
       } catch (telemetryError) {
         log.debug('Error tracking OTLP log records telemetry:', telemetryError)

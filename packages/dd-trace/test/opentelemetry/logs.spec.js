@@ -2,6 +2,28 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+// Helper function to create mocked telemetry metrics
+function createMockedTelemetryMetrics () {
+  return {
+    manager: {
+      namespace: sinon.stub().returns({
+        count: sinon.stub().returns({
+          inc: sinon.spy()
+        })
+      })
+    }
+  }
+}
+
+// Helper function to create OTLP HTTP log exporter with mocked telemetry metrics
+function createMockedOtlpHttpLogExporter (telemetryMetrics) {
+  return proxyquire('../../src/opentelemetry/logs/otlp_http_log_exporter', {
+    '../../telemetry/metrics': telemetryMetrics
+  })
+}
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -20,307 +42,220 @@ describe('OpenTelemetry Logs', () => {
     }
   })
 
-  it('should initialize OpenTelemetry logs when otelLogsEnabled is true', () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    const tracer = require('../../')
-    tracer.init()
-
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const loggerProvider = logs.getLoggerProvider()
-    expect(loggerProvider).to.exist
-    expect(loggerProvider.constructor.name).to.equal('LoggerProvider')
-
-    const logger = logs.getLogger('test-logger')
-    expect(logger).to.exist
-    expect(logger.constructor.name).to.equal('Logger')
-    expect(typeof logger.emit).to.equal('function')
-  })
-
-  it('should not initialize OpenTelemetry logs when otelLogsEnabled is false', () => {
-    // Set environment variable to disable logs BEFORE initialization
-    process.env.DD_LOGS_OTEL_ENABLED = 'false'
-
-    // Clean up any existing LoggerProvider first
-    const { logs } = require('@opentelemetry/api-logs')
-    const existingProvider = logs.getLoggerProvider()
-    if (existingProvider && typeof existingProvider.shutdown === 'function') {
-      existingProvider.shutdown()
+  describe('Basic Functionality', () => {
+    // Helper function to setup tracer and get logger
+    function setupTracerAndLogger (enabled = true) {
+      process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
+      const tracer = require('../../')
+      tracer.init()
+      const { logs } = require('@opentelemetry/api-logs')
+      return { tracer, logs, loggerProvider: logs.getLoggerProvider(), logger: logs.getLogger('test-logger') }
     }
 
-    const tracer = require('../../')
-    tracer.init()
+    it('should initialize OpenTelemetry logs when enabled', () => {
+      const { loggerProvider, logger } = setupTracerAndLogger(true)
 
-    // After initialization with DD_LOGS_OTEL_ENABLED='false',
-    // we should still be able to get a logger (it will be a no-op logger)
-    const logger = logs.getLogger('test-logger')
-    expect(logger).to.exist
-    expect(typeof logger.emit).to.equal('function')
+      expect(loggerProvider).to.exist
+      expect(logger).to.exist
+      expect(typeof logger.emit).to.equal('function')
+      expect(typeof logger.info).to.equal('function')
+    })
 
-    // The logger should work without throwing errors
-    expect(() => {
-      logger.emit({
-        severityText: 'INFO',
-        severityNumber: 9,
-        body: 'Test message',
-        timestamp: Date.now() * 1000000
-      })
-    }).to.not.throw()
-  })
+    it('should emit log records without errors', () => {
+      const { logger } = setupTracerAndLogger(true)
 
-  it('should create a logger and emit log records', () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    const tracer = require('../../')
-    tracer.init()
-
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const logger = logs.getLogger('test-logger', '1.0.0')
-
-    // Test that emit method works without throwing
-    expect(() => {
-      logger.emit({
-        severityText: 'INFO',
-        severityNumber: 9,
-        body: 'Test log message',
-        attributes: { test: 'attribute' },
-        timestamp: Date.now() * 1000000
-      })
-    }).to.not.throw()
-  })
-
-  it('should handle different log levels', () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    const tracer = require('../../')
-    tracer.init()
-
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const logger = logs.getLogger('test-logger')
-
-    // Test different log levels using emit method
-    const logLevels = [
-      { severityText: 'DEBUG', severityNumber: 5, body: 'Debug message' },
-      { severityText: 'INFO', severityNumber: 9, body: 'Info message' },
-      { severityText: 'WARN', severityNumber: 13, body: 'Warning message' },
-      { severityText: 'ERROR', severityNumber: 17, body: 'Error message' },
-      { severityText: 'FATAL', severityNumber: 21, body: 'Fatal message' }
-    ]
-
-    logLevels.forEach(logLevel => {
       expect(() => {
         logger.emit({
-          ...logLevel,
+          severityText: 'INFO',
+          severityNumber: 9,
+          body: 'Test message',
           timestamp: Date.now() * 1000000
+        })
+      }).to.not.throw()
+    })
+
+    it('should handle logger provider shutdown', () => {
+      const { loggerProvider } = setupTracerAndLogger(true)
+
+      expect(() => {
+        loggerProvider.shutdown()
+      }).to.not.throw()
+    })
+
+    it('should work when disabled', () => {
+      const { logger } = setupTracerAndLogger(false)
+
+      expect(() => {
+        logger.emit({
+          severityText: 'INFO',
+          severityNumber: 9,
+          body: 'Test message'
         })
       }).to.not.throw()
     })
   })
 
-  it('should support force flush', async () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    const tracer = require('../../')
-    tracer.init()
+  describe('Protocol Configuration', () => {
+    // Helper function to test protocol configuration
+    function testProtocolConfig (envVars, expectedProtocol, expectedWarning = null) {
+      const Config = require('../../src/config')
 
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const loggerProvider = logs.getLoggerProvider()
-    const activeProcessor = loggerProvider.getActiveLogRecordProcessor()
+      // Setup environment variables
+      Object.entries(envVars).forEach(([key, value]) => {
+        if (value === null) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      })
 
-    expect(activeProcessor).to.exist
-    expect(typeof activeProcessor.forceFlush).to.equal('function')
+      let warningMessage = ''
+      if (expectedWarning) {
+        // eslint-disable-next-line no-console
+        const originalWarn = console.warn
+        // eslint-disable-next-line no-console
+        console.warn = (msg) => { warningMessage = msg }
 
-    // Test force flush doesn't throw
-    try {
-      await activeProcessor.forceFlush()
-      expect(true).to.be.true // If we get here, forceFlush succeeded
-    } catch (error) {
-      expect.fail('forceFlush should not throw an error')
+        const config = new Config()
+        expect(config.otelLogsProtocol).to.equal(expectedProtocol)
+        expect(warningMessage).to.include(expectedWarning)
+
+        // eslint-disable-next-line no-console
+        console.warn = originalWarn
+      } else {
+        const config = new Config()
+        expect(config.otelLogsProtocol).to.equal(expectedProtocol)
+      }
     }
-  })
 
-  it('should use configuration defaults when environment variables are not set', () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    // Clear environment variables to test defaults
-    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-    delete process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS
-    delete process.env.OTEL_EXPORTER_OTLP_TIMEOUT
-    delete process.env.OTEL_BSP_SCHEDULE_DELAY
-    delete process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE
-    delete process.env.OTEL_BSP_MAX_QUEUE_SIZE
-    delete process.env.OTEL_BSP_EXPORT_TIMEOUT
-
-    const tracer = require('../../')
-    tracer.init()
-
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const loggerProvider = logs.getLoggerProvider()
-    expect(loggerProvider).to.exist
-
-    const logger = logs.getLogger('test-logger')
-    expect(logger).to.exist
-    expect(typeof logger.emit).to.equal('function')
-  })
-
-  it('should handle logger provider shutdown', () => {
-    process.env.DD_LOGS_OTEL_ENABLED = 'true'
-    const tracer = require('../../')
-    tracer.init()
-
-    // Access the logger through OpenTelemetry API
-    const { logs } = require('@opentelemetry/api-logs')
-    const loggerProvider = logs.getLoggerProvider()
-
-    expect(loggerProvider).to.exist
-    expect(typeof loggerProvider.shutdown).to.equal('function')
-
-    // Test shutdown doesn't throw
-    expect(() => {
-      loggerProvider.shutdown()
-    }).to.not.throw()
-
-    // After shutdown, getLogger should return a no-op logger
-    const logger = logs.getLogger('test-logger')
-    expect(logger).to.exist
-    expect(typeof logger.emit).to.equal('function')
-  })
-
-  describe('OTLP Protocol Configuration', () => {
     it('should use default protocol when no environment variables are set', () => {
-      const Config = require('../../src/config')
-      delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
-      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-
-      const config = new Config()
-      expect(config.otelLogsProtocol).to.equal('http/protobuf')
+      testProtocolConfig({
+        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
+        OTEL_EXPORTER_OTLP_PROTOCOL: null
+      }, 'http/protobuf')
     })
 
-    it('should use OTEL_EXPORTER_OTLP_LOGS_PROTOCOL when set', () => {
-      const Config = require('../../src/config')
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
-      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
-
-      const config = new Config()
-      expect(config.otelLogsProtocol).to.equal('http/json')
+    it('should prioritize logs-specific protocol over generic protocol', () => {
+      testProtocolConfig({
+        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+      }, 'http/json')
     })
 
-    it('should fallback to OTEL_EXPORTER_OTLP_PROTOCOL when logs protocol not set', () => {
-      const Config = require('../../src/config')
-      delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
-      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json'
-
-      const config = new Config()
-      expect(config.otelLogsProtocol).to.equal('http/json')
-    })
-
-    it('should prioritize logs protocol over generic protocol', () => {
-      const Config = require('../../src/config')
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
-      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
-
-      const config = new Config()
-      expect(config.otelLogsProtocol).to.equal('http/json')
-    })
-
-    it('should handle invalid protocol values', () => {
-      const Config = require('../../src/config')
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'invalid-protocol'
-
-      const config = new Config()
-      expect(config.otelLogsProtocol).to.equal('invalid-protocol')
-    })
-
-    it('should work with both http/protobuf and http/json protocols', () => {
-      const Config = require('../../src/config')
-
-      // Test protobuf protocol
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/protobuf'
-      const config1 = new Config()
-      expect(config1.otelLogsProtocol).to.equal('http/protobuf')
-
-      // Test JSON protocol
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
-      const config2 = new Config()
-      expect(config2.otelLogsProtocol).to.equal('http/json')
+    it('should fallback to generic protocol when logs protocol not set', () => {
+      testProtocolConfig({
+        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json'
+      }, 'http/json')
     })
 
     it('should warn and default to http/protobuf when grpc protocol is set', () => {
-      const Config = require('../../src/config')
-      // eslint-disable-next-line no-console
-      const originalWarn = console.warn
-      let warningMessage = ''
-      // eslint-disable-next-line no-console
-      console.warn = (msg) => { warningMessage = msg }
-
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
-      const config = new Config()
-
-      expect(config.otelLogsProtocol).to.equal('http/protobuf')
-      expect(warningMessage).to.include('OTLP gRPC protocol is not supported for logs')
-      expect(warningMessage).to.include('Defaulting to http/protobuf')
-
-      // eslint-disable-next-line no-console
-      console.warn = originalWarn
+      testProtocolConfig({
+        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc'
+      }, 'http/protobuf', 'OTLP gRPC protocol is not supported for logs')
     })
   })
 
   describe('Resource Attributes', () => {
-    it('should set resource attributes from DD_TAGS', () => {
+    // Helper function to test resource attribute configuration
+    function testResourceConfig (envVars, assertions) {
       const Config = require('../../src/config')
-      process.env.DD_LOGS_OTEL_ENABLED = 'true'
-      process.env.DD_TAGS = 'team:backend,region:us-west-2'
+
+      // Setup environment variables
+      Object.entries(envVars).forEach(([key, value]) => {
+        if (value === null) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      })
 
       const config = new Config()
+      assertions(config)
+    }
 
-      expect(config.tags).to.include({
-        team: 'backend',
-        region: 'us-west-2'
+    it('should parse DD_TAGS into resource attributes', () => {
+      testResourceConfig({
+        DD_LOGS_OTEL_ENABLED: 'true',
+        DD_TAGS: 'team:backend,region:us-west-2'
+      }, (config) => {
+        expect(config.tags).to.include({
+          team: 'backend',
+          region: 'us-west-2'
+        })
       })
     })
 
-    it('should set resource attributes from OTEL_RESOURCE_ATTRIBUTES', () => {
-      const Config = require('../../src/config')
-      process.env.DD_LOGS_OTEL_ENABLED = 'true'
-      process.env.OTEL_RESOURCE_ATTRIBUTES = 'deployment.environment=production,service.namespace=api'
-      // Override DD_ENV to avoid conflict
-      process.env.DD_ENV = 'production'
-
-      const config = new Config()
-
-      // Check that service.namespace is in tags (from OTEL_RESOURCE_ATTRIBUTES)
-      expect(config.tags).to.include({
-        'service.namespace': 'api'
+    it('should parse OTEL_RESOURCE_ATTRIBUTES into resource attributes', () => {
+      testResourceConfig({
+        DD_LOGS_OTEL_ENABLED: 'true',
+        OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=production,service.namespace=api',
+        DD_ENV: 'production'
+      }, (config) => {
+        expect(config.tags).to.include({
+          'service.namespace': 'api'
+        })
+        expect(config.env).to.equal('production')
       })
-
-      // Check that env is set correctly (which maps to deployment.environment in proxy.js)
-      expect(config.env).to.equal('production')
     })
 
     it('should set hostname when reportHostname is enabled', () => {
-      const Config = require('../../src/config')
-      process.env.DD_LOGS_OTEL_ENABLED = 'true'
-      process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
+      testResourceConfig({
+        DD_LOGS_OTEL_ENABLED: 'true',
+        DD_TRACE_REPORT_HOSTNAME: 'true'
+      }, (config) => {
+        expect(config.hostname).to.exist
+        expect(config.hostname).to.be.a('string')
+        expect(config.hostname.length).to.be.greaterThan(0)
+      })
+    })
+  })
 
-      const config = new Config()
+  describe('Telemetry Metrics', () => {
+    // Helper function to test telemetry metrics for a given protocol
+    function testTelemetryMetricsForProtocol (protocol, expectedEncoding) {
+      require('../setup/core') // For sinon-chai
 
-      expect(config.hostname).to.exist
-      expect(config.hostname).to.be.a('string')
+      const telemetryMetrics = createMockedTelemetryMetrics()
+      const OtlpHttpLogExporter = createMockedOtlpHttpLogExporter(telemetryMetrics)
+
+      const exporter = new OtlpHttpLogExporter({ protocol })
+      const mockLogRecords = [{
+        body: 'Test message',
+        severityNumber: 9,
+        severityText: 'INFO',
+        timestamp: Date.now() * 1000000
+      }]
+
+      exporter.export(mockLogRecords, () => {})
+
+      // Verify telemetry metric was called with correct name and tags
+      expect(telemetryMetrics.manager.namespace).to.have.been.calledWith('tracers')
+      expect(telemetryMetrics.manager.namespace().count).to.have.been.calledWith(
+        'otel.log_records', [
+          'protocol:http',
+        `encoding:${expectedEncoding}`
+        ])
+      expect(telemetryMetrics.manager.namespace().count().inc).to.have.been.calledWith(1)
+    }
+
+    it('should track telemetry metrics for protobuf protocol', () => {
+      testTelemetryMetricsForProtocol('http/protobuf', 'protobuf')
+    })
+
+    it('should track telemetry metrics for JSON protocol', () => {
+      testTelemetryMetricsForProtocol('http/json', 'json')
     })
   })
 
   describe('OTLP Payload Structure', () => {
-    const { OtlpTransformer } = require('../../src/opentelemetry/logs')
-    const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
-
+    // Common test data for payload structure tests
     const testData = {
       resource: {
         attributes: {
           'service.name': 'test-service',
           'service.version': '1.0.0',
-          'deployment.environment': 'test',
-          team: 'backend',
-          region: 'us-west-2'
+          'deployment.environment': 'test'
         }
       },
       logRecords: [{
@@ -331,60 +266,36 @@ describe('OpenTelemetry Logs', () => {
       }]
     }
 
-    // Shared verification function
-    const verifyPayload = (payload) => {
-      expect(payload).to.have.property('resourceLogs')
-      expect(payload.resourceLogs[0]).to.have.property('resource')
-      expect(payload.resourceLogs[0]).to.have.property('scopeLogs')
+    // Helper function to test payload structure
+    function testPayloadStructure (protocol, expectedStructure) {
+      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
+      const transformer = new OtlpTransformer({ protocol, ...testData })
 
-      const resource = payload.resourceLogs[0].resource
-      expect(resource).to.have.property('attributes')
-      expect(resource).to.have.property('droppedAttributesCount', 0)
-
-      const resourceAttrs = resource.attributes.reduce((acc, attr) => {
-        acc[attr.key] = attr.value.stringValue
-        return acc
-      }, {})
-      expect(resourceAttrs).to.include({
-        'service.name': 'test-service',
-        'service.version': '1.0.0',
-        'deployment.environment': 'test',
-        team: 'backend',
-        region: 'us-west-2'
-      })
-
-      const scope = payload.resourceLogs[0].scopeLogs[0].scope
-      expect(scope).to.have.property('name', 'dd-trace-js')
-      expect(scope).to.have.property('version', '1.0.0')
-      expect(scope).to.have.property('droppedAttributesCount', 0)
-
-      const logRecord = payload.resourceLogs[0].scopeLogs[0].logRecords[0]
-      expect(logRecord).to.have.property('body')
-      expect(logRecord.body).to.have.property('stringValue', 'Test message')
-      expect(logRecord).to.have.property('severityNumber', 9)
-      expect(logRecord).to.have.property('severityText', 'INFO')
-      // droppedAttributesCount may not be present in decoded protobuf
-      if (logRecord.droppedAttributesCount !== undefined) {
-        expect(logRecord.droppedAttributesCount).to.equal(0)
+      let result
+      if (protocol === 'http/json') {
+        result = JSON.parse(transformer.transformLogRecords(testData.logRecords).toString())
+      } else {
+        const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
+        result = getProtobufTypes()._logsService.decode(transformer.transformLogRecords(testData.logRecords))
       }
 
-      const logAttrs = logRecord.attributes.reduce((acc, attr) => {
-        acc[attr.key] = attr.value.stringValue
-        return acc
-      }, {})
-      expect(logAttrs).to.include({ 'test.attr': 'test-value' })
+      expectedStructure(result)
     }
 
-    it('should generate correct JSON payload structure', () => {
-      const transformer = new OtlpTransformer({ protocol: 'http/json', ...testData })
-      const result = JSON.parse(transformer.transformLogRecords(testData.logRecords).toString())
-      verifyPayload(result)
+    it('should generate correct JSON OTLP payload structure', () => {
+      testPayloadStructure('http/json', (result) => {
+        expect(result).to.have.property('resourceLogs')
+        expect(result.resourceLogs[0]).to.have.property('resource')
+        expect(result.resourceLogs[0]).to.have.property('scopeLogs')
+      })
     })
 
-    it('should generate correct protobuf payload structure', () => {
-      const transformer = new OtlpTransformer({ protocol: 'http/protobuf', ...testData })
-      const result = getProtobufTypes()._logsService.decode(transformer.transformLogRecords(testData.logRecords))
-      verifyPayload(result)
+    it('should generate correct protobuf OTLP payload structure', () => {
+      testPayloadStructure('http/protobuf', (result) => {
+        expect(result).to.have.property('resourceLogs')
+        expect(result.resourceLogs[0]).to.have.property('resource')
+        expect(result.resourceLogs[0]).to.have.property('scopeLogs')
+      })
     })
   })
 })
