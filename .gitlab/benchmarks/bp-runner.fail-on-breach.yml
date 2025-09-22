@@ -9,7 +9,6 @@ experiments:
         run: fail_on_breach
         warning_range: 7
         scenarios:
-          # Macrobenchmarks
           - name: normal_operation/only-tracing
             thresholds:
               - agg_http_req_duration_p50 < 2 ms
