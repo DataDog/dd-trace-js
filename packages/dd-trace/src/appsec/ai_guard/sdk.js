@@ -72,10 +72,10 @@ class AIGuard extends NoopAIGuard {
     const { block = false } = opts ?? {}
     return await this._tracer.trace('ai_guard', {}, async (span) => {
       const last = messages[messages.length - 1]
-      const target = last.toolCalls ? 'tool' : 'prompt'
+      const target = last.tool_calls ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
       if (target === 'tool') {
-        const names = last.toolCalls.map((tool) => tool.function.name)
+        const names = last.tool_calls.map((tool) => tool.function.name)
         span.setTag(AI_GUARD_TOOL_NAME_TAG_KEY, names.join(', '))
       }
       span.meta_struct = {
