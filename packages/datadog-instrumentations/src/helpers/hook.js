@@ -1,6 +1,6 @@
 'use strict'
 const iitm = require('../../../dd-trace/src/iitm')
-const path = require('path')
+// const path = require('path')
 const ritm = require('../../../dd-trace/src/ritm')
 
 /**
@@ -18,21 +18,19 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
-  const patched = new WeakMap()
-  this._patched = Object.create(null)
+  // const patched = new WeakMap()
+  // this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    const parts = [moduleBaseDir, moduleName].filter(Boolean)
-    const filename = path.join(...parts)
+    // const parts = [moduleBaseDir, moduleName].filter(Boolean)
+    // const filename = path.join(...parts)
 
-    if (this._patched[filename] && patched.has(moduleExports)) return patched.get(moduleExports)
+    // if (this._patched[filename] && patched.has(moduleExports)) return patched.get(moduleExports)
     let defaultWrapResult
 
     if (
       isIitm &&
-      moduleExports.default &&
-      (typeof moduleExports.default === 'object' ||
-        typeof moduleExports.default === 'function')
+      moduleExports.default
     ) {
       defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
@@ -41,11 +39,11 @@ function Hook (modules, hookOptions, onrequire) {
 
     if (defaultWrapResult) newExports.default = defaultWrapResult
 
-    if (newExports &&
-      (typeof newExports === 'object' || typeof newExports === 'function')) {
-      patched.set(moduleExports, newExports)
-      this._patched[filename] = true
-    }
+    // if (newExports &&
+    //   (typeof newExports === 'object' || typeof newExports === 'function')) {
+    //   patched.set(moduleExports, newExports)
+    //   this._patched[filename] = true
+    // }
 
     return newExports
   }
