@@ -368,7 +368,7 @@ function reportAttack ({ events: attackData, actions }) {
 
   // TODO this should be deleted in the next major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
-    reportRequestBody(rootSpan, req.body)
+    reportRequestBody(rootSpan, req.body, true)
   }
   // TODO if actions.extended_data_collection => save the request for data collection at the end of the request
   const extendedDataCollection = actions?.extended_data_collection
@@ -432,7 +432,7 @@ function truncateRequestBody (target, depth = 0) {
   }
 }
 
-function reportRequestBody (rootSpan, requestBody) {
+function reportRequestBody (rootSpan, requestBody, isRasp = false) {
   if (!requestBody) return
 
   if (!rootSpan.meta_struct) {
@@ -443,7 +443,10 @@ function reportRequestBody (rootSpan, requestBody) {
     const { truncated, value } = truncateRequestBody(requestBody)
     rootSpan.meta_struct['http.request.body'] = value
     if (truncated) {
-      rootSpan.setTag('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+      const sizeExceedTagKey = isRasp
+        ? '_dd.appsec.rasp.request_body_size.exceeded'
+        : '_dd.appsec.request_body_size.exceeded'
+      rootSpan.setTag(sizeExceedTagKey, 'true')
     }
   }
 }
