@@ -30,9 +30,6 @@ class AIGuardClientError extends Error {
     if (opts.cause) {
       this.cause = opts.cause
     }
-    if (opts.status) {
-      this.status = opts.status
-    }
   }
 }
 
@@ -105,7 +102,7 @@ class AIGuard extends NoopAIGuard {
         log.debug(`AI Guard API call failed: ${JSON.stringify(response)}`)
         throw new AIGuardClientError(
           `AI Guard service call failed, status ${response.status}`,
-          { errors: response.body?.errors, status: response.status })
+          { errors: response.body?.errors })
       }
       let action, reason, shouldBlock
       try {
