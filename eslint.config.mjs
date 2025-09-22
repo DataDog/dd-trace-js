@@ -76,7 +76,7 @@ export default [
         }
       },
       globals: {
-        ...globals.es2021,
+        ...globals.es2022,
         ...globals.node,
         document: 'readonly',
         navigator: 'readonly',
