@@ -165,7 +165,8 @@ module.exports = class PluginManager {
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
+      experimental
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -184,7 +185,8 @@ module.exports = class PluginManager {
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
+      experimental
     }
 
     if (logInjection !== undefined) {
