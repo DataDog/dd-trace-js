@@ -1317,7 +1317,9 @@ moduleTypes.forEach(({
         })
 
         receiver.setKnownTestsResponseCode(500)
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          cypress: {}
+        })
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -2532,7 +2534,9 @@ moduleTypes.forEach(({
 
       context('test is new', () => {
         it('should be retried and marked both as new and modified', async () => {
-          receiver.setKnownTests({})
+          receiver.setKnownTests({
+            cypress: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
