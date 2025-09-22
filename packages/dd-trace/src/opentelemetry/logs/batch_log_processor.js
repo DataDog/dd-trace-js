@@ -1,6 +1,6 @@
 'use strict'
 /**
- * BatchLogRecordProcessor processes log records in batches for efficient export.
+ * BatchLogRecordProcessor processes log records in batches for efficient export to Datadog Agent.
  *
  * This implementation follows the OpenTelemetry JavaScript SDK BatchLogRecordProcessor:
  * https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk-logs.BatchLogRecordProcessor.html
@@ -11,7 +11,7 @@ class BatchLogRecordProcessor {
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
-   * @param {Object} processor - Log processor to process batches
+   * @param {Object} processor - Log processor for exporting batches to Datadog Agent
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
    * @param {number} maxQueueSize - Maximum number of log records in queue

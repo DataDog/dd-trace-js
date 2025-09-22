@@ -288,11 +288,6 @@ class Tracer extends NoopProxy {
         resourceAttributes['host.name'] = os.hostname()
       }
 
-      // Create logger provider
-      const loggerProvider = new LoggerProvider({
-        attributes: resourceAttributes
-      })
-
       // Create OTLP exporter using resolved config values
       const exporter = new OtlpHttpLogExporter(
         config.otelLogsUrl,
@@ -302,7 +297,7 @@ class Tracer extends NoopProxy {
         resourceAttributes
       )
 
-      // Create batch processor using resolved config values
+      // Create batch processor for exporting logs to Datadog Agent
       const processor = new BatchLogRecordProcessor(
         exporter,
         config.otelLogsBatchTimeout,
@@ -311,8 +306,11 @@ class Tracer extends NoopProxy {
         config.otelLogsExportTimeoutMillis
       )
 
-      // Add processor to logger provider
-      loggerProvider.addLogRecordProcessor(processor)
+      // Create logger provider with processor for Datadog Agent export
+      const loggerProvider = new LoggerProvider({
+        resource: { attributes: resourceAttributes },
+        processor
+      })
 
       // Register the logger provider globally with OpenTelemetry API
       logs.setGlobalLoggerProvider(loggerProvider)

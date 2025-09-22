@@ -224,7 +224,11 @@ describe('OpenTelemetry Logs', () => {
         body: 'Test message',
         severityNumber: 9,
         severityText: 'INFO',
-        timestamp: Date.now() * 1000000
+        timestamp: Date.now() * 1000000,
+        instrumentationLibrary: {
+          name: 'dd-trace-js',
+          version: '1.0.0'
+        }
       }]
 
       exporter.export(mockLogRecords, () => {})

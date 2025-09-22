@@ -4,51 +4,67 @@ const Logger = require('./logger')
 const log = require('../../log')
 
 /**
- * LoggerProvider is the main entry point for creating loggers.
+ * LoggerProvider is the main entry point for creating loggers with a single processor for Datadog Agent export.
  *
- * This implementation follows the OpenTelemetry JavaScript SDK LoggerProvider:
-   * https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk-logs.LoggerProvider.html
+ * This implementation follows the OpenTelemetry JavaScript API LoggerProvider interface:
+ * https://github.com/open-telemetry/opentelemetry-js/blob/a7a36499f70f25201949aeabb84c5fd4ca80e860/experimental/packages/api-logs/src/types/LoggerProvider.ts
  *
  * @class LoggerProvider
+ * @implements {import('@opentelemetry/api-logs').LoggerProvider}
  */
 class LoggerProvider {
   /**
-   * Creates a new LoggerProvider instance.
+   * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
    *
-   * @param {Object} [resource] - Resource attributes
-   * @param {Object} [resource.attributes] - Resource attribute key-value pairs
-   * @param {Array} [processors] - Array of LogRecordProcessor instances
+   * @param {Object} [options] - LoggerProvider options
+   * @param {Object} [options.resource] - Resource attributes
+   * @param {Object} [options.resource.attributes] - Resource attribute key-value pairs
+   * @param {Object} [options.processor] - Single LogRecordProcessor instance for exporting logs to Datadog Agent
    */
-  constructor (resource, processors = []) {
-    this.resource = resource
-    this._processors = processors
+  constructor (options = {}) {
+    this.resource = options.resource
+    this._processor = options.processor || null
     this._loggers = new Map()
-    this._activeProcessor = null
     this._isShutdown = false
   }
 
   /**
    * Gets or creates a logger instance.
    *
-   * @param {string} name - Logger name
-   * @param {string} [version='1.0.0'] - Logger version
-   * @param {Object} [options={}] - Additional options
+   * @param {string|Object} nameOrOptions - Logger name or options object
+   * @param {string} [version] - Logger version (when nameOrOptions is a string)
+   * @param {Object} [options] - Additional options (when nameOrOptions is a string)
    * @returns {Logger} Logger instance
    */
-  getLogger (name, version = '1.0.0', options = {}) {
+  getLogger (nameOrOptions, version, options = {}) {
     if (this._isShutdown) {
       return this._createNoOpLogger()
     }
 
-    const key = `${name}@${version}`
+    let name, loggerOptions
+    if (typeof nameOrOptions === 'string') {
+      name = nameOrOptions
+      loggerOptions = { version, ...options }
+    } else {
+      name = nameOrOptions.name
+      loggerOptions = nameOrOptions
+    }
+
+    const loggerVersion = loggerOptions.version || ''
+    const key = `${name}@${loggerVersion}`
+
     if (!this._loggers.has(key)) {
-      this._loggers.set(key, new Logger(this))
+      this._loggers.set(key, new Logger(this, { name, version: loggerVersion }))
     }
     return this._loggers.get(key)
   }
 
   _createNoOpLogger () {
     return {
+      instrumentationLibrary: {
+        name: 'dd-trace-js',
+        version: ''
+      },
       emit: () => {},
       debug: () => {},
       info: () => {},
@@ -56,20 +72,6 @@ class LoggerProvider {
       error: () => {},
       fatal: () => {}
     }
-  }
-
-  addLogRecordProcessor (logRecordProcessor) {
-    if (this._isShutdown) {
-      log.warn('Cannot add log record processor after shutdown')
-      return
-    }
-
-    this._processors.push(logRecordProcessor)
-    this._activeProcessor = logRecordProcessor
-  }
-
-  getActiveLogRecordProcessor () {
-    return this._activeProcessor
   }
 
   register () {
@@ -88,11 +90,11 @@ class LoggerProvider {
       return Promise.reject(new Error('LoggerProvider is shutdown'))
     }
 
-    if (!this._activeProcessor) {
+    if (!this._processor) {
       return Promise.resolve()
     }
 
-    return this._activeProcessor.forceFlush()
+    return this._processor.forceFlush()
   }
 
   shutdown () {
@@ -102,11 +104,11 @@ class LoggerProvider {
 
     this._isShutdown = true
 
-    if (!this._activeProcessor) {
+    if (!this._processor) {
       return Promise.resolve()
     }
 
-    return this._activeProcessor.shutdown()
+    return this._processor.shutdown()
   }
 }
 

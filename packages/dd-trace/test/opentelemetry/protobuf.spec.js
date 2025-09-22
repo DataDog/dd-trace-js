@@ -124,7 +124,7 @@ describe('OTLP Protobuf Serialization', () => {
     expect(result.length).to.be.greaterThan(0)
   })
 
-  it('hould serialize log records to json format', () => {
+  it('Should serialize log records to json format', () => {
     const transformer = new OtlpTransformer({
       attributes: {
         'service.name': 'test-service'

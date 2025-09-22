@@ -16,9 +16,16 @@ class Logger {
    * Creates a new Logger instance.
    *
    * @param {LoggerProvider} loggerProvider - Parent logger provider
+   * @param {Object} [instrumentationLibrary] - Instrumentation library information
+   * @param {string} [instrumentationLibrary.name] - Library name (defaults to 'dd-trace-js')
+   * @param {string} [instrumentationLibrary.version] - Library version (defaults to tracer version)
    */
-  constructor (loggerProvider) {
+  constructor (loggerProvider, instrumentationLibrary) {
     this._loggerProvider = loggerProvider
+    this.instrumentationLibrary = {
+      name: instrumentationLibrary?.name || 'dd-trace-js',
+      version: instrumentationLibrary?.version || require('../../../../../package.json').version
+    }
   }
 
   get resource () {
@@ -35,8 +42,7 @@ class Logger {
       return
     }
 
-    const processor = this._loggerProvider.getActiveLogRecordProcessor()
-    if (!processor) {
+    if (!this._loggerProvider._processor) {
       return
     }
 
@@ -45,7 +51,7 @@ class Logger {
     }
 
     logRecord.instrumentationLibrary = this.instrumentationLibrary
-    processor.onEmit(logRecord)
+    this._loggerProvider._processor.onEmit(logRecord)
   }
 
   debug (message, attributes = {}) {
