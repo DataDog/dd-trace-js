@@ -33,7 +33,7 @@ const propagationLodashFns = [
   'arrayJoinLodashWithSeparator'
 ]
 
-const propagationLodashFunctionsFile = path.join(__dirname, 'resources/propagationLodashFunctions.js')
+const propagationLodashFunctionsFile = path.join(__dirname, 'resources/propagation-lodash-functions.js')
 const propagationLodashFunctions = require(propagationLodashFunctionsFile)
 
 describe('TaintTracking lodash', () => {
