@@ -1,6 +1,6 @@
 'use strict'
 
-const inspector = require('../../../../src/debugger/devtools_client/inspector_promises_polyfill')
+const inspector = require('../../../../src/debugger/devtools-client/inspector-promises-polyfill')
 const session = module.exports = new inspector.Session()
 session.connect()
 

@@ -9,7 +9,7 @@ const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
 
 const LangChainHandler = require('./handlers/default')
-const LangChainLanguageModelHandler = require('./handlers/language_models')
+const LangChainLanguageModelHandler = require('./handlers/language-models')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
 class BaseLangChainTracingPlugin extends TracingPlugin {

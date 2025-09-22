@@ -4,7 +4,7 @@ const Activation = require('../appsec/activation')
 
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
-const { setCollectionMode } = require('../appsec/user_tracking')
+const { setCollectionMode } = require('../appsec/user-tracking')
 const log = require('../log')
 
 let rc
@@ -77,7 +77,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
-    const RuleManager = require('../appsec/rule_manager')
+    const RuleManager = require('../appsec/rule-manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
@@ -116,7 +116,7 @@ function enableWafUpdate (appsecConfig) {
 
 function disableWafUpdate () {
   if (rc) {
-    const RuleManager = require('../appsec/rule_manager')
+    const RuleManager = require('../appsec/rule-manager')
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)

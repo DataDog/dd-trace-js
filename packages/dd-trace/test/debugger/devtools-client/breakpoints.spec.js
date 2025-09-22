@@ -42,7 +42,7 @@ describe('breakpoints', function () {
       '@noCallThru': true
     }
 
-    breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
+    breakpoints = proxyquire('../../../src/debugger/devtools-client/breakpoints', {
       './session': sessionMock,
       './state': stateMock
     })

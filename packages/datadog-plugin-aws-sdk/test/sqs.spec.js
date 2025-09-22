@@ -9,7 +9,7 @@ const { randomUUID } = require('node:crypto')
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')

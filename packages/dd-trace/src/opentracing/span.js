@@ -4,10 +4,10 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
-const SpanContext = require('./span_context')
+const SpanContext = require('./span-context')
 const id = require('../id')
 const tagger = require('../tagger')
-const runtimeMetrics = require('../runtime_metrics')
+const runtimeMetrics = require('../runtime-metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')

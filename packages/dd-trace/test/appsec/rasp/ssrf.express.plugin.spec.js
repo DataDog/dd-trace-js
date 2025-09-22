@@ -30,7 +30,7 @@ describe('RASP - ssrf', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'rasp-rules.json'),
           rasp: { enabled: true }
         }
       }))
@@ -234,7 +234,7 @@ describe('RASP - ssrf', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'rasp-rules.json'),
           rasp: { enabled: true }
         }
       }))

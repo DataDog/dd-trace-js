@@ -22,7 +22,7 @@ const {
   compile,
   compileSegments,
   templateRequiresEvaluation
-} = require('../../../src/debugger/devtools_client/condition')
+} = require('../../../src/debugger/devtools-client/condition')
 
 // Each test case is either a tuple of [ast, vars, expected] where:
 // - `ast` is the abstract syntax tree to be compiled

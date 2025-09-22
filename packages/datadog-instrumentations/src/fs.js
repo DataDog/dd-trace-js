@@ -10,7 +10,7 @@ const errorChannel = channel('apm:fs:operation:error')
 const ddFhSym = Symbol('ddFileHandle')
 let kHandle, kDirReadPromisified, kDirClosePromisified
 
-// Update packages/dd-trace/src/profiling/profilers/event_plugins/fs.js if you make changes to param names in any of
+// Update packages/dd-trace/src/profiling/profilers/event-plugins/fs.js if you make changes to param names in any of
 // the following objects.
 
 const paramsByMethod = {

@@ -1,7 +1,7 @@
 'use strict'
 
 const web = require('../../plugins/util/web')
-const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack_trace')
+const { getCallsiteFrames, reportStackTrace, canReportStackTrace } = require('../stack-trace')
 const { getBlockingAction } = require('../blocking')
 const log = require('../../log')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')

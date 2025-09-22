@@ -6,10 +6,10 @@ const {
   trackCustomEvent,
   trackUserLoginSuccessV2,
   trackUserLoginFailureV2
-} = require('./track_event')
-const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
+} = require('./track-event')
+const { checkUserAndSetUser, blockRequest } = require('./user-blocking')
 const { setTemplates } = require('../blocking')
-const { setUser } = require('./set_user')
+const { setUser } = require('./set-user')
 
 class EventTrackingV2 {
   constructor (tracer) {

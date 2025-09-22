@@ -11,7 +11,7 @@ const fs = require('node:fs')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { json } = require('../../src/appsec/blocked_templates')
+const { json } = require('../../src/appsec/blocked-templates')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
@@ -682,7 +682,7 @@ describe('Api Security - Fastify', () => {
       config = new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'api_security_rules.json'),
+          rules: path.join(__dirname, 'api-security-rules.json'),
           apiSecurity: {
             enabled: true,
             sampleDelay: 10

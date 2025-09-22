@@ -17,8 +17,8 @@ describe('findScriptFromPartialPath', function () {
   ]
 
   before(function () {
-    state = proxyquire('../../../src/debugger/devtools_client/state', {
-      './source-maps': proxyquire('../../../src/debugger/devtools_client/source-maps', {
+    state = proxyquire('../../../src/debugger/devtools-client/state', {
+      './source-maps': proxyquire('../../../src/debugger/devtools-client/source-maps', {
         fs: {
           // Mock reading the source map file
           readFileSync: () => JSON.stringify({

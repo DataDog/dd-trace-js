@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
-const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci-plugin')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {

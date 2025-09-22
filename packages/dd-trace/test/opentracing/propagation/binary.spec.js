@@ -6,7 +6,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 require('../../setup/core')
 
 const id = require('../../../src/id')
-const SpanContext = require('../../../src/opentracing/span_context')
+const SpanContext = require('../../../src/opentracing/span-context')
 
 describe('BinaryPropagator', () => {
   let BinaryPropagator

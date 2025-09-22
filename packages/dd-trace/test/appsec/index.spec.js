@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const waf = require('../../src/appsec/waf')
-const RuleManager = require('../../src/appsec/rule_manager')
+const RuleManager = require('../../src/appsec/rule-manager')
 const appsec = require('../../src/appsec')
 const {
   bodyParser,
@@ -30,7 +30,7 @@ const {
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
-const blockedTemplate = require('../../src/appsec/blocked_templates')
+const blockedTemplate = require('../../src/appsec/blocked-templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
@@ -127,7 +127,7 @@ describe('AppSec Index', function () {
       disable: sinon.stub()
     }
 
-    apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
+    apiSecuritySampler = proxyquire('../../src/appsec/api-security-sampler', {
       '../plugins/util/web': web
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
@@ -146,10 +146,10 @@ describe('AppSec Index', function () {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
-      './user_tracking': UserTracking,
+      './user-tracking': UserTracking,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler,
+      './api-security-sampler': apiSecuritySampler,
       './rasp': rasp,
       '../serverless': serverless
     })

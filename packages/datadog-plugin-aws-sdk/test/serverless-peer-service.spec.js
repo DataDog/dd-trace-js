@@ -6,8 +6,8 @@ const { describe, it, before, after } = require('mocha')
 const { promisify } = require('node:util')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const helpers = require('./kinesis_helpers')
-const { setup } = require('./spec_helpers')
+const helpers = require('./kinesis-helpers')
+const { setup } = require('./spec-helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {

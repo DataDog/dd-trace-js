@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const { models } = require('./fixtures/bedrockruntime')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const assert = require('node:assert')

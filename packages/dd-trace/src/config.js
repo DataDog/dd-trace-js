@@ -10,14 +10,14 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git-properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
-const defaults = require('./config_defaults')
+const defaults = require('./config-defaults')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -253,7 +253,7 @@ class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
-      const StableConfig = require('./config_stable')
+      const StableConfig = require('./config-stable')
       this.stableConfig = new StableConfig()
     }
 

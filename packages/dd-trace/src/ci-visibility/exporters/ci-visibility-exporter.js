@@ -2,7 +2,7 @@
 
 const URL = require('url').URL
 
-const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git-metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')

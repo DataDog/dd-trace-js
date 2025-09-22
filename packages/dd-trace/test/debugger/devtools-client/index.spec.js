@@ -52,25 +52,25 @@ describe('onPause', function () {
     send = sinon.spy()
     send['@noCallThru'] = true
 
-    const state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
-    proxyquire.noCallThru()('../../../src/debugger/devtools_client/status', { './config': config })
-    const collector = proxyquire('../../../src/debugger/devtools_client/snapshot/collector', { '../session': session })
-    const redaction = proxyquire('../../../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
-    const processor = proxyquire('../../../src/debugger/devtools_client/snapshot/processor', {
+    const state = proxyquire('../../../src/debugger/devtools-client/state', { './session': session })
+    proxyquire.noCallThru()('../../../src/debugger/devtools-client/status', { './config': config })
+    const collector = proxyquire('../../../src/debugger/devtools-client/snapshot/collector', { '../session': session })
+    const redaction = proxyquire('../../../src/debugger/devtools-client/snapshot/redaction', { '../config': config })
+    const processor = proxyquire('../../../src/debugger/devtools-client/snapshot/processor', {
       './redaction': redaction
     })
-    const snapshot = proxyquire('../../../src/debugger/devtools_client/snapshot', {
+    const snapshot = proxyquire('../../../src/debugger/devtools-client/snapshot', {
       './collector': collector,
       './processor': processor
     })
-    proxyquire('../../../src/debugger/devtools_client', {
+    proxyquire('../../../src/debugger/devtools-client', {
       './config': config,
       './session': session,
       './state': state,
       './snapshot': snapshot,
       './send': send,
       './status': { ackReceived },
-      './remote_config': { '@noCallThru': true }
+      './remote-config': { '@noCallThru': true }
     })
 
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')

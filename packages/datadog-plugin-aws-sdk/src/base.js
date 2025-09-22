@@ -1,6 +1,6 @@
 'use strict'
 
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const analyticsSampler = require('../../dd-trace/src/analytics-sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')

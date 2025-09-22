@@ -113,12 +113,12 @@ describe('IAST Security Controls', () => {
     it('should hook a module only once', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate'
+/security-controls/resources/custom-input-validator.js:validate'
       securityControls.configure({ securityControlsConfiguration: conf })
 
-      requireAndPublish('./resources/custom_input_validator')
+      requireAndPublish('./resources/custom-input-validator')
 
-      const { validate } = requireAndPublish('./resources/custom_input_validator')
+      const { validate } = requireAndPublish('./resources/custom-input-validator')
       validate('input')
 
       sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, 'input', CUSTOM_COMMAND_INJECTION_MARK, false)
@@ -128,10 +128,10 @@ describe('IAST Security Controls', () => {
       it('should hook configured control for input_validator', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate'
+/security-controls/resources/custom-input-validator.js:validate'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        const { validate } = requireAndPublish('./resources/custom-input-validator')
         validate('input')
 
         sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, 'input', CUSTOM_COMMAND_INJECTION_MARK, false)
@@ -140,10 +140,10 @@ describe('IAST Security Controls', () => {
       it('should hook configured control for default sanitizer', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/sanitizer_default.js'
+/security-controls/resources/sanitizer-default.js'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const sanitize = requireAndPublish('./resources/sanitizer_default')
+        const sanitize = requireAndPublish('./resources/sanitizer-default')
         const result = sanitize('input')
 
         assert.equal(result, 'sanitized input')
@@ -153,12 +153,12 @@ describe('IAST Security Controls', () => {
       it('should hook multiple methods', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate;INPUT_VALIDATOR:\
+/security-controls/resources/custom-input-validator.js:validate;INPUT_VALIDATOR:\
 COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources\
-/custom_input_validator.js:validateObject'
+/custom-input-validator.js:validateObject'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate, validateObject } = requireAndPublish('./resources/custom_input_validator')
+        const { validate, validateObject } = requireAndPublish('./resources/custom-input-validator')
         let result = validate('input')
 
         sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, result, CUSTOM_COMMAND_INJECTION_MARK, false)
@@ -173,10 +173,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should hook configured control for input_validator with multiple inputs', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate'
+/security-controls/resources/custom-input-validator.js:validate'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        const { validate } = requireAndPublish('./resources/custom-input-validator')
         validate('input1', 'input2')
 
         sinon.assert.calledTwice(addSecureMark)
@@ -187,10 +187,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should hook configured control for input_validator with multiple inputs marking one parameter', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate:1'
+/security-controls/resources/custom-input-validator.js:validate:1'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        const { validate } = requireAndPublish('./resources/custom-input-validator')
         validate('input1', 'input2')
 
         sinon.assert.calledOnceWithExactly(addSecureMark, iastContext, 'input2', CUSTOM_COMMAND_INJECTION_MARK, false)
@@ -199,10 +199,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should hook configured control for input_validator with multiple inputs marking multiple parameter', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate:1,3'
+/security-controls/resources/custom-input-validator.js:validate:1,3'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        const { validate } = requireAndPublish('./resources/custom-input-validator')
         validate('input1', 'input2', 'input3', 'input4')
 
         sinon.assert.calledTwice(addSecureMark)
@@ -213,10 +213,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should hook configured control for input_validator with invalid parameter', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validate:42'
+/security-controls/resources/custom-input-validator.js:validate:42'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validate } = requireAndPublish('./resources/custom_input_validator')
+        const { validate } = requireAndPublish('./resources/custom-input-validator')
         validate('input1')
 
         sinon.assert.notCalled(addSecureMark)
@@ -239,10 +239,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should add marks for input string properties', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validateObject'
+/security-controls/resources/custom-input-validator.js:validateObject'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validateObject } = requireAndPublish('./resources/custom_input_validator')
+        const { validateObject } = requireAndPublish('./resources/custom-input-validator')
         const result = validateObject({ input1: 'input1', nested: { input: 'input2' } })
 
         sinon.assert.calledTwice(addSecureMark)
@@ -255,10 +255,10 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
       it('should add marks for mixed input string properties', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
-/security-controls/resources/custom_input_validator.js:validateObject'
+/security-controls/resources/custom-input-validator.js:validateObject'
         securityControls.configure({ securityControlsConfiguration: conf })
 
-        const { validateObject } = requireAndPublish('./resources/custom_input_validator')
+        const { validateObject } = requireAndPublish('./resources/custom-input-validator')
         const result = validateObject({ input1: 'input1' }, 'input3')
 
         sinon.assert.calledTwice(addSecureMark)

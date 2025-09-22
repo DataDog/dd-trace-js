@@ -16,10 +16,10 @@ async function loadMessage (avro, messageTypeName) {
     }
   } else if (messageTypeName === 'AdvancedUser') {
     // Read and parse the Avro schema
-    const schema = JSON.parse(fs.readFileSync('packages/datadog-plugin-avsc/test/schemas/advanced_user.avsc', 'utf8'))
+    const schema = JSON.parse(fs.readFileSync('packages/datadog-plugin-avsc/test/schemas/advanced-user.avsc', 'utf8'))
 
     // Create a file and write Avro data
-    const filePath = 'packages/datadog-plugin-avsc/test/schemas/advanced_users.avro'
+    const filePath = 'packages/datadog-plugin-avsc/test/schemas/advanced-users.avro'
 
     return {
       schema,

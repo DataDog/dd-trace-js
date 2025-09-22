@@ -1,6 +1,6 @@
 'use strict'
 
-const TextMapPropagator = require('./text_map')
+const TextMapPropagator = require('./text-map')
 
 class HttpPropagator extends TextMapPropagator {}
 

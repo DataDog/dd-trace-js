@@ -13,7 +13,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('.
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
-const SpanContext = require('./span_context')
+const SpanContext = require('./span-context')
 const id = require('../id')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.

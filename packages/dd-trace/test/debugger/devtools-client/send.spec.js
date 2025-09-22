@@ -10,7 +10,7 @@ const sinon = require('sinon')
 const { hostname: getHostname } = require('node:os')
 
 const { getRequestOptions } = require('./utils')
-const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const JSONBuffer = require('../../../src/debugger/devtools-client/json-buffer')
 const { version } = require('../../../../../package.json')
 
 process.env.DD_ENV = 'my-env'
@@ -43,7 +43,7 @@ describe('input message http requests', function () {
       }
     }
 
-    send = proxyquire('../../../src/debugger/devtools_client/send', {
+    send = proxyquire('../../../src/debugger/devtools-client/send', {
       './config': {
         service,
         commitSHA,

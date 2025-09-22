@@ -17,7 +17,7 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    runtimeMetrics = require('./runtime_metrics')
+    runtimeMetrics = require('./runtime-metrics')
 
     Object.setPrototypeOf(module.exports, runtimeMetrics)
 

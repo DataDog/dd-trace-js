@@ -5,7 +5,7 @@ const { describe, it, before, after } = require('mocha')
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const axios = require('axios')
 const { rawExpectedSchema } = require('./s3-naming')
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')

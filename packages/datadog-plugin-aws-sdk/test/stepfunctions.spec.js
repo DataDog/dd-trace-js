@@ -6,7 +6,7 @@ const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 
 const helloWorldSMD = {
   Comment: 'A Hello World example of the Amazon States Language using a Pass state',

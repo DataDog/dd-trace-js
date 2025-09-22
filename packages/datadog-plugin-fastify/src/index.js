@@ -1,7 +1,7 @@
 'use strict'
 
 const FastifyTracingPlugin = require('./tracing')
-const FastifyCodeOriginForSpansPlugin = require('./code_origin')
+const FastifyCodeOriginForSpansPlugin = require('./code-origin')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class FastifyPlugin extends CompositePlugin {

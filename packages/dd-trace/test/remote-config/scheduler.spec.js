@@ -6,7 +6,7 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
-const Scheduler = require('../../src/remote_config/scheduler')
+const Scheduler = require('../../src/remote-config/scheduler')
 
 const INTERVAL = 5e3
 

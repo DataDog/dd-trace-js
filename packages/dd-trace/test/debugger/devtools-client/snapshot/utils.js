@@ -6,10 +6,10 @@ const { join, basename } = require('node:path')
 const session = require('./stub-session')
 const proxyquire = require('proxyquire')
 
-const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
+const collectorWithStub = proxyquire('../../../../src/debugger/devtools-client/snapshot/collector', {
   '../session': session
 })
-const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
+const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools-client/snapshot/redaction', {
   '../config': {
     dynamicInstrumentation: {
       redactedIdentifiers: [],
@@ -18,11 +18,11 @@ const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devt
   }
 })
 
-const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
+const processorWithStub = proxyquire('../../../../src/debugger/devtools-client/snapshot/processor', {
   './redaction': redactionWithStub
 })
 
-const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
+const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools-client/snapshot', {
   './collector': collectorWithStub,
   './processor': processorWithStub
 })

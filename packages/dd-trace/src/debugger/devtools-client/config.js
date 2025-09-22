@@ -3,7 +3,7 @@
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { format } = require('node:url')
 const log = require('./log')
-const defaults = require('../../config_defaults')
+const defaults = require('../../config-defaults')
 
 const config = module.exports = {
   ...parentConfig,

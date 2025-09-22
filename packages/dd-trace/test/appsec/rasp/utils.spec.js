@@ -28,7 +28,7 @@ describe('RASP - utils.js', () => {
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
       '../../plugins/util/web': web,
-      '../stack_trace': stackTrace,
+      '../stack-trace': stackTrace,
       '../telemetry': telemetry,
       '../blocking': {
         getBlockingAction: sinon.spy((actions) => actions?.blocking_action)

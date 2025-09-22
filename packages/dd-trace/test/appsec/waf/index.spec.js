@@ -48,7 +48,7 @@ describe('WAF Manager', () => {
     DDWAF.prototype.removeConfig = sinon.stub()
     DDWAF.prototype.knownAddresses = knownAddresses
 
-    WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
+    WAFManager = proxyquire('../../../src/appsec/waf/waf-manager', {
       '@datadog/native-appsec': { DDWAF }
     })
 
@@ -58,9 +58,9 @@ describe('WAF Manager', () => {
     }
 
     waf = proxyquire('../../../src/appsec/waf', {
-      './waf_manager': WAFManager,
-      '../../rate_limiter': function () { return limiterStub },
-      '../../priority_sampler': { keepTrace },
+      './waf-manager': WAFManager,
+      '../../rate-limiter': function () { return limiterStub },
+      '../../priority-sampler': { keepTrace },
       '../../standalone/product': { ASM: 'ASM' },
       '../../plugins/util/web': webMock,
       '../telemetry': { updateRateLimitedMetric }

@@ -1,7 +1,7 @@
 'use strict'
 
 const id = require('../../id')
-const DatadogSpanContext = require('../span_context')
+const DatadogSpanContext = require('../span-context')
 
 class LogPropagator {
   constructor (config) {

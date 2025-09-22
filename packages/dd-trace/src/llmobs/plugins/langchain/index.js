@@ -18,7 +18,7 @@ const TOOL = 'tool'
 const RETRIEVAL = 'retrieval'
 
 const ChainHandler = require('./handlers/chain')
-const ChatModelHandler = require('./handlers/chat_model')
+const ChatModelHandler = require('./handlers/chat-model')
 const LlmHandler = require('./handlers/llm')
 const EmbeddingHandler = require('./handlers/embedding')
 const ToolHandler = require('./handlers/tool')

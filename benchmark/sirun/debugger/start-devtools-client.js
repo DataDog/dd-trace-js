@@ -2,7 +2,7 @@
 
 const Config = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
-const { generateProbeConfig } = require('../../../packages/dd-trace/test/debugger/devtools_client/utils')
+const { generateProbeConfig } = require('../../../packages/dd-trace/test/debugger/devtools-client/utils')
 
 const breakpoint = {
   file: process.env.BREAKPOINT_FILE,

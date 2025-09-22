@@ -7,11 +7,11 @@ const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
-const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply-states')
 const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
-const defaults = require('../config_defaults')
+const defaults = require('../config-defaults')
 
 const clientId = uuid()
 

@@ -9,17 +9,17 @@ const {
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
 
-// TODO: move debugger/devtools_client/session to common place
-const session = require('../../../debugger/devtools_client/session')
-// TODO: move debugger/devtools_client/source-maps to common place
-const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
-// TODO: move debugger/devtools_client/snapshot to common place
-const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
-// TODO: move debugger/devtools_client/state to common place
+// TODO: move debugger/devtools-client/session to common place
+const session = require('../../../debugger/devtools-client/session')
+// TODO: move debugger/devtools-client/source-maps to common place
+const { getGeneratedPosition } = require('../../../debugger/devtools-client/source-maps')
+// TODO: move debugger/devtools-client/snapshot to common place
+const { getLocalStateForCallFrame } = require('../../../debugger/devtools-client/snapshot')
+// TODO: move debugger/devtools-client/state to common place
 const {
   findScriptFromPartialPath,
   getStackFromCallFrames
-} = require('../../../debugger/devtools_client/state')
+} = require('../../../debugger/devtools-client/state')
 const log = require('../../../log')
 
 let sessionStarted = false

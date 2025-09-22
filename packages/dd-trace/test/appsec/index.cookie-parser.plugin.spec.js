@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { json } = require('../../src/appsec/blocked_templates')
+const { json } = require('../../src/appsec/blocked-templates')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('cookie-parser', 'cookie-parser', version => {

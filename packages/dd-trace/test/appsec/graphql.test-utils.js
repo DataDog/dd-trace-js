@@ -7,7 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const path = require('node:path')
 const fs = require('node:fs')
 
-const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
+const { graphqlJson, json } = require('../../src/appsec/blocked-templates')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')

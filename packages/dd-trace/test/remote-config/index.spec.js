@@ -7,9 +7,9 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const RuleManager = require('../../src/appsec/rule_manager')
-const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
-const { kPreUpdate } = require('../../src/remote_config/manager')
+const RuleManager = require('../../src/appsec/rule-manager')
+const RemoteConfigCapabilities = require('../../src/remote-config/capabilities')
+const { kPreUpdate } = require('../../src/remote-config/manager')
 
 let config
 let rc
@@ -53,9 +53,9 @@ describe('Remote Config index', () => {
       disable: sinon.spy()
     }
 
-    remoteConfig = proxyquire('../../src/remote_config', {
+    remoteConfig = proxyquire('../../src/remote-config', {
       './manager': RemoteConfigManager,
-      '../appsec/user_tracking': UserTracking,
+      '../appsec/user-tracking': UserTracking,
       '../log': log,
     })
   })

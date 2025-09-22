@@ -5,7 +5,7 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
-const { ipHeaderList } = require('../plugins/util/ip_extractor')
+const { ipHeaderList } = require('../plugins/util/ip-extractor')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -16,7 +16,7 @@ const {
   updateRaspRuleSkippedMetricTags,
   getRequestMetrics
 } = require('./telemetry')
-const { keepTrace } = require('../priority_sampler')
+const { keepTrace } = require('../priority-sampler')
 const { ASM } = require('../standalone/product')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 

@@ -4,7 +4,7 @@ const { info, warn } = require('./log/writer')
 
 const os = require('os')
 const { inspect } = require('util')
-const defaults = require('./config_defaults')
+const defaults = require('./config-defaults')
 const tracerVersion = require('../../../package.json').version
 
 const errors = {}

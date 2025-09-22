@@ -4,7 +4,7 @@ const proxyquire = require('proxyquire')
 const path = require('path')
 const os = require('os')
 const { expect } = require('chai')
-const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
+const { getCallsiteFrames } = require('../../../src/appsec/stack-trace')
 
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {

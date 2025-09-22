@@ -62,7 +62,7 @@ function start (config, rc) {
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
   worker = new Worker(
-    join(__dirname, 'devtools_client', 'index.js'),
+    join(__dirname, 'devtools-client', 'index.js'),
     {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)

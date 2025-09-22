@@ -75,7 +75,7 @@
       "versions": ["^4"]
     }
   ],
-  "child_process": [
+  "child-process": [
     {
       "name": "bluebird",
       "versions": ["^3"]

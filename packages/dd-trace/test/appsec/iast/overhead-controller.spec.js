@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const { EventEmitter } = require('node:events')
 
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
-const DatadogSpanContext = require('../../../src/opentracing/span_context')
+const DatadogSpanContext = require('../../../src/opentracing/span-context')
 const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const iast = require('../../../src/appsec/iast')

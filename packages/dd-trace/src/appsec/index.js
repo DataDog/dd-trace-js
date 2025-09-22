@@ -1,8 +1,8 @@
 'use strict'
 
 const log = require('../log')
-const RuleManager = require('./rule_manager')
-const remoteConfig = require('../remote_config')
+const RuleManager = require('./rule-manager')
+const remoteConfig = require('../remote-config')
 const {
   bodyParser,
   cookieParser,
@@ -30,12 +30,12 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
-const apiSecuritySampler = require('./api_security_sampler')
+const apiSecuritySampler = require('./api-security-sampler')
 const web = require('../plugins/util/web')
-const { extractIp } = require('../plugins/util/ip_extractor')
+const { extractIp } = require('../plugins/util/ip-extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
-const UserTracking = require('./user_tracking')
+const UserTracking = require('./user-tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')

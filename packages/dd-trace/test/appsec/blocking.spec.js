@@ -33,7 +33,7 @@ describe('blocking', () => {
 
     const blocking = proxyquire('../../src/appsec/blocking', {
       '../log': log,
-      './blocked_templates': defaultBlockedTemplate,
+      './blocked-templates': defaultBlockedTemplate,
       './telemetry': telemetry
     })
 

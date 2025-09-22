@@ -92,7 +92,7 @@ class NoopProxy {
   }
 
   get TracerProvider () {
-    return require('../opentelemetry/tracer_provider')
+    return require('../opentelemetry/tracer-provider')
   }
 }
 

@@ -13,7 +13,7 @@ const log = require('./log')
 const { version } = require('../../../../../package.json')
 const { NODE_MAJOR } = require('../../../../../version')
 
-require('./remote_config')
+require('./remote-config')
 
 // Expression to run on a call frame of the paused thread to get its active trace and span id.
 const templateExpressionSetupCode = `

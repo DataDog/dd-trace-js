@@ -11,7 +11,7 @@ require('../setup/core')
 
 require('../../').init()
 
-const TracerProvider = require('../../src/opentelemetry/tracer_provider')
+const TracerProvider = require('../../src/opentelemetry/tracer-provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
 

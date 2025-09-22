@@ -5,7 +5,7 @@ const { describe, it } = require('mocha')
 
 require('../../setup/mocha')
 
-const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const JSONBuffer = require('../../../src/debugger/devtools-client/json-buffer')
 
 const MAX_SAFE_SIGNED_INTEGER = 2 ** 31 - 1
 

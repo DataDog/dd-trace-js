@@ -8,7 +8,7 @@ const sinon = require('sinon')
 require('../../setup/mocha')
 
 const { getRequestOptions } = require('./utils')
-const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const JSONBuffer = require('../../../src/debugger/devtools-client/json-buffer')
 
 const ddsource = 'dd_debugger'
 const service = 'my-service'
@@ -38,7 +38,7 @@ describe('diagnostic message http requests', function () {
       }
     }
 
-    statusproxy = proxyquire('../../../src/debugger/devtools_client/status', {
+    statusproxy = proxyquire('../../../src/debugger/devtools-client/status', {
       './config': {
         service,
         runtimeId,

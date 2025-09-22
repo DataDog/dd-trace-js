@@ -6,7 +6,7 @@ const assert = require('node:assert')
 const Axios = require('axios')
 
 const { createSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
-const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
+const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools-client/utils')
 
 // A race condition exists where the tracer receives a probe via RC, before Node.js has had a chance to load all the JS
 // files from disk. If this race condition is triggered, it results in the tracer either not being able to find any

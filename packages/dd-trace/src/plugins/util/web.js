@@ -1,7 +1,7 @@
 'use strict'
 
 const uniq = require('../../../../datadog-core/src/utils/src/uniq')
-const analyticsSampler = require('../../analytics_sampler')
+const analyticsSampler = require('../../analytics-sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
@@ -9,7 +9,7 @@ const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
-const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred-proxy')
 const TracingPlugin = require('../tracing')
 
 let extractIp
@@ -67,7 +67,7 @@ const web = {
     const middleware = getMiddlewareSetting(config)
     const queryStringObfuscation = getQsObfuscator(config)
 
-    extractIp = config.clientIpEnabled && require('./ip_extractor').extractIp
+    extractIp = config.clientIpEnabled && require('./ip-extractor').extractIp
 
     return {
       ...config,

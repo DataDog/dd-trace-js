@@ -151,10 +151,10 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
-  child_process:
+  child-process:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: child_process
+      PLUGINS: child-process
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts

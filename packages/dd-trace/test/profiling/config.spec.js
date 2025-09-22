@@ -395,7 +395,7 @@ describe('config', () => {
         exportStrategies: ['process'],
         exportCommand: [
           process.execPath,
-          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter-cli.js')),
           'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'
@@ -424,7 +424,7 @@ describe('config', () => {
         exportStrategies: ['process', 'async'],
         exportCommand: [
           process.execPath,
-          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter-cli.js')),
           'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'

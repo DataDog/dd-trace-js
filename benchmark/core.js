@@ -5,8 +5,8 @@ const proxyquire = require('proxyquire')
 
 const Config = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
-const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
-const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
+const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span-context')
+const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text-map')
 const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   './request': () => Promise.resolve(),
   '../../encode/0.4': {
@@ -26,7 +26,7 @@ const config = new Config({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
-const runtimeMetrics = require('../packages/dd-trace/src/runtime_metrics')
+const runtimeMetrics = require('../packages/dd-trace/src/runtime-metrics')
 const log = require('../packages/dd-trace/src/log')
 
 const encoder04 = new Agent04Encoder({ flush: () => encoder04.makePayload() })

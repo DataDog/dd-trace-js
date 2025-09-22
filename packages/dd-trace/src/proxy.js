@@ -2,13 +2,13 @@
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const runtimeMetrics = require('./runtime_metrics')
+const runtimeMetrics = require('./runtime-metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
-const PluginManager = require('./plugin_manager')
+const PluginManager = require('./plugin-manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const {
@@ -101,7 +101,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.heapSnapshot.count > 0) {
-        require('./heap_snapshots').start(config)
+        require('./heap-snapshots').start(config)
       }
 
       telemetry.start(config, this._pluginManager)
@@ -122,7 +122,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = require('./remote_config').enable(config, this._modules.appsec)
+        const rc = require('./remote-config').enable(config, this._modules.appsec)
 
         rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
@@ -275,7 +275,7 @@ class Tracer extends NoopProxy {
   }
 
   get TracerProvider () {
-    return require('./opentelemetry/tracer_provider')
+    return require('./opentelemetry/tracer-provider')
   }
 }
 

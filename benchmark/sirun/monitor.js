@@ -1,4 +1,4 @@
 'use strict'
 
-require('./event_loop')
+require('./event-loop')
 require('./gc')

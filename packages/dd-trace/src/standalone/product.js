@@ -1,7 +1,7 @@
 'use strict'
 
 const { SAMPLING_MECHANISM_APPSEC } = require('../constants')
-const RateLimiter = require('../rate_limiter')
+const RateLimiter = require('../rate-limiter')
 
 function getProductRateLimiter (config) {
   if (config?.appsec?.enabled || config?.iast?.enabled) {

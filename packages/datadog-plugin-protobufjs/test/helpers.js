@@ -2,7 +2,7 @@
 
 async function loadMessage (protobuf, messageTypeName) {
   if (messageTypeName === 'OtherMessage') {
-    const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')
+    const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other-message.proto')
     const OtherMessage = root.lookupType('OtherMessage')
     const message = OtherMessage.create({
       name: ['Alice'],
@@ -17,7 +17,7 @@ async function loadMessage (protobuf, messageTypeName) {
   } else if (messageTypeName === 'MyMessage') {
     const messageProto = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/message.proto')
     const otherMessageProto = await protobuf.load(
-      'packages/datadog-plugin-protobufjs/test/schemas/other_message.proto'
+      'packages/datadog-plugin-protobufjs/test/schemas/other-message.proto'
     )
     const Status = messageProto.lookupEnum('Status')
     const MyMessage = messageProto.lookupType('MyMessage')
@@ -42,7 +42,7 @@ async function loadMessage (protobuf, messageTypeName) {
       }
     }
   } else if (messageTypeName === 'MainMessage') {
-    const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/all_types.proto')
+    const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/all-types.proto')
 
     const Status = root.lookupEnum('example.Status')
     const Scalars = root.lookupType('example.Scalars')

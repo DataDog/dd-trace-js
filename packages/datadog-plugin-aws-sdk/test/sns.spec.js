@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const semver = require('semver')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {

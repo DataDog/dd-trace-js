@@ -15,9 +15,9 @@ const {
 } = require('../../dd-trace/src/constants')
 const sinon = require('sinon')
 const { loadMessage } = require('./helpers')
-const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
+const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema-builder')
 
-const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected_schemas.json'), 'utf8'))
+const schemas = JSON.parse(fs.readFileSync(path.join(__dirname, 'schemas/expected-schemas.json'), 'utf8'))
 const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
 const OTHER_MESSAGE_SCHEMA_DEF = schemas.OTHER_MESSAGE_SCHEMA_DEF
 const ALL_TYPES_MESSAGE_SCHEMA_DEF = schemas.ALL_TYPES_MESSAGE_SCHEMA_DEF
@@ -192,7 +192,7 @@ describe('Plugin', () => {
         })
 
         it('should wrap encode and decode for fromObject', async () => {
-          const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')
+          const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other-message.proto')
           const OtherMessage = root.lookupType('OtherMessage')
           const messageObject = {
             name: ['Alice'],
@@ -217,7 +217,7 @@ describe('Plugin', () => {
         })
 
         it('should wrap decodeDelimited', async () => {
-          const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other_message.proto')
+          const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/other-message.proto')
           const OtherMessage = root.lookupType('OtherMessage')
           const message = OtherMessage.create({
             name: ['Alice'],
@@ -267,7 +267,7 @@ describe('Plugin', () => {
         })
 
         it('should load using JSON descriptors', () => {
-          const jsonDescriptor = require('./schemas/other_message_proto.json')
+          const jsonDescriptor = require('./schemas/other-message-proto.json')
           const root = protobuf.Root.fromJSON(jsonDescriptor)
           const OtherMessage = root.lookupType('OtherMessage')
 

@@ -10,7 +10,7 @@ require('../../setup/mocha')
 describe('worker thread logger', function () {
   it('should log to the provided message channel', function (done) {
     const logChannel = new MessageChannel()
-    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+    const log = proxyquire('../../../src/debugger/devtools-client/log', {
       'node:worker_threads': {
         workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } }
       }
@@ -36,7 +36,7 @@ describe('worker thread logger', function () {
 
   it('should respect the debug flag', function (done) {
     const logChannel = new MessageChannel()
-    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+    const log = proxyquire('../../../src/debugger/devtools-client/log', {
       'node:worker_threads': {
         workerData: { logPort: logChannel.port1, config: { debug: false, logLevel: 'debug' } }
       }
@@ -56,7 +56,7 @@ describe('worker thread logger', function () {
 
   it('should should resolve the function argument', function (done) {
     const logChannel = new MessageChannel()
-    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+    const log = proxyquire('../../../src/debugger/devtools-client/log', {
       'node:worker_threads': {
         workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } }
       }
@@ -85,7 +85,7 @@ function checkLogLevel (level, expectedLevels) {
 
   return function (done) {
     const logChannel = new MessageChannel()
-    const log = proxyquire('../../../src/debugger/devtools_client/log', {
+    const log = proxyquire('../../../src/debugger/devtools-client/log', {
       'node:worker_threads': {
         workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: level } }
       }

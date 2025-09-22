@@ -17,9 +17,9 @@ const {
   TRACE_SOURCE_PROPAGATION_KEY
 } = require('../../src/constants')
 const { USER_KEEP } = require('../../../../ext/priority')
-const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const TextMapPropagator = require('../../src/opentracing/propagation/text-map')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
-const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
+const TraceSourcePrioritySampler = require('../../src/standalone/tracesource-priority-sampler')
 
 const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
