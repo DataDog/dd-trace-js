@@ -332,4 +332,22 @@ describe('OpenTelemetry Logs', () => {
       expect(config.otelLogsUrl).to.equal('http://127.0.0.1:4318/v1/logs')
     })
   })
+
+  describe('OTLP Headers Configuration', () => {
+    it('should parse OTLP headers from comma-separated key=value string', () => {
+      const { OtlpHttpLogExporter } = require('../../src/opentelemetry/logs')
+
+      const exporter = new OtlpHttpLogExporter({
+        url: 'http://localhost:4318/v1/logs',
+        protocol: 'http/protobuf',
+        timeout: 1000,
+        otelLogsHeaders: 'api-key=key,other-config-value=value'
+      })
+
+      expect(exporter._headers).to.include({
+        'api-key': 'key',
+        'other-config-value': 'value'
+      })
+    })
+  })
 })

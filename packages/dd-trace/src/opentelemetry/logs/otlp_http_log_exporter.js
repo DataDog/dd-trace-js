@@ -35,7 +35,6 @@ class OtlpHttpLogExporter {
    * @param {string} config.protocol - OTLP protocol (http/protobuf or http/json)
    */
   constructor (config) {
-    this._config = config
     this._url = config.url
     this._protocol = config.protocol
 
@@ -44,10 +43,12 @@ class OtlpHttpLogExporter {
       ? 'application/json'
       : 'application/x-protobuf'
 
+    // Parse OTLP headers from comma-separated key=value string
+    const headers = this._parseAdditionalHeaders(config.otelLogsHeaders)
+
     this._headers = {
       'Content-Type': contentType,
-      'User-Agent': 'dd-trace-js/otlp-exporter',
-      ...config.headers
+      ...headers
     }
     this._timeout = config.timeout
     this._transformer = new OtlpTransformer(config)
@@ -87,6 +88,20 @@ class OtlpHttpLogExporter {
       log.error('Error transforming log records:', error)
       resultCallback({ code: 1, error })
     }
+  }
+
+  _parseAdditionalHeaders (headersString) {
+    if (!headersString || typeof headersString !== 'string') {
+      return {}
+    }
+
+    return Object.fromEntries(
+      headersString
+        .split(',')
+        .map(pair => pair.trim().split('='))
+        .filter(([key, value]) => key && value)
+        .map(([key, value]) => [key.trim(), value.trim()])
+    )
   }
 
   _sendPayload (payload, resultCallback) {
