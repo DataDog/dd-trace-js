@@ -189,35 +189,33 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
-  // Input validation
-  if (!Array.isArray(dependencies)) {
-    throw new Error('Dependencies must be an array')
-  }
-  if (!Array.isArray(integrationTestsPaths)) {
-    throw new Error('Integration test paths must be an array')
-  }
-  if (followUpCommand && typeof followUpCommand !== 'string') {
-    throw new Error('Follow-up command must be a string')
-  }
-
-  // Validate integration test paths exist (handle glob patterns)
-  for (const testPath of integrationTestsPaths) {
-    // For glob patterns, check if the directory exists
-    const dirPath = testPath.includes('*') ? path.dirname(testPath) : testPath
-    if (!fs.existsSync(dirPath)) {
-      throw new Error(`Integration test path does not exist: ${testPath}`)
+async function execHelper (addCommand, addOptions) {
+  let finalE
+  try {
+    const ran = await exec(addCommand, addOptions)
+    console.log('Success it ran!', ran)
+  } catch (e) {
+    console.error('we caught, we retried ', e)
+    try {
+      const ranTwice = await exec(addCommand, addOptions)
+      console.log('Success it ran!', ranTwice)
+    } catch (retryE) {
+      console.error('retry failed', retryE)
+      finalE = retryE
+    }
+  } finally {
+    if (finalE) {
+      console.error('both attempts failed', finalE)
     }
   }
+}
 
+async function createSandbox (dependencies = [], isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
     const match = dep.replaceAll(/['"]/g, '').match(/^(@?[^@]+)(@(.+))?$/)
-    if (!match) {
-      throw new Error(`Invalid dependency format: ${dep}`)
-    }
     const name = match[1]
     const range = match[3] || ''
     const cappedRange = getCappedRange(name, range)
@@ -229,18 +227,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const { NODE_OPTIONS, ...restOfEnv } = process.env
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
-    try {
-      // Execute integration tests without a sandbox. This is useful when you have other components
-      // yarn-linked into dd-trace and want to run the integration tests against them.
+    // Execute integration tests without a sandbox. This is useful when you have other components
+    // yarn-linked into dd-trace and want to run the integration tests against them.
 
-      // Link dd-trace to itself, then...
-      await exec('yarn link')
-      await exec('yarn link dd-trace')
-      // ... run the tests in the current directory.
-      return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
-    } catch (error) {
-      throw new Error(`Failed to setup no-sandbox mode: ${error.message}`)
-    }
+    // Link dd-trace to itself, then...
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
+    // ... run the tests in the current directory.
+    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
@@ -252,76 +246,24 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  // Create npm package first with timeout and error handling
-  try {
-    await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
+  await execHelper(addCommand, addOptions)
 
-    // Validate the package was created
-    if (!fs.existsSync(out)) {
-      throw new Error('npm pack failed to create package file')
-    }
-  } catch (error) {
-    throw new Error(`Failed to create npm package: ${error.message}`)
-  }
-
-  // Run package installation and file copying in parallel for better performance
-  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
-    // retry in case of server error from registry
-    // eslint-disable-next-line no-console
-    console.warn(`Package installation failed, retrying: ${e.message}`)
-    return exec(addCommand, addOptions)
-  })
-
-  const fileCopyPromises = integrationTestsPaths.map(testPath => {
+  for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
-      try {
-        return exec(`Copy-Item -Recurse -Path "${testPath}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-      } catch (error) {
-        throw new Error(`Failed to copy test files on Windows: ${error.message}`)
-      }
+      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      try {
-        return exec(`cp -R ${testPath} ${folder}`)
-      } catch (error) {
-        throw new Error(`Failed to copy test files: ${error.message}`)
-      }
+      await exec(`cp -R ${path} ${folder}`)
     }
-  })
-
-  // Wait for both operations to complete with error handling
-  try {
-    await Promise.all([packageInstallPromise, ...fileCopyPromises])
-  } catch (error) {
-    // Cleanup on failure
-    try {
-      fs.rmSync(folder, { recursive: true, force: true })
-    } catch (cleanupError) {
-      // eslint-disable-next-line no-console
-      console.warn(`Failed to cleanup on error: ${cleanupError.message}`)
-    }
-    throw new Error(`Failed to complete sandbox setup: ${error.message}`)
   }
   if (process.platform === 'win32') {
-    try {
-      // On Windows, we can only sync entire filesystem volume caches.
-      await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
-    } catch (error) {
-      throw new Error(`Failed to sync filesystem cache on Windows: ${error.message}`)
-    }
+    // On Windows, we can only sync entire filesystem volume caches.
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
-    try {
-      await exec(`sync ${folder}`)
-    } catch (error) {
-      throw new Error(`Failed to sync filesystem cache: ${error.message}`)
-    }
+    await exec(`sync ${folder}`)
   }
 
   if (followUpCommand) {
-    try {
-      await exec(followUpCommand, { cwd: folder, env: restOfEnv })
-    } catch (error) {
-      throw new Error(`Failed to execute follow-up command: ${error.message}`)
-    }
+    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
   if (isGitRepo) {
@@ -336,6 +278,11 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     if (!existsSync(localRemotePath)) {
       await exec(`git init --bare ${localRemotePath}`)
     }
+
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
