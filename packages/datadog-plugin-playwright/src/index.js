@@ -54,7 +54,7 @@ class PlaywrightPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new Map()
+    this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
@@ -146,7 +146,7 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
 
-      this._testSuites.set(testSuiteAbsolutePath, testSuiteSpan)
+      this._testSuiteSpansByTestSuiteAbsolutePath.set(testSuiteAbsolutePath, testSuiteSpan)
 
       return ctx.currentStore
     })
@@ -251,7 +251,9 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
-            const testSuite = this._testSuites.get(formattedSpan.meta.test_suite_absolute_path)
+            const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
+              formattedSpan.meta.test_suite_absolute_path
+            )
             if (testSuite) {
               formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
             }
@@ -395,7 +397,7 @@ class PlaywrightPlugin extends CiPlugin {
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
   startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
-    const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
+    const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
       [TEST_SOURCE_START]: testSourceLine
