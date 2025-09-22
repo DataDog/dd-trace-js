@@ -201,11 +201,8 @@ class Tracer extends NoopProxy {
         }
       }
 
-      // Initialize OpenTelemetry logs if enabled via environment variable
-      try {
+      if (config.otelLogsEnabled) {
         this._initializeOpenTelemetryLogs(config)
-      } catch (error) {
-        log.error('Error initializing OpenTelemetry logs:', error)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
@@ -270,11 +267,6 @@ class Tracer extends NoopProxy {
 
   _initializeOpenTelemetryLogs (config) {
     try {
-      // Check if OpenTelemetry logs are enabled via config or environment variable
-      if (!config.otelLogsEnabled) {
-        return
-      }
-
       const { LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
       const { logs } = require('@opentelemetry/api-logs')
       const os = require('os')
