@@ -1,0 +1,17 @@
+ls:
+  .dir: kebab-case
+  .*: kebab-case
+
+ignore:
+  - .*
+  - '**/__{snapshots,test}__'
+  - '**/node_modules'
+  - '**/{API,CONTRIBUTING,LICENSE,MIGRATING,README,SECURITY}.md'
+  - '{LICENSE,LICENSE-3rdparty}.*'
+  - benchmark/e2e/acmeair-nodejs
+  - benchmark/sirun/async_hooks
+  - coverage
+  - packages/datadog-plugin-next/test/app
+  - packages/datadog-plugin-next/test/pages
+  - packages/dd-trace/test/llmobs/cassettes
+  - versions
