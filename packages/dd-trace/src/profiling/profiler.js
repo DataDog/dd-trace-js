@@ -110,11 +110,13 @@ class Profiler extends EventEmitter {
           }
           break
         case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') {
+          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
+            // eslint-disable-next-line n/no-unsupported-features/node-builtins
             this.#compressionFn = promisify(zlib.zstdCompress)
             if (clevel !== undefined) {
               this.#compressionOptions = {
                 params: {
+                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
                   [zlib.constants.ZSTD_c_compressionLevel]: clevel
                 }
               }
