@@ -156,7 +156,7 @@ moduleTypes.forEach(({
     })
 
     // Cypress child processes can sometimes hang or take longer to
-    // terminate. This can cause `FakeCiVisIntake` stop to be delayed
+    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
     // because there are pending connections.
     afterEach(async () => {
       childProcess.kill()
