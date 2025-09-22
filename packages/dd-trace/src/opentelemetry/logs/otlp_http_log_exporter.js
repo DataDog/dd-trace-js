@@ -28,16 +28,16 @@ class OtlpHttpLogExporter {
   /**
    * Creates a new OtlpHttpLogExporter instance.
    *
-   * @param {Object} [config={}] - Configuration options
-   * @param {string} [config.url='http://localhost:4318/v1/logs'] - OTLP endpoint URL
-   * @param {Object} [config.headers={}] - Additional HTTP headers
-   * @param {number} [config.timeout=10000] - Request timeout in milliseconds
-   * @param {string} [config.protocol='http/protobuf'] - OTLP protocol (http/protobuf or http/json)
+   * @param {Object} config - Configuration options
+   * @param {string} config.url - OTLP endpoint URL
+   * @param {Object} config.headers - Additional HTTP headers
+   * @param {number} config.timeout - Request timeout in milliseconds
+   * @param {string} config.protocol - OTLP protocol (http/protobuf or http/json)
    */
-  constructor (config = {}) {
+  constructor (config) {
     this._config = config
-    this._url = config.url || 'http://localhost:4318/v1/logs'
-    this._protocol = config.protocol || 'http/protobuf'
+    this._url = config.url
+    this._protocol = config.protocol
 
     // Set Content-Type based on protocol
     const contentType = this._protocol === 'http/json'
@@ -49,7 +49,7 @@ class OtlpHttpLogExporter {
       'User-Agent': 'dd-trace-js/otlp-exporter',
       ...config.headers
     }
-    this._timeout = config.timeout || 10_000
+    this._timeout = config.timeout
     this._transformer = new OtlpTransformer(config)
 
     // Pre-compute telemetry tags for efficiency

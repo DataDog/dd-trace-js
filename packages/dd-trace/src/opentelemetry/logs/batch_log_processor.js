@@ -32,10 +32,10 @@ class BatchLogRecordProcessor {
     this._processors = processors
     this._config = config
     this._isShutdown = false
-    this._batchTimeout = config.batchTimeout || 5000 // 5 seconds default
-    this._maxExportBatchSize = config.maxExportBatchSize || 512
-    this._maxQueueSize = config.maxQueueSize || 2048
-    this._exportTimeoutMillis = config.exportTimeoutMillis || 30_000 // 30 seconds default
+    this._batchTimeout = config.batchTimeout
+    this._maxExportBatchSize = config.maxExportBatchSize
+    this._maxQueueSize = config.maxQueueSize
+    this._exportTimeoutMillis = config.exportTimeoutMillis
 
     this._logRecords = []
     this._timer = null

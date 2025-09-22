@@ -21,7 +21,7 @@ const { getProtobufTypes } = require('./protobuf_loader')
 class OtlpTransformer {
   constructor (config = {}) {
     this._config = config
-    this._protocol = config.protocol || 'http/protobuf'
+    this._protocol = config.protocol
     this._protobufTypes = null
   }
 
