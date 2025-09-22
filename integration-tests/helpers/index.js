@@ -254,10 +254,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   // Create npm package first with timeout and error handling
   try {
-    await exec(`npm pack --silent --pack-destination ${folder}`, {
-      env: restOfEnv,
-      timeout: 25000 // 25 second timeout (under test timeout)
-    })
+    await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
 
     // Validate the package was created
     if (!fs.existsSync(out)) {
@@ -268,11 +265,11 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 
   // Run package installation and file copying in parallel for better performance
-  const packageInstallPromise = exec(addCommand, { ...addOptions, timeout: 25000 }).catch(async (e) => {
+  const packageInstallPromise = exec(addCommand, addOptions).catch(async (e) => {
     // retry in case of server error from registry
     // eslint-disable-next-line no-console
     console.warn(`Package installation failed, retrying: ${e.message}`)
-    return exec(addCommand, { ...addOptions, timeout: 25000 })
+    return exec(addCommand, addOptions)
   })
 
   const fileCopyPromises = integrationTestsPaths.map(testPath => {
