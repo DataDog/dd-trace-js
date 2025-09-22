@@ -1234,9 +1234,9 @@ declare namespace tracer {
        * @param opts - Optional configuration object:
        *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
        *              and the AI Guard service has blocking mode enabled.
-       * @returns Promise resolving to an Evaluation with the security decision and reasoning
-       * @throws AIGuardAbortError when `opts.block` is true and the evaluation result would block the request
-       * @throws AIGuardClientError when communication with the AI Guard service fails
+       * @returns Promise resolving to an Evaluation with the security decision and reasoning.
+       *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
+       *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
       evaluate(messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
     }
