@@ -4,11 +4,13 @@ const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopLLMObsSDK = require('../llmobs/noop')
+const NoopAIGuardSDK = require('../appsec/ai_guard/noop')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
+const noopAIGuard = new NoopAIGuardSDK(noop)
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
@@ -17,6 +19,7 @@ class NoopProxy {
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
+    this.aiguard = noopAIGuard
     this.setBaggageItem = () => {}
     this.getBaggageItem = () => {}
     this.getAllBaggageItems = () => {}

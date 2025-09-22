@@ -485,11 +485,14 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_ENABLED,
+      DD_AI_GUARD_ENDPOINT,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
       DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
+      DD_APP_KEY,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -858,6 +861,9 @@ class Config {
     this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
     env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
+    this._setBoolean(env, 'aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    this._setString(env, 'appKey', DD_APP_KEY)
   }
 
   _applyOptions (options) {
@@ -1027,6 +1033,10 @@ class Config {
     if (llmobsEnabledEnv == null && options.llmobs) {
       this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
     }
+
+    this._setBoolean(opts, 'aiguard.enabled', options.aiguard?.enabled)
+    this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
+    this._setString(opts, 'appKey', options.appKey)
   }
 
   _isCiVisibility () {
