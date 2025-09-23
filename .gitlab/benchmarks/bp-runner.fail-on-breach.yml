@@ -11,15 +11,14 @@ experiments:
         scenarios:
           - name: normal_operation/only-tracing
             thresholds:
-              # We have to add 0.1ms because the standard deviation is really
-              # low so 7% less than the SLO would otherwise be higher than
-              # the mean.
-              - agg_http_req_duration_p50 < 2.1 ms
+              - agg_http_req_duration_p50 < 2 ms
               - agg_http_req_duration_p99 < 15 ms
+            warning_range: 3
           - name: normal_operation/only-tracing-with-runtime-metrics-enabled
             thresholds:
-              - agg_http_req_duration_p50 < 2.1 ms
+              - agg_http_req_duration_p50 < 2 ms
               - agg_http_req_duration_p99 < 16 ms
+            warning_range: 3
           - name: high_load/only-tracing
             thresholds:
               - throughput > 400 op/s
