@@ -20,7 +20,8 @@ const {
   NAME,
   PROPAGATED_PARENT_ID_KEY,
   ROOT_PARENT_ID,
-  CACHED_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -145,8 +146,11 @@ class LLMObsTagger {
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
           break
-        case 'cachedTokens':
-          processedKey = CACHED_TOKENS_METRIC_KEY
+        case 'cacheReadTokens':
+          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWriteTokens':
+          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
           break
       }
 
