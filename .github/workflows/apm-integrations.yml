@@ -952,7 +952,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
-      - uses: ./.github/actions/node/nigthly
+      - uses: ./.github/actions/node/nightly
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
