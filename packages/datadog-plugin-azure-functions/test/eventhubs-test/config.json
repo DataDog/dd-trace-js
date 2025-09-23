@@ -1,0 +1,33 @@
+{
+  "UserConfig": {
+    "NamespaceConfig": [
+      {
+        "Type": "EventHub",
+        "Name": "emulatorNs1",
+        "Entities": [
+          {
+            "Name": "eh1",
+            "PartitionCount": "2",
+            "ConsumerGroups": [
+              {
+                "Name": "cg1"
+              }
+            ]
+          },
+          {
+            "Name": "eh2",
+            "PartitionCount": "2",
+            "ConsumerGroups": [
+              {
+                "Name": "cg2"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "LoggingConfig": {
+      "Type": "File"
+    }
+  }
+}

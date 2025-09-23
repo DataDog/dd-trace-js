@@ -11,6 +11,8 @@ services:
         - "127.0.0.1:10002:10002"
   azureeventhubsemulator:
     image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+    volumes:
+       - "${CONFIG_PATH}:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5673:5672"
       - "127.0.0.1:9092:9092"

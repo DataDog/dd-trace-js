@@ -93,7 +93,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `ServiceBus ${functionName}`,
       'span.kind': 'consumer'
     }
-  } else if (triggerMap[methodName] === 'EventHub') {
+  } else if (triggerMap[methodName] === 'EventHubs') {
     const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
     meta = {
       ...meta,
