@@ -6,30 +6,40 @@ const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
 
-const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
-const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
-const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
-
-// We can't use VITEST_WORKER_ID because it's set _after_ the worker is initialized
-const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
-const isPlaywrightWorker = !!getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')
-
-const isTestWorker = isJestWorker || isCucumberWorker || isMochaWorker || isVitestWorker || isPlaywrightWorker
-
-const packageManagers = [
-  'npm',
-  'yarn',
-  'pnpm'
-]
-
-const isPackageManager = () => {
-  return packageManagers.some(packageManager => process.argv[1]?.includes(`bin/${packageManager}`))
+const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
+const DEFAULT_FLUSH_INTERVAL = 5000
+const JEST_FLUSH_INTERVAL = 0
+const EXPORTER_MAP = {
+  jest: 'jest_worker',
+  cucumber: 'cucumber_worker',
+  mocha: 'mocha_worker',
+  playwright: 'playwright_worker',
+  vitest: 'vitest_worker'
 }
 
-const options = {
+function isPackageManager () {
+  return PACKAGE_MANAGERS.some(packageManager =>
+    process.argv[1]?.includes(`bin/${packageManager}`)
+  )
+}
+
+function detectTestWorkerType () {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) return 'jest'
+  if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) return 'cucumber'
+  if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'
+  if (getEnvironmentVariable('PLAYWRIGHT_WORKER')) return 'playwright'
+  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) return 'vitest'
+  return null
+}
+
+const testWorkerType = detectTestWorkerType()
+const isTestWorker = testWorkerType !== null
+const isJestWorker = testWorkerType === 'jest'
+
+const baseOptions = {
   startupLogs: false,
   isCiVisibility: true,
-  flushInterval: isJestWorker ? 0 : 5000
+  flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL
 }
 
 let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
@@ -41,53 +51,33 @@ if (!isTestWorker && isPackageManager()) {
 }
 
 if (isTestWorker) {
-  options.telemetry = {
-    enabled: false
-  }
-  if (isJestWorker) {
-    options.experimental = {
-      exporter: 'jest_worker'
-    }
-  } else if (isCucumberWorker) {
-    options.experimental = {
-      exporter: 'cucumber_worker'
-    }
-  } else if (isMochaWorker) {
-    options.experimental = {
-      exporter: 'mocha_worker'
-    }
-  } else if (isPlaywrightWorker) {
-    options.experimental = {
-      exporter: 'playwright_worker'
-    }
-  } else if (isVitestWorker) {
-    options.experimental = {
-      exporter: 'vitest_worker'
-    }
+  baseOptions.telemetry = { enabled: false }
+  baseOptions.experimental = {
+    exporter: EXPORTER_MAP[testWorkerType]
   }
 } else {
-  // If a test worker is running, it will not communicate with the intake
-  // or the agent, so this logic only applies to non-test workers.
   if (isAgentlessEnabled) {
     if (getEnvironmentVariable('DD_API_KEY')) {
-      options.experimental = {
+      baseOptions.experimental = {
         exporter: 'datadog'
       }
     } else {
-      console.error('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
+      console.error(
+        'DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
         'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
-        'dd-trace will not be initialized.')
+        'dd-trace will not be initialized.'
+      )
       shouldInit = false
     }
   } else {
-    options.experimental = {
+    baseOptions.experimental = {
       exporter: 'agent_proxy'
     }
   }
 }
 
 if (shouldInit) {
-  tracer.init(options)
+  tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
 }
