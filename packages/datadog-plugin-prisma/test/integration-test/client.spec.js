@@ -20,7 +20,7 @@ describe('esm', () => {
 
   withVersions('prisma', '@prisma/client', version => {
     before(async function () {
-      this.timeout(30000)
+      this.timeout(100000)
       sandbox = await createSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
         './packages/datadog-plugin-prisma/test/integration-test/*',
         './packages/datadog-plugin-prisma/test/schema.prisma'

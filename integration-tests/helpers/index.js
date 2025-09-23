@@ -189,18 +189,19 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   })
 }
 
-async function execHelper (addCommand, addOptions) {
+async function execHelper (command, options) {
   try {
-    await exec(addCommand, addOptions)
+    console.log('Commencing exec execution...', command) // eslint-disable-line no-console
+    await exec(command, options)
     console.log('Success it ran!') // eslint-disable-line no-console
   } catch (e) {
     console.error('We caught, commencing retry, error:', // eslint-disable-line no-console
-      e, 'failed command:', addCommand)
+      e, 'failed command:', command)
     try {
-      await exec(addCommand, addOptions)
+      await exec(command, options)
       console.log('Success on the second try!') // eslint-disable-line no-console
     } catch {
-      console.error('Retry failed, command:', addCommand) // eslint-disable-line no-console
+      console.error('Retry failed, command:', command) // eslint-disable-line no-console
     }
   }
 }

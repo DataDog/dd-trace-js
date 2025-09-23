@@ -17,7 +17,7 @@ describe('esm', () => {
 
   withVersions('pino', 'pino', version => {
     before(async function () {
-      this.timeout(30000)
+      this.timeout(20000)
       sandbox = await createSandbox([`'pino@${version}'`],
         false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', null, 'pino')
