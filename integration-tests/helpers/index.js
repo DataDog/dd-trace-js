@@ -190,22 +190,16 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 }
 
 async function execHelper (addCommand, addOptions) {
-  let finalErr
   try {
-    const ran = await exec(addCommand, addOptions)
+    await exec(addCommand, addOptions)
     console.log('Success it ran!') // eslint-disable-line no-console
   } catch (e) {
-    console.error('we caught, we retried ', e) // eslint-disable-line no-console
+    console.error('we caught, we retried ', e, addCommand) // eslint-disable-line no-console
     try {
-      const ranTwice = await exec(addCommand, addOptions)
+      await exec(addCommand, addOptions)
       console.log('Success on the second try!') // eslint-disable-line no-console
-    } catch (retryErr) {
-      console.error('retry failed', retryErr) // eslint-disable-line no-console
-      finalErr = retryErr
-    }
-  } finally {
-    if (finalErr) {
-      console.error('both attempts failed', finalErr) // eslint-disable-line no-console
+    } catch {
+      console.error('retry failed, command:', addCommand) // eslint-disable-line no-console
     }
   }
 }
@@ -231,8 +225,8 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // yarn-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    await exec('yarn link')
-    await exec('yarn link dd-trace')
+    await execHelper('yarn link')
+    await execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
@@ -244,26 +238,26 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  await execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   await execHelper(addCommand, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      await execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await exec(`cp -R ${path} ${folder}`)
+      await execHelper(`cp -R ${path} ${folder}`)
     }
   }
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
-    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+    await execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
-    await exec(`sync ${folder}`)
+    await execHelper(`sync ${folder}`)
   }
 
   if (followUpCommand) {
-    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
+    await execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
   if (isGitRepo) {
@@ -282,7 +276,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     await execHelper('git add -A', { cwd: folder })
     await execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
     await execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await exec('git push --set-upstream origin HEAD', { cwd: folder })
+    await execHelper('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
