@@ -171,26 +171,30 @@ function createWrapRouterMethod (name) {
       }
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
-      const mountPath = getRouterMountPath(this)
-      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) &&
-        mountPath && this.stack && this.stack.length > offset) {
-        const layer = this.stack[this.stack.length - 1]
-        if (layer?.route) {
-          const route = layer.route
-          const fullPath = joinPath(mountPath, route.path)
+      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
+        const mountPath = getRouterMountPath(this)
 
-          METHODS.forEach(method => {
-            if (typeof route[method] === 'function') {
-              shimmer.wrap(route, method, (originalMethod) => function () {
-                // Now publish the route with this specific method
-                expressRouteAddedChannel.publish({
-                  method: normalizeMethodName(method),
-                  path: fullPath
+        if (mountPath) {
+          const layer = this.stack[this.stack.length - 1]
+
+          if (layer?.route) {
+            const route = layer.route
+            const fullPath = joinPath(mountPath, route.path)
+
+            METHODS.forEach(method => {
+              if (typeof route[method] === 'function') {
+                shimmer.wrap(route, method, (originalMethod) => function () {
+                  // Now publish the route with this specific method
+                  expressRouteAddedChannel.publish({
+                    method: normalizeMethodName(method),
+                    path: fullPath
+                  })
+
+                  return originalMethod.apply(this, arguments)
                 })
-                return originalMethod.apply(this, arguments)
-              })
-            }
-          })
+              }
+            })
+          }
         }
       }
 
