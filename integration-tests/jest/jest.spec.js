@@ -2345,8 +2345,8 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
-            ENABLE_HAPPY_DOM: true,
-            DD_TRACE_DEBUG: 1,
+            ENABLE_HAPPY_DOM: 'true',
+            DD_TRACE_DEBUG: '1',
             DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
