@@ -484,6 +484,7 @@ function setShouldKill (value) {
   })
 }
 
+/* eslint-disable n/no-unsupported-features/node-builtins */
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
@@ -521,6 +522,7 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
     }
   }
 }
+/* eslint-enable n/no-unsupported-features/node-builtins */
 
 function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
