@@ -59,7 +59,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
-        partition: getPartition(awsRegion),
+        'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk'
