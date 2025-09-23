@@ -11,11 +11,12 @@ experiments:
         scenarios:
           - name: normal_operation/only-tracing
             thresholds:
-              - agg_http_req_duration_p50 < 2 ms
+              # We have to add 0.2ms because the warning threshold is rounded up to 2.1ms.
+              - agg_http_req_duration_p50 < 2.2 ms
               - agg_http_req_duration_p99 < 15 ms
           - name: normal_operation/only-tracing-with-runtime-metrics-enabled
             thresholds:
-              - agg_http_req_duration_p50 < 2 ms
+              - agg_http_req_duration_p50 < 2.2 ms
               - agg_http_req_duration_p99 < 16 ms
           - name: high_load/only-tracing
             thresholds:
