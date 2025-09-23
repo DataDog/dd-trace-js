@@ -118,7 +118,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const partition = getPartition(region)
       if (partition) {
-        span.setTag('partition', partition)
+        span.setTag('aws.partition', partition)
       }
 
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
