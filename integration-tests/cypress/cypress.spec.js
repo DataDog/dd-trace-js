@@ -65,6 +65,7 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
+const RECEIVER_STOP_TIMEOUT = 20000
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
@@ -154,9 +155,24 @@ moduleTypes.forEach(({
       receiver = await new FakeCiVisIntake().start()
     })
 
+    // Cypress child processes can sometimes hang or take longer to
+    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
+    // because there are pending connections.
     afterEach(async () => {
       childProcess.kill()
-      await receiver.stop()
+
+      // Add timeout to prevent hanging
+      const stopPromise = receiver.stop()
+      const timeoutPromise = new Promise((resolve, reject) =>
+        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
+      )
+
+      try {
+        await Promise.race([stopPromise, timeoutPromise])
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn('Receiver stop timed out:', error.message)
+      }
     })
 
     if (version === '6.7.0') {
