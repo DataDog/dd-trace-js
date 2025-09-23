@@ -41,8 +41,8 @@ app.all(/^\/login\/.*$/i, (req, res) => {
 
 // Nested routes with Router
 const apiRouter = express.Router()
-apiRouter.put('/nested/:id', (_, res) => res.send('ok'))
 app.use('/v1', apiRouter)
+apiRouter.put('/nested/:id', (_, res) => res.send('ok'))
 
 // Add endpoint during runtime
 setTimeout(() => {

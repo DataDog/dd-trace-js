@@ -5,6 +5,16 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
+const expressRouteAddedChannel = channel('apm:express:add:route')
+const {
+  getRouterMountPath,
+  joinPath,
+  setLayerMatchers,
+  normalizeMethodName,
+  isAppMounted,
+  setRouterMountPath
+} = require('./helpers/router-state')
+
 function isFastStar (layer, matchers) {
   return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
 }
@@ -79,9 +89,7 @@ function createWrapRouterMethod (name) {
       }
 
       layerMatchers.set(layer, matchers)
-
-      // Save matchers to consume it later on express.js for endpoint discovery
-      layer.ddMatchers = matchers
+      setLayerMatchers(layer, matchers)
 
       if (layer.route) {
         METHODS.forEach(method => {
@@ -144,12 +152,47 @@ function createWrapRouterMethod (name) {
       }
       const router = original.apply(this, arguments)
 
+      // Handle nested router mounting for 'use' method
+      if (original.name === 'use' && arguments.length >= 2) {
+        const [mountPath, nestedRouter] = arguments
+
+        if (typeof mountPath === 'string' && nestedRouter && typeof nestedRouter === 'function') {
+          const parentPath = getRouterMountPath(this)
+          const fullMountPath = joinPath(parentPath, mountPath)
+          setRouterMountPath(nestedRouter, fullMountPath)
+        }
+      }
+
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
       }
 
       if (routeAddedChannel.hasSubscribers) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
+      }
+
+      // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
+      const mountPath = getRouterMountPath(this)
+      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) &&
+        mountPath && this.stack && this.stack.length > offset) {
+        const layer = this.stack[this.stack.length - 1]
+        if (layer?.route) {
+          const route = layer.route
+          const fullPath = joinPath(mountPath, route.path)
+
+          METHODS.forEach(method => {
+            if (typeof route[method] === 'function') {
+              shimmer.wrap(route, method, (originalMethod) => function () {
+                // Now publish the route with this specific method
+                expressRouteAddedChannel.publish({
+                  method: normalizeMethodName(method),
+                  path: fullPath
+                })
+                return originalMethod.apply(this, arguments)
+              })
+            }
+          })
+        }
       }
 
       if (this.stack.length > offset) {
