@@ -13,6 +13,7 @@ module.exports = {
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
+  get '@happy-dom/jest-environment' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/test-sequencer' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/transform' () { return require('../../../datadog-plugin-jest/src') },

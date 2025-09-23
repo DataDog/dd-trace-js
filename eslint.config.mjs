@@ -76,7 +76,7 @@ export default [
         }
       },
       globals: {
-        ...globals.es2021,
+        ...globals.es2022,
         ...globals.node,
         document: 'readonly',
         navigator: 'readonly',
@@ -410,6 +410,7 @@ export default [
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
+      'unicorn/no-array-sort': 'off', // Node.js 20
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
