@@ -43,6 +43,10 @@ describe('esm', () => {
       await agent.stop()
     })
 
+    // TODO(bengl): The `varySandbox` helper function isn't well set-up for dealing
+    // with Azure Functions and the way the `func` command expects to find files. I
+    // have manually tested that all the usual import variants work, but really we ought
+    // to figure out a way of automating this.
     it('is instrumented', async () => {
       const envArgs = {
         PATH: process.env.PATH

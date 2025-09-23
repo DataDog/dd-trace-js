@@ -18,7 +18,6 @@ const names = ['http2', 'node:http2']
 addHook({ name: names }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
-  return http2
 })
 
 function wrapCreateServer (createServer) {

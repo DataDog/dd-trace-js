@@ -66,7 +66,7 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -137,7 +137,8 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
-            moduleExports = hook(moduleExports, version, name) ?? moduleExports
+
+            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {
