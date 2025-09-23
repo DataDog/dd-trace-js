@@ -99,6 +99,14 @@ const log = {
     return this
   },
 
+  errorWithoutTelemetry (...args) {
+    args.push(NO_TRANSMIT)
+    if (errorChannel.hasSubscribers) {
+      errorChannel.publish(Log.parse(...args))
+    }
+    return this
+  },
+
   deprecate (code, message) {
     return this._deprecate(code, message)
   },
