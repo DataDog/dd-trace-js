@@ -194,12 +194,13 @@ async function execHelper (addCommand, addOptions) {
     await exec(addCommand, addOptions)
     console.log('Success it ran!') // eslint-disable-line no-console
   } catch (e) {
-    console.error('we caught, we retried ', e, addCommand) // eslint-disable-line no-console
+    console.error('We caught, commencing retry, error:', // eslint-disable-line no-console
+      e, 'failed command:', addCommand)
     try {
       await exec(addCommand, addOptions)
       console.log('Success on the second try!') // eslint-disable-line no-console
     } catch {
-      console.error('retry failed, command:', addCommand) // eslint-disable-line no-console
+      console.error('Retry failed, command:', addCommand) // eslint-disable-line no-console
     }
   }
 }
@@ -482,7 +483,6 @@ function setShouldKill (value) {
   })
 }
 
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
