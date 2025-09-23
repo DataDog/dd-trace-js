@@ -93,6 +93,62 @@ describe('OpenTelemetry Logs', () => {
         })
       }).to.not.throw()
     })
+
+    it('should populate trace context when span is active', () => {
+      const { logs, loggerProvider } = setupTracerAndLogger(true)
+      loggerProvider._isShutdown = false
+
+      // Mock active span
+      const { trace } = require('@opentelemetry/api')
+      const originalGetSpan = trace.getSpan
+      trace.getSpan = () => ({
+        spanContext: () => ({
+          traceId: '1234567890abcdef1234567890abcdef',
+          spanId: '1234567890abcdef'
+        })
+      })
+
+      // Capture log records
+      const logRecords = []
+      loggerProvider._processor = {
+        onEmit: (record, instrumentationLibrary, spanContext) => {
+          logRecords.push({ ...record, traceId: spanContext?.traceId || '', spanId: spanContext?.spanId || '' })
+        },
+        shutdown: () => Promise.resolve()
+      }
+
+      logs.getLogger('test-logger').info('Test message')
+
+      expect(logRecords[0].traceId).to.equal('1234567890abcdef1234567890abcdef')
+      expect(logRecords[0].spanId).to.equal('1234567890abcdef')
+
+      trace.getSpan = originalGetSpan
+    })
+
+    it('should serialize traceId and spanId in OTLP payload', () => {
+      // Test OTLP transformation directly
+      const OtlpTransformer = require('../../src/opentelemetry/logs/otlp_transformer')
+      const transformer = new OtlpTransformer({}, 'http/protobuf')
+
+      const logRecords = [{
+        body: 'Test message',
+        severityNumber: 9,
+        severityText: 'INFO',
+        timestamp: Date.now() * 1000000,
+        instrumentationLibrary: { name: 'test-logger', version: '1.0.0' },
+        traceId: '1234567890abcdef1234567890abcdef',
+        spanId: '1234567890abcdef'
+      }]
+
+      const protobufPayload = transformer.transformLogRecords(logRecords)
+      const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
+      const { _logsService } = getProtobufTypes()
+      const decodedPayload = _logsService.decode(protobufPayload)
+      const logRecord = decodedPayload.resourceLogs[0].scopeLogs[0].logRecords[0]
+
+      expect(logRecord.traceId.toString('hex')).to.equal('1234567890abcdef1234567890abcdef')
+      expect(logRecord.spanId.toString('hex')).to.equal('1234567890abcdef')
+    })
   })
 
   describe('Protocol Configuration', () => {

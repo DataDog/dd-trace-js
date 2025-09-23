@@ -34,13 +34,25 @@ class BatchLogRecordProcessor {
    * Processes a single log record.
    *
    * @param {Object} logRecord - The log record to process
+   * @param {Object} instrumentationLibrary - Instrumentation library information
+   * @param {Object} spanContext - Span context containing traceId and spanId
+   * @param {string} spanContext.traceId - Trace ID for correlation
+   * @param {string} spanContext.spanId - Span ID for correlation
    */
-  onEmit (logRecord) {
+  onEmit (logRecord, instrumentationLibrary, spanContext) {
     if (this._isShutdown) {
       return
     }
 
-    this._logRecords.push(logRecord)
+    // Store the additional context with the log record
+    const enrichedLogRecord = {
+      ...logRecord,
+      instrumentationLibrary,
+      traceId: spanContext?.traceId || '',
+      spanId: spanContext?.spanId || ''
+    }
+
+    this._logRecords.push(enrichedLogRecord)
 
     if (this._logRecords.length >= this._maxExportBatchSize) {
       this._export()

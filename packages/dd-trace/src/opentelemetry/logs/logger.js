@@ -2,7 +2,7 @@
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { sanitizeAttributes } = require('@opentelemetry/core')
-
+const { trace, context } = require('@opentelemetry/api')
 /**
  * Logger provides methods to emit log records.
  *
@@ -50,8 +50,7 @@ class Logger {
       logRecord.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    logRecord.instrumentationLibrary = this.instrumentationLibrary
-    this._loggerProvider._processor.onEmit(logRecord)
+    this._loggerProvider._processor.onEmit(logRecord, this.instrumentationLibrary, this._getSpanContext(logRecord))
   }
 
   debug (message, attributes = {}) {
@@ -82,6 +81,20 @@ class Logger {
       attributes,
       timestamp: Date.now() * 1_000_000
     })
+  }
+
+  _getSpanContext (logRecord) {
+    const activeSpan = trace.getSpan(logRecord.context || context.active())
+    if (activeSpan) {
+      const spanContext = activeSpan.spanContext()
+      if (spanContext && spanContext.traceId && spanContext.spanId) {
+        return {
+          traceId: spanContext.traceId,
+          spanId: spanContext.spanId
+        }
+      }
+    }
+    return null
   }
 }
 
