@@ -68,15 +68,15 @@ function wrapResponseRender (render) {
 
 function wrapAppAll (all) {
   return function wrappedAll (path) {
-    if (routeAddedChannel.hasSubscribers) {
-      const paths = Array.isArray(path) ? path : [path]
+    if (!routeAddedChannel.hasSubscribers) return all.apply(this, arguments)
 
-      for (const p of paths) {
-        routeAddedChannel.publish({
-          method: '*',
-          path: p instanceof RegExp ? p.toString() : p
-        })
-      }
+    const paths = Array.isArray(path) ? path : [path]
+
+    for (const p of paths) {
+      routeAddedChannel.publish({
+        method: '*',
+        path: p instanceof RegExp ? p.toString() : p
+      })
     }
 
     return all.apply(this, arguments)
@@ -120,7 +120,7 @@ function wrapAppUse (use) {
         markAppMounted(router)
 
         // Collect existing routes from the router (includes nested routers)
-        if (routeAddedChannel.hasSubscribers && router.stack) {
+        if (routeAddedChannel.hasSubscribers) {
           collectRoutesFromRouter(router, mountPath)
         }
       }

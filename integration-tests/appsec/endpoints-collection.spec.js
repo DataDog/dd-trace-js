@@ -13,10 +13,7 @@ describe('Endpoints collection', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
-    sandbox = await createSandbox(
-      ['express', 'fastify'],
-      false
-    )
+    sandbox = await createSandbox(['express', 'fastify'])
 
     cwd = sandbox.folder
   })
@@ -78,6 +75,7 @@ describe('Endpoints collection', () => {
       expectedEndpoints.push({ method: 'POST', path: '/all-methods' })
       expectedEndpoints.push({ method: 'GET', path: '/wildcard/*' })
       expectedEndpoints.push({ method: 'HEAD', path: '/wildcard/*' })
+
       // Wildcard routes
       expectedEndpoints.push({ method: 'GET', path: '*' })
       expectedEndpoints.push({ method: 'HEAD', path: '*' })

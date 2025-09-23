@@ -9,6 +9,7 @@ const expressRouteAddedChannel = channel('apm:express:add:route')
 const {
   getRouterMountPath,
   joinPath,
+  getLayerMatchers,
   setLayerMatchers,
   normalizeMethodName,
   isAppMounted,
@@ -32,7 +33,6 @@ function createWrapRouterMethod (name) {
   const nextChannel = channel(`apm:${name}:middleware:next`)
   const routeAddedChannel = channel(`apm:${name}:route:added`)
 
-  const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
 
   function wrapLayerHandle (layer, original) {
@@ -41,7 +41,7 @@ function createWrapRouterMethod (name) {
     return shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
-      const matchers = layerMatchers.get(layer)
+      const matchers = getLayerMatchers(layer)
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
@@ -88,7 +88,6 @@ function createWrapRouterMethod (name) {
         layer.handle = wrapLayerHandle(layer, layer.handle)
       }
 
-      layerMatchers.set(layer, matchers)
       setLayerMatchers(layer, matchers)
 
       if (layer.route) {
@@ -126,7 +125,7 @@ function createWrapRouterMethod (name) {
     return arg.map(pattern => ({
       path: pattern instanceof RegExp ? `(${pattern})` : pattern,
       test: layer => {
-        const matchers = layerMatchers.get(layer)
+        const matchers = getLayerMatchers(layer)
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
