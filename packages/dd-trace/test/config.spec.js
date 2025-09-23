@@ -2686,7 +2686,7 @@ describe('Config', () => {
 
     afterEach(() => {
       process.env = env
-      fs.rmdirSync(tempDir, { recursive: true })
+      fs.rmSync(tempDir, { recursive: true })
     })
 
     it('should apply host wide config', () => {
