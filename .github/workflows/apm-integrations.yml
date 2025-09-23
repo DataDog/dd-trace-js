@@ -166,6 +166,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   confluentinc-kafka-javascript:
@@ -279,6 +281,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -303,6 +307,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -318,6 +324,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
       - run: yarn test:plugins:ci
 
   fastify:
@@ -379,7 +387,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: [oldest, maintenance, 'latest']
+        node-version: [oldest, maintenance, 'latest', nightly]
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -413,6 +421,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -422,7 +432,7 @@ jobs:
   kafkajs:
     strategy:
       matrix:
-        node-version: ['oldest', 'latest']
+        node-version: ['oldest', 'latest', 'nightly']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -587,8 +597,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -630,6 +640,8 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -680,6 +692,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -765,6 +779,8 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:plugins:ci
       # - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -788,6 +804,7 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+
   prisma:
     runs-on: ubuntu-latest
     services:
@@ -906,6 +923,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -931,6 +950,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/nigthly
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - if: always()
