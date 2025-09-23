@@ -28,20 +28,16 @@ class Log {
     let message, cause, delegate
     let sendViaTelemetry = true
 
-    {
-      const lastArg = args.at(-1)
-      if (lastArg instanceof LogConfig) {
-        args.pop()
-        sendViaTelemetry = lastArg.transmit
-      }
+    const maybeLogConfig = args.at(-1)
+    if (maybeLogConfig instanceof LogConfig) {
+      args.pop()
+      sendViaTelemetry = maybeLogConfig.transmit
     }
 
-    {
-      const lastArg = args.at(-1)
-      if (lastArg && typeof lastArg === 'object' && lastArg.stack) { // lastArg instanceof Error?
-        cause = args.pop()
-        if (cause instanceof NoTransmitError) sendViaTelemetry = false
-      }
+    const maybeError = args.at(-1)
+    if (maybeError && typeof maybeError === 'object' && maybeError.stack) { // maybeError instanceof Error?
+      cause = args.pop()
+      if (cause instanceof NoTransmitError) sendViaTelemetry = false
     }
 
     const firstArg = args.shift()
