@@ -2793,7 +2793,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 
