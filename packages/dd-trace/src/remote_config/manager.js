@@ -154,7 +154,7 @@ class RemoteConfigManager extends EventEmitter {
       if (statusCode === 404) return cb()
 
       if (err) {
-        log.error('[RC] Error in request', err)
+        log.errorWithoutTelemetry('[RC] Error in request', err)
         return cb()
       }
 

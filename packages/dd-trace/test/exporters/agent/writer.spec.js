@@ -44,7 +44,8 @@ function describeWriter (protocolVersion) {
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
+      errorWithoutTelemetry: sinon.spy()
     }
 
     const AgentEncoder = function () {
@@ -160,8 +161,9 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       setTimeout(() => {
-        expect(log.error)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)', error.status, error)
+        expect(log.errorWithoutTelemetry)
+          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
+            error.status, error)
         done()
       })
     })
