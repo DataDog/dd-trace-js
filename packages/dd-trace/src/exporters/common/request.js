@@ -106,11 +106,12 @@ function request (data, options, callback) {
         } catch {
           // ignore error
         }
+
         const responseData = buffer.toString()
         if (responseData) {
           errorMessage += ` Response from the endpoint: "${responseData}"`
         }
-        const error = new Error(errorMessage)
+        const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
         callback(error, null, res.statusCode)
