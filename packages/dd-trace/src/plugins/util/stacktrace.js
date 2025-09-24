@@ -90,6 +90,7 @@ function parseLine (stack, start, end) {
   [fileName, lineNumber, columnNumber, index] = result
 
   if (isNodeModulesFrame(fileName)) return
+  if (isDDInstrumentationFile(fileName)) return
 
   // parse method name
   let methodName, functionName
@@ -151,6 +152,10 @@ function isNodeModulesFrame (fileName) {
   const relativePath = relative(cwd, actualPath)
 
   return relativePath.startsWith(NODE_MODULES_PATTERN_START) || relativePath.includes(NODE_MODULES_PATTERN_MIDDLE)
+}
+
+function isDDInstrumentationFile (fileName) {
+  return fileName.includes(`packages${sep}datadog-instrumentations${sep}src`)
 }
 
 /**
