@@ -3,7 +3,7 @@
 const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const rimraf = require('rimraf')
+const { rimraf } = require('rimraf')
 
 const util = require('node:util')
 const os = require('node:os')
@@ -89,8 +89,8 @@ describe('Plugin', () => {
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
 
-    after((done) => {
-      rimraf(tmpdir, realFS, done)
+    after(async () => {
+      await rimraf(tmpdir, realFS)
       delete plugins.fs
     })
 
