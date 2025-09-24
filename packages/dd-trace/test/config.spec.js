@@ -1007,7 +1007,8 @@ describe('Config', () => {
     const config = new Config({
       aiguard: {
         enabled: true,
-        endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard'
+        endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+        timeout: 2000
       },
       appKey: 'myAppKey',
       appsec: false,
@@ -1037,6 +1038,10 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         b3: true,
+        aiguard: {
+          maxMessagesLength: 32,
+          maxContentSize: 1024 * 1024
+        },
         exporter: 'log',
         enableGetRumData: true,
         iast: {
@@ -1194,6 +1199,9 @@ describe('Config', () => {
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.nested.property('aiguard.enabled', true)
     expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('aiguard.timeout', 2000)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
     expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce

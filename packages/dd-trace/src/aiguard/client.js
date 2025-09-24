@@ -4,13 +4,13 @@ const http = require('http')
 const https = require('https')
 const { URL } = require('url')
 
-function executeRequest (url, headers, body) {
+function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
     let parsedUrl
     try {
-      parsedUrl = new URL(url)
+      parsedUrl = new URL(opts.url)
     } catch {
-      return reject(new Error(`Invalid URL: ${url}`))
+      return reject(new Error(`Invalid URL: ${opts.url}`))
     }
     const transport = parsedUrl.protocol === 'https:' ? https : http
     const postData = JSON.stringify(body)
@@ -22,8 +22,9 @@ function executeRequest (url, headers, body) {
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData),
-        ...headers
+        ...opts.headers
       },
+      timeout: opts.timeout,
     }
     const req = transport.request(options, res => {
       const chunks = []
@@ -42,6 +43,7 @@ function executeRequest (url, headers, body) {
       res.on('error', reject)
     })
     req.on('error', reject)
+    req.on('timeout', req.abort)
     req.write(postData)
     req.end()
   })

@@ -6,8 +6,8 @@ const { expect } = require('chai')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const agent = require('../../plugins/agent')
-const NoopAIGuard = require('../../../src/appsec/ai_guard/noop')
+const agent = require('../plugins/agent')
+const NoopAIGuard = require('../../src/aiguard/noop')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -19,6 +19,12 @@ describe('AIGuard SDK', () => {
     aiguard: {
       enabled: true,
       endpoint: 'https://aiguard.com'
+    },
+    experimental: {
+      aiguard: {
+        maxMessagesLength: 10,
+        maxContentSize: 1024
+      }
     }
   }
   let tracer
@@ -42,19 +48,23 @@ describe('AIGuard SDK', () => {
     }
   ]
 
-  const prompt = [
+  const toolOutput = [
     ...toolCall,
     { role: 'tool', tool_call_id: 'call_1', content: '5' },
+  ]
+
+  const prompt = [
+    ...toolOutput,
     { role: 'assistant', content: '2 + 2 is 5' },
     { role: 'user', content: 'Are you sure?' },
   ]
 
   beforeEach(() => {
-    tracer = require('../../../../dd-trace')
+    tracer = require('../../../dd-trace')
     tracer.init(config)
 
     executeRequest = sinon.stub()
-    const AIGuard = proxyquire('../../../src/appsec/ai_guard/sdk', {
+    const AIGuard = proxyquire('../../src/aiguard/sdk', {
       './client': executeRequest
     })
     aiGuard = new AIGuard(tracer, config)
@@ -75,9 +85,12 @@ describe('AIGuard SDK', () => {
 
   const assertExecuteRequest = (messages) => {
     sinon.assert.calledOnceWithExactly(executeRequest,
-      `${config.aiguard.endpoint}/evaluate`,
-      { 'DD-API-KEY': 'API_KEY', 'DD-APPLICATION-KEY': 'APP_KEY' },
-      { data: { attributes: { messages, meta: { service: 'ai_guard_demo', env: 'test' } } } }
+      { data: { attributes: { messages, meta: { service: 'ai_guard_demo', env: 'test' } } } },
+      {
+        url: `${config.aiguard.endpoint}/evaluate`,
+        headers: { 'DD-API-KEY': 'API_KEY', 'DD-APPLICATION-KEY': 'APP_KEY' },
+        timeout: 5000
+      }
     )
   }
 
@@ -99,77 +112,52 @@ describe('AIGuard SDK', () => {
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
+  ]).flatMap(r => [
+    { ...r, suite: 'tool call', target: 'tool', messages: toolCall },
+    { ...r, suite: 'tool output', target: 'tool', messages: toolOutput },
+    { ...r, suite: 'prompt', target: 'prompt', messages: prompt }
   ])
 
-  for (const { action, reason, blocking } of testSuite) {
-    it(`test evaluate prompt with ${action} action (blocking: ${blocking})`, async () => {
-      // given
+  for (const { action, reason, blocking, suite, target, messages } of testSuite) {
+    it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
       mockExecuteRequest({ body: { data: { attributes: { action, reason, is_blocking_enabled: blocking } } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
-      // when
       if (shouldBlock) {
         await rejects(
-          () => aiGuard.evaluate(prompt, { block: blocking }),
+          () => aiGuard.evaluate(messages, { block: true }),
           err => err.name === 'AIGuardAbortError' && err.reason === reason
         )
       } else {
-        const evaluation = await aiGuard.evaluate(prompt, { block: blocking })
+        const evaluation = await aiGuard.evaluate(messages, { block: true })
         expect(evaluation.action).to.equal(action)
         expect(evaluation.reason).to.equal(reason)
       }
 
-      // then
-      assertExecuteRequest(prompt)
+      assertExecuteRequest(messages)
       await assertAIGuardSpan({
-        'ai_guard.target': 'prompt',
+        'ai_guard.target': target,
         'ai_guard.action': action,
         'ai_guard.reason': reason,
+        ...(target === 'tool' ? { 'ai_guard.tool_name': 'calc' } : {}),
         ...(shouldBlock ? { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' } : {})
       },
-      { messages: prompt })
-    })
-
-    it(`test evaluate tool call with ${action} action (blocking: ${blocking})`, async () => {
-      // given
-      mockExecuteRequest({ body: { data: { attributes: { action, reason, is_blocking_enabled: blocking } } } })
-      const shouldBlock = action !== 'ALLOW' && blocking
-
-      // when
-      if (shouldBlock) {
-        await rejects(
-          () => aiGuard.evaluate(toolCall, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason
-        )
-      } else {
-        const evaluation = await aiGuard.evaluate(toolCall, { block: true })
-        expect(evaluation.action).to.equal(action)
-        expect(evaluation.reason).to.equal(reason)
-      }
-
-      // then
-      assertExecuteRequest(toolCall)
-      await assertAIGuardSpan({
-        'ai_guard.target': 'tool',
-        'ai_guard.tool_name': 'calc',
-        'ai_guard.action': action,
-        'ai_guard.reason': reason,
-        ...(shouldBlock ? { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' } : {})
-      },
-      { messages: toolCall })
+      { messages })
     })
   }
 
   it('test evaluate with API error', async () => {
+    const errors = [{ status: 400, title: 'Internal server error' }]
     mockExecuteRequest({
       status: 400,
-      body: { errors: [{ status: 400, title: 'Internal server error' }] }
+      body: { errors }
     })
 
     await rejects(
       () => aiGuard.evaluate(toolCall),
-      err => err.name === 'AIGuardClientError' && err.errors?.length > 0
+      err => err.name === 'AIGuardClientError' && err.errors === errors
     )
+
     assertExecuteRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -184,6 +172,7 @@ describe('AIGuard SDK', () => {
       () => aiGuard.evaluate(toolCall),
       err => err.name === 'AIGuardClientError'
     )
+
     assertExecuteRequest(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -193,9 +182,42 @@ describe('AIGuard SDK', () => {
 
   it('test noop implementation', async () => {
     const noop = new NoopAIGuard()
-    await rejects(
-      () => noop.evaluate(prompt),
-      err => err.message === 'AI Guard is not enabled'
+    const result = await noop.evaluate(prompt)
+    result.action === 'ALLOW'
+    result.reason === 'AI Guard is not enabled'
+  })
+
+  it('test message length truncation', async () => {
+    const maxMessages = config.experimental.aiguard.maxMessagesLength
+    const messages = Array(maxMessages + 1)
+      .fill({ role: 'user', content: 'This is a prompt' })
+    mockExecuteRequest({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
+    })
+
+    await aiGuard.evaluate(messages)
+
+    assertExecuteRequest(messages)
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages: messages.slice(0, maxMessages) }
+    )
+  })
+
+  it('test message content truncation', async () => {
+    const maxContent = config.experimental.aiguard.maxContentSize
+    const content = Array(maxContent + 1).fill('A').join('')
+    const messages = [{ role: 'user', content }]
+    mockExecuteRequest({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
+    })
+
+    await aiGuard.evaluate(messages)
+
+    assertExecuteRequest(messages)
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages: [{ role: 'user', content: content.slice(0, maxContent) }] }
     )
   })
 })

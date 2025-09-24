@@ -4,7 +4,7 @@ const NoopTracer = require('./tracer')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopLLMObsSDK = require('../llmobs/noop')
-const NoopAIGuardSDK = require('../appsec/ai_guard/noop')
+const NoopAIGuardSDK = require('../aiguard/noop')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()

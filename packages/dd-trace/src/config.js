@@ -487,6 +487,9 @@ class Config {
       DD_AGENT_HOST,
       DD_AI_GUARD_ENABLED,
       DD_AI_GUARD_ENDPOINT,
+      DD_AI_GUARD_TIMEOUT,
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH,
+      DD_AI_GUARD_MAX_CONTENT_SIZE,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
@@ -863,6 +866,12 @@ class Config {
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
     this._setBoolean(env, 'aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    env['aiguard.timeout'] = maybeInt(Math.floor(DD_AI_GUARD_TIMEOUT))
+    this._envUnprocessed['aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(Math.floor(DD_AI_GUARD_MAX_MESSAGES_LENGTH))
+    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    env['experimental.aiguard.maxContentSize'] = maybeInt(Math.floor(DD_AI_GUARD_MAX_CONTENT_SIZE))
+    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
     this._setString(env, 'appKey', DD_APP_KEY)
   }
 
@@ -1036,6 +1045,19 @@ class Config {
 
     this._setBoolean(opts, 'aiguard.enabled', options.aiguard?.enabled)
     this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
+    if (options.aiguard?.timeout) {
+      opts['aiguard.timeout'] = maybeInt(options.aiguard.timeout)
+      this._optsUnprocessed['aiguard.timeout'] = options.aiguard.timeout
+    }
+    if (options.experimental?.aiguard?.maxMessagesLength) {
+      opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental.aiguard.maxMessagesLength)
+      this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental.aiguard.maxMessagesLength
+    }
+    if (options.experimental?.aiguard?.maxContentSize) {
+      opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental.aiguard.maxContentSize)
+      this._optsUnprocessed['experimental.aiguard.maxContentSize'] =
+        options.experimental.aiguard.maxContentSize
+    }
     this._setString(opts, 'appKey', options.appKey)
   }
 
