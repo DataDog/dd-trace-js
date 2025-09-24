@@ -598,6 +598,17 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
+      },
+
+      aiguard?: {
+        /**
+         * Maximum number of conversational messages allowed to be set in the meta-struct
+         */
+        maxMessagesLength?: number,
+        /**
+         * Max size of the content property set in the meta-struct
+         */
+        maxContentSize?: number
       }
     };
 
@@ -882,9 +893,13 @@ declare namespace tracer {
        */
       enabled?: boolean,
       /**
-       * URL of the AI Guard REST API endpoint.
+       * URL of the AI Guard REST API.
        */
-      endpoint?: string
+      endpoint?: string,
+      /**
+       * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
+       */
+      timeout?: number
     }
   }
 
