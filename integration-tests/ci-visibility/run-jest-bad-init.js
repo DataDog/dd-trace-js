@@ -9,7 +9,7 @@ const options = {
   maxWorkers: '50%',
   testRegex: /test\/ci-visibility-test/,
   runInBand: true,
-  testEnvironment: '<rootDir>/ci-visibility/jestEnvironmentBadInit.js'
+  testEnvironment: '<rootDir>/ci-visibility/jest-environment-bad-init.js'
 }
 
 jest.runCLI(

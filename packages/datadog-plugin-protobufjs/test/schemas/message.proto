@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "other_message.proto";
+import "other-message.proto";
 
 enum Status {
   UNKNOWN = 0;

@@ -2,19 +2,19 @@
 
 const os = require('os')
 const Span = require('./span')
-const SpanProcessor = require('../span_processor')
-const PrioritySampler = require('../priority_sampler')
-const TextMapPropagator = require('./propagation/text_map')
-const DSMTextMapPropagator = require('./propagation/text_map_dsm')
+const SpanProcessor = require('../span-processor')
+const PrioritySampler = require('../priority-sampler')
+const TextMapPropagator = require('./propagation/text-map')
+const DSMTextMapPropagator = require('./propagation/text-map-dsm')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 const formats = require('../../../../ext/formats')
 
 const log = require('../log')
-const runtimeMetrics = require('../runtime_metrics')
+const runtimeMetrics = require('../runtime-metrics')
 const getExporter = require('../exporter')
-const SpanContext = require('./span_context')
+const SpanContext = require('./span-context')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'

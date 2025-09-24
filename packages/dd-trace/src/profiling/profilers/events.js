@@ -345,12 +345,12 @@ class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
     // List all entries explicitly for bundlers to pick up the require calls correctly.
     const plugins = [
-      require('./event_plugins/dns_lookup'),
-      require('./event_plugins/dns_lookupservice'),
-      require('./event_plugins/dns_resolve'),
-      require('./event_plugins/dns_reverse'),
-      require('./event_plugins/fs'),
-      require('./event_plugins/net')
+      require('./event-plugins/dns-lookup'),
+      require('./event-plugins/dns-lookupservice'),
+      require('./event-plugins/dns-resolve'),
+      require('./event-plugins/dns-reverse'),
+      require('./event-plugins/fs'),
+      require('./event-plugins/net')
     ]
     this.plugins = plugins.map((Plugin) => {
       return new Plugin(eventHandler, eventFilter)

@@ -6,7 +6,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 
-const SpanContext = require('../src/opentracing/span_context')
+const SpanContext = require('../src/opentracing/span-context')
 const id = require('../src/id')
 
 describe('Sampler', () => {

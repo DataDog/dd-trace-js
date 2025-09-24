@@ -2,11 +2,11 @@
 
 // TODO: Update setup script to not leave agent process running in background.
 
-const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
+const SpanProcessor = require('../../../packages/dd-trace/src/span-processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
-const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
+const PrioritySampler = require('../../../packages/dd-trace/src/priority-sampler')
 const id = require('../../../packages/dd-trace/src/id')
-const defaults = require('../../../packages/dd-trace/src/config_defaults')
+const defaults = require('../../../packages/dd-trace/src/config-defaults')
 const hostname = require('os').hostname()
 
 const config = {

@@ -9,7 +9,7 @@ const { setTimeout: wait } = require('node:timers/promises')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')

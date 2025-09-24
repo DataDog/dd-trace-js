@@ -10,7 +10,7 @@ const os = require('node:os')
 
 require('../setup/core')
 
-const SpanContext = require('../../src/opentracing/span_context')
+const SpanContext = require('../../src/opentracing/span-context')
 const formats = require('../../../../ext/formats')
 const Reference = opentracing.Reference
 
@@ -93,10 +93,10 @@ describe('Tracer', () => {
 
     Tracer = proxyquire('../../src/opentracing/tracer', {
       './span': Span,
-      './span_context': SpanContext,
-      '../priority_sampler': PrioritySampler,
-      '../span_processor': SpanProcessor,
-      './propagation/text_map': TextMapPropagator,
+      './span-context': SpanContext,
+      '../priority-sampler': PrioritySampler,
+      '../span-processor': SpanProcessor,
+      './propagation/text-map': TextMapPropagator,
       './propagation/http': HttpPropagator,
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,

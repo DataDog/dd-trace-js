@@ -37,7 +37,7 @@ describe('RASP', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: true,
           DD_APPSEC_RASP_ENABLED: true,
-          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
+          DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp-rules.json'),
           DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
         }
       }, stdOutputHandler, stdOutputHandler)

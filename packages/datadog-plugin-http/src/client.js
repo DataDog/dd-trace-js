@@ -3,7 +3,7 @@
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const analyticsSampler = require('../../dd-trace/src/analytics-sampler')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')

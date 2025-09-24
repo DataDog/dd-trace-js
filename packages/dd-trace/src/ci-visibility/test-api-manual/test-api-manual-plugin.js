@@ -1,6 +1,6 @@
 'use strict'
 
-const CiPlugin = require('../../plugins/ci_plugin')
+const CiPlugin = require('../../plugins/ci-plugin')
 const {
   TEST_STATUS,
   finishAllTraceSpans,

@@ -60,7 +60,7 @@ describe('RASP - lfi', () => {
         appsec.enable(new Config({
           appsec: {
             enabled: true,
-            rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
+            rules: path.join(__dirname, 'resources', 'lfi-rasp-rules.json'),
             rasp: { enabled: true }
           }
         }))
@@ -472,7 +472,7 @@ describe('RASP - lfi', () => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
+          rules: path.join(__dirname, 'resources', 'lfi-rasp-rules.json'),
           rasp: { enabled: true }
         }
       }))

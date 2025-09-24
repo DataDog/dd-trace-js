@@ -9,7 +9,7 @@ const {
 const { storage } = require('./storage')
 
 const telemetry = require('./telemetry')
-const LLMObsSpanProcessor = require('./span_processor')
+const LLMObsSpanProcessor = require('./span-processor')
 
 const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')

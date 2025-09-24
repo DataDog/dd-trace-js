@@ -7,7 +7,7 @@ const { join } = require('path')
 const { assert } = require('chai')
 const { pollInterval, setup } = require('./utils')
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote_config/apply_states')
+const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../packages/dd-trace/src/remote-config/apply-states')
 const { version } = require('../../package.json')
 
 describe('Dynamic Instrumentation', function () {

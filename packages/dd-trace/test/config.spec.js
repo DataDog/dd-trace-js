@@ -43,12 +43,12 @@ describe('Config', () => {
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
-    const configDefaults = proxyquire('../src/config_defaults', {
+    const configDefaults = proxyquire('../src/config-defaults', {
       './pkg': pkg
     })
 
     Config = proxyquire('../src/config', {
-      './config_defaults': configDefaults,
+      './config-defaults': configDefaults,
       './log': log,
       './telemetry': { updateConfig },
       fs,
@@ -2671,7 +2671,7 @@ describe('Config', () => {
   })
 
   context('library config', () => {
-    const StableConfig = require('../src/config_stable')
+    const StableConfig = require('../src/config-stable')
     const path = require('path')
     // os.tmpdir returns undefined on Windows somehow
     const baseTempDir = os.platform() !== 'win32' ? os.tmpdir() : 'C:\\Windows\\Temp'

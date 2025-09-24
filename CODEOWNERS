@@ -5,7 +5,7 @@
 
 /integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/datadog-code-origin/ @DataDog/dd-trace-js @DataDog/debugger
-/packages/datadog-plugin-*/**/code_origin.* @DataDog/dd-trace-js @DataDog/debugger
+/packages/datadog-plugin-*/**/code-origin.* @DataDog/dd-trace-js @DataDog/debugger
 /packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 
@@ -25,7 +25,7 @@
 /packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-vitest/ @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/git.js @DataDog/ci-app-libraries
-/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/ci-plugin.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
@@ -51,7 +51,7 @@
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-api-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-api-js
-/integration-tests/remote_config.spec.js @DataDog/apm-sdk-api-js
+/integration-tests/remote-config.spec.js @DataDog/apm-sdk-api-js
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
@@ -78,17 +78,17 @@
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-api-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-api-js
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-api-js
-/packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-api-js
-/packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/remote-config/ @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/remote-config/ @DataDog/apm-sdk-api-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-api-js
 /packages/dd-trace/src/sampler.js @DataDog/apm-sdk-api-js
 /packages/dd-trace/test/sampler.spec.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/src/priority_sampler.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/test/priority_sampler.spec.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/src/sampling_rule.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/test/sampling_rule.spec.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-api-js
-/packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/priority-sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/priority-sampler.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/sampling-rule.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/sampling-rule.spec.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/src/span-sampler.js @DataDog/apm-sdk-api-js
+/packages/dd-trace/test/span-sampler.spec.js @DataDog/apm-sdk-api-js
 
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-api-js

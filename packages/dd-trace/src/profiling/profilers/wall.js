@@ -3,7 +3,7 @@
 const { storage } = require('../../../../datadog-core')
 
 const dc = require('dc-polyfill')
-const runtimeMetrics = require('../../runtime_metrics')
+const runtimeMetrics = require('../../runtime-metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const {
   END_TIMESTAMP_LABEL,

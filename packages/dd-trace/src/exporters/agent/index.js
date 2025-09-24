@@ -3,7 +3,7 @@
 const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
-const defaults = require('../../config_defaults')
+const defaults = require('../../config-defaults')
 
 class AgentExporter {
   #timer

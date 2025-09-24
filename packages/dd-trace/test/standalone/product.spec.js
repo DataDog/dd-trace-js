@@ -7,14 +7,14 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const RateLimiter = require('../../src/rate_limiter')
+const RateLimiter = require('../../src/rate-limiter')
 
 describe('Disabled APM Tracing or Standalone - Product', () => {
   let getProductRateLimiter
 
   beforeEach(() => {
     getProductRateLimiter = proxyquire('../../src/standalone/product', {
-      '../rate_limiter': sinon.stub(RateLimiter.prototype, 'constructor').callsFake((limit, interval = 'second') => {
+      '../rate-limiter': sinon.stub(RateLimiter.prototype, 'constructor').callsFake((limit, interval = 'second') => {
         return {
           limit,
           interval

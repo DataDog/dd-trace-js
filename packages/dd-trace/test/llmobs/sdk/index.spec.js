@@ -10,7 +10,7 @@ const Config = require('../../../src/config')
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
-const LLMObsSpanProcessor = require('../../../src/llmobs/span_processor')
+const LLMObsSpanProcessor = require('../../../src/llmobs/span-processor')
 
 const tracerVersion = require('../../../../../package.json').version
 

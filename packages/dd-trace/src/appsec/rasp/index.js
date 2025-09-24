@@ -9,9 +9,9 @@ const {
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
 const ssrf = require('./ssrf')
-const sqli = require('./sql_injection')
+const sqli = require('./sql-injection')
 const lfi = require('./lfi')
-const cmdi = require('./command_injection')
+const cmdi = require('./command-injection')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const { DatadogRaspAbortError } = require('./utils')

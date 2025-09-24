@@ -7,8 +7,8 @@ const Sampler = require('./sampler')
 const Span = require('./span')
 const id = require('../id')
 const log = require('../log')
-const SpanContext = require('./span_context')
-const TextMapPropagator = require('../opentracing/propagation/text_map')
+const SpanContext = require('./span-context')
+const TextMapPropagator = require('../opentracing/propagation/text-map')
 const TraceState = require('../opentracing/propagation/tracestate')
 
 class Tracer {

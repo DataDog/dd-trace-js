@@ -5,7 +5,7 @@ const log = require('../log')
 const request = require('../exporters/common/request')
 const { URL, format } = require('url')
 const { MsgpackEncoder } = require('../msgpack')
-const defaults = require('../config_defaults')
+const defaults = require('../config-defaults')
 const zlib = require('zlib')
 
 const msgpack = new MsgpackEncoder()

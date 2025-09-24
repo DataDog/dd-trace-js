@@ -79,7 +79,7 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
   'getSchema'
 ])
 
-const SchemaBuilder = lazyClass(() => require('./schemas/schema_builder').SchemaBuilder, [
+const SchemaBuilder = lazyClass(() => require('./schemas/schema-builder').SchemaBuilder, [
   'build',
   'addProperty',
   'shouldExtractSchema'

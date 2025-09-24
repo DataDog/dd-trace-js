@@ -201,14 +201,14 @@ describe('TracerProxy', () => {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
-      './plugin_manager': PluginManager,
-      './runtime_metrics': runtimeMetrics,
+      './plugin-manager': PluginManager,
+      './runtime-metrics': runtimeMetrics,
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './remote_config': remoteConfig,
+      './remote-config': remoteConfig,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
@@ -333,7 +333,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote-config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -364,7 +364,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote-config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -500,12 +500,12 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './noop/tracer': NoopTracer,
           './config': Config,
-          './runtime_metrics': runtimeMetrics,
+          './runtime-metrics': runtimeMetrics,
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './remote_config': remoteConfig
+          './remote-config': remoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -533,7 +533,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote-config': remoteConfig,
           './appsec/sdk': AppsecSdk,
           './standalone': standalone,
           './telemetry': telemetry

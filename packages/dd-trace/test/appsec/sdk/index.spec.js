@@ -25,16 +25,16 @@ describe('Appsec SDK', () => {
     setUser = sinon.stub()
 
     const AppsecSdk = proxyquire('../../../src/appsec/sdk', {
-      './track_event': {
+      './track-event': {
         trackUserLoginSuccessEvent,
         trackUserLoginFailureEvent,
         trackCustomEvent,
         trackUserLoginSuccessV2,
         trackUserLoginFailureV2
       },
-      './user_blocking': { checkUserAndSetUser, blockRequest },
+      './user-blocking': { checkUserAndSetUser, blockRequest },
       '../blocking': { setTemplates },
-      './set_user': { setUser }
+      './set-user': { setUser }
     })
 
     appsecSdk = new AppsecSdk(tracer, config)

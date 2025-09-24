@@ -3,8 +3,8 @@
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const Reporter = require('../reporter')
-const Limiter = require('../../rate_limiter')
-const { keepTrace } = require('../../priority_sampler')
+const Limiter = require('../../rate-limiter')
+const { keepTrace } = require('../../priority-sampler')
 const { ASM } = require('../../standalone/product')
 const web = require('../../plugins/util/web')
 const { updateRateLimitedMetric } = require('../telemetry')
@@ -37,7 +37,7 @@ function init (rules, config) {
   limiter = new Limiter(config.rateLimit)
 
   // dirty require to make startup faster for serverless
-  const WAFManager = require('./waf_manager')
+  const WAFManager = require('./waf-manager')
 
   waf.wafManager = new WAFManager(rules, config)
 

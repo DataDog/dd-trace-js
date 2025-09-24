@@ -4,7 +4,7 @@ const fs = require('fs')
 const { promisify } = require('util')
 const { threadId } = require('worker_threads')
 const writeFile = promisify(fs.writeFile)
-const { EventSerializer } = require('./event_serializer')
+const { EventSerializer } = require('./event-serializer')
 
 const pad = (n) => String(n).padStart(2, '0')
 

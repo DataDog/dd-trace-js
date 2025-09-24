@@ -15,9 +15,9 @@ const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
-const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure_metadata')
+const { getAzureTagsFromMetadata, getAzureAppMetadata } = require('../azure-metadata')
 const { getEnvironmentVariables } = require('../config-helper')
-const defaults = require('../config_defaults')
+const defaults = require('../config-defaults')
 
 class Config {
   constructor (options = {}) {
@@ -385,6 +385,6 @@ function buildExportCommand (options) {
     }
   }
   return [process.execPath,
-    path.join(__dirname, 'exporter_cli.js'),
+    path.join(__dirname, 'exporter-cli.js'),
     urls.join(','), tags, 'space']
 }

@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../log')
-const blockedTemplates = require('./blocked_templates')
+const blockedTemplates = require('./blocked-templates')
 const { updateBlockFailureMetric } = require('./telemetry')
 
 const detectedSpecificEndpoints = {}

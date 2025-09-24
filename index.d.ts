@@ -170,7 +170,7 @@ interface Plugins {
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
-  "child_process": tracer.plugins.child_process;
+  "child-process": tracer.plugins.child_process;
   "confluentinc-kafka-javascript": tracer.plugins.confluentinc_kafka_javascript;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;

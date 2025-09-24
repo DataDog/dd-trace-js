@@ -45,7 +45,7 @@ const commands = [
   ' ls -ls �'
 ]
 
-const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
+const propagationFunctionsFile = path.join(__dirname, 'resources/propagation-functions.js')
 const propagationFunctions = require(propagationFunctionsFile)
 
 describe('TaintTracking', () => {

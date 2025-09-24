@@ -34,11 +34,12 @@ require,shell-quote,mit,Copyright (c) 2013 James Halliday
 require,source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and contributors
 require,ttl-set,MIT,Copyright (c) 2024 Thomas Watson
 dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other contributors
-dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
+dev,@ls-lint/ls-lint,MIT,Copyright (c) 2020-2025 Lucas Löffel
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
+dev,@types/node,MIT,Copyright Authors
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson

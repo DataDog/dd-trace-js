@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 
 const Config = require('../../src/config')
-const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const TextMapPropagator = require('../../src/opentracing/propagation/text-map')
 
 const startCh = channel('dd-trace:span:start')
 

@@ -2,7 +2,7 @@
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
+const analyticsSampler = require('../../dd-trace/src/analytics-sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 

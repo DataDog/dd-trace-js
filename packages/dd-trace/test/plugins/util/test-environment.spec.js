@@ -51,7 +51,7 @@ describe('test environment data', () => {
       it('can read pull request data from GitHub Actions', () => {
         process.env = env
         process.env.GITHUB_BASE_REF = 'datadog:main'
-        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload.json')
+        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github-event-payload.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
           [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
@@ -71,7 +71,7 @@ describe('test environment data', () => {
       it('does not crash if GITHUB_EVENT_PATH is not a valid JSON file', () => {
         process.env = env
         process.env.GITHUB_BASE_REF = 'datadog:main'
-        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github_event_payload_malformed.json')
+        process.env.GITHUB_EVENT_PATH = path.join(__dirname, 'fixtures', 'github-event-payload-malformed.json')
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
           [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,

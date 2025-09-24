@@ -11,7 +11,7 @@ const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { json } = require('../../src/appsec/blocked_templates')
+const { json } = require('../../src/appsec/blocked-templates')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
@@ -297,7 +297,7 @@ withVersions('express', 'express', version => {
       config = new Config({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'api_security_rules.json'),
+          rules: path.join(__dirname, 'api-security-rules.json'),
           apiSecurity: {
             enabled: true
           }

@@ -12,9 +12,9 @@ require('../setup/core')
 const tracer = require('../../').init()
 
 const api = require('@opentelemetry/api')
-const TracerProvider = require('../../src/opentelemetry/tracer_provider')
-const SpanContext = require('../../src/opentelemetry/span_context')
-const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
+const TracerProvider = require('../../src/opentelemetry/tracer-provider')
+const SpanContext = require('../../src/opentelemetry/span-context')
+const { NoopSpanProcessor } = require('../../src/opentelemetry/span-processor')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')

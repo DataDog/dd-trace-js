@@ -38,7 +38,7 @@ describe('RASP metrics', () => {
           DD_APPSEC_ENABLED: 'true',
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
+          DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp-rules.json'),
           DD_APPSEC_WAF_TIMEOUT: 0.1
         }
       })

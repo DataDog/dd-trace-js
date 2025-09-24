@@ -13,7 +13,7 @@ const sinon = require('sinon')
 require('./core')
 
 const externals = require('../plugins/externals.json')
-const runtimeMetrics = require('../../src/runtime_metrics')
+const runtimeMetrics = require('../../src/runtime-metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')

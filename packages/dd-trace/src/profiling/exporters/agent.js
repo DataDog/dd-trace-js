@@ -3,7 +3,7 @@
 const retry = require('retry')
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
-const { EventSerializer } = require('./event_serializer')
+const { EventSerializer } = require('./event-serializer')
 
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')

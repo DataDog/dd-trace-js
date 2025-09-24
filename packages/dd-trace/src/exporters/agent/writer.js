@@ -2,7 +2,7 @@
 
 const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
-const runtimeMetrics = require('../../runtime_metrics')
+const runtimeMetrics = require('../../runtime-metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')

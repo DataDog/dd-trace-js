@@ -1,6 +1,6 @@
 'use strict'
 
-const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
+const CiPlugin = require('../../dd-trace/src/plugins/ci-plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 

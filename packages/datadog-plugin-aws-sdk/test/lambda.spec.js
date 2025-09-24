@@ -6,7 +6,7 @@ const { describe, it, before, after } = require('mocha')
 const JSZip = require('jszip')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup } = require('./spec-helpers')
 const { rawExpectedSchema } = require('./lambda-naming')
 
 const zip = new JSZip()

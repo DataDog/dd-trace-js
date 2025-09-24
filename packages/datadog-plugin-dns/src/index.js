@@ -2,7 +2,7 @@
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const DNSLookupPlugin = require('./lookup')
-const DNSLookupServicePlugin = require('./lookup_service')
+const DNSLookupServicePlugin = require('./lookup-service')
 const DNSResolvePlugin = require('./resolve')
 const DNSReversePlugin = require('./reverse')
 
