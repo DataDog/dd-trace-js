@@ -11,7 +11,6 @@ const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
-const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
@@ -270,7 +269,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   return {
     folder,
-    remove: async () => rimraf(folder)
+    remove: async () => fs.rm(folder, { force: true, recursive: true })
   }
 }
 
