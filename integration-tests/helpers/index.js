@@ -227,8 +227,8 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // yarn-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    await execHelper('yarn link')
-    await execHelper('yarn link dd-trace')
+    await exec('yarn link')
+    await exec('yarn link dd-trace')
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
@@ -240,45 +240,45 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   await execHelper(addCommand, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
-      await execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await execHelper(`cp -R ${path} ${folder}`)
+      await exec(`cp -R ${path} ${folder}`)
     }
   }
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
-    await execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
-    await execHelper(`sync ${folder}`)
+    await exec(`sync ${folder}`)
   }
 
   if (followUpCommand) {
-    await execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
+    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
   if (isGitRepo) {
-    await execHelper('git init', { cwd: folder })
+    await exec('git init', { cwd: folder })
     fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await execHelper('git config user.email "john@doe.com"', { cwd: folder })
-    await execHelper('git config user.name "John Doe"', { cwd: folder })
-    await execHelper('git config commit.gpgsign false', { cwd: folder })
+    await exec('git config user.email "john@doe.com"', { cwd: folder })
+    await exec('git config user.name "John Doe"', { cwd: folder })
+    await exec('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
     if (!fs.existsSync(localRemotePath)) {
-      await execHelper(`git init --bare ${localRemotePath}`)
+      await exec(`git init --bare ${localRemotePath}`)
     }
 
-    await execHelper('git add -A', { cwd: folder })
-    await execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
-    await execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await execHelper('git push --set-upstream origin HEAD', { cwd: folder })
+    await exec('git add -A', { cwd: folder })
+    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
+    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await exec('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
