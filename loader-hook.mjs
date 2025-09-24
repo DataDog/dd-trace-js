@@ -24,7 +24,7 @@ function initialize (data = {}) {
   )
 
   for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}`))
+    data.include.push(new RegExp(`node_modules/${moduleName}`), moduleName)
     data.exclude.push(new RegExp(`node_modules/${moduleName}/node_modules`))
   }
 
