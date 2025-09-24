@@ -360,6 +360,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.property('tracing', true)
+    expect(config).to.have.nested.property('aiguard.enabled', false)
+    expect(config).to.have.nested.property('aiguard.endpoint', undefined)
+    expect(config).to.have.nested.property('aiguard.timeout', 10e3)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 16)
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 512 * 1024)
 
     expect(updateConfig).to.be.calledOnce
 
