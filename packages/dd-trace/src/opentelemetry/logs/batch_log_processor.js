@@ -11,14 +11,14 @@ class BatchLogRecordProcessor {
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
-   * @param {Object} processor - Log processor for exporting batches to Datadog Agent
+   * @param {Object} exporter - Log processor for exporting batches to Datadog Agent
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
    * @param {number} maxQueueSize - Maximum number of log records in queue
    * @param {number} exportTimeoutMillis - Timeout for export operations
    */
-  constructor (processor, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
-    this._processor = processor
+  constructor (exporter, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
+    this._exporter = exporter
     this._batchTimeout = batchTimeout
     this._maxExportBatchSize = maxExportBatchSize
     this._maxQueueSize = maxQueueSize
@@ -78,7 +78,7 @@ class BatchLogRecordProcessor {
 
     const logRecords = this._logRecords.splice(0, this._maxExportBatchSize)
     this._clearTimer()
-    this._processor.export(logRecords, () => {})
+    this._exporter.export(logRecords, () => {})
 
     if (this._logRecords.length > 0) {
       this._startTimer()
@@ -115,7 +115,7 @@ class BatchLogRecordProcessor {
 
       this._export()
 
-      const shutdownPromises = this._processor ? [this._processor.shutdown()] : []
+      const shutdownPromises = this._exporter ? [this._exporter.shutdown()] : []
 
       Promise.all(shutdownPromises).then(resolve)
     })

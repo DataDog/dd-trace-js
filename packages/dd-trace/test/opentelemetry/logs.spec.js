@@ -36,10 +36,8 @@ describe('OpenTelemetry Logs', () => {
     process.env = originalEnv
     // Clean up OpenTelemetry API state by shutting down the current logger provider
     const { logs } = require('@opentelemetry/api-logs')
-    const loggerProvider = logs.getLoggerProvider()
-    if (loggerProvider && typeof loggerProvider.shutdown === 'function') {
-      loggerProvider.shutdown()
-    }
+    // Unregister the logger provider from OpenTelemetry API by resetting global state
+    logs.disable()
   })
 
   describe('Basic Functionality', () => {
@@ -47,9 +45,10 @@ describe('OpenTelemetry Logs', () => {
     function setupTracerAndLogger (enabled = true) {
       process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
       const tracer = require('../../')
+      tracer._initialized = false
       tracer.init()
       const { logs } = require('@opentelemetry/api-logs')
-      return { tracer, logs, loggerProvider: logs.getLoggerProvider(), logger: logs.getLogger('test-logger') }
+      return { logs, loggerProvider: logs.getLoggerProvider(), logger: logs.getLogger('test-logger') }
     }
 
     it('should initialize OpenTelemetry logs when enabled', () => {
@@ -76,6 +75,9 @@ describe('OpenTelemetry Logs', () => {
 
     it('should handle logger provider shutdown', () => {
       const { loggerProvider } = setupTracerAndLogger(true)
+
+      expect(loggerProvider).to.exist
+      expect(typeof loggerProvider.shutdown).to.equal('function')
 
       expect(() => {
         loggerProvider.shutdown()
@@ -309,53 +311,49 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('OTLP Payload Structure', () => {
-    // Common test data for payload structure tests
-    const testData = {
-      resource: {
-        attributes: {
-          'service.name': 'test-service',
-          'service.version': '1.0.0',
-          'deployment.environment': 'test'
-        }
-      },
-      logRecords: [{
+    it('should generate correct JSON OTLP payload structure', () => {
+      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
+      const transformer = new OtlpTransformer({
+        attributes: { 'service.name': 'test-service' }
+      }, 'http/json')
+
+      const logRecords = [{
         body: 'Test message',
         severityNumber: 9,
         severityText: 'INFO',
-        attributes: { 'test.attr': 'test-value' }
+        attributes: { 'test.attr': 'test-value' },
+        timestamp: Date.now() * 1000000,
+        instrumentationLibrary: { name: 'test-service', version: '1.0.0' }
       }]
-    }
 
-    // Helper function to test payload structure
-    function testPayloadStructure (protocol, expectedStructure) {
-      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
-      const transformer = new OtlpTransformer(testData.resource, protocol)
-
-      let result
-      if (protocol === 'http/json') {
-        result = JSON.parse(transformer.transformLogRecords(testData.logRecords).toString())
-      } else {
-        const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
-        result = getProtobufTypes()._logsService.decode(transformer.transformLogRecords(testData.logRecords))
-      }
-
-      expectedStructure(result)
-    }
-
-    it('should generate correct JSON OTLP payload structure', () => {
-      testPayloadStructure('http/json', (result) => {
-        expect(result).to.have.property('resourceLogs')
-        expect(result.resourceLogs[0]).to.have.property('resource')
-        expect(result.resourceLogs[0]).to.have.property('scopeLogs')
-      })
+      const result = JSON.parse(transformer.transformLogRecords(logRecords).toString())
+      expect(result).to.have.property('resourceLogs')
+      expect(result.resourceLogs[0]).to.have.property('resource')
+      expect(result.resourceLogs[0]).to.have.property('scopeLogs')
+      expect(result.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue).to.equal('Test message')
     })
 
     it('should generate correct protobuf OTLP payload structure', () => {
-      testPayloadStructure('http/protobuf', (result) => {
-        expect(result).to.have.property('resourceLogs')
-        expect(result.resourceLogs[0]).to.have.property('resource')
-        expect(result.resourceLogs[0]).to.have.property('scopeLogs')
-      })
+      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
+      const transformer = new OtlpTransformer({
+        attributes: { 'service.name': 'test-service' }
+      }, 'http/protobuf')
+
+      const logRecords = [{
+        body: 'Test message',
+        severityNumber: 9,
+        severityText: 'INFO',
+        attributes: { 'test.attr': 'test-value' },
+        timestamp: Date.now() * 1000000,
+        instrumentationLibrary: { name: 'test-service', version: '1.0.0' }
+      }]
+
+      const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
+      const result = getProtobufTypes()._logsService.decode(transformer.transformLogRecords(logRecords))
+      expect(result).to.have.property('resourceLogs')
+      expect(result.resourceLogs[0]).to.have.property('resource')
+      expect(result.resourceLogs[0]).to.have.property('scopeLogs')
+      expect(result.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue).to.equal('Test message')
     })
   })
 
