@@ -288,7 +288,8 @@ bedrockruntime.cacheWriteRequest = {
     cacheReadTokens: 0,
     cacheWriteTokens: 1209,
     text: 'The capital of France is Paris.\n\nParis is'
-  }
+  },
+  outputRole: 'assistant'
 }
 bedrockruntime.cacheReadRequest = {
   provider: PROVIDER.ANTHROPIC,
@@ -319,7 +320,8 @@ bedrockruntime.cacheReadRequest = {
     cacheReadTokens: 1209,
     cacheWriteTokens: 0,
     text: 'The capital of Italy is Rome (Roma in Italian'
-  }
+  },
+  outputRole: 'assistant'
 }
 
 module.exports = bedrockruntime

@@ -181,6 +181,51 @@ describe('Plugin', () => {
           expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
 
+        it('should invoke model and handle cache write tokens for streamed response', async () => {
+          const request = {
+            body: JSON.stringify(cacheWriteRequest.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: cacheWriteRequest.modelId
+          }
+
+          const command = new AWS.InvokeModelWithResponseStreamCommand(request)
+          await bedrockRuntimeClient.send(command)
+
+          const stream = await bedrockRuntimeClient.send(command)
+          for await (const chunk of stream.body) { // eslint-disable-line no-unused-vars
+            // consume the stream
+          }
+
+          const expectedOutput = { content: cacheWriteRequest.response.text }
+          if (cacheWriteRequest.outputRole) expectedOutput.role = cacheWriteRequest.outputRole
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const expected = expectedLLMObsLLMSpanEvent({
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            outputMessages: [expectedOutput],
+            tokenMetrics: {
+              input_tokens: cacheWriteRequest.response.inputTokens,
+              output_tokens: cacheWriteRequest.response.outputTokens,
+              total_tokens: cacheWriteRequest.response.inputTokens + cacheWriteRequest.response.outputTokens,
+              cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
+              cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens
+            },
+            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
+            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            metadata: {
+              temperature: cacheWriteRequest.requestBody.temperature,
+              max_tokens: cacheWriteRequest.requestBody.max_tokens
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
+          })
+
+          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
+        })
+
         it('should invoke model and handle cache read tokens', async () => {
           /**
            * This test verifies that invoking a Bedrock model correctly handles cache read tokens.
@@ -197,6 +242,51 @@ describe('Plugin', () => {
           }
 
           const command = new AWS.InvokeModelCommand(request)
+          await bedrockRuntimeClient.send(command)
+
+          const expectedOutput = { content: cacheReadRequest.response.text }
+          if (cacheReadRequest.outputRole) expectedOutput.role = cacheReadRequest.outputRole
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const expected = expectedLLMObsLLMSpanEvent({
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            outputMessages: [expectedOutput],
+            tokenMetrics: {
+              input_tokens: cacheReadRequest.response.inputTokens,
+              output_tokens: cacheReadRequest.response.outputTokens,
+              total_tokens: cacheReadRequest.response.inputTokens + cacheReadRequest.response.outputTokens,
+              cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
+              cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens
+            },
+            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
+            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            metadata: {
+              temperature: cacheReadRequest.requestBody.temperature,
+              max_tokens: cacheReadRequest.requestBody.max_tokens
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
+          })
+
+          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
+        })
+
+        it('should invoke model and handle cache read tokens for streamed response', async () => {
+          const request = {
+            body: JSON.stringify(cacheReadRequest.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: cacheReadRequest.modelId
+          }
+
+          const command = new AWS.InvokeModelWithResponseStreamCommand(request)
+          const stream = await bedrockRuntimeClient.send(command)
+          for await (const chunk of stream.body) { // eslint-disable-line no-unused-vars
+            // consume the stream
+          }
+
           await bedrockRuntimeClient.send(command)
 
           const expectedOutput = { content: cacheReadRequest.response.text }
