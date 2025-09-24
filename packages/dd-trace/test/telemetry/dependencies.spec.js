@@ -19,7 +19,7 @@ describe('dependencies', () => {
 
   setImmediate2.__promisify__ = function (...args) {
     setImmediate2(() => undefined, ...args)
-    return new Promise((resolve) => resolve(undefined))
+    return Promise.resolve()
   }
 
   describe('start', () => {

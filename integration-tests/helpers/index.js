@@ -179,7 +179,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
 
-  return new Promise((resolve, reject) => {
+  return /** @type {Promise<childProcess.ChildProcess & { url?: string }|void>} */ (new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
@@ -193,7 +193,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
         if (code !== 0) {
           return reject(new Error(`Process exited with status code ${code}.`))
         }
-        resolve(undefined)
+        resolve()
       })
 
     proc.stdout.on('data', data => {
@@ -211,7 +211,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
       // eslint-disable-next-line no-console
       if (!options.silent) console.error(data.toString())
     })
-  })
+  }))
 }
 
 /**
@@ -569,8 +569,8 @@ function setShouldKill (value) {
   })
 }
 
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
 // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
