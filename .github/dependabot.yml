@@ -67,6 +67,9 @@ updates:
       - dependency-name: "@opentelemetry/core"
         # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "rimraf"
+        # 4.0.0 onwards no longer supports an API where we can pass in an fs implementation
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
