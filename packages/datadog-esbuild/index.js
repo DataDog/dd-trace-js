@@ -7,6 +7,11 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
+const { resolve, load } = require('import-in-the-middle/hook.mjs')
+const { pathToFileURL, fileURLToPath } = require('url')
+const { processModule } = require('./iitm-helpers.js')
+
+
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -133,7 +138,11 @@ ${build.initialOptions.banner.js}`
     console.warn('Warning: No git metadata available - skipping injection')
   }
 
-  build.onResolve({ filter: /.*/ }, args => {
+
+  const toInterceptESMModules = new Set()
+  const interceptedESMModules = new Set()
+
+  build.onResolve({ filter: /.*/ }, async args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
@@ -158,7 +167,7 @@ ${build.initialOptions.banner.js}`
 
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch (err) {
       if (DEBUG) {
         console.warn(`Warning: Unable to find "${args.path}".` +
@@ -166,7 +175,10 @@ ${build.initialOptions.banner.js}`
       }
       return
     }
+    // this works for some things, but more package.json could be between file and node_modules
+    // width interesting data, like "type": "commonjs" in an esm module
     const extracted = extractPackageAndModulePath(fullPathToModule)
+
 
     const internal = builtins.has(args.path)
 
@@ -196,6 +208,45 @@ ${build.initialOptions.banner.js}`
 
       const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
+
+      function isESMFile(fullPathToModule, modulePackageJsonPath, packageJson) {
+        if (fullPathToModule.endsWith('.mjs')) return true
+        if (fullPathToModule.endsWith('.cjs')) return false
+
+        const pathParts = fullPathToModule.split(path.sep)
+        do {
+          pathParts.pop()
+
+          const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
+          if (packageJsonPath === modulePackageJsonPath) {
+            return packageJson.type === 'module'
+          }
+
+          try {
+            const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
+            const packageJson = JSON.parse(packageJsonContent)
+            if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
+              return packageJson.type === 'module'
+            }
+          } catch (err) {
+            // file does not exit, continue
+          }
+        } while (pathParts.length > 0)
+
+        return packageJson.type === 'module'
+
+      }
+      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+      let esmData
+      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule += '._dd_esbuild_intercepted'
+      }
+
+      console.log(`${fullPathToModule} is ${isESM ? 'ESM' : 'CommonJS'}`)
+      // console.log('path', args.path)
+      // console.log('packageJson', packageJson)
+
+
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
@@ -208,13 +259,16 @@ ${build.initialOptions.banner.js}`
           full: fullPathToModule,
           raw: args.path,
           pkgOfInterest: true,
-          internal
+          kind: args.kind,
+          internal,
+          isESM,
+          esmData
         }
       }
     }
   })
 
-  build.onLoad({ filter: /.*/ }, args => {
+  build.onLoad({ filter: /.*/ }, async args => {
     if (!args.pluginData?.pkgOfInterest) {
       return
     }
@@ -228,26 +282,78 @@ ${build.initialOptions.banner.js}`
       : data.pkg
 
     // Read the content of the module file of interest
-    const fileCode = fs.readFileSync(args.path, 'utf8')
+    
+    let contents
+    
 
-    const contents = `
-      (function() {
-        ${fileCode}
-      })(...arguments);
-      {
-        const dc = require('dc-polyfill');
-        const ch = dc.channel('${CHANNEL}');
-        const mod = module.exports
-        const payload = {
-          module: mod,
-          version: '${data.version}',
-          package: '${data.pkg}',
-          path: '${pkgPath}'
-        };
-        ch.publish(payload);
-        module.exports = payload.module;
+    if (data.isESM) {
+      if (args.path.endsWith('._dd_esbuild_intercepted')) {
+        args.path = args.path.slice(0, -1 * '._dd_esbuild_intercepted'.length)
+        interceptedESMModules.add(args.path)
+
+
+        const setters = await processModule({ 
+          path: args.path,
+          context: {},
+          async parentGetSource (url, context) {
+            return {
+              source: fs.readFileSync(fileURLToPath(url), 'utf8'),
+              format: 'module',
+              shortCircuit: true
+            }
+          },
+          async parentResolve (specifier, context) {
+            // we will assume this is called for an esm module
+            const conditions = ['import']
+            const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
+            console.log('resolved', resolved)
+            return {
+              url: specifier // TODO use require.resolve with canditates etc.
+            }
+          },
+          excludeDefault: true
+        })
+        contents = `
+// import { register } from '$\{iitmURL}'
+import * as namespace from ${JSON.stringify(args.path)}
+
+// Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
+const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } })
+const set = {}
+const get = {}
+
+${Array.from(setters.values()).join('\n')}
+
+// register($\{JSON.stringify(realUrl)}, _, set, get, $\{JSON.stringify(specifiers.get(realUrl))})
+`
+        // contents = `import * as namespace from ${JSON.stringify(args.path)}
+        // console.log('iepa kaixooo!!')
+        // export default namespace;`
+      } else {
+        contents = fs.readFileSync(args.path, 'utf8')
+      }
+    } else {
+      const fileCode = fs.readFileSync(args.path, 'utf8')
+      contents = `
+        (function() {
+          ${fileCode}
+        })(...arguments);
+        {
+          const dc = require('dc-polyfill');
+          const ch = dc.channel('${CHANNEL}');
+          const mod = module.exports
+          const payload = {
+            module: mod,
+            version: '${data.version}',
+            package: '${data.pkg}',
+            path: '${pkgPath}'
+          };
+          ch.publish(payload);
+          module.exports = payload.module;
+      }
+      `
     }
-    `
+
 
     // https://esbuild.github.io/plugins/#on-load-results
     return {
@@ -259,12 +365,19 @@ ${build.initialOptions.banner.js}`
 }
 
 // @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory) {
+function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path === '.') {
     path = './'
   } else if (path === '..') {
     path = '../'
   }
+  let conditions
+  if (usesImportStatement) {
+    conditions = ['import']
+  }
 
-  return require.resolve(path, { paths: [directory] })
+  if (path.startsWith('file://')) {
+    path = path.slice(7)
+  }
+  return require.resolve(path, { paths: [directory], conditions })
 }
