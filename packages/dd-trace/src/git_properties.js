@@ -2,6 +2,7 @@
 
 const commitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
 const repositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
+const gitRemoteOriginRegex = /\[remote\s+"origin"\]\s*\n\s*url\s*=\s*([\w\d:@/.-]+)/
 
 function removeUserSensitiveInfo (repositoryUrl) {
   try {
@@ -32,4 +33,19 @@ function getGitMetadataFromGitProperties (gitPropertiesString) {
   }
 }
 
-module.exports = { getGitMetadataFromGitProperties, removeUserSensitiveInfo }
+function getGitRepositoryUrlFromGitConfig (gitConfigContent) {
+  if (!gitConfigContent) {
+    return {}
+  }
+
+  // Look for [remote "origin"] section and extract the URL
+  const repositoryUrlMatch = gitConfigContent.match(gitRemoteOriginRegex)
+
+  const repositoryUrl = repositoryUrlMatch ? repositoryUrlMatch[1] : undefined
+
+  return {
+    repositoryUrl: removeUserSensitiveInfo(repositoryUrl)
+  }
+}
+
+module.exports = { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getGitRepositoryUrlFromGitConfig }

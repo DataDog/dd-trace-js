@@ -5,7 +5,7 @@ const { describe, it } = require('tap').mocha
 
 require('./setup/core')
 
-const { getGitMetadataFromGitProperties } = require('../src/git_properties')
+const { getGitMetadataFromGitProperties, getGitRepositoryUrlFromGitConfig } = require('../src/git_properties')
 
 describe('git_properties', () => {
   describe('getGitMetadataFromGitProperties', () => {
@@ -53,6 +53,48 @@ git.repository_url=; rm -rf ;
       const undefinedResult = getGitMetadataFromGitProperties(undefined)
       expect(undefinedResult.commitSHA).to.equal(undefined)
       expect(undefinedResult.repositoryUrl).to.equal(undefined)
+    })
+  })
+
+  describe('getGitRepositoryUrlFromGitConfig', () => {
+    it('reads repository URL from .git/config', () => {
+      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+        [remote "origin"]
+        url = git@github.com:DataDog/dd-trace-js.git
+      `)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('filters out credentials', () => {
+      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+        [remote "origin"]
+        url = https://username:password@github.com/datadog/dd-trace-js.git
+      `)
+      expect(repositoryUrl).to.equal('https://github.com/datadog/dd-trace-js.git')
+    })
+
+    it('ignores other fields', () => {
+      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+        [remote "origin"]
+        url = https://github.com/DataDog/dd-trace-js.git
+        fetch = +refs/heads/*:refs/remotes/origin/*
+      `)
+      expect(repositoryUrl).to.equal('https://github.com/DataDog/dd-trace-js.git')
+    })
+
+    it('ignores badly formatted files', () => {
+      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+        [remote "origin"]
+        url = ; rm -rf ;
+      `)
+      expect(repositoryUrl).to.equal(undefined)
+    })
+
+    it('does not crash with empty files', () => {
+      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig('')
+      expect(repositoryUrl).to.equal(undefined)
+      const { undefinedResult } = getGitRepositoryUrlFromGitConfig(undefined)
+      expect(undefinedResult).to.equal(undefined)
     })
   })
 })

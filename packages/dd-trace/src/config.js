@@ -10,7 +10,8 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getGitRepositoryUrlFromGitConfig } =
+  require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
@@ -390,6 +391,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
+      // try to read Git metadata from the environment variables
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
           getEnvironmentVariable('DD_GIT_REPOSITORY_URL'),
@@ -400,6 +402,7 @@ class Config {
         getEnvironmentVariable('DD_GIT_COMMIT_SHA'),
         this.tags[GIT_COMMIT_SHA]
       )
+      // otherwise, try to read Git metadata from the git.properties file
       if (!this.repositoryUrl || !this.commitSHA) {
         const DD_GIT_PROPERTIES_FILE = coalesce(
           getEnvironmentVariable('DD_GIT_PROPERTIES_FILE'),
@@ -418,6 +421,49 @@ class Config {
           const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
           this.commitSHA = this.commitSHA || commitSHA
           this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        }
+      }
+      // otherwise, try to read Git metadata from the .git/ folder
+      if (!this.repositoryUrl || !this.commitSHA) {
+        const DD_GIT_FOLDER_PATH = coalesce(
+          getEnvironmentVariable('DD_GIT_FOLDER_PATH'),
+          `${process.cwd()}/.git/`
+        )
+        try {
+          const gitConfigContent = fs.readFileSync(DD_GIT_FOLDER_PATH + 'config', 'utf8')
+          if (gitConfigContent) {
+            const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(gitConfigContent)
+            this.repositoryUrl = this.repositoryUrl || repositoryUrl
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git config: %s', DD_GIT_FOLDER_PATH + 'config', e)
+          }
+        }
+        try {
+          const gitHeadContent = fs.readFileSync(DD_GIT_FOLDER_PATH + 'HEAD', 'utf8')
+          if (gitHeadContent) {
+            // remove the 'ref: ' prefix
+            const gitHeadRef = gitHeadContent.split(':')[1].trim()
+            try {
+              const gitHeadShaContent = fs.readFileSync(DD_GIT_FOLDER_PATH + gitHeadRef, 'utf8')
+              if (gitHeadShaContent) {
+                const gitHeadSha = gitHeadShaContent.trim()
+                this.commitSHA = this.commitSHA || gitHeadSha
+              }
+            } catch (e) {
+              // Only log error if the user has set a .git/ path
+              if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+                log.error('Error reading git HEAD ref content: %s', DD_GIT_FOLDER_PATH + gitHeadContent, e)
+              }
+            }
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git HEAD file: %s', DD_GIT_FOLDER_PATH + 'HEAD', e)
+          }
         }
       }
     }

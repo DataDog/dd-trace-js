@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 const { readFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const path = require('node:path')
 
 require('./setup/core')
 
@@ -35,6 +36,7 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+  const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures/config/git-folder/')
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2407,6 +2409,7 @@ describe('Config', () => {
       delete process.env.DD_GIT_COMMIT_SHA
       delete process.env.DD_GIT_REPOSITORY_URL
       delete process.env.DD_TRACE_GIT_METADATA_ENABLED
+      delete process.env.DD_GIT_FOLDER_PATH
       process.env.DD_TAGS = ddTags
     })
     it('reads DD_GIT_* env vars', () => {
@@ -2466,6 +2469,33 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+    it('reads .git/ folder if it is available', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      const config = new Config({})
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dd-trace-js.git')
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+    })
+    it('does not crash if .git/ folder is not available', () => {
+      process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', undefined)
+      expect(config).to.have.property('repositoryUrl', undefined)
+    })
+    it('does not read .git/ folder if env vars are passed', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
+    })
+    it('still reads .git/ if one of the env vars is missing', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_REPOSITORY_URL = 'git@github.com:DataDog/dummy-dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dummy-dd-trace-js.git')
     })
   })
 

@@ -74,6 +74,7 @@
     "DD_GIT_COMMIT_MESSAGE": ["A"],
     "DD_GIT_COMMIT_SHA": ["A"],
     "DD_GIT_PROPERTIES_FILE": ["A"],
+    "DD_GIT_FOLDER_PATH": ["A"],
     "DD_GIT_REPOSITORY_URL": ["A"],
     "DD_GIT_TAG": ["A"],
     "DD_GIT_PULL_REQUEST_BASE_BRANCH": ["A"],
