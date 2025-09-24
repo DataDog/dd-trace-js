@@ -26,6 +26,10 @@ if (process.env.ENABLE_JSDOM) {
   options.testEnvironment = 'jsdom'
 }
 
+if (process.env.ENABLE_HAPPY_DOM) {
+  options.testEnvironment = '@happy-dom/jest-environment'
+}
+
 jest.runCLI(
   options,
   options.projects

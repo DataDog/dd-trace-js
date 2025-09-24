@@ -87,6 +87,14 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('injects Git metadata into bundled applications', () => {
+      const command = 'node ./build-and-test-git-tags.js'
+      console.log(command)
+      chproc.execSync(command, {
+        timeout: 1000 * 30
+      })
+    })
+
     describe('ESM', () => {
       afterEach(() => {
         fs.rmSync('./out.mjs', { force: true })

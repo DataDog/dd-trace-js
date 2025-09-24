@@ -1,3 +1,9 @@
+include:
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/notify-slo-breaches.template.yml'
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/check-slo-breaches.template.yml'
+
 .macrobenchmarks:
   stage: macrobenchmarks
   rules:
@@ -69,3 +75,25 @@ only-tracing-with-runtime-metrics-enabled:
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
     DD_RUNTIME_METRICS_ENABLED: "true"
+
+check-slo-breaches:
+  extends: .check-slo-breaches
+  stage: macrobenchmarks-gate
+  needs:
+    - baseline
+    - only-tracing
+    - only-tracing-with-runtime-metrics-enabled
+  artifacts:
+    name: "artifacts"
+    when: always
+    paths:
+      - platform/artifacts/
+    expire_in: 3 months
+
+notify-slo-breaches:
+  extends: .notify-slo-breaches
+  stage: macrobenchmarks-notify
+  needs:
+    - check-slo-breaches
+  variables:
+    CHANNEL: "notifications-apm-js"
