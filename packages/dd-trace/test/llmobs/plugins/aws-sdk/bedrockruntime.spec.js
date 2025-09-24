@@ -6,7 +6,7 @@ const { describe, it, before } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, useLlmObs } = require('../../util')
-const { models, modelConfig } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
+const { models, modelConfig, cacheWriteRequest, cacheReadRequest } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const { expect } = chai
@@ -75,7 +75,9 @@ describe('Plugin', () => {
               tokenMetrics: {
                 input_tokens: model.response.inputTokens,
                 output_tokens: model.response.outputTokens,
-                total_tokens: model.response.inputTokens + model.response.outputTokens
+                total_tokens: model.response.inputTokens + model.response.outputTokens,
+                cache_read_input_tokens: model.response.cacheReadTokens,
+                cache_write_input_tokens: model.response.cacheWriteTokens
               },
               modelName: model.modelId.split('.')[1].toLowerCase(),
               modelProvider: model.provider.toLowerCase(),
@@ -117,7 +119,9 @@ describe('Plugin', () => {
               tokenMetrics: {
                 input_tokens: expectedResponseObject.inputTokens,
                 output_tokens: expectedResponseObject.outputTokens,
-                total_tokens: expectedResponseObject.inputTokens + expectedResponseObject.outputTokens
+                total_tokens: expectedResponseObject.inputTokens + expectedResponseObject.outputTokens,
+                cache_read_input_tokens: model.response.cacheReadTokens,
+                cache_write_input_tokens: model.response.cacheWriteTokens
               },
               modelName: model.modelId.split('.')[1].toLowerCase(),
               modelProvider: model.provider.toLowerCase(),
@@ -130,6 +134,98 @@ describe('Plugin', () => {
 
             expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
           })
+        })
+
+        it('should invoke model and handle cache write tokens', async () => {
+          /**
+           * This test verifies that invoking a Bedrock model correctly handles cache write tokens.
+           * If updates are made to this test, a new cassette will need to be generated. Please
+           * ensure that the cassette has cache write tokens.
+           */
+          const request = {
+            body: JSON.stringify(cacheWriteRequest.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: cacheWriteRequest.modelId
+          }
+
+          const command = new AWS.InvokeModelCommand(request)
+          await bedrockRuntimeClient.send(command)
+
+          const expectedOutput = { content: cacheWriteRequest.response.text }
+          if (cacheWriteRequest.outputRole) expectedOutput.role = cacheWriteRequest.outputRole
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const expected = expectedLLMObsLLMSpanEvent({
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            outputMessages: [expectedOutput],
+            tokenMetrics: {
+              input_tokens: cacheWriteRequest.response.inputTokens,
+              output_tokens: cacheWriteRequest.response.outputTokens,
+              total_tokens: cacheWriteRequest.response.inputTokens + cacheWriteRequest.response.outputTokens,
+              cache_read_input_tokens: cacheWriteRequest.response.cacheReadTokens,
+              cache_write_input_tokens: cacheWriteRequest.response.cacheWriteTokens
+            },
+            modelName: cacheWriteRequest.modelId.split('.')[2].toLowerCase(),
+            modelProvider: cacheWriteRequest.provider.toLowerCase(),
+            metadata: {
+              temperature: cacheWriteRequest.requestBody.temperature,
+              max_tokens: cacheWriteRequest.requestBody.max_tokens
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
+          })
+
+          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
+        })
+
+        it('should invoke model and handle cache read tokens', async () => {
+          /**
+           * This test verifies that invoking a Bedrock model correctly handles cache read tokens.
+           * If updates are made to this test, a new cassette will need to be generated. Please
+           * ensure that the cassette has cache read tokens. For example, you may need to
+           * generate the cassette once, delete it, then generate the cassette again to ensure
+           * the prompt is cached.
+           */
+          const request = {
+            body: JSON.stringify(cacheReadRequest.requestBody),
+            contentType: 'application/json',
+            accept: 'application/json',
+            modelId: cacheReadRequest.modelId
+          }
+
+          const command = new AWS.InvokeModelCommand(request)
+          await bedrockRuntimeClient.send(command)
+
+          const expectedOutput = { content: cacheReadRequest.response.text }
+          if (cacheReadRequest.outputRole) expectedOutput.role = cacheReadRequest.outputRole
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          const expected = expectedLLMObsLLMSpanEvent({
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'bedrock-runtime.command',
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            outputMessages: [expectedOutput],
+            tokenMetrics: {
+              input_tokens: cacheReadRequest.response.inputTokens,
+              output_tokens: cacheReadRequest.response.outputTokens,
+              total_tokens: cacheReadRequest.response.inputTokens + cacheReadRequest.response.outputTokens,
+              cache_read_input_tokens: cacheReadRequest.response.cacheReadTokens,
+              cache_write_input_tokens: cacheReadRequest.response.cacheWriteTokens
+            },
+            modelName: cacheReadRequest.modelId.split('.')[2].toLowerCase(),
+            modelProvider: cacheReadRequest.provider.toLowerCase(),
+            metadata: {
+              temperature: cacheReadRequest.requestBody.temperature,
+              max_tokens: cacheReadRequest.requestBody.max_tokens
+            },
+            tags: { ml_app: 'test', language: 'javascript', integration: 'bedrock' }
+          })
+
+          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
     })
