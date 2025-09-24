@@ -78,18 +78,16 @@ describe('integrations', () => {
   }
 
   describe('langchain', () => {
-    before(() => {
+    const getEvents = useLlmObs({ plugin: 'langchain' })
+
+    before(async () => {
       iastFilter.isDdTrace = file => {
         if (file.includes('dd-trace-js/versions/')) {
           return false
         }
         return isDdTrace(file)
       }
-    })
 
-    const getEvents = useLlmObs({ plugin: 'langchain' })
-
-    before(async () => {
       llmobs = require('../../../../../..').llmobs
     })
 

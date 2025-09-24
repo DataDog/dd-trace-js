@@ -243,22 +243,19 @@ function useLlmObs ({
   })
 
   before(() => {
-    return agent.load(plugin, {}, Object.assign({
+    return agent.load(plugin, {}, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false
-      }
-    }, tracerConfigOptions))
+      },
+      ...tracerConfigOptions
+    })
   })
 
-  beforeEach(() => {
-    resetTracesPromises()
-  })
+  beforeEach(resetTracesPromises)
 
   after(() => {
-    return agent.close(Object.assign({
-      ritmReset: false
-    }, closeOptions))
+    return agent.close({ ritmReset: false, ...closeOptions })
   })
 
   return async function () {
