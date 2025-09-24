@@ -119,8 +119,8 @@ function extractTokens ({ requestId, usage }) {
 
   const inputTokens = usage.inputTokens || inputTokensFromHeaders || 0
   const outputTokens = usage.outputTokens || outputTokensFromHeaders || 0
-  const cacheReadTokens = cacheReadTokensFromHeaders || 0
-  const cacheWriteTokens = cacheWriteTokensFromHeaders || 0
+  const cacheReadTokens = usage.cacheReadTokens || cacheReadTokensFromHeaders || 0
+  const cacheWriteTokens = usage.cacheWriteTokens || cacheWriteTokensFromHeaders || 0
 
   // adjust for the fact that bedrock input tokens only count non-cached tokens
   const normalizedInputTokens = inputTokens + cacheReadTokens + cacheWriteTokens
