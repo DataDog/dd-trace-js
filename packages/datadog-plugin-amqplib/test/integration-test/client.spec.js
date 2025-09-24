@@ -22,7 +22,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'amqplib@${version}'`], false,
         ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'amqplib', 'connect')
+      variants = varySandbox(sandbox, 'server.mjs', 'amqplib', 'connect')
     })
 
     after(async () => {
@@ -38,7 +38,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'destructure', 'star']) {
+    for (const variant of varySandbox.variants) {
       it('is instrumented', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

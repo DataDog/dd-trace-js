@@ -21,7 +21,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [
         './packages/datadog-plugin-mongoose/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'mongoose')
+      variants = varySandbox(sandbox, 'server.mjs', 'mongoose')
     })
 
     after(async () => {
@@ -36,8 +36,8 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented ${variant}`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)

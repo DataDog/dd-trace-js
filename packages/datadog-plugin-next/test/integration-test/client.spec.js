@@ -26,7 +26,7 @@ describe('esm', () => {
       sandbox = await createSandbox([`'next@${version}'`, 'react@^18.2.0', 'react-dom@^18.2.0'],
         false, ['./packages/datadog-plugin-next/test/integration-test/*'],
         'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build')
-      variants = varySandbox(sandbox, 'server.mjs', null, 'next')
+      variants = varySandbox(sandbox, 'server.mjs', 'next')
     })
 
     after(async () => {
@@ -42,8 +42,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'star', 'destructure']) {
-      it(`is instrumented ${variant}`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port, undefined, {
           NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
         })

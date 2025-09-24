@@ -21,7 +21,7 @@ describe('esm', () => {
       this.timeout(30000)
       sandbox = await createSandbox([`'mongodb@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'mongodb', 'MongoClient')
+      variants = varySandbox(sandbox, 'server.mjs', 'mongodb', 'MongoClient')
     })
 
     after(async function () {
@@ -37,8 +37,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)
@@ -58,7 +58,7 @@ describe('esm', () => {
       this.timeout(30000)
       sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server2.mjs', null, 'MongoDBCore')
+      variants = varySandbox(sandbox, 'server2.mjs', 'MongoDBCore')
     })
 
     after(async function () {
@@ -74,8 +74,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)

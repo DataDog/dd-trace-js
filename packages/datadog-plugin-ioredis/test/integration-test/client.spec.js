@@ -20,7 +20,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'ioredis@${version}'`], false, [
         './packages/datadog-plugin-ioredis/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'ioredis')
+      variants = varySandbox(sandbox, 'server.mjs', 'ioredis')
     })
 
     after(async () => {
@@ -36,8 +36,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'star', 'destructure']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)

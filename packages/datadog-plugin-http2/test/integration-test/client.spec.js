@@ -19,7 +19,7 @@ describe('esm', () => {
     this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
-    variants = varySandbox(sandbox, 'server.mjs', null, 'http2', 'createServer')
+    variants = varySandbox(sandbox, 'server.mjs', 'http2', 'createServer')
   })
 
   after(async function () {
@@ -37,8 +37,8 @@ describe('esm', () => {
   })
 
   context('http2', () => {
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

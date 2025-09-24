@@ -22,7 +22,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
         './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'elasticsearch', null, '@elastic/elasticsearch')
+      variants = varySandbox(sandbox, 'server.mjs', 'elasticsearch', undefined, '@elastic/elasticsearch')
     })
 
     after(async () => {
@@ -37,8 +37,8 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.variants) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)
