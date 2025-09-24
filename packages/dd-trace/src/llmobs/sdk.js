@@ -422,6 +422,21 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
+  annotationContext (options, fn) {
+    if (!this.enabled) return fn()
+
+    const currentStore = storage.getStore()
+    const existingAnnotationContext = currentStore?.annotationContext
+    const mergedAnnotationContext = { ...existingAnnotationContext }
+    for (const key of Object.keys(options)) {
+      Object.assign(mergedAnnotationContext, { [key]: options[key] })
+    }
+
+    const store = { ...currentStore, annotationContext: mergedAnnotationContext }
+
+    return storage.run(store, fn)
+  }
+
   flush () {
     if (!this.enabled) return
 
@@ -447,20 +462,20 @@ class LLMObs extends NoopLLMObs {
   }
 
   _activate (span, options, fn) {
-    const parent = this._active()
-    if (this.enabled) storage.enterWith({ span })
+    const parentStore = storage.getStore()
+    if (this.enabled) storage.enterWith({ ...parentStore, span })
 
     if (options) {
       this._tagger.registerLLMObsSpan(span, {
         ...options,
-        parent
+        parent: parentStore?.span
       })
     }
 
     try {
       return fn()
     } finally {
-      if (this.enabled) storage.enterWith({ span: parent })
+      if (this.enabled) storage.enterWith(parentStore)
     }
   }
 

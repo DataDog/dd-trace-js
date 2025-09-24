@@ -28,7 +28,7 @@ class LLMObsPlugin extends TracingPlugin {
     const enabled = this._tracerConfig.llmobs.enabled
     if (!enabled) return
 
-    const parent = this.getLLMObsParent(ctx)
+    const parentStore = llmobsStorage.getStore()
     const apmStore = ctx.currentStore
     const span = apmStore?.span
 
@@ -40,10 +40,14 @@ class LLMObsPlugin extends TracingPlugin {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: this.constructor.integration })
 
       ctx.llmobs = {} // initialize context-based namespace
-      llmobsStorage.enterWith({ span })
-      ctx.llmobs.parent = parent
+      llmobsStorage.enterWith({ ...parentStore, span })
+      ctx.llmobs.parent = parentStore?.span
 
-      this._tagger.registerLLMObsSpan(span, { parent, integration: this.constructor.integration, ...registerOptions })
+      this._tagger.registerLLMObsSpan(span, {
+        parent: parentStore?.span,
+        integration: this.constructor.integration,
+        ...registerOptions
+      })
     }
   }
 
@@ -56,8 +60,8 @@ class LLMObsPlugin extends TracingPlugin {
     const span = apmStore?.span
     if (!LLMObsTagger.tagMap.has(span)) return
 
-    const parent = ctx.llmobs.parent
-    llmobsStorage.enterWith({ span: parent })
+    const parentStore = ctx.llmobs.parent
+    llmobsStorage.enterWith(parentStore)
   }
 
   asyncEnd (ctx) {
@@ -86,11 +90,6 @@ class LLMObsPlugin extends TracingPlugin {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
     super.configure(config)
-  }
-
-  getLLMObsParent () {
-    const store = llmobsStorage.getStore()
-    return store?.span
   }
 }
 
