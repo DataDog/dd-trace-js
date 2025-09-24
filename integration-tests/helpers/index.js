@@ -546,6 +546,7 @@ function setShouldKill (value) {
 }
 
 // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
