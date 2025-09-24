@@ -62,6 +62,7 @@ function Hook (modules, hookOptions, onrequire) {
 Hook.prototype.unhook = function () {
   this._ritmHook.unhook()
   this._iitmHook.unhook()
+  this._patched = Object.create(null)
 }
 
 module.exports = Hook
