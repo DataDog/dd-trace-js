@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   createSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const http2 = require('http2')
@@ -12,11 +13,13 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  let variants
 
   before(async function () {
     this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
+    variants = varySandbox(sandbox, 'server.mjs', null, 'http2', 'createServer')
   })
 
   after(async function () {
@@ -34,20 +37,22 @@ describe('esm', () => {
   })
 
   context('http2', () => {
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'web.request')
-        assert.propertyVal(payload[0][0].meta, 'component', 'http2')
-      })
-      await curl(proc)
-      return resultPromise
-    }).timeout(50000)
+    for (const variant of ['default', 'destructure', 'star']) {
+      it(`is instrumented (${variant})`, async () => {
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 1)
+          assert.isArray(payload[0])
+          assert.strictEqual(payload[0].length, 1)
+          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.propertyVal(payload[0][0].meta, 'component', 'http2')
+        })
+        await curl(proc)
+        return resultPromise
+      }).timeout(50000)
+    }
   })
 })
 

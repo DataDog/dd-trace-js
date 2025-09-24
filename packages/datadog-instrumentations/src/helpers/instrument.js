@@ -29,7 +29,7 @@ exports.tracingChannel = function (name) {
  * @param {string} args.filePattern pattern to match files within package to instrument
  * @param Function hook
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern }, hook) {
+exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
   if (typeof name === 'string') {
     name = [name]
   }
@@ -38,7 +38,7 @@ exports.addHook = function addHook ({ name, versions, file, filePattern }, hook)
     if (!instrumentations[val]) {
       instrumentations[val] = []
     }
-    instrumentations[val].push({ name: val, versions, file, filePattern, hook })
+    instrumentations[val].push({ name: val, versions, file, filePattern, hook, patchDefault })
   }
 }
 
