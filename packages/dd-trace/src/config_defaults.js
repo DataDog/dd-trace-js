@@ -28,7 +28,7 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
 module.exports = {
   'aiguard.enabled': false,
   'aiguard.endpoint': undefined,
-  'aiguard.timeout': 5000,
+  'aiguard.timeout': 10e3, // ms
   apmTracingEnabled: true,
   appKey: undefined,
   'appsec.apiSecurity.enabled': true,

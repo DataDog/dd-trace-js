@@ -63,9 +63,9 @@ class AIGuard extends NoopAIGuard {
       'DD-APPLICATION-KEY': config.appKey,
     }
 
-    this._timeout = config.aiguard?.timeout ?? 5000
-    this._maxMessagesLength = config.experimental?.aiguard?.maxMessagesLength ?? 16
-    this._maxContentSize = config.experimental?.aiguard?.maxContentSize ?? 512 * 1024
+    this._timeout = config.aiguard.timeout
+    this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
+    this._maxContentSize = config.experimental.aiguard.maxContentSize
     this._meta = { service: config.service, env: config.env }
   }
 
@@ -84,10 +84,7 @@ class AIGuard extends NoopAIGuard {
   }
 
   _isToolCall (message) {
-    if ('tool_calls' in message) {
-      return true
-    }
-    return message.role === 'tool'
+    return 'tool_calls' in message || 'tool_call_id' in message
   }
 
   _getToolName (message, history) {
@@ -97,15 +94,13 @@ class AIGuard extends NoopAIGuard {
       return names.length === 0 ? null : names.join(',')
     }
     // 2. assistant message with tool output (search the linked tool call in reverse order)
-    if ('tool_call_id' in message && history.length > 1) {
-      const id = message.tool_call_id
-      for (let i = history.length - 2; i >= 0; i--) {
-        const item = history[i]
-        if ('tool_calls' in item) {
-          for (const toolCall of item.tool_calls) {
-            if (toolCall.id === id) {
-              return toolCall.function.name
-            }
+    const id = message.tool_call_id
+    for (let i = history.length - 2; i >= 0; i--) {
+      const item = history[i]
+      if ('tool_calls' in item) {
+        for (const toolCall of item.tool_calls) {
+          if (toolCall.id === id) {
+            return toolCall.function.name
           }
         }
       }

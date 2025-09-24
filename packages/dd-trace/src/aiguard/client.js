@@ -26,9 +26,12 @@ function executeRequest (body, opts) {
       },
       timeout: opts.timeout,
     }
-    const req = transport.request(options, res => {
+    const req = transport.request(options)
+    req.on('response', res => {
       const chunks = []
-      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('data', (chunk) => {
+        chunks.push(chunk)
+      })
       res.on('end', () => {
         try {
           const rawBody = Buffer.concat(chunks)

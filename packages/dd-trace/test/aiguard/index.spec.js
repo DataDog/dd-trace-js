@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const agent = require('../plugins/agent')
 const NoopAIGuard = require('../../src/aiguard/noop')
+const { URL } = require('url')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -18,17 +19,18 @@ describe('AIGuard SDK', () => {
     protocolVersion: '0.4',
     aiguard: {
       enabled: true,
-      endpoint: 'https://aiguard.com'
+      endpoint: 'https://aiguard.com',
+      timeout: 10e3
     },
     experimental: {
       aiguard: {
-        maxMessagesLength: 10,
-        maxContentSize: 1024
+        maxMessagesLength: 16,
+        maxContentSize: 512 * 1024
       }
     }
   }
   let tracer
-  let aiGuard
+  let aiguard
   let executeRequest
 
   const toolCall = [
@@ -64,10 +66,16 @@ describe('AIGuard SDK', () => {
     tracer.init(config)
 
     executeRequest = sinon.stub()
-    const AIGuard = proxyquire('../../src/aiguard/sdk', {
-      './client': executeRequest
+
+    const client = proxyquire('../../src/aiguard/client', {
+      http: { request: executeRequest },
+      https: { request: executeRequest }
     })
-    aiGuard = new AIGuard(tracer, config)
+
+    const AIGuard = proxyquire('../../src/aiguard/sdk', {
+      './client': client
+    })
+    aiguard = new AIGuard(tracer, config)
 
     return agent.load(null, [])
   })
@@ -77,19 +85,40 @@ describe('AIGuard SDK', () => {
   })
 
   const mockExecuteRequest = (options) => {
-    executeRequest.resolves({
-      status: options.status ?? 200,
-      body: options.body
-    })
+    const mockRequest = {
+      on: sinon.stub(),
+      write: sinon.stub(),
+      end: sinon.stub(),
+      setTimeout: sinon.stub()
+    }
+    executeRequest.returns(mockRequest)
+    const mockResponse = {
+      statusCode: options.status ?? 200,
+      on: sinon.stub()
+    }
+    mockResponse.on.withArgs('data').callsArgWith(1, Buffer.from(JSON.stringify(options.body)))
+    mockResponse.on.withArgs('end').callsArg(1)
+    mockRequest.on.withArgs('response').callsArgWith(1, mockResponse)
   }
 
   const assertExecuteRequest = (messages) => {
+    const parsedUrl = new URL(`${config.aiguard.endpoint}/evaluate`)
+    const postData = JSON.stringify(
+      { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
+    )
     sinon.assert.calledOnceWithExactly(executeRequest,
-      { data: { attributes: { messages, meta: { service: 'ai_guard_demo', env: 'test' } } } },
       {
-        url: `${config.aiguard.endpoint}/evaluate`,
-        headers: { 'DD-API-KEY': 'API_KEY', 'DD-APPLICATION-KEY': 'APP_KEY' },
-        timeout: 5000
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          'DD-API-KEY': config.apiKey,
+          'DD-APPLICATION-KEY': config.appKey
+        },
+        timeout: config.aiguard.timeout
       }
     )
   }
@@ -125,11 +154,11 @@ describe('AIGuard SDK', () => {
 
       if (shouldBlock) {
         await rejects(
-          () => aiGuard.evaluate(messages, { block: true }),
+          () => aiguard.evaluate(messages, { block: true }),
           err => err.name === 'AIGuardAbortError' && err.reason === reason
         )
       } else {
-        const evaluation = await aiGuard.evaluate(messages, { block: true })
+        const evaluation = await aiguard.evaluate(messages, { block: true })
         expect(evaluation.action).to.equal(action)
         expect(evaluation.reason).to.equal(reason)
       }
@@ -154,8 +183,9 @@ describe('AIGuard SDK', () => {
     })
 
     await rejects(
-      () => aiGuard.evaluate(toolCall),
-      err => err.name === 'AIGuardClientError' && err.errors === errors
+      () => aiguard.evaluate(toolCall),
+      err =>
+        err.name === 'AIGuardClientError' && JSON.stringify(err.errors) === JSON.stringify(errors)
     )
 
     assertExecuteRequest(toolCall)
@@ -169,7 +199,7 @@ describe('AIGuard SDK', () => {
     mockExecuteRequest({ body: { message: 'This is an invalid JSON' } })
 
     await rejects(
-      () => aiGuard.evaluate(toolCall),
+      () => aiguard.evaluate(toolCall),
       err => err.name === 'AIGuardClientError'
     )
 
@@ -195,7 +225,7 @@ describe('AIGuard SDK', () => {
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
     })
 
-    await aiGuard.evaluate(messages)
+    await aiguard.evaluate(messages)
 
     assertExecuteRequest(messages)
     await assertAIGuardSpan(
@@ -212,7 +242,7 @@ describe('AIGuard SDK', () => {
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
     })
 
-    await aiGuard.evaluate(messages)
+    await aiguard.evaluate(messages)
 
     assertExecuteRequest(messages)
     await assertAIGuardSpan(
