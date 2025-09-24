@@ -6,7 +6,12 @@ const { describe, it, before } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
 const { expectedLLMObsLLMSpanEvent, deepEqualWithMockValues, useLlmObs } = require('../../util')
-const { models, modelConfig, cacheWriteRequest, cacheReadRequest } = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
+const {
+  models,
+  modelConfig,
+  cacheWriteRequest,
+  cacheReadRequest
+} = require('../../../../../datadog-plugin-aws-sdk/test/fixtures/bedrockruntime')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const { expect } = chai
