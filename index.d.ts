@@ -253,7 +253,7 @@ declare namespace tracer {
     /**
      * An array of span links
      */
-    links?: Array<{ context: SpanContext, attributes?: Object }>
+    links?: { context: SpanContext, attributes?: Object }[]
   }
 
   /**
@@ -268,11 +268,34 @@ declare namespace tracer {
 
     /**
      * Causally links another span to the current span
+     *
+     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
+     * This will be removed in the next major version.
      * @param {SpanContext} context The context of the span to link to.
      * @param {Object} attributes An optional key value pair of arbitrary values.
      * @returns {void}
      */
     addLink (context: SpanContext, attributes?: Object): void;
+
+    /**
+     * Adds a single link to the span.
+     *
+     * Links added after the creation will not affect the sampling decision.
+     * It is preferred span links be added at span creation.
+     *
+     * @param link the link to add.
+     */
+    addLink (link: { context: SpanContext, attributes?: Object }): void;
+
+    /**
+     * Adds multiple links to the span.
+     *
+     * Links added after the creation will not affect the sampling decision.
+     * It is preferred span links be added at span creation.
+     *
+     * @param links the links to add.
+     */
+    addLinks (links: { context: SpanContext, attributes?: Object }[]): void;
   }
 
   /**
@@ -404,7 +427,7 @@ declare namespace tracer {
 
     /**
      * The address of the trace agent that the tracer will submit to.
-     * @default 'localhost'
+     * @default '127.0.0.1'
      */
     hostname?: string;
 
@@ -2311,11 +2334,33 @@ declare namespace tracer {
 
       /**
        * Causally links another span to the current span
+       *
+       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
        * @param {otel.SpanContext} context The context of the span to link to.
        * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
        * @returns {void}
        */
       addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
+
+      /**
+       * Adds a single link to the span.
+       *
+       * Links added after the creation will not affect the sampling decision.
+       * It is preferred span links be added at span creation.
+       *
+       * @param link the link to add.
+       */
+      addLink(link: otel.Link): this;
+
+      /**
+       * Adds multiple links to the span.
+       *
+       * Links added after the creation will not affect the sampling decision.
+       * It is preferred span links be added at span creation.
+       *
+       * @param links the links to add.
+       */
+      addLinks(links: otel.Link[]): this;
     }
 
     /**

@@ -36,6 +36,15 @@ bedrockruntime.models = [
         'visited cities in the world, with millions of tourists visiting each year. ' +
         'Paris is known for its rich history, culture, and architecture, including ' +
         'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. '
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 78,
+      text: '\nParis is the capital of France. Paris, the capital of France, is a city ' +
+      'that has been a center of art, culture, and cuisine for centuries. The city is ' +
+      'home to some of the world\'s most famous landmarks, including the Eiffel Tower, ' +
+      'Notre Dame Cathedral, and the Louvre Museum. Paris is also a major international ' +
+      'hub for business, finance, and tourism.'
     }
   },
   {
@@ -133,6 +142,11 @@ bedrockruntime.models = [
         ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
         ' know more about the history of France or the city of Paris, please let me' +
         ' know!'
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 7,
+      text: 'The capital of France is Paris.'
     }
   },
   {
@@ -169,6 +183,29 @@ bedrockruntime.models = [
         'is the chemical symbol for sulfur?**\nA) S\nB) P\nC) Cl\nD) Br\n\nAnswer: ' +
         'A) S\n\n**What is the largest species of shark?**\nA) Great white shark\nB) ' +
         'Whale shark\nC) Tiger'
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 459,
+      text: '**\nA. Berlin\nB. Paris\nC. London\nD. Rome\n\nAnswer: B. Paris\n#### 12. ' +
+      'Which of the following planets is known for being the largest in our solar system?\nA. ' +
+      'Earth\nB. Saturn\nC. Jupiter\nD. Uranus\n\nAnswer: C. Jupiter\n#### 13. Which of ' +
+      'the following authors wrote the novel "To Kill a Mockingbird"?\nA. F. Scott Fitzgerald\nB. ' +
+      'Harper Lee\nC. Jane Austen\nD. J.K. Rowling\n\nAnswer: B. Harper Lee\n#### 14. Which of the ' +
+      'following musical instruments is often associated with the jazz genre?\nA. Piano\nB. Guitar\nC. ' +
+      'Drums\nD. Trumpet\n\nAnswer: D. Trumpet\n#### 15. Which of the following countries is known for ' +
+      'its chocolate production?\nA. Switzerland\nB. Belgium\nC. France\nD. Italy\n\nAnswer: B. ' +
+      'Belgium\n#### 16. Which of the following ancient civilizations built the Great Pyramid of Giza?\nA. ' +
+      'Egyptians\nB. Greeks\nC. Romans\nD. Babylonians\n\nAnswer: A. Egyptians\n#### 17. Which of the ' +
+      'following chemical elements is a noble gas?\nA. Oxygen\nB. Nitrogen\nC. Helium\nD. Carbon\n\nAnswer: ' +
+      'C. Helium\n#### 18. Which of the following famous paintings is also known as "La Gioconda"?\nA. ' +
+      'The Mona Lisa\nB. The Scream\nC. Starry Night\nD. The Last Supper\n\nAnswer: A. The Mona Lisa\n#### ' +
+      '19. Which of the following countries is known for its coffee production?\nA. Brazil\nB. ' +
+      'Colombia\nC. Ethiopia\nD. Vietnam\n\nAnswer: C. Ethiopia\n#### 20. Which of the following ' +
+      'ancient philosophers is known for his concept of the "examined life"?\nA. Socrates\nB. ' +
+      'Plato\nC. Aristotle\nD. Epicurus\n\nAnswer: A. Socrates\n\nNote: The answers to these questions are ' +
+      'not necessarily absolute or definitive, as there may be multiple correct answers or nuances ' +
+      'to each question. However, the answers provided are generally accepted and accurate.'
     }
   },
   {
@@ -191,6 +228,15 @@ bedrockruntime.models = [
         'has a rich history and is home to many world-renowned institutions, including ' +
         'the Sorbonne University and the École Normale Supérieure. It is a popular ' +
         'tourist destination and attracts millions of visitors every year.'
+    },
+    streamedResponse: {
+      inputTokens: 8,
+      outputTokens: 94,
+      text: ' Paris is the capital city of France. It is the most populous city in France, ' +
+      'and it is also one of the most visited cities in the world. Paris is known for its ' +
+      'iconic landmarks such as the Eiffel Tower, the Louvre Museum, and Notre Dame Cathedral. ' +
+      'It is also famous for its cuisine, fashion, and art scene. Paris has a rich history ' +
+      'and is considered to be the cultural center of France.'
     }
   }
 ]

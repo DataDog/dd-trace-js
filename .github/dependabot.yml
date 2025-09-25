@@ -13,6 +13,10 @@ updates:
       - "/.github/workflows/*"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     groups:
       gh-actions-packages:
         patterns:
@@ -27,6 +31,10 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies
@@ -53,6 +61,12 @@ updates:
         # That breaks cypress in our v5 release line. Update when v5 is EOL.
         # Reverting this commit should suffice.
         update-types: ["version-update:semver-major"]
+      - dependency-name: "glob"
+        # 11.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/core"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -77,7 +91,6 @@ updates:
           - "@datadog/pprof"
           - "@datadog/sketches-js"
           - "@datadog/wasm-js-rewriter"
-          - "@opentelemetry/api"
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"

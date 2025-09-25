@@ -5,6 +5,9 @@ on:
     types:
       - opened
 
+env:
+  GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
+
 jobs:
   dependabot:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
@@ -23,13 +26,13 @@ jobs:
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
       - name: Enable auto-merge for Dependabot PRs
-        if: steps.metadata.outputs.dependency-group == 'test-versions'
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - name: Approve a PR
-        if: steps.metadata.outputs.dependency-group == 'test-versions'
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

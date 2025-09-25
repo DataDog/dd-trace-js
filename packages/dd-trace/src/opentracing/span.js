@@ -86,8 +86,10 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._links = []
-    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
+    this._links = fields.links?.map(link => ({
+      context: link.context._ddContext ?? link.context,
+      attributes: this._sanitizeAttributes(link.attributes)
+    })) ?? []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -196,11 +198,23 @@ class DatadogSpan {
 
   logEvent () {}
 
-  addLink (context, attributes) {
+  addLink (link, attrs) {
+    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
+    if (link instanceof SpanContext) {
+      link = { context: link, attributes: attrs ?? {} }
+    }
+
+    const { context, attributes } = link
+
     this._links.push({
       context: context._ddContext ?? context,
       attributes: this._sanitizeAttributes(attributes)
     })
+  }
+
+  addLinks (links) {
+    links.forEach(link => this.addLink(link))
+    return this
   }
 
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
@@ -214,7 +228,7 @@ class DatadogSpan {
       'ptr.hash': ptrHash,
       'link.kind': 'span-pointer'
     }
-    this.addLink(zeroContext, attributes)
+    this.addLink({ context: zeroContext, attributes })
   }
 
   addEvent (name, attributesOrStartTime, startTime) {
