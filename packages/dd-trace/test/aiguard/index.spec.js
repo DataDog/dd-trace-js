@@ -45,7 +45,7 @@ describe('AIGuard SDK', () => {
           id: 'call_1',
           function: {
             name: 'calc',
-            arguments: '{ operator: "+", args: [2, 2] }'
+            arguments: '{ "operator": "+", "args": [2, 2] }'
           }
         },
       ],
@@ -270,15 +270,14 @@ describe('AIGuard SDK', () => {
 
   it('test required fields', () => {
     expect(
-      () => new AIGuard(tracer, { protocolVersion: '0.5' })
-    ).to.throw('AIGuard: requires protocol version 0.4')
-
-    expect(
-      () => new AIGuard(tracer, { protocolVersion: '0.4' })
-    ).to.throw('AIGuard: missing endpoint, use env DD_AI_GUARD_ENDPOINT')
-
-    expect(
-      () => new AIGuard(tracer, { protocolVersion: '0.4', aiguard: { endpoint: 'http://aiguard' } })
+      () => new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
     ).to.throw('AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY')
+  })
+
+  it('test endpoint discovery', () => {
+    const newConfig = Object.assign({ site: 'datad0g.com' }, config)
+    delete newConfig.aiguard.endpoint
+    const client = new AIGuard(tracer, newConfig)
+    expect(client._evaluateUrl.toString()).to.equal('https://dd.datad0g.com/api/v2/ai-guard/evaluate')
   })
 })
