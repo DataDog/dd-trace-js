@@ -481,6 +481,9 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_ENABLED,
       DD_ENV,
       DD_IAST_ENABLED,
+      DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ENABLED,
+      DD_LLMOBS_ML_APP,
       DD_LOGS_INJECTION,
       DD_PROFILING_ENABLED,
       DD_RUNTIME_METRICS_ENABLED,
@@ -494,6 +497,9 @@ class Config {
     this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this._setString(obj, 'env', DD_ENV)
     this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
+    this._setBoolean(obj, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setBoolean(obj, 'llmobs.enabled', DD_LLMOBS_ENABLED)
+    this._setString(obj, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
     const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
     this._setString(obj, 'profiling.enabled', profilingEnabled)
