@@ -276,7 +276,7 @@ class LLMObsTagger {
     const filteredToolResults = []
     for (const toolResult of toolResults) {
       if (typeof toolResult !== 'object') {
-        this.#handleFailure('Tool call must be an object.', 'invalid_io_messages')
+        this.#handleFailure('Tool result must be an object.', 'invalid_io_messages')
         continue
       }
 
