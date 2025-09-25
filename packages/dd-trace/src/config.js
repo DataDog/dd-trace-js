@@ -866,11 +866,11 @@ class Config {
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
     this._setBoolean(env, 'aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
-    env['aiguard.timeout'] = maybeInt(Math.floor(DD_AI_GUARD_TIMEOUT))
+    env['aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
     this._envUnprocessed['aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
-    env['experimental.aiguard.maxMessagesLength'] = maybeInt(Math.floor(DD_AI_GUARD_MAX_MESSAGES_LENGTH))
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
     this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
-    env['experimental.aiguard.maxContentSize'] = maybeInt(Math.floor(DD_AI_GUARD_MAX_CONTENT_SIZE))
+    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
     this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
     this._setString(env, 'appKey', DD_APP_KEY)
   }
