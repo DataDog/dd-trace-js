@@ -5,7 +5,8 @@ import { EventHubProducerClient, EventHubBufferedProducerClient } from '@azure/e
 const ehClient1 = new EventHubProducerClient(process.env.MyEventHub, 'eh1')
 const ehClient2 = new EventHubProducerClient(process.env.MyEventHub, 'eh2')
 
-// const bufferedClient = new EventHubBufferedProducerClient(process.env.MyEventHub, 'eh1')
+const bufferedClient1 = new EventHubBufferedProducerClient(process.env.MyEventHub, 'eh1')
+const bufferedClient2 = new EventHubBufferedProducerClient(process.env.MyEventHub, 'eh2')
 
 const eventData = [
   { body: "Hello Event Hub 1" },
@@ -64,12 +65,9 @@ app.http('eh1-batch', {
   authLevel: 'anonymous',
   handler: async (request, context) => {
     const batch = await ehClient1.createBatch();
-    batch.tryAdd({ body: "Hello Event Hub 1" });
-    batch.tryAdd({ body: "Hello Event Hub 2" });
-    //
-    // eventData.forEach((item) => {
-    //   batch.tryAdd(item)
-    // });
+    eventData.forEach((item) => {
+      batch.tryAdd(item)
+    });
     await ehClient1.sendBatch(batch);
     await ehClient1.close();
     return {

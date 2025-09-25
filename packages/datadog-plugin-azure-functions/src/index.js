@@ -100,7 +100,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'messaging.destination.name': partitionContext.eventHubName,
       'messaging.operation': 'receive',
       'messaging.system': 'eventhub',
-      'resource.name': `EventHub ${functionName}`,
+      'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer'
     }
   }

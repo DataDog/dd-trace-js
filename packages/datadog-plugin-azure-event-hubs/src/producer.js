@@ -1,13 +1,12 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-event-hubs' }
   static get operation () { return 'send' }
   static get prefix () { return 'tracing:apm:azure-event-hubs:send' }
-  // list of spans created from tryAdd calls. used for span links when sending a batch
-  batch = []
 
   bindStart (ctx) {
     const qualifiedNamespace = ctx.config.endpoint.replace('sb://', '').replace('/', '')
@@ -30,8 +29,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       if (ctx.eventData.messageID !== undefined) {
         span.setTag('message.id', ctx.eventData.messageID)
       }
-      this.batch.push(span)
-      injectTraceContext(this.tracer, span, ctx.eventData)
+
+      if (batchLinksAreEnabled()) {
+        ctx.batch._spanContexts.push(span.context())
+        injectTraceContext(this.tracer, span, ctx.eventData)
+      }
     }
 
     if (ctx.functionName === 'sendBatch' || ctx.functionName === 'enqueuEvents') {
@@ -45,10 +47,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
           injectTraceContext(this.tracer, span, event)
         })
       } else {
-        this.batch.forEach(tryAddSpan => {
-          span.addLink(tryAddSpan.context())
-        })
-        this.batch = []
+        if (batchLinksAreEnabled()) {
+          eventData._spanContexts.forEach(spanContext => {
+            span.addLink(spanContext)
+          })
+        }
       }
     }
 
@@ -71,6 +74,11 @@ function injectTraceContext (tracer, span, event) {
     event.properties = {}
   }
   tracer.inject(span, 'text_map', event.properties)
+}
+
+function batchLinksAreEnabled () {
+  const eh = getEnvironmentVariable('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
+  return  eh !== 'false'
 }
 
 module.exports = AzureEventHubsProducerPlugin
