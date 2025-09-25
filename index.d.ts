@@ -519,6 +519,12 @@ declare namespace tracer {
     }
 
     /**
+     * Whether to add an auto-generated `runtime-id` tag to metrics.
+     * @default false
+     */
+    runtimeMetricsRuntimeId?: boolean
+
+    /**
      * Custom function for DNS lookups when sending requests to the agent.
      * @default dns.lookup()
      */
@@ -554,13 +560,6 @@ declare namespace tracer {
      */
     experimental?: {
       b3?: boolean
-      traceparent?: boolean
-
-      /**
-       * Whether to add an auto-generated `runtime-id` tag to metrics.
-       * @default false
-       */
-      runtimeId?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
@@ -620,13 +619,6 @@ declare namespace tracer {
     tags?: { [key: string]: any };
 
     /**
-     * Specifies which scope implementation to use. The default is to use the best
-     * implementation for the runtime. Only change this if you know what you are
-     * doing.
-     */
-    scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
-
-    /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
      */
@@ -637,13 +629,6 @@ declare namespace tracer {
      * @default 'debug'
      */
     logLevel?: 'error' | 'debug'
-
-    /**
-     * If false, require a parent in order to trace.
-     * @default true
-     * @deprecated since version 4.0
-     */
-    orphanable?: boolean
 
     /**
      * Enables DBM to APM link using tag injection.
@@ -841,7 +826,7 @@ declare namespace tracer {
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
      */
-    propagationStyle?: string[] | PropagationStyle
+    tracePropagationStyle?: string[] | PropagationStyle
 
     /**
      * Cloud payload report as tags
