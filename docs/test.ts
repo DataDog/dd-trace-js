@@ -718,7 +718,7 @@ aiguard.evaluate([
     tool_calls: [
       {
         id: 'call_1',
-        function: { name: 'calc', arguments: '{ operator: "+", args: [2, 2] }' }
+        function: { name: 'calc', arguments: '{ "operator": "+", "args": [2, 2] }' }
       },
     ],
   }

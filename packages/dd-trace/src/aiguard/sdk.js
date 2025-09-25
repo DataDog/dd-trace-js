@@ -42,17 +42,16 @@ class AIGuard extends NoopAIGuard {
     super(tracer)
 
     if (config.protocolVersion !== '0.4') {
-      const message = 'AIGuard: requires protocol version 0.4'
-      log.error(message)
-      throw new Error(message)
+      log.error('AIGuard: observability of evaluation results requires protocol version 0.4')
     }
 
-    if (!config.aiguard?.endpoint) {
-      const message = 'AIGuard: missing endpoint, use env DD_AI_GUARD_ENDPOINT'
-      log.error(message)
-      throw new Error(message)
+    let endpoint = config.aiguard?.endpoint
+    if (!endpoint) {
+      endpoint = config.site === 'datad0g.com'
+        ? 'https://dd.datad0g.com/api/v2/ai-guard'
+        : `https://app.${config.site}/api/v2/ai-guard`
     }
-    this._evaluateUrl = new URL(`${config.aiguard.endpoint}/evaluate`)
+    this._evaluateUrl = new URL(`${endpoint}/evaluate`)
 
     if (!config.apiKey || !config.appKey) {
       const message = 'AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY'
