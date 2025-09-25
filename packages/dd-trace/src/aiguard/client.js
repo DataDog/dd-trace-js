@@ -2,22 +2,16 @@
 
 const http = require('http')
 const https = require('https')
-const { URL } = require('url')
 
 function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
-    let parsedUrl
-    try {
-      parsedUrl = new URL(opts.url)
-    } catch {
-      return reject(new Error(`Invalid URL: ${opts.url}`))
-    }
-    const transport = parsedUrl.protocol === 'https:' ? https : http
+    const url = opts.url
+    const transport = url.protocol === 'https:' ? https : http
     const postData = JSON.stringify(body)
     const options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: parsedUrl.pathname,
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

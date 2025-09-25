@@ -12,6 +12,7 @@ const {
   AI_GUARD_TOOL_NAME_TAG_KEY
 } = require('./tags')
 const log = require('../log')
+const { URL } = require('url')
 
 const ALLOW = 'ALLOW'
 
@@ -51,7 +52,7 @@ class AIGuard extends NoopAIGuard {
       log.error(message)
       throw new Error(message)
     }
-    this._evaluateUrl = `${config.aiguard.endpoint}/evaluate`
+    this._evaluateUrl = new URL(`${config.aiguard.endpoint}/evaluate`)
 
     if (!config.apiKey || !config.appKey) {
       const message = 'AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY'
@@ -151,8 +152,8 @@ class AIGuard extends NoopAIGuard {
       let action, reason, blockingEnabled
       try {
         const attr = response.body.data.attributes
-        if ('action' in response || 'reason' in response) {
-          throw new Error('Action and/or reason missing from response')
+        if (!('action' in attr)) {
+          throw new Error('Action missing from response')
         }
         action = attr.action
         reason = attr.reason
