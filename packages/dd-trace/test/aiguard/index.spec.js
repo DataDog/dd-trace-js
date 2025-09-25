@@ -32,6 +32,7 @@ describe('AIGuard SDK', () => {
   let tracer
   let aiguard
   let executeRequest
+  let AIGuard
 
   const toolCall = [
     { role: 'system', content: 'You are a beautiful AI assistant' },
@@ -72,7 +73,7 @@ describe('AIGuard SDK', () => {
       https: { request: executeRequest }
     })
 
-    const AIGuard = proxyquire('../../src/aiguard/sdk', {
+    AIGuard = proxyquire('../../src/aiguard/sdk', {
       './client': client
     })
     aiguard = new AIGuard(tracer, config)
@@ -210,6 +211,21 @@ describe('AIGuard SDK', () => {
     })
   })
 
+  it('test evaluate with with missing action or response', async () => {
+    mockExecuteRequest({ body: { data: { attributes: { reason: 'I miss something' } } } })
+
+    await rejects(
+      () => aiguard.evaluate(toolCall),
+      err => err.name === 'AIGuardClientError'
+    )
+
+    assertExecuteRequest(toolCall)
+    await assertAIGuardSpan({
+      'ai_guard.target': 'tool',
+      'error.type': 'AIGuardClientError'
+    })
+  })
+
   it('test noop implementation', async () => {
     const noop = new NoopAIGuard()
     const result = await noop.evaluate(prompt)
@@ -249,5 +265,19 @@ describe('AIGuard SDK', () => {
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: [{ role: 'user', content: content.slice(0, maxContent) }] }
     )
+  })
+
+  it('test required fields', () => {
+    expect(
+      () => new AIGuard(tracer, { protocolVersion: '0.5' })
+    ).to.throw('AIGuard: requires protocol version 0.4')
+
+    expect(
+      () => new AIGuard(tracer, { protocolVersion: '0.4' })
+    ).to.throw('AIGuard: missing endpoint, use env DD_AI_GUARD_ENDPOINT')
+
+    expect(
+      () => new AIGuard(tracer, { protocolVersion: '0.4', aiguard: { endpoint: 'http://aiguard' } })
+    ).to.throw('AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY')
   })
 })
