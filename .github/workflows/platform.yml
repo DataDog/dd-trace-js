@@ -26,6 +26,8 @@ jobs:
       - run: yarn test:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:core:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   dd-trace-api:
@@ -268,6 +270,9 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:instrumentations:misc:ci
         shell: bash
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:instrumentations:misc:ci
+        shell: bash
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -281,7 +286,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [oldest, maintenance, active, latest]
+        version: [oldest, maintenance, active, latest, nightly]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -301,13 +306,15 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
+      - uses: ./.github/actions/node/nightly
+      - run: yarn test:trace:guardrails:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
     strategy:
       matrix:
-        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
+        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0, nightly]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -345,5 +352,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci
       - uses: ./.github/actions/node/latest
+      - run: yarn test:shimmer:ci
+      - uses: ./.github/actions/node/nightly
       - run: yarn test:shimmer:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
