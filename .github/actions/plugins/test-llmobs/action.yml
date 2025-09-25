@@ -1,0 +1,27 @@
+name: Plugin and LLMOBs Tests
+description: Run plugin tests and llmobs test suites
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/testagent/start
+    - uses: ./.github/actions/node/oldest-maintenance-lts
+    - uses: ./.github/actions/install
+    - run: yarn test:plugins:ci
+      shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      shell: bash
+    - uses: ./.github/actions/node/latest
+    - run: yarn test:plugins:ci
+      shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      shell: bash
+    - uses: ./.github/actions/node/nightly
+    - run: yarn test:plugins:ci
+      shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      shell: bash
+    - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+    - if: always()
+      uses: ./.github/actions/testagent/logs
+      with:
+        suffix: llmobs-${{ github.job }}
