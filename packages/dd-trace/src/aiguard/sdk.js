@@ -69,14 +69,13 @@ class AIGuard extends NoopAIGuard {
 
   _truncate (messages) {
     const size = Math.min(messages.length, this._maxMessagesLength)
-    const result = new Array(size)
+    const result = messages.slice(0, size)
+
     for (let i = 0; i < size; i++) {
-      let message = messages[i]
+      const message = result[i]
       if ('content' in message && message.content.length > this._maxContentSize) {
-        message = { ...message }
-        message.content = message.content.slice(0, this._maxContentSize)
+        result[i] = { ...message, content: message.content.slice(0, this._maxContentSize) }
       }
-      result[i] = message
     }
     return result
   }
