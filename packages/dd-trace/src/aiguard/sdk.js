@@ -105,9 +105,9 @@ class AIGuard extends NoopAIGuard {
     return null
   }
 
-  async evaluate (messages, opts) {
+  evaluate (messages, opts) {
     const { block = false } = opts ?? {}
-    return await this._tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
+    return this._tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]
       const target = this._isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
