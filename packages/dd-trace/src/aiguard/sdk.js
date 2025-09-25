@@ -41,16 +41,6 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super(tracer)
 
-    if (config.protocolVersion !== '0.4') {
-      log.error('AIGuard: observability of evaluation results requires protocol version 0.4')
-    }
-
-    let endpoint = config.aiguard?.endpoint
-    if (!endpoint) {
-      endpoint = `https://app.${config.site}/api/v2/ai-guard`
-    }
-    this._evaluateUrl = new URL(`${endpoint}/evaluate`)
-
     if (!config.apiKey || !config.appKey) {
       const message = 'AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY'
       log.error(message)
@@ -60,6 +50,16 @@ class AIGuard extends NoopAIGuard {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
     }
+
+    if (config.protocolVersion !== '0.4') {
+      log.error('AIGuard: observability of evaluation results requires protocol version 0.4')
+    }
+
+    let endpoint = config.aiguard?.endpoint
+    if (!endpoint) {
+      endpoint = `https://app.${config.site}/api/v2/ai-guard`
+    }
+    this._evaluateUrl = new URL(`${endpoint}/evaluate`)
 
     this._timeout = config.aiguard.timeout
     this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
