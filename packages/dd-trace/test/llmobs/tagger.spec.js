@@ -402,7 +402,7 @@ describe('tagger', () => {
         })
       })
 
-      describe.only('tagging tool results appropriately', () => {
+      describe('tagging tool results appropriately', () => {
         it('tags a span with tool results', () => {
           const inputData = [
             { content: 'hello', toolResults: [{ result: 'foo', toolId: '123', type: 'tool_result' }] }
