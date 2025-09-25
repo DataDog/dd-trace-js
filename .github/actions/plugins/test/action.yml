@@ -1,5 +1,11 @@
 name: Plugin Tests
 description: Run plugin tests
+inputs:
+  skipNightly:
+    description: "Wheter to skip nightly testing"
+    required: false
+    default: 'false'
+
 runs:
   using: composite
   steps:
@@ -12,7 +18,9 @@ runs:
     - run: yarn test:plugins:ci
       shell: bash
     - uses: ./.github/actions/node/nightly
+      if: inputs.skipNightly != 'true'
     - run: yarn test:plugins:ci
+      if: inputs.skipNightly != 'true'
       shell: bash
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
     - if: always()
