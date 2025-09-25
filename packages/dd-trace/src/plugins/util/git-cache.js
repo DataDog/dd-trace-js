@@ -10,21 +10,18 @@ const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')
 const { isTrue } = require('../../util')
 
-const GIT_CACHE_ENABLED = isTrue(getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED'))
+let isGitEnabled = isTrue(getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED'))
 const GIT_CACHE_DIR = getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR') ||
   path.join(os.tmpdir(), 'dd-trace-git-cache')
 
-// Cache manager functions
-function ensureCacheDir () {
-  if (!GIT_CACHE_ENABLED) return false
+if (isGitEnabled) {
   try {
     if (!fs.existsSync(GIT_CACHE_DIR)) {
       fs.mkdirSync(GIT_CACHE_DIR, { recursive: true })
     }
-    return true
   } catch (err) {
-    log.error('Failed to create git cache directory', err)
-    return false
+    log.error('Failed to create git cache directory, disabling cache', err)
+    isGitEnabled = false
   }
 }
 
@@ -39,7 +36,7 @@ function getCacheFilePath (cacheKey) {
 }
 
 function getCache (cacheKey) {
-  if (!GIT_CACHE_ENABLED) return null
+  if (!isGitEnabled) return null
 
   try {
     const cacheFilePath = getCacheFilePath(cacheKey)
@@ -56,11 +53,9 @@ function getCache (cacheKey) {
 }
 
 function setCache (cacheKey, result) {
-  if (!GIT_CACHE_ENABLED) return
+  if (!isGitEnabled) return
 
   try {
-    if (!ensureCacheDir()) return
-
     const cacheFilePath = getCacheFilePath(cacheKey)
     fs.writeFileSync(cacheFilePath, result, 'utf8')
   } catch (err) {
@@ -72,7 +67,7 @@ function cachedExec (cmd, flags, options) {
   if (options === undefined) {
     options = { stdio: 'pipe' }
   }
-  if (!GIT_CACHE_ENABLED) {
+  if (!isGitEnabled) {
     return cp.execFileSync(cmd, flags, options)
   }
   const cacheKey = getCacheKey(cmd, flags)
@@ -113,12 +108,6 @@ function cachedExec (cmd, flags, options) {
 }
 
 module.exports = {
-  GIT_CACHE_ENABLED,
-  GIT_CACHE_DIR,
-  ensureCacheDir,
+  cachedExec,
   getCacheKey,
-  getCacheFilePath,
-  getCache,
-  setCache,
-  cachedExec
 }
