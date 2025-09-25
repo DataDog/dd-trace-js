@@ -271,13 +271,19 @@ describe('AIGuard SDK', () => {
   it('test required fields', () => {
     expect(
       () => new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
-    ).to.throw('AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY')
+    ).to.throw('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
   })
 
-  it('test endpoint discovery', () => {
-    const newConfig = Object.assign({ site: 'datad0g.com' }, config)
-    delete newConfig.aiguard.endpoint
-    const client = new AIGuard(tracer, newConfig)
-    expect(client._evaluateUrl.toString()).to.equal('https://dd.datad0g.com/api/v2/ai-guard/evaluate')
-  })
+  const sites = [
+    { site: 'datad0g.com', endpoint: 'https://app.datad0g.com/api/v2/ai-guard' },
+    { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' }
+  ]
+  for (const { site, endpoint } of sites) {
+    it(`test endpoint discovery: ${site}`, () => {
+      const newConfig = Object.assign({ site }, config)
+      delete newConfig.aiguard.endpoint
+      const client = new AIGuard(tracer, newConfig)
+      expect(client._evaluateUrl.toString()).to.equal(`${endpoint}/evaluate`)
+    })
+  }
 })
