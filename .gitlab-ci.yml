@@ -4,6 +4,8 @@ stages:
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
   - macrobenchmarks
+  - macrobenchmarks-gate
+  - macrobenchmarks-notify
 
 validate_supported_configurations_local_file:
   rules:

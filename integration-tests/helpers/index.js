@@ -273,6 +273,50 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 }
 
+/**
+ * Creates a bunch of files based on an original file in sandbox. Useful for varying test files
+ * without having to create a bunch of them yourself.
+ *
+ * The variants object should have keys that are named variants, and values that are the text
+ * in the file that's different in each variant. There must always be a "default" variant,
+ * whose value is the original text within the file that will be replaced.
+ *
+ * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {object} variants - The variants. If empty then a default import style will be added
+ * depending on the parameters passed through.
+ * @param {object} bindingName - The binding name that will be use to bind to the packageName.
+ * @param {object} namedVariant - The name of the named variant to use.
+ * @param {object} packageName - The name of the package.
+ * @returns {object} A map from variant names to resulting filenames
+ */
+function varySandbox (sandbox, filename, variants, bindingName, namedVariant, packageName) {
+  const origFileData = fs.readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const [prefix, suffix] = filename.split('.')
+  const variantFilenames = {}
+  packageName = packageName || bindingName
+  const defaultVariants = {
+    default: `import ${bindingName} from '${packageName}'`,
+    star: namedVariant
+      ? `import * as ${bindingName} from '${packageName}'`
+      : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+    destructure: namedVariant
+      ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
+      : `import { default as ${bindingName}} from '${packageName}'`
+  }
+  variants = variants || defaultVariants
+  for (const variant in variants) {
+    const variantFilename = `${prefix}-${variant}.${suffix}`
+    variantFilenames[variant] = variantFilename
+    let newFileData = origFileData
+    if (variant !== 'default') {
+      newFileData = origFileData.replace(variants.default, `${variants[variant]}`)
+    }
+    fs.writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
+  }
+  return variantFilenames
+}
+
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
@@ -426,6 +470,7 @@ function setShouldKill (value) {
   })
 }
 
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
@@ -487,5 +532,6 @@ module.exports = {
   useEnv,
   useSandbox,
   sandboxCwd,
-  setShouldKill
+  setShouldKill,
+  varySandbox
 }
