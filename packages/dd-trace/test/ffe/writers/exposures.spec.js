@@ -38,7 +38,10 @@ describe('FFE Exposures Writer', () => {
       url: new (require('url').URL)('http://localhost:8126'),
       apiKey: 'test-api-key',
       ffeFlushInterval: 1000,
-      ffeTimeout: 5000
+      ffeTimeout: 5000,
+      service: 'test-service',
+      version: '1.0.0',
+      env: 'test'
     }
 
     log = {
@@ -78,6 +81,10 @@ describe('FFE Exposures Writer', () => {
   })
 
   describe('append', () => {
+    beforeEach(() => {
+      writer.setEnabled(true) // Enable writer for append tests
+    })
+
     it('should add exposure event to buffer', () => {
       writer.append(exposureEvent)
 
@@ -121,7 +128,6 @@ describe('FFE Exposures Writer', () => {
     })
 
     it('should flush when payload would exceed 5MB limit', () => {
-      writer.setEnabled(true)
       sinon.spy(writer, 'flush')
 
       // Create events that together exceed 5MB
@@ -138,20 +144,44 @@ describe('FFE Exposures Writer', () => {
         sinon.match(/buffer size would exceed .* bytes, flushing first/)
       )
     })
+
+    it('should buffer events when disabled', () => {
+      writer.setEnabled(false) // Disable writer
+
+      writer.append(exposureEvent)
+
+      expect(writer._buffer).to.have.length(0) // Event should not be in main buffer
+      expect(writer._pendingEvents).to.have.length(1) // Should be in pending events
+      expect(writer._pendingEvents[0].event).to.equal(exposureEvent)
+    })
   })
 
   describe('makePayload', () => {
-    it('should return array of formatted events', () => {
+    it('should return context wrapper with exposures array', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
 
-      expect(payload).to.be.an('array').with.length(1)
+      expect(payload).to.be.an('object')
+      expect(payload).to.have.property('context')
+      expect(payload).to.have.property('exposures')
+      expect(payload.exposures).to.be.an('array').with.length(1)
+    })
+
+    it('should include service metadata in context', () => {
+      const events = [exposureEvent]
+      const payload = writer.makePayload(events)
+
+      expect(payload.context).to.deep.equal({
+        service_name: 'test-service',
+        version: '1.0.0',
+        env: 'test'
+      })
     })
 
     it('should format exposure events correctly', () => {
       const events = [exposureEvent]
       const payload = writer.makePayload(events)
-      const formattedEvent = payload[0]
+      const formattedEvent = payload.exposures[0]
 
       expect(formattedEvent).to.deep.equal({
         timestamp: 1672531200000,
@@ -166,6 +196,23 @@ describe('FFE Exposures Writer', () => {
       })
     })
 
+    it('should handle optional config values', () => {
+      const writerWithoutOptionals = new ExposuresWriter({
+        ...config,
+        version: undefined,
+        env: undefined
+      })
+
+      const events = [exposureEvent]
+      const payload = writerWithoutOptionals.makePayload(events)
+
+      expect(payload.context).to.deep.equal({
+        service_name: 'test-service'
+      })
+      expect(payload.context).to.not.have.property('version')
+      expect(payload.context).to.not.have.property('env')
+    })
+
     it('should handle flat format with dot notation', () => {
       const flatEvent = {
         timestamp: 1672531200000,
@@ -176,7 +223,7 @@ describe('FFE Exposures Writer', () => {
       }
 
       const payload = writer.makePayload([flatEvent])
-      const formattedEvent = payload[0]
+      const formattedEvent = payload.exposures[0]
 
       expect(formattedEvent.allocation.key).to.equal('allocation_123')
       expect(formattedEvent.flag.key).to.equal('test_flag')
@@ -221,8 +268,12 @@ describe('FFE Exposures Writer', () => {
       expect(options.headers['X-Datadog-EVP-Subdomain']).to.equal('event-platform-intake')
 
       const parsedPayload = JSON.parse(payload)
-      expect(parsedPayload).to.be.an('array').with.length(1)
-      expect(parsedPayload[0].timestamp).to.exist
+      expect(parsedPayload).to.be.an('object')
+      expect(parsedPayload).to.have.property('context')
+      expect(parsedPayload).to.have.property('exposures')
+      expect(parsedPayload.exposures).to.be.an('array').with.length(1)
+      expect(parsedPayload.exposures[0].timestamp).to.exist
+      expect(parsedPayload.context.service_name).to.equal('test-service')
     })
 
     it('should empty buffer after flushing', () => {

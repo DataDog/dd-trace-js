@@ -12,6 +12,7 @@ class ExposuresWriter extends BaseFFEWriter {
       interval: config.ffeFlushInterval,
       timeout: config.ffeTimeout
     })
+    this._config = config
     this._enabled = false // Start disabled until agent strategy is set
     this._pendingEvents = [] // Buffer events until enabled
   }
@@ -46,9 +47,26 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   makePayload (events) {
-    // Agent expects raw exposure events conforming to exposures schema
-    // No SDK wrapper needed - agent forwards JSON directly to intake
-    return events.map(event => this._formatExposureEvent(event))
+    // Wrap exposure events with service context metadata
+    const formattedEvents = events.map(event => this._formatExposureEvent(event))
+
+    const context = {
+      service_name: this._config.service || 'unknown'
+    }
+
+    // Only include version and env if they are defined
+    if (this._config.version !== undefined) {
+      context.version = this._config.version
+    }
+
+    if (this._config.env !== undefined) {
+      context.env = this._config.env
+    }
+
+    return {
+      context,
+      exposures: formattedEvents
+    }
   }
 
   // export interface ExposureEvent {

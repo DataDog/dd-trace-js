@@ -8,5 +8,7 @@ module.exports = {
 
   // EVP intake limits
   EVP_PAYLOAD_SIZE_LIMIT: 5 << 20, // 5MB (actual limit is 5.1MB)
-  EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024 // 999KB (actual limit is 1MB)
+  EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024, // 999KB (actual limit is 1MB)
+
+  EXPOSURE_CHANNEL: 'ffe:exposure:submit'
 }

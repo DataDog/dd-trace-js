@@ -3,14 +3,20 @@
 const tracer = require('dd-trace')
 tracer.init({
   flushInterval: 1,
+  service: 'ffe-test-service',
+  version: '1.2.3',
+  env: 'test'
 })
-
 const express = require('express')
 const { channel } = require('dc-polyfill')
+const { flaggingProvider } = tracer
+const { OpenFeature } = require('@openfeature/server-sdk')
 
-// FFE diagnostic channels for publishing events, only for testing
-const exposureSubmitCh = channel('ffe:exposure:submit')
+// Only need flush channel for manual flushing in tests
 const flushCh = channel('ffe:writers:flush')
+
+OpenFeature.setProvider(flaggingProvider)
+const client = OpenFeature.getClient()
 
 const app = express()
 
@@ -18,65 +24,82 @@ app.get('/', async (req, res) => {
   res.end('OK')
 })
 
-app.get('/submit-exposure', async (req, res) => {
-  // Check if FFE is enabled
-  if (process.env.DD_FFE_ENABLED !== 'true') {
-    return res.status(500).json({ error: 'FFE module not available' })
+app.get('/evaluate-flags', async (req, res) => {
+  if (!client) {
+    return res.status(500).json({ error: 'OpenFeature client not available' })
   }
 
-  // Submit a single exposure event
-  const exposureEvent = {
-    timestamp: Date.now(),
-    allocation: { key: 'test_allocation_123' },
-    flag: { key: 'test_flag' },
-    variant: { key: 'variant_a' },
-    subject: {
-      id: 'user_123',
-      type: 'user',
-      attributes: { plan: 'premium' }
+  try {
+    const context1 = {
+      targetingKey: 'test-user-123',
+      user: 'test-user-123',
+      plan: 'premium'
     }
+
+    const booleanResult = await client.getBooleanValue('test-boolean-flag', false, context1)
+
+    const context2 = {
+      targetingKey: 'test-user-456',
+      user: 'test-user-456',
+      tier: 'enterprise'
+    }
+
+    const stringResult = await client.getStringValue('test-string-flag', 'default', context2)
+
+    res.json({
+      results: {
+        boolean: booleanResult,
+        string: stringResult
+      },
+      evaluationsCompleted: 2
+    })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
   }
-  exposureSubmitCh.publish(exposureEvent)
-  res.json({ submitted: 1, event: exposureEvent })
 })
 
-app.get('/submit-multiple-exposures', async (req, res) => {
-  // Submit multiple exposure events
-  const exposureEvents = [
-    {
-      timestamp: Date.now(),
-      allocation: { key: 'allocation_1' },
-      flag: { key: 'flag_1' },
-      variant: { key: 'control' },
-      subject: { id: 'user_1', type: 'user' }
-    },
-    {
-      timestamp: Date.now() + 1,
-      allocation: { key: 'allocation_2' },
-      flag: { key: 'flag_2' },
-      variant: { key: 'treatment' },
-      subject: { id: 'user_2', type: 'user' }
-    },
-    {
-      timestamp: Date.now() + 2,
-      allocation: { key: 'allocation_3' },
-      flag: { key: 'flag_3' },
-      variant: { key: 'variant_b' },
-      subject: {
-        id: 'user_3',
-        type: 'user',
-        attributes: { tier: 'enterprise' }
-      }
-    }
-  ]
+app.get('/evaluate-multiple-flags', async (req, res) => {
+  if (!client) {
+    return res.status(500).json({ error: 'OpenFeature client not available' })
+  }
 
-  exposureSubmitCh.publish(exposureEvents)
-  res.json({ submitted: exposureEvents.length, events: exposureEvents })
+  try {
+    const results = []
+
+    const users = [
+      { id: 'user-1', attributes: { plan: 'basic' } },
+      { id: 'user-2', attributes: { plan: 'premium' } },
+      { id: 'user-3', attributes: { plan: 'enterprise', tier: 'gold' } }
+    ]
+
+    for (const user of users) {
+      const context = {
+        targetingKey: user.id,
+        user: user.id,
+        ...user.attributes
+      }
+
+      const boolResult = await client.getBooleanValue('test-boolean-flag', false, context)
+      const stringResult = await client.getStringValue('test-string-flag', 'default', context)
+
+      results.push({
+        user: user.id,
+        boolean: boolResult,
+        string: stringResult
+      })
+    }
+
+    res.json({
+      results,
+      evaluationsCompleted: users.length * 2
+    })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
 })
 
 app.get('/flush', async (req, res) => {
   flushCh.publish()
-
   res.json({ flushed: true })
 })
 

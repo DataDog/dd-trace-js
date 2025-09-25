@@ -6,7 +6,6 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
-const FFE = require('./ffe')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
@@ -85,7 +84,8 @@ class Tracer extends NoopProxy {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
+      flaggingProvider: new LazyModule(() => require('./ffe'))
     }
   }
 
@@ -157,21 +157,18 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        if (config.ffe.enabled) {
-          FFE.enable(config)
-          rc.setProductHandler('FFE_FLAG_CONFIGURATION_RULES', (action, conf, configId) => {
-            if (action === 'apply') {
-              // Store UFC config - conf is the parsed UFC JSON
-              FFE.setConfig(configId, conf)
-            } else if (action === 'modify') {
-              // Modify stored UFC config - conf is the parsed UFC JSON
-              FFE.modifyConfig(configId, conf)
-            } else if (action === 'unapply') {
-              // Remove config when no longer needed
-              FFE.removeConfig(configId)
+        if (config.flaggingProvider.enabled) {
+          rc.setProductHandler('FFE_FLAGS', (action, conf, configId) => {
+            // Feed UFC config directly to flagging provider
+            if (this.flaggingProvider) {
+              if (action === 'apply' || action === 'modify') {
+                this.flaggingProvider._setConfiguration(conf)
+              } else if (action === 'unapply') {
+                // For now, just pass empty config
+                this.flaggingProvider._setConfiguration({})
+              }
             }
           })
-          this._modules.ffe = FFE // Expose for testing
         }
       }
 
@@ -251,6 +248,7 @@ class Tracer extends NoopProxy {
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
       }
+
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
@@ -261,6 +259,40 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
+      if (config.flaggingProvider.enabled) {
+        // This should not be merged in and should be fixed in the upstream package
+        // Remove this workaround once @datadog/flagging-core upstream publishes with proper exports field
+        // Fix upstream package.json exports issue before loading SDK
+        try {
+          const fs = require('fs')
+          const path = require('path')
+          const flaggingCorePkgPath = path.join(__dirname, '../../../node_modules/@datadog/flagging-core/package.json')
+          const pkg = JSON.parse(fs.readFileSync(flaggingCorePkgPath, 'utf8'))
+
+          if (!pkg.exports) {
+            pkg.exports = {
+              '.': {
+                types: './cjs/index.d.ts',
+                import: './esm/index.js',
+                require: './cjs/index.js'
+              },
+              './src/configuration/exposureEvent': {
+                types: './cjs/configuration/exposureEvent.d.ts',
+                import: './esm/configuration/exposureEvent.js',
+                require: './cjs/configuration/exposureEvent.js'
+              },
+              './src/configuration/exposureEvent.types': {
+                types: './cjs/configuration/exposureEvent.types.d.ts',
+                import: './esm/configuration/exposureEvent.types.js',
+                require: './cjs/configuration/exposureEvent.types.js'
+              }
+            }
+            fs.writeFileSync(flaggingCorePkgPath, JSON.stringify(pkg, null, 2))
+          }
+        } catch {}
+        this._modules.flaggingProvider.enable(config)
+        lazyProxy(this, 'flaggingProvider', config, () => require('./ffe/sdk'), this._tracer, config)
+      }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
@@ -269,6 +301,7 @@ class Tracer extends NoopProxy {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
+      this._modules.flaggingProvider.disable()
     }
 
     if (this._tracingInitialized) {

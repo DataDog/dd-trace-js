@@ -146,7 +146,7 @@ describe('TracerProxy', () => {
       configure: sinon.spy(),
       llmobs: {},
       heapSnapshot: {},
-      ffe: {
+      flaggingProvider: {
         enabled: true
       }
     }
@@ -172,14 +172,6 @@ describe('TracerProxy', () => {
     iast = {
       enable: sinon.spy(),
       disable: sinon.spy()
-    }
-
-    const FFE = {
-      enable: sinon.spy(),
-      setConfig: sinon.spy(),
-      getConfig: sinon.spy(),
-      modifyConfig: sinon.spy(),
-      removeConfig: sinon.spy()
     }
 
     flare = {
@@ -223,8 +215,7 @@ describe('TracerProxy', () => {
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
-      './flare': flare,
-      './ffe': FFE
+      './flare': flare
     })
 
     proxy = new Proxy()
@@ -287,59 +278,6 @@ describe('TracerProxy', () => {
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
-      })
-
-      it('should support applying FFE remote config', () => {
-        const ufcConfig = {
-          flags: {
-            'test-flag': {
-              key: 'test-flag',
-              enabled: true,
-              variationType: 'BOOLEAN',
-              variations: {
-                true: { key: 'true', value: true },
-                false: { key: 'false', value: false }
-              },
-              allocations: []
-            }
-          }
-        }
-        const configId = 'org-42-env-prod'
-
-        proxy.init()
-
-        handlers.get('FFE_FLAG_CONFIGURATION_RULES')('apply', ufcConfig, configId)
-
-        expect(proxy._modules.ffe.setConfig).to.have.been.calledWith(configId, ufcConfig)
-      })
-
-      it('should support modifying FFE remote config', () => {
-        const ufcConfig = {
-          flags: {
-            'test-flag': {
-              key: 'test-flag',
-              enabled: false, // changed
-              variationType: 'BOOLEAN'
-            }
-          }
-        }
-        const configId = 'org-42-env-prod'
-
-        proxy.init()
-
-        handlers.get('FFE_FLAG_CONFIGURATION_RULES')('modify', ufcConfig, configId)
-
-        expect(proxy._modules.ffe.modifyConfig).to.have.been.calledWith(configId, ufcConfig)
-      })
-
-      it('should support removing FFE remote config', () => {
-        const configId = 'org-42-env-prod'
-
-        proxy.init()
-
-        handlers.get('FFE_FLAG_CONFIGURATION_RULES')('unapply', {}, configId)
-
-        expect(proxy._modules.ffe.removeConfig).to.have.been.calledWith(configId)
       })
 
       it('should support enabling debug logs for tracer flares', () => {

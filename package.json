@@ -114,14 +114,17 @@
     "version.js"
   ],
   "dependencies": {
+    "@datadog/flagging-core": "0.1.0-preview.6",
     "@datadog/libdatadog": "0.7.0",
     "@datadog/native-appsec": "10.2.1",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
+    "@datadog/openfeature-node-server": "0.1.0-preview.6",
     "@datadog/pprof": "5.10.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "4.0.1",
     "@isaacs/ttlcache": "^1.4.1",
+    "@openfeature/core": "^1.8.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
     "crypto-randomuuid": "^1.0.0",
@@ -146,14 +149,21 @@
     "semifies": "^1.0.0",
     "shell-quote": "^1.8.2",
     "source-map": "^0.7.4",
+    "spark-md5": "^3.0.2",
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
+  },
+  "_dependencyNotes": {
+    "@openfeature/core": "Also needed for @datadog/openfeature-node-server",
+    "spark-md5": "TODO: Remove once @datadog/openfeature-node-server includes this as dependency (upstream bug breaks package build)",
+    "@datadog/flagging-core": "TODO: Upstream needs to publish with proper exports field in package.json to export subpaths (./src/configuration/exposureEvent, ./src/configuration/exposureEvent.types) that @datadog/openfeature-node-server imports. Automatically fixed in proxy.js at runtime"
   },
   "devDependencies": {
     "@babel/helpers": "^7.27.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.29.0",
     "@msgpack/msgpack": "^3.1.2",
+    "@openfeature/server-sdk": "^1.19.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^18.19.106",
     "axios": "^1.11.0",

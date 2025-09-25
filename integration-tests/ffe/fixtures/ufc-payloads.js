@@ -2,6 +2,116 @@
 
 // UFC (Universal Flag Configuration) payloads for testing
 module.exports = {
+  // Simplified configurations for integration testing
+  testBooleanAndStringFlags: {
+    flags: {
+      'test-boolean-flag': {
+        key: 'test-boolean-flag',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: {
+          true: { key: 'true', value: true },
+          false: { key: 'false', value: false }
+        },
+        allocations: [
+          {
+            key: 'boolean-allocation',
+            rules: [],
+            splits: [
+              {
+                variationKey: 'true',
+                shards: []
+              }
+            ],
+            doLog: true
+          }
+        ]
+      },
+      'test-string-flag': {
+        key: 'test-string-flag',
+        enabled: true,
+        variationType: 'STRING',
+        variations: {
+          'variant-a': { key: 'variant-a', value: 'hello' },
+          'variant-b': { key: 'variant-b', value: 'world' }
+        },
+        allocations: [
+          {
+            key: 'string-allocation',
+            rules: [],
+            splits: [
+              {
+                variationKey: 'variant-a',
+                shards: [
+                  {
+                    salt: 'test-string-flag-allocation-split',
+                    totalShards: 10000,
+                    ranges: [{ start: 0, end: 5000 }]
+                  }
+                ]
+              },
+              {
+                variationKey: 'variant-b',
+                shards: [
+                  {
+                    salt: 'test-string-flag-allocation-split',
+                    totalShards: 10000,
+                    ranges: [{ start: 5000, end: 10000 }]
+                  }
+                ]
+              }
+            ],
+            doLog: true
+          }
+        ]
+      }
+    }
+  },
+
+  simpleBooleanFlag: {
+    flags: {
+      'removable-flag': {
+        key: 'removable-flag',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        defaultVariation: 'true',
+        variations: {
+          true: { key: 'true', value: true },
+          false: { key: 'false', value: false }
+        },
+        allocations: [
+          {
+            key: 'remove-allocation',
+            percentages: { true: 100, false: 0 },
+            filters: []
+          }
+        ]
+      }
+    }
+  },
+
+  simpleStringFlagForAck: {
+    flags: {
+      'simple-flag': {
+        key: 'simple-flag',
+        enabled: true,
+        variationType: 'STRING',
+        defaultVariation: 'control',
+        variations: {
+          control: { key: 'control', value: 'control-value' },
+          treatment: { key: 'treatment', value: 'treatment-value' }
+        },
+        allocations: [
+          {
+            key: 'default-allocation',
+            percentages: { control: 100, treatment: 0 },
+            filters: []
+          }
+        ]
+      }
+    }
+  },
+
   simpleStringFlag: {
     createdAt: '2025-02-14T00:56:56.910Z',
     format: 'SERVER',
