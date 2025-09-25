@@ -211,7 +211,7 @@ async function execHelper (command, options) {
   }
 }
 
-function execWithTimeout (command, options, timeoutMs = 10000) {
+function execWithTimeout (command, options, timeoutMs = 30000) {
   return Promise.race([
     exec(command, options),
     new Promise((resolve, reject) =>
