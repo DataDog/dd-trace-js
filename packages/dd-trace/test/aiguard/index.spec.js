@@ -12,6 +12,7 @@ const { URL } = require('url')
 
 describe('AIGuard SDK', () => {
   const config = {
+    flushInterval: 0,
     service: 'ai_guard_demo',
     env: 'test',
     apiKey: 'API_KEY',
