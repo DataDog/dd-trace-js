@@ -485,6 +485,7 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_ENABLED,
       DD_AI_GUARD_ENDPOINT,
       DD_AI_GUARD_TIMEOUT,
       DD_AI_GUARD_MAX_MESSAGES_LENGTH,
@@ -863,6 +864,7 @@ class Config {
     this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
     env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
+    this._setBoolean(env, 'aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     env['aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
     this._envUnprocessed['aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
@@ -1041,6 +1043,7 @@ class Config {
       this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
     }
 
+    this._setBoolean(opts, 'aiguard.enabled', options.aiguard?.enabled)
     this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
     opts['aiguard.timeout'] = maybeInt(options.aiguard?.timeout)
     this._optsUnprocessed['aiguard.timeout'] = options.aiguard?.timeout

@@ -360,6 +360,7 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.property('tracing', true)
+    expect(config).to.have.nested.property('aiguard.enabled', false)
     expect(config).to.have.nested.property('aiguard.endpoint', undefined)
     expect(config).to.have.nested.property('aiguard.timeout', 10e3)
     expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 16)
@@ -773,6 +774,7 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.nested.property('aiguard.enabled', true)
     expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
     expect(config).to.have.property('appKey', 'myAppKey')
 
@@ -1200,6 +1202,7 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.property('version', '0.1.0')
+    expect(config).to.have.nested.property('aiguard.enabled', true)
     expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
     expect(config).to.have.nested.property('aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
