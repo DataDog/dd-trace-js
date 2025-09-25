@@ -657,7 +657,7 @@ class Config {
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_EXPORTERS_OTLP_ENDPOINT,
-      OTEL_EXPORTERS_OTLP_HEADERS,
+      OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTERS_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
@@ -685,12 +685,11 @@ class Config {
     if (customOtelLogsUrl) {
       this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
     }
-    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTERS_OTLP_HEADERS)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
     // Handle OTLP protocol with grpc warning
     const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
     if (requestedProtocol === 'grpc') {
-      // eslint-disable-next-line no-console
-      console.warn('OTLP gRPC protocol is not supported for logs. ' +
+      log.warn('OTLP gRPC protocol is not supported for logs. ' +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
       this._setString(env, 'otelLogsProtocol', 'http/protobuf')
     } else {

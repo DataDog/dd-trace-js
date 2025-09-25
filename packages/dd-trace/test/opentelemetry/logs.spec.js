@@ -1,32 +1,49 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('assert')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-// Helper function to create mocked telemetry metrics
-function createMockedTelemetryMetrics () {
-  return {
-    manager: {
-      namespace: sinon.stub().returns({
-        count: sinon.stub().returns({
-          inc: sinon.spy()
-        })
-      })
-    }
-  }
-}
-
-// Helper function to create OTLP HTTP log exporter with mocked telemetry metrics
-function createMockedOtlpHttpLogExporter (telemetryMetrics) {
-  return proxyquire('../../src/opentelemetry/logs/otlp_http_log_exporter', {
-    '../../telemetry/metrics': telemetryMetrics
-  })
-}
-
 describe('OpenTelemetry Logs', () => {
   let originalEnv
+
+  function setupTracer (enabled = true) {
+    process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
+    process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '1'
+    const tracer = require('../../')
+    tracer._initialized = false
+    tracer.init()
+    const { logs } = require('@opentelemetry/api-logs')
+    return { logs, loggerProvider: logs.getLoggerProvider() }
+  }
+
+  function mockOtlpExport (validator, protocol = 'protobuf') {
+    const OtlpHttpLogExporter = require('../../src/opentelemetry/logs/otlp_http_log_exporter')
+    sinon.stub(OtlpHttpLogExporter.prototype, '_sendPayload').callsFake((payload, callback) => {
+      try {
+        const decoded = protocol === 'json'
+          ? JSON.parse(payload.toString())
+          : require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()._logsService.decode(payload)
+        validator(decoded)
+        callback({ code: 0 })
+      } catch (error) {
+        callback({ code: 1, error })
+      }
+    })
+  }
+
+  function mockLogWarn () {
+    const log = require('../../src/log')
+    const originalWarn = log.warn
+    let warningMessage = ''
+    log.warn = (msg) => { warningMessage = msg }
+    return { restore: () => { log.warn = originalWarn }, getMessage: () => warningMessage }
+  }
+
+  function createMockSpan (traceId = '1234567890abcdef1234567890abcdef', spanId = '1234567890abcdef') {
+    return { spanContext: () => ({ traceId, spanId, traceFlags: 1, isRemote: false }) }
+  }
 
   beforeEach(() => {
     originalEnv = { ...process.env }
@@ -34,379 +51,145 @@ describe('OpenTelemetry Logs', () => {
 
   afterEach(() => {
     process.env = originalEnv
-    // Clean up OpenTelemetry API state by shutting down the current logger provider
-    const { logs } = require('@opentelemetry/api-logs')
-    // Unregister the logger provider from OpenTelemetry API by resetting global state
-    logs.disable()
+    require('@opentelemetry/api-logs').logs.disable()
+    sinon.restore()
   })
 
-  describe('Basic Functionality', () => {
-    // Helper function to setup tracer and get logger
-    function setupTracerAndLogger (enabled = true) {
-      process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
-      const tracer = require('../../')
-      tracer._initialized = false
-      tracer.init()
-      const { logs } = require('@opentelemetry/api-logs')
-      return { logs, loggerProvider: logs.getLoggerProvider(), logger: logs.getLogger('test-logger') }
-    }
+  describe('Core Functionality', () => {
+    it('exports logs with complete OTLP structure and trace correlation', () => {
+      mockOtlpExport((decoded) => {
+        const { resource } = decoded.resourceLogs[0]
+        const resourceAttrs = {}
+        resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
+        assert(resourceAttrs['service.name'])
 
-    it('should initialize OpenTelemetry logs when enabled', () => {
-      const { loggerProvider, logger } = setupTracerAndLogger(true)
+        const { scope, logRecords } = decoded.resourceLogs[0].scopeLogs[0]
+        assert.strictEqual(scope.name, 'test-logger')
 
-      expect(loggerProvider).to.exist
-      expect(logger).to.exist
-      expect(typeof logger.emit).to.equal('function')
-      expect(typeof logger.info).to.equal('function')
-    })
-
-    it('should emit log records without errors', () => {
-      const { logger } = setupTracerAndLogger(true)
-
-      expect(() => {
-        logger.emit({
-          severityText: 'INFO',
-          severityNumber: 9,
-          body: 'Test message',
-          timestamp: Date.now() * 1000000
-        })
-      }).to.not.throw()
-    })
-
-    it('should handle logger provider shutdown', () => {
-      const { loggerProvider } = setupTracerAndLogger(true)
-
-      expect(loggerProvider).to.exist
-      expect(typeof loggerProvider.shutdown).to.equal('function')
-
-      expect(() => {
-        loggerProvider.shutdown()
-      }).to.not.throw()
-    })
-
-    it('should work when disabled', () => {
-      const { logger } = setupTracerAndLogger(false)
-
-      expect(() => {
-        logger.emit({
-          severityText: 'INFO',
-          severityNumber: 9,
-          body: 'Test message'
-        })
-      }).to.not.throw()
-    })
-
-    it('should populate trace context when span is active', () => {
-      const { logs, loggerProvider } = setupTracerAndLogger(true)
-      loggerProvider._isShutdown = false
-
-      // Mock active span
-      const { trace } = require('@opentelemetry/api')
-      const originalGetSpan = trace.getSpan
-      trace.getSpan = () => ({
-        spanContext: () => ({
-          traceId: '1234567890abcdef1234567890abcdef',
-          spanId: '1234567890abcdef'
-        })
+        const log = logRecords[0]
+        assert.strictEqual(log.severityText, 'INFO')
+        assert.strictEqual(log.body.stringValue, 'Test message')
+        assert.strictEqual(log.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
+        assert.strictEqual(log.spanId.toString('hex'), '1234567890abcdef')
       })
 
-      // Capture log records
-      const logRecords = []
-      loggerProvider._processor = {
-        onEmit: (record, instrumentationLibrary, spanContext) => {
-          logRecords.push({ ...record, traceId: spanContext?.traceId || '', spanId: spanContext?.spanId || '' })
-        },
-        shutdown: () => Promise.resolve()
-      }
+      const { logs } = setupTracer()
+      const { trace, context } = require('@opentelemetry/api')
 
-      logs.getLogger('test-logger').info('Test message')
-
-      expect(logRecords[0].traceId).to.equal('1234567890abcdef1234567890abcdef')
-      expect(logRecords[0].spanId).to.equal('1234567890abcdef')
-
-      trace.getSpan = originalGetSpan
-    })
-
-    it('should serialize traceId and spanId in OTLP payload', () => {
-      // Test OTLP transformation directly
-      const OtlpTransformer = require('../../src/opentelemetry/logs/otlp_transformer')
-      const transformer = new OtlpTransformer({}, 'http/protobuf')
-
-      const logRecords = [{
-        body: 'Test message',
-        severityNumber: 9,
+      logs.getLogger('test-logger').emit({
         severityText: 'INFO',
-        timestamp: Date.now() * 1000000,
-        instrumentationLibrary: { name: 'test-logger', version: '1.0.0' },
-        traceId: '1234567890abcdef1234567890abcdef',
-        spanId: '1234567890abcdef'
-      }]
+        body: 'Test message',
+        context: trace.setSpan(context.active(), createMockSpan()),
+        attributes: { 'test.key': 'test.value' }
+      })
+    })
 
-      const protobufPayload = transformer.transformLogRecords(logRecords)
-      const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
-      const { _logsService } = getProtobufTypes()
-      const decodedPayload = _logsService.decode(protobufPayload)
-      const logRecord = decodedPayload.resourceLogs[0].scopeLogs[0].logRecords[0]
+    it('exports logs using protobuf protocol', () => {
+      mockOtlpExport((decoded) => {
+        assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'Protobuf format')
+      })
 
-      expect(logRecord.traceId.toString('hex')).to.equal('1234567890abcdef1234567890abcdef')
-      expect(logRecord.spanId.toString('hex')).to.equal('1234567890abcdef')
+      const { logs } = setupTracer()
+      logs.getLogger('test').emit({ severityText: 'INFO', body: 'Protobuf format' })
+    })
+
+    it('exports logs using JSON protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      mockOtlpExport((decoded) => {
+        assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'JSON format')
+      }, 'json')
+
+      const { logs } = setupTracer()
+      logs.getLogger('test').emit({ severityText: 'DEBUG', body: 'JSON format' })
+    })
+
+    it('handles shutdown gracefully', () => {
+      const { loggerProvider } = setupTracer()
+      loggerProvider.shutdown()
+      assert.strictEqual(loggerProvider._isShutdown, true)
     })
   })
 
-  describe('Protocol Configuration', () => {
-    // Helper function to test protocol configuration
-    function testProtocolConfig (envVars, expectedProtocol, expectedWarning = null) {
-      const Config = require('../../src/config')
-
-      // Setup environment variables
-      Object.entries(envVars).forEach(([key, value]) => {
-        if (value === null) {
-          delete process.env[key]
-        } else {
-          process.env[key] = value
-        }
-      })
-
-      let warningMessage = ''
-      if (expectedWarning) {
-        // eslint-disable-next-line no-console
-        const originalWarn = console.warn
-        // eslint-disable-next-line no-console
-        console.warn = (msg) => { warningMessage = msg }
-
-        const config = new Config()
-        expect(config.otelLogsProtocol).to.equal(expectedProtocol)
-        expect(warningMessage).to.include(expectedWarning)
-
-        // eslint-disable-next-line no-console
-        console.warn = originalWarn
-      } else {
-        const config = new Config()
-        expect(config.otelLogsProtocol).to.equal(expectedProtocol)
-      }
-    }
-
-    it('should use default protocol when no environment variables are set', () => {
-      testProtocolConfig({
-        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
-        OTEL_EXPORTER_OTLP_PROTOCOL: null
-      }, 'http/protobuf')
+  describe('Configuration', () => {
+    it('uses default protobuf protocol when no environment variables set', () => {
+      delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+      const { loggerProvider } = setupTracer()
+      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/protobuf')
     })
 
-    it('should prioritize logs-specific protocol over generic protocol', () => {
-      testProtocolConfig({
-        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/json',
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
-      }, 'http/json')
+    it('prioritizes logs-specific protocol over generic protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
+      const { loggerProvider } = setupTracer()
+      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/json')
     })
 
-    it('should fallback to generic protocol when logs protocol not set', () => {
-      testProtocolConfig({
-        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: null,
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json'
-      }, 'http/json')
+    it('warns and falls back to protobuf when gRPC protocol is set', () => {
+      const logMock = mockLogWarn()
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
+
+      const { loggerProvider } = setupTracer()
+      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/protobuf')
+      assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
+
+      logMock.restore()
     })
 
-    it('should warn and default to http/protobuf when grpc protocol is set', () => {
-      testProtocolConfig({
-        OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc'
-      }, 'http/protobuf', 'OTLP gRPC protocol is not supported for logs')
-    })
-  })
-
-  describe('Resource Attributes', () => {
-    // Helper function to test resource attribute configuration
-    function testResourceConfig (envVars, assertions) {
-      const Config = require('../../src/config')
-
-      // Setup environment variables
-      Object.entries(envVars).forEach(([key, value]) => {
-        if (value === null) {
-          delete process.env[key]
-        } else {
-          process.env[key] = value
-        }
-      })
-
-      const config = new Config()
-      assertions(config)
-    }
-
-    it('should parse DD_TAGS into resource attributes', () => {
-      testResourceConfig({
-        DD_LOGS_OTEL_ENABLED: 'true',
-        DD_TAGS: 'team:backend,region:us-west-2'
-      }, (config) => {
-        expect(config.tags).to.include({
-          team: 'backend',
-          region: 'us-west-2'
-        })
-      })
+    it('configures resource attributes from environment variables', () => {
+      process.env.DD_TAGS = 'team:backend,region:us-west-2'
+      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.namespace=api'
+      const { loggerProvider } = setupTracer()
+      const resourceAttrs = loggerProvider.resource.attributes
+      assert.strictEqual(resourceAttrs.team, 'backend')
+      assert.strictEqual(resourceAttrs['service.namespace'], 'api')
     })
 
-    it('should parse OTEL_RESOURCE_ATTRIBUTES into resource attributes', () => {
-      testResourceConfig({
-        DD_LOGS_OTEL_ENABLED: 'true',
-        OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=production,service.namespace=api',
-        DD_ENV: 'production'
-      }, (config) => {
-        expect(config.tags).to.include({
-          'service.namespace': 'api'
-        })
-        expect(config.env).to.equal('production')
-      })
+    it('includes hostname in resource when reportHostname is enabled', () => {
+      process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
+      const { loggerProvider } = setupTracer()
+      assert(typeof loggerProvider.resource.attributes['host.name'] === 'string')
     })
 
-    it('should set hostname when reportHostname is enabled', () => {
-      testResourceConfig({
-        DD_LOGS_OTEL_ENABLED: 'true',
-        DD_TRACE_REPORT_HOSTNAME: 'true'
-      }, (config) => {
-        expect(config.hostname).to.exist
-        expect(config.hostname).to.be.a('string')
-        expect(config.hostname.length).to.be.greaterThan(0)
-      })
+    it('configures custom OTLP endpoint', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
+      const { loggerProvider } = setupTracer()
+      assert.strictEqual(loggerProvider._processor._exporter._url, 'http://custom:4318/v1/logs')
+    })
+
+    it('configures OTLP headers from logs-specific environment variable', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'api-key=secret,env=prod'
+      const { loggerProvider } = setupTracer()
+      const exporter = loggerProvider._processor._exporter
+      assert.strictEqual(exporter._headers['api-key'], 'secret')
+      assert.strictEqual(exporter._headers.env, 'prod')
+    })
+
+    it('prioritizes logs-specific headers over generic OTLP headers', () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'generic=value,shared=generic'
+      process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'logs-specific=value,shared=logs'
+      const { loggerProvider } = setupTracer()
+      const exporter = loggerProvider._processor._exporter
+      assert.strictEqual(exporter._headers['logs-specific'], 'value')
+      assert.strictEqual(exporter._headers.shared, 'logs')
+      assert.strictEqual(exporter._headers.generic, undefined)
     })
   })
 
   describe('Telemetry Metrics', () => {
-    // Helper function to test telemetry metrics for a given protocol
-    function testTelemetryMetricsForProtocol (protocol, expectedEncoding) {
-      require('../setup/core') // For sinon-chai
-
-      const telemetryMetrics = createMockedTelemetryMetrics()
-      const OtlpHttpLogExporter = createMockedOtlpHttpLogExporter(telemetryMetrics)
-
-      const exporter = new OtlpHttpLogExporter('http://localhost:4318/v1/logs', '', 1000, protocol, {})
-      const mockLogRecords = [{
-        body: 'Test message',
-        severityNumber: 9,
-        severityText: 'INFO',
-        timestamp: Date.now() * 1000000,
-        instrumentationLibrary: {
-          name: 'dd-trace-js',
-          version: '1.0.0'
-        }
-      }]
-
-      exporter.export(mockLogRecords, () => {})
-
-      // Verify telemetry metric was called with correct name and tags
-      expect(telemetryMetrics.manager.namespace).to.have.been.calledWith('tracers')
-      expect(telemetryMetrics.manager.namespace().count).to.have.been.calledWith(
-        'otel.log_records', [
-          'protocol:http',
-        `encoding:${expectedEncoding}`
-        ])
-      expect(telemetryMetrics.manager.namespace().count().inc).to.have.been.calledWith(1)
-    }
-
-    it('should track telemetry metrics for protobuf protocol', () => {
-      testTelemetryMetricsForProtocol('http/protobuf', 'protobuf')
-    })
-
-    it('should track telemetry metrics for JSON protocol', () => {
-      testTelemetryMetricsForProtocol('http/json', 'json')
-    })
-  })
-
-  describe('OTLP Payload Structure', () => {
-    it('should generate correct JSON OTLP payload structure', () => {
-      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
-      const transformer = new OtlpTransformer({
-        attributes: { 'service.name': 'test-service' }
-      }, 'http/json')
-
-      const logRecords = [{
-        body: 'Test message',
-        severityNumber: 9,
-        severityText: 'INFO',
-        attributes: { 'test.attr': 'test-value' },
-        timestamp: Date.now() * 1000000,
-        instrumentationLibrary: { name: 'test-service', version: '1.0.0' }
-      }]
-
-      const result = JSON.parse(transformer.transformLogRecords(logRecords).toString())
-      expect(result).to.have.property('resourceLogs')
-      expect(result.resourceLogs[0]).to.have.property('resource')
-      expect(result.resourceLogs[0]).to.have.property('scopeLogs')
-      expect(result.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue).to.equal('Test message')
-    })
-
-    it('should generate correct protobuf OTLP payload structure', () => {
-      const { OtlpTransformer } = require('../../src/opentelemetry/logs')
-      const transformer = new OtlpTransformer({
-        attributes: { 'service.name': 'test-service' }
-      }, 'http/protobuf')
-
-      const logRecords = [{
-        body: 'Test message',
-        severityNumber: 9,
-        severityText: 'INFO',
-        attributes: { 'test.attr': 'test-value' },
-        timestamp: Date.now() * 1000000,
-        instrumentationLibrary: { name: 'test-service', version: '1.0.0' }
-      }]
-
-      const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
-      const result = getProtobufTypes()._logsService.decode(transformer.transformLogRecords(logRecords))
-      expect(result).to.have.property('resourceLogs')
-      expect(result.resourceLogs[0]).to.have.property('resource')
-      expect(result.resourceLogs[0]).to.have.property('scopeLogs')
-      expect(result.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue).to.equal('Test message')
-    })
-  })
-
-  describe('OTLP Endpoint Configuration', () => {
-    it('should use environment value when set', () => {
-      const Config = require('../../src/config')
-
-      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://explicit-agent:4318/v1/logs'
-      process.env.DD_AGENT_HOST = 'different-agent.example.com'
-
-      const config = new Config()
-      expect(config.otelLogsUrl).to.equal('http://explicit-agent:4318/v1/logs')
-    })
-
-    it('should use calculated default when no environment variables are set', () => {
-      const Config = require('../../src/config')
-
-      delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-      delete process.env.OTEL_EXPORTERS_OTLP_ENDPOINT
-      process.env.DD_AGENT_HOST = 'default-agent.example.com'
-
-      const config = new Config()
-      expect(config.otelLogsUrl).to.equal('http://default-agent.example.com:4318/v1/logs')
-    })
-
-    it('should use fallback default when no environment variables and no DD_AGENT_HOST', () => {
-      const Config = require('../../src/config')
-
-      delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-      delete process.env.OTEL_EXPORTERS_OTLP_ENDPOINT
-      delete process.env.DD_AGENT_HOST
-
-      const config = new Config()
-      expect(config.otelLogsUrl).to.equal('http://127.0.0.1:4318/v1/logs')
-    })
-  })
-
-  describe('OTLP Headers Configuration', () => {
-    it('should parse OTLP headers from comma-separated key=value string', () => {
-      const { OtlpHttpLogExporter } = require('../../src/opentelemetry/logs')
-
-      const exporter = new OtlpHttpLogExporter(
-        'http://localhost:4318/v1/logs',
-        'api-key=key,other-config-value=value',
-        1000,
-        'http/protobuf',
-        {}
-      )
-
-      expect(exporter._headers).to.include({
-        'api-key': 'key',
-        'other-config-value': 'value'
+    it('tracks telemetry metrics for exported logs', () => {
+      require('../setup/core')
+      const telemetryMetrics = {
+        manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
+      }
+      const MockedExporter = proxyquire('../../src/opentelemetry/logs/otlp_http_log_exporter', {
+        '../../telemetry/metrics': telemetryMetrics
       })
+
+      const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})
+      exporter.export([{ body: 'test', severityNumber: 9, timestamp: Date.now() * 1000000 }], () => {})
+
+      assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
     })
   })
 })

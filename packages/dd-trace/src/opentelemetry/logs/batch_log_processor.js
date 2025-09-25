@@ -11,7 +11,7 @@ class BatchLogRecordProcessor {
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
-   * @param {Object} exporter - Log processor for exporting batches to Datadog Agent
+   * @param {OtlpHttpLogExporter} exporter - Log processor for exporting batches to Datadog Agent
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
    * @param {number} maxQueueSize - Maximum number of log records in queue
@@ -33,26 +33,15 @@ class BatchLogRecordProcessor {
   /**
    * Processes a single log record.
    *
-   * @param {Object} logRecord - The log record to process
-   * @param {Object} instrumentationLibrary - Instrumentation library information
-   * @param {Object} spanContext - Span context containing traceId and spanId
-   * @param {string} spanContext.traceId - Trace ID for correlation
-   * @param {string} spanContext.spanId - Span ID for correlation
+   * @param {Object} logRecord - The enriched log record with trace correlation and metadata
    */
-  onEmit (logRecord, instrumentationLibrary, spanContext) {
+  onEmit (logRecord) {
     if (this._isShutdown) {
       return
     }
 
-    // Store the additional context with the log record
-    const enrichedLogRecord = {
-      ...logRecord,
-      instrumentationLibrary,
-      traceId: spanContext?.traceId || '',
-      spanId: spanContext?.spanId || ''
-    }
-
-    this._logRecords.push(enrichedLogRecord)
+    // Store the log record (already enriched by Logger.emit)
+    this._logRecords.push(logRecord)
 
     if (this._logRecords.length >= this._maxExportBatchSize) {
       this._export()
@@ -61,6 +50,10 @@ class BatchLogRecordProcessor {
     }
   }
 
+  /**
+   * Starts the batch timeout timer.
+   * @private
+   */
   _startTimer () {
     if (this._timer) {
       return
@@ -71,6 +64,10 @@ class BatchLogRecordProcessor {
     }, this._batchTimeout)
   }
 
+  /**
+   * Exports the current batch of log records.
+   * @private
+   */
   _export () {
     if (this._logRecords.length === 0) {
       return
@@ -85,6 +82,10 @@ class BatchLogRecordProcessor {
     }
   }
 
+  /**
+   * Clears the batch timeout timer.
+   * @private
+   */
   _clearTimer () {
     if (this._timer) {
       clearTimeout(this._timer)
@@ -92,6 +93,10 @@ class BatchLogRecordProcessor {
     }
   }
 
+  /**
+   * Forces an immediate flush of all pending log records.
+   * @returns {Promise<void>} Promise that resolves when flush is complete
+   */
   forceFlush () {
     return new Promise((resolve) => {
       if (this._isShutdown) {
@@ -104,6 +109,10 @@ class BatchLogRecordProcessor {
     })
   }
 
+  /**
+   * Shuts down the processor and exports any remaining log records.
+   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   */
   shutdown () {
     if (this._isShutdown) {
       return this._shutdownPromise || Promise.resolve()

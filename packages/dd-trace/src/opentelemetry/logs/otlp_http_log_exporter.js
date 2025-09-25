@@ -53,7 +53,7 @@ class OtlpHttpLogExporter {
   /**
    * Exports log records via OTLP over HTTP.
    *
-   * @param {Array} logRecords - Array of log records to export
+   * @param {Object[]} logRecords - Array of enriched log records to export
    * @param {Function} resultCallback - Callback function for export result
    */
   export (logRecords, resultCallback) {
@@ -80,6 +80,12 @@ class OtlpHttpLogExporter {
     }
   }
 
+  /**
+   * Parses additional HTTP headers from a comma-separated string.
+   * @param {string} headersString - Comma-separated key=value pairs
+   * @returns {Record<string, string>} Parsed headers object
+   * @private
+   */
   _parseAdditionalHeaders (headersString) {
     if (!headersString || typeof headersString !== 'string') {
       return {}
@@ -94,6 +100,12 @@ class OtlpHttpLogExporter {
     )
   }
 
+  /**
+   * Sends the payload via HTTP request.
+   * @param {Buffer|string} payload - The payload to send
+   * @param {Function} resultCallback - Callback for the result
+   * @private
+   */
   _sendPayload (payload, resultCallback) {
     const url = new URL(this._url)
     const isHttps = url.protocol === 'https:'
@@ -143,6 +155,10 @@ class OtlpHttpLogExporter {
     req.end()
   }
 
+  /**
+   * Shuts down the exporter.
+   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   */
   shutdown () {
     return Promise.resolve()
   }

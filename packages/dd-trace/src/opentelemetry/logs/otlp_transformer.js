@@ -24,6 +24,11 @@ class OtlpTransformer {
     this._protobufTypes = null
   }
 
+  /**
+   * Gets the protobuf types, loading them lazily to reduce startup overhead.
+   * @returns {Object} Protobuf types object
+   * @private
+   */
   _getProtobufTypes () {
     // Delay the loading of protobuf types to reduce startup overhead
     if (!this._protobufTypes) {
@@ -32,6 +37,11 @@ class OtlpTransformer {
     return this._protobufTypes
   }
 
+  /**
+   * Transforms log records to OTLP format based on the configured protocol.
+   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @returns {Buffer} Transformed log records in the appropriate format
+   */
   transformLogRecords (logRecords) {
     // Use the configured protocol to determine serialization format
     if (this._protocol === 'http/json') {
@@ -41,6 +51,12 @@ class OtlpTransformer {
     return this._transformToProtobuf(logRecords)
   }
 
+  /**
+   * Transforms log records to protobuf format.
+   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @returns {Buffer} Protobuf-encoded log records
+   * @private
+   */
   _transformToProtobuf (logRecords) {
     const { _logsService } = this._getProtobufTypes()
 
@@ -62,6 +78,12 @@ class OtlpTransformer {
     return buffer
   }
 
+  /**
+   * Transforms log records to JSON format.
+   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @returns {Buffer} JSON-encoded log records
+   * @private
+   */
   _transformToJson (logRecords) {
     // JSON transformation for http/json protocol
     const logsData = {
@@ -76,6 +98,12 @@ class OtlpTransformer {
     return Buffer.from(JSON.stringify(logsData))
   }
 
+  /**
+   * Transforms instrumentation library information to OTLP scope format.
+   * @param {Object} instrumentationLibrary - Instrumentation library info
+   * @returns {Object} OTLP scope object
+   * @private
+   */
   _transformScope (instrumentationLibrary) {
     return {
       name: instrumentationLibrary?.name || 'dd-trace-js',
@@ -85,6 +113,11 @@ class OtlpTransformer {
     }
   }
 
+  /**
+   * Transforms resource attributes to OTLP resource format.
+   * @returns {Object} OTLP resource object
+   * @private
+   */
   _transformResource () {
     return {
       attributes: this._resourceAttributes,
@@ -92,6 +125,12 @@ class OtlpTransformer {
     }
   }
 
+  /**
+   * Transforms a single log record to OTLP format.
+   * @param {Object} logRecord - Log record to transform
+   * @returns {Object} OTLP log record object
+   * @private
+   */
   _transformLogRecord (logRecord) {
     const timestamp = logRecord.timestamp || Date.now() * 1_000_000
 
@@ -109,6 +148,12 @@ class OtlpTransformer {
     }
   }
 
+  /**
+   * Maps OpenTelemetry severity number to protobuf severity number.
+   * @param {number} severityNumber - OpenTelemetry severity number
+   * @returns {number} Protobuf severity number
+   * @private
+   */
   _mapSeverityNumber (severityNumber) {
     const { _severityNumber } = this._getProtobufTypes()
 
@@ -122,6 +167,12 @@ class OtlpTransformer {
     return severityMap[severityNumber] || _severityNumber.values.SEVERITY_NUMBER_INFO
   }
 
+  /**
+   * Creates a mapping from OpenTelemetry severity numbers to protobuf severity numbers.
+   * @param {Object} severityEnum - Protobuf severity enum
+   * @returns {Object} Severity mapping object
+   * @private
+   */
   _createSeverityMap (severityEnum) {
     const map = {}
     map[SeverityNumber.TRACE] = severityEnum.values.SEVERITY_NUMBER_TRACE
@@ -151,6 +202,12 @@ class OtlpTransformer {
     return map
   }
 
+  /**
+   * Converts a hex string to a Buffer.
+   * @param {string} hexString - Hex string to convert
+   * @returns {Buffer} Buffer containing the hex data
+   * @private
+   */
   _hexToBytes (hexString) {
     if (!hexString || hexString.length === 0) {
       return Buffer.alloc(0)
@@ -162,6 +219,12 @@ class OtlpTransformer {
     return Buffer.from(paddedHex, 'hex')
   }
 
+  /**
+   * Transforms log body to OTLP AnyValue format.
+   * @param {any} body - Log body to transform
+   * @returns {Object} OTLP AnyValue object
+   * @private
+   */
   _transformBody (body) {
     if (typeof body === 'string') {
       return {
@@ -190,6 +253,12 @@ class OtlpTransformer {
     }
   }
 
+  /**
+   * Transforms attributes to OTLP KeyValue format.
+   * @param {Object} attributes - Attributes to transform
+   * @returns {Object[]} Array of OTLP KeyValue objects
+   * @private
+   */
   _transformAttributes (attributes) {
     if (!attributes) {
       return {}
@@ -200,6 +269,12 @@ class OtlpTransformer {
     }))
   }
 
+  /**
+   * Transforms any value to OTLP AnyValue format.
+   * @param {any} value - Value to transform
+   * @returns {Object} OTLP AnyValue object
+   * @private
+   */
   _transformAnyValue (value) {
     if (typeof value === 'string') {
       return { stringValue: value }

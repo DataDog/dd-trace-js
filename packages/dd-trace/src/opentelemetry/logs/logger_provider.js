@@ -4,6 +4,12 @@ const Logger = require('./logger')
 const log = require('../../log')
 
 /**
+ * @typedef {import('@opentelemetry/resources').Resource} Resource
+ * @typedef {import('@opentelemetry/api-logs').Logger} Logger
+ * @typedef {import('./batch_log_processor')} BatchLogRecordProcessor
+ */
+
+/**
  * LoggerProvider is the main entry point for creating loggers with a single processor for Datadog Agent export.
  *
  * This implementation follows the OpenTelemetry JavaScript API LoggerProvider interface:
@@ -17,13 +23,13 @@ class LoggerProvider {
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
    *
    * @param {Object} [options] - LoggerProvider options
-   * @param {Object} [options.resource] - Resource attributes
-   * @param {Object} [options.resource.attributes] - Resource attribute key-value pairs
-   * @param {Object} [options.processor] - Single LogRecordProcessor instance for exporting logs to Datadog Agent
+   * @param {Resource} [options.resource] - Resource attributes
+   * @param {BatchLogRecordProcessor} [options.processor] - Single LogRecordProcessor instance for
+   *   exporting logs to Datadog Agent
    */
   constructor (options = {}) {
     this.resource = options.resource
-    this._processor = options.processor || null
+    this._processor = options.processor
     this._loggers = new Map()
     this._isShutdown = false
   }
@@ -59,6 +65,11 @@ class LoggerProvider {
     return this._loggers.get(key)
   }
 
+  /**
+   * Creates a no-op logger for use when the provider is shutdown.
+   * @returns {Logger} A no-op logger instance
+   * @private
+   */
   _createNoOpLogger () {
     return {
       instrumentationLibrary: {
@@ -74,6 +85,9 @@ class LoggerProvider {
     }
   }
 
+  /**
+   * Registers this logger provider as the global provider.
+   */
   register () {
     if (this._isShutdown) {
       log.warn('Cannot register after shutdown')
@@ -85,6 +99,10 @@ class LoggerProvider {
     }
   }
 
+  /**
+   * Forces a flush of all pending log records.
+   * @returns {Promise<void>} Promise that resolves when flush is complete
+   */
   forceFlush () {
     if (this._isShutdown) {
       return Promise.reject(new Error('LoggerProvider is shutdown'))
@@ -97,6 +115,10 @@ class LoggerProvider {
     return this._processor.forceFlush()
   }
 
+  /**
+   * Shuts down the logger provider and all associated processors.
+   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   */
   shutdown () {
     if (this._isShutdown) {
       return Promise.resolve()

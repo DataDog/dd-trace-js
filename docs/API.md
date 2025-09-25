@@ -384,17 +384,23 @@ The following attributes are available to override Datadog-specific options:
 dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
 
 ```javascript
-const tracer = require('dd-trace').init()
+require('dd-trace').init()
 const { logs } = require('@opentelemetry/api-logs')
+const express = require('express')
 
+const app = express()
 const logger = logs.getLogger('my-service', '1.0.0')
-logger.emit({
-  severityText: 'INFO',
-  severityNumber: 9,
-  body: 'Application started',
-  attributes: { version: '1.0.0' },
-  timestamp: Date.now() * 1000000
+
+app.get('/api/users/:id', (req, res) => {
+  logger.emit({
+    severityText: 'INFO',
+    severityNumber: 9,
+    body: `Processing user request for ID: ${req.params.id}`,
+  })
+  res.json({ id: req.params.id, name: 'John Doe' })
 })
+
+app.listen(3000)
 ```
 
 #### Supported Configuration

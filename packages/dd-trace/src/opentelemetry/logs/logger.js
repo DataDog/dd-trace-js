@@ -1,8 +1,14 @@
 'use strict'
 
-const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { sanitizeAttributes } = require('@opentelemetry/core')
 const { trace, context } = require('@opentelemetry/api')
+
+/**
+ * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
+ * @typedef {import('@opentelemetry/api').SpanContext} SpanContext
+ * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {import('@opentelemetry/resources').Resource} Resource
+ */
 /**
  * Logger provides methods to emit log records.
  *
@@ -19,6 +25,8 @@ class Logger {
    * @param {Object} [instrumentationLibrary] - Instrumentation library information
    * @param {string} [instrumentationLibrary.name] - Library name (defaults to 'dd-trace-js')
    * @param {string} [instrumentationLibrary.version] - Library version (defaults to tracer version)
+   * @param {Attributes[]} [instrumentationLibrary.attributes] - Additional attributes
+   * @param {number} [instrumentationLibrary.dropped_attributes_count] - Number of dropped attributes
    */
   constructor (loggerProvider, instrumentationLibrary) {
     this._loggerProvider = loggerProvider
@@ -28,6 +36,10 @@ class Logger {
     }
   }
 
+  /**
+   * Gets the resource associated with this logger.
+   * @returns {Resource} The resource attributes
+   */
   get resource () {
     return this._loggerProvider.resource
   }
@@ -35,7 +47,7 @@ class Logger {
   /**
    * Emits a log record.
    *
-   * @param {Object} logRecord - The log record to emit
+   * @param {LogRecord} logRecord - The log record to emit
    */
   emit (logRecord) {
     if (this._loggerProvider._isShutdown) {
@@ -50,41 +62,50 @@ class Logger {
       logRecord.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    this._loggerProvider._processor.onEmit(logRecord, this.instrumentationLibrary, this._getSpanContext(logRecord))
+    // Set default timestamp if not provided
+    if (!logRecord.timestamp) {
+      logRecord.timestamp = Date.now() * 1_000_000
+    }
+
+    // Set observed timestamp if not provided
+    if (!logRecord.observedTimestamp) {
+      logRecord.observedTimestamp = logRecord.timestamp
+    }
+
+    // Use the provided context or get the current active context
+    const activeContext = logRecord.context || context.active()
+
+    // Extract span context from the active context for trace correlation
+    const spanContext = this._getSpanContext(activeContext)
+
+    // Create enriched log record with all expected fields
+    // Contains: severityText, severityNumber, body, timestamp, observedTimestamp,
+    // attributes, resource, instrumentationLibrary, traceId, spanId, traceFlags
+    const enrichedLogRecord = {
+      timestamp: logRecord.timestamp,
+      observedTimestamp: logRecord.observedTimestamp,
+      severityText: logRecord.severityText || '',
+      severityNumber: logRecord.severityNumber || 0,
+      body: logRecord.body || '',
+      attributes: logRecord.attributes,
+      resource: this._loggerProvider.resource,
+      instrumentationLibrary: this.instrumentationLibrary,
+      traceId: spanContext?.traceId || '',
+      spanId: spanContext?.spanId || '',
+      traceFlags: spanContext?.traceFlags || 0
+    }
+
+    this._loggerProvider._processor.onEmit(enrichedLogRecord)
   }
 
-  debug (message, attributes = {}) {
-    this._emitLog('DEBUG', SeverityNumber.DEBUG, message, attributes)
-  }
-
-  info (message, attributes = {}) {
-    this._emitLog('INFO', SeverityNumber.INFO, message, attributes)
-  }
-
-  warn (message, attributes = {}) {
-    this._emitLog('WARN', SeverityNumber.WARN, message, attributes)
-  }
-
-  error (message, attributes = {}) {
-    this._emitLog('ERROR', SeverityNumber.ERROR, message, attributes)
-  }
-
-  fatal (message, attributes = {}) {
-    this._emitLog('FATAL', SeverityNumber.FATAL, message, attributes)
-  }
-
-  _emitLog (severityText, severityNumber, message, attributes) {
-    this.emit({
-      severityText,
-      severityNumber,
-      body: message,
-      attributes,
-      timestamp: Date.now() * 1_000_000
-    })
-  }
-
-  _getSpanContext (logRecord) {
-    const activeSpan = trace.getSpan(logRecord.context || context.active())
+  /**
+   * Extracts span context from the OpenTelemetry context for trace correlation.
+   * @param {Object} activeContext - The OpenTelemetry context
+   * @returns {SpanContext|null} Span context or null if not available
+   * @private
+   */
+  _getSpanContext (activeContext) {
+    const activeSpan = trace.getSpan(activeContext)
     if (activeSpan) {
       const spanContext = activeSpan.spanContext()
       if (spanContext && spanContext.traceId && spanContext.spanId) {
