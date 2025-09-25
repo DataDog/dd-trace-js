@@ -21,8 +21,9 @@ const telemetryGood = ['complete', 'injection_forced:false']
 
 const { engines } = require('../package.json')
 const supportedRange = engines.node
-const currentVersionIsSupported = semver.satisfies(process.versions.node, supportedRange)
-
+const isNightly = process.versions.node.includes('nightly')
+const currentNodeVersion = isNightly ? process.versions.node.split('-')[0] : process.versions.node
+const currentVersionIsSupported = semver.satisfies(currentNodeVersion, supportedRange, process.version.node)
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
 delete process.env.DD_INJECTION_ENABLED
