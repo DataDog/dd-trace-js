@@ -5,7 +5,7 @@ const { describe, it } = require('tap').mocha
 
 require('./setup/core')
 
-const { getGitMetadataFromGitProperties, getGitRepositoryUrlFromGitConfig } = require('../src/git_properties')
+const { getGitMetadataFromGitProperties, getGitRepoUrlFromGitConfig, getGitHeadRef } = require('../src/git_properties')
 
 describe('git_properties', () => {
   describe('getGitMetadataFromGitProperties', () => {
@@ -56,9 +56,9 @@ git.repository_url=; rm -rf ;
     })
   })
 
-  describe('getGitRepositoryUrlFromGitConfig', () => {
+  describe('getGitRepoUrlFromGitConfig', () => {
     it('reads repository URL from .git/config', () => {
-      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+      const repositoryUrl = getGitRepoUrlFromGitConfig(`
         [remote "origin"]
         url = git@github.com:DataDog/dd-trace-js.git
       `)
@@ -66,7 +66,7 @@ git.repository_url=; rm -rf ;
     })
 
     it('filters out credentials', () => {
-      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+      const repositoryUrl = getGitRepoUrlFromGitConfig(`
         [remote "origin"]
         url = https://username:password@github.com/datadog/dd-trace-js.git
       `)
@@ -74,7 +74,7 @@ git.repository_url=; rm -rf ;
     })
 
     it('ignores other fields', () => {
-      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+      const repositoryUrl = getGitRepoUrlFromGitConfig(`
         [remote "origin"]
         url = https://github.com/DataDog/dd-trace-js.git
         fetch = +refs/heads/*:refs/remotes/origin/*
@@ -83,7 +83,7 @@ git.repository_url=; rm -rf ;
     })
 
     it('ignores badly formatted files', () => {
-      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig(`
+      const repositoryUrl = getGitRepoUrlFromGitConfig(`
         [remote "origin"]
         url = ; rm -rf ;
       `)
@@ -91,9 +91,41 @@ git.repository_url=; rm -rf ;
     })
 
     it('does not crash with empty files', () => {
-      const { repositoryUrl } = getGitRepositoryUrlFromGitConfig('')
+      const repositoryUrl = getGitRepoUrlFromGitConfig('')
       expect(repositoryUrl).to.equal(undefined)
-      const { undefinedResult } = getGitRepositoryUrlFromGitConfig(undefined)
+      const undefinedResult = getGitRepoUrlFromGitConfig(undefined)
+      expect(undefinedResult).to.equal(undefined)
+    })
+  })
+
+  describe('getGitHeadRef', () => {
+    it('reads HEAD ref from .git/HEAD', () => {
+      const headRef = getGitHeadRef(`
+        ref: refs/heads/main
+      `)
+      expect(headRef).to.equal('refs/heads/main')
+    })
+
+    it('ignores badly formatted files', () => {
+      const headRef = getGitHeadRef(`
+        ref: ; rm -rf ;
+      `)
+      expect(headRef).to.equal(undefined)
+    })
+
+    it('ignores other fields', () => {
+      const headRef = getGitHeadRef(`
+        git.commit.sha=4e7da8069bcf5ffc8023603b95653e2dc99d1c7d
+        ref: refs/heads/main
+        ref: ; rm -rf ;
+      `)
+      expect(headRef).to.equal('refs/heads/main')
+    })
+
+    it('does not crash with empty files', () => {
+      const headRef = getGitHeadRef('')
+      expect(headRef).to.equal(undefined)
+      const undefinedResult = getGitHeadRef(undefined)
       expect(undefinedResult).to.equal(undefined)
     })
   })
