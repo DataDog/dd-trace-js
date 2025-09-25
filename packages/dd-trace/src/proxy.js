@@ -244,9 +244,7 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
-        if (config.aiguard.enabled) {
-          lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
-        }
+        lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
