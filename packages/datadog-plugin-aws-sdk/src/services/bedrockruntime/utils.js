@@ -45,6 +45,8 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   let message = ''
   let inputTokens = 0
   let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
 
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
@@ -100,6 +102,8 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     if (invocationMetrics) {
       inputTokens = invocationMetrics.inputTokenCount
       outputTokens = invocationMetrics.outputTokenCount
+      cacheReadTokens = invocationMetrics.cacheReadInputTokenCount
+      cacheWriteTokens = invocationMetrics.cacheWriteInputTokenCount
     }
   }
 
@@ -107,7 +111,9 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     message,
     role: 'assistant',
     inputTokens,
-    outputTokens
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   })
 }
 
@@ -118,7 +124,9 @@ class Generation {
     choiceId = '',
     role,
     inputTokens,
-    outputTokens
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -127,7 +135,9 @@ class Generation {
     this.role = role
     this.usage = {
       inputTokens,
-      outputTokens
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens
     }
   }
 }
