@@ -12,6 +12,9 @@ const { getProtobufTypes } = require('./protobuf_loader')
  * @class OtlpTransformer
  */
 class OtlpTransformer {
+  #protobufTypes
+  #resourceAttributes
+
   /**
    * Creates a new OtlpTransformer instance.
    *
@@ -19,22 +22,9 @@ class OtlpTransformer {
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    */
   constructor (resourceAttributes, protocol) {
-    this._resourceAttributes = this._transformAttributes(resourceAttributes)
+    this.#resourceAttributes = this.#transformAttributes(resourceAttributes)
     this.protocol = protocol
-    this._protobufTypes = null
-  }
-
-  /**
-   * Gets the protobuf types, loading them lazily to reduce startup overhead.
-   * @returns {Object} Protobuf types object
-   * @private
-   */
-  _getProtobufTypes () {
-    // Delay the loading of protobuf types to reduce startup overhead
-    if (!this._protobufTypes) {
-      this._protobufTypes = getProtobufTypes()
-    }
-    return this._protobufTypes
+    this.#protobufTypes = null
   }
 
   /**
@@ -45,10 +35,23 @@ class OtlpTransformer {
   transformLogRecords (logRecords) {
     // Use the configured protocol to determine serialization format
     if (this.protocol === 'http/json') {
-      return this._transformToJson(logRecords)
+      return this.#transformToJson(logRecords)
     }
     // Default to protobuf for http/protobuf or any other protocol
-    return this._transformToProtobuf(logRecords)
+    return this.#transformToProtobuf(logRecords)
+  }
+
+  /**
+   * Gets the protobuf types, loading them lazily to reduce startup overhead.
+   * @returns {Object} Protobuf types object
+   * @private
+   */
+  #getProtobufTypes () {
+    // Delay the loading of protobuf types to reduce startup overhead
+    if (!this.#protobufTypes) {
+      this.#protobufTypes = getProtobufTypes()
+    }
+    return this.#protobufTypes
   }
 
   /**
@@ -57,16 +60,16 @@ class OtlpTransformer {
    * @returns {Buffer} Protobuf-encoded log records
    * @private
    */
-  _transformToProtobuf (logRecords) {
-    const { _logsService } = this._getProtobufTypes()
+  #transformToProtobuf (logRecords) {
+    const { _logsService } = this.#getProtobufTypes()
 
     // Create the OTLP LogsData structure
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.#transformResource(),
         scopeLogs: [{
-          scope: this._transformScope(logRecords[0]?.instrumentationLibrary),
-          logRecords: logRecords.map(record => this._transformLogRecord(record))
+          scope: this.#transformScope(logRecords[0]?.instrumentationLibrary),
+          logRecords: logRecords.map(record => this.#transformLogRecord(record))
         }]
       }]
     }
@@ -84,14 +87,14 @@ class OtlpTransformer {
    * @returns {Buffer} JSON-encoded log records
    * @private
    */
-  _transformToJson (logRecords) {
+  #transformToJson (logRecords) {
     // JSON transformation for http/json protocol
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.#transformResource(),
         scopeLogs: [{
-          scope: this._transformScope(logRecords[0]?.instrumentationLibrary),
-          logRecords: logRecords.map(record => this._transformLogRecord(record))
+          scope: this.#transformScope(logRecords[0]?.instrumentationLibrary),
+          logRecords: logRecords.map(record => this.#transformLogRecord(record))
         }]
       }]
     }
@@ -104,7 +107,7 @@ class OtlpTransformer {
    * @returns {Object} OTLP scope object
    * @private
    */
-  _transformScope (instrumentationLibrary) {
+  #transformScope (instrumentationLibrary) {
     return {
       name: instrumentationLibrary?.name || 'dd-trace-js',
       version: instrumentationLibrary?.version || '',
@@ -118,9 +121,9 @@ class OtlpTransformer {
    * @returns {Object} OTLP resource object
    * @private
    */
-  _transformResource () {
+  #transformResource () {
     return {
-      attributes: this._resourceAttributes,
+      attributes: this.#resourceAttributes,
       droppedAttributesCount: 0
     }
   }
@@ -131,20 +134,20 @@ class OtlpTransformer {
    * @returns {Object} OTLP log record object
    * @private
    */
-  _transformLogRecord (logRecord) {
+  #transformLogRecord (logRecord) {
     const timestamp = logRecord.timestamp || Date.now() * 1_000_000
 
     return {
       timeUnixNano: timestamp,
       observedTimeUnixNano: timestamp,
-      severityNumber: this._mapSeverityNumber(logRecord.severityNumber || SeverityNumber.INFO),
+      severityNumber: this.#mapSeverityNumber(logRecord.severityNumber || SeverityNumber.INFO),
       severityText: logRecord.severityText || 'INFO',
-      body: this._transformBody(logRecord.body),
-      attributes: this._transformAttributes(logRecord.attributes),
+      body: this.#transformBody(logRecord.body),
+      attributes: this.#transformAttributes(logRecord.attributes),
       droppedAttributesCount: 0,
       flags: logRecord.flags || 0,
-      traceId: this._hexToBytes(logRecord.traceId || ''),
-      spanId: this._hexToBytes(logRecord.spanId || '')
+      traceId: this.#hexToBytes(logRecord.traceId || ''),
+      spanId: this.#hexToBytes(logRecord.spanId || '')
     }
   }
 
@@ -154,8 +157,8 @@ class OtlpTransformer {
    * @returns {number} Protobuf severity number
    * @private
    */
-  _mapSeverityNumber (severityNumber) {
-    const { _severityNumber } = this._getProtobufTypes()
+  #mapSeverityNumber (severityNumber) {
+    const { _severityNumber } = this.#getProtobufTypes()
 
     if (!_severityNumber) {
       // eslint-disable-next-line no-console
@@ -163,7 +166,7 @@ class OtlpTransformer {
       return 9 // Default to INFO
     }
 
-    const severityMap = this._createSeverityMap(_severityNumber)
+    const severityMap = this.#createSeverityMap(_severityNumber)
     return severityMap[severityNumber] || _severityNumber.values.SEVERITY_NUMBER_INFO
   }
 
@@ -173,7 +176,7 @@ class OtlpTransformer {
    * @returns {Object} Severity mapping object
    * @private
    */
-  _createSeverityMap (severityEnum) {
+  #createSeverityMap (severityEnum) {
     const map = {}
     map[SeverityNumber.TRACE] = severityEnum.values.SEVERITY_NUMBER_TRACE
     map[SeverityNumber.TRACE2] = severityEnum.values.SEVERITY_NUMBER_TRACE2
@@ -208,7 +211,7 @@ class OtlpTransformer {
    * @returns {Buffer} Buffer containing the hex data
    * @private
    */
-  _hexToBytes (hexString) {
+  #hexToBytes (hexString) {
     if (!hexString || hexString.length === 0) {
       return Buffer.alloc(0)
     }
@@ -225,7 +228,7 @@ class OtlpTransformer {
    * @returns {Object} OTLP AnyValue object
    * @private
    */
-  _transformBody (body) {
+  #transformBody (body) {
     if (typeof body === 'string') {
       return {
         stringValue: body
@@ -243,7 +246,7 @@ class OtlpTransformer {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this._transformAnyValue(value)
+            value: this.#transformAnyValue(value)
           }))
         }
       }
@@ -259,13 +262,13 @@ class OtlpTransformer {
    * @returns {Object[]} Array of OTLP KeyValue objects
    * @private
    */
-  _transformAttributes (attributes) {
+  #transformAttributes (attributes) {
     if (!attributes) {
       return {}
     }
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this._transformAnyValue(value)
+      value: this.#transformAnyValue(value)
     }))
   }
 
@@ -275,7 +278,7 @@ class OtlpTransformer {
    * @returns {Object} OTLP AnyValue object
    * @private
    */
-  _transformAnyValue (value) {
+  #transformAnyValue (value) {
     if (typeof value === 'string') {
       return { stringValue: value }
     } else if (typeof value === 'number') {
@@ -288,7 +291,7 @@ class OtlpTransformer {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this._transformAnyValue(v))
+          values: value.map(v => this.#transformAnyValue(v))
         }
       }
     } else if (value && typeof value === 'object') {
@@ -296,7 +299,7 @@ class OtlpTransformer {
         kvlistValue: {
           values: Object.entries(value).map(([k, v]) => ({
             key: k,
-            value: this._transformAnyValue(v)
+            value: this.#transformAnyValue(v)
           }))
         }
       }

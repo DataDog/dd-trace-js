@@ -18,6 +18,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @class OtlpHttpLogExporter
  */
 class OtlpHttpLogExporter {
+  #telemetryTags
+
   /**
    * Creates a new OtlpHttpLogExporter instance.
    *
@@ -38,13 +40,13 @@ class OtlpHttpLogExporter {
 
     this.headers = {
       'Content-Type': contentType,
-      ...this._parseAdditionalHeaders(headers)
+      ...this.#parseAdditionalHeaders(headers)
     }
     this.timeout = timeout
     this.transformer = new OtlpTransformer(resource, protocol)
 
     // Pre-compute telemetry tags for efficiency
-    this._telemetryTags = [
+    this.#telemetryTags = [
       `protocol:${this.protocol.startsWith('grpc') ? 'grpc' : 'http'}`,
       `encoding:${this.protocol === 'http/json' ? 'json' : 'protobuf'}`
     ]
@@ -67,7 +69,7 @@ class OtlpHttpLogExporter {
 
       // Track telemetry metric for OTLP log records
       try {
-        tracerMetrics.count('otel.log_records', this._telemetryTags)
+        tracerMetrics.count('otel.log_records', this.#telemetryTags)
           .inc(logRecords.length)
       } catch (telemetryError) {
         log.debug('Error tracking OTLP log records telemetry:', telemetryError)
@@ -78,26 +80,6 @@ class OtlpHttpLogExporter {
       log.error('Error transforming log records:', error)
       resultCallback({ code: 1, error })
     }
-  }
-
-  /**
-   * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} headersString - Comma-separated key=value pairs
-   * @returns {Record<string, string>} Parsed headers object
-   * @private
-   */
-  _parseAdditionalHeaders (headersString) {
-    if (!headersString || typeof headersString !== 'string') {
-      return {}
-    }
-
-    return Object.fromEntries(
-      headersString
-        .split(',')
-        .map(pair => pair.trim().split('='))
-        .filter(([key, value]) => key && value)
-        .map(([key, value]) => [key.trim(), value.trim()])
-    )
   }
 
   /**
@@ -161,6 +143,26 @@ class OtlpHttpLogExporter {
    */
   shutdown () {
     return Promise.resolve()
+  }
+
+  /**
+   * Parses additional HTTP headers from a comma-separated string.
+   * @param {string} headersString - Comma-separated key=value pairs
+   * @returns {Record<string, string>} Parsed headers object
+   * @private
+   */
+  #parseAdditionalHeaders (headersString) {
+    if (!headersString || typeof headersString !== 'string') {
+      return {}
+    }
+
+    return Object.fromEntries(
+      headersString
+        .split(',')
+        .map(pair => pair.trim().split('='))
+        .filter(([key, value]) => key && value)
+        .map(([key, value]) => [key.trim(), value.trim()])
+    )
   }
 }
 

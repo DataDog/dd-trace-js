@@ -8,25 +8,27 @@
  * @class BatchLogRecordProcessor
  */
 class BatchLogRecordProcessor {
+  #logRecords
+  #timer
+  #batchTimeout
+  #maxExportBatchSize
+  #shutdownPromise
+
   /**
    * Creates a new BatchLogRecordProcessor instance.
    *
    * @param {OtlpHttpLogExporter} exporter - Log processor for exporting batches to Datadog Agent
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
-   * @param {number} maxQueueSize - Maximum number of log records in queue
-   * @param {number} exportTimeoutMillis - Timeout for export operations
    */
   constructor (exporter, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
     this.exporter = exporter
-    this._batchTimeout = batchTimeout
-    this._maxExportBatchSize = maxExportBatchSize
-    this._maxQueueSize = maxQueueSize
-    this._exportTimeoutMillis = exportTimeoutMillis
+    this.#batchTimeout = batchTimeout
+    this.#maxExportBatchSize = maxExportBatchSize
 
-    this._logRecords = []
-    this._timer = null
-    this._shutdownPromise = null
+    this.#logRecords = []
+    this.#timer = null
+    this.#shutdownPromise = null
     this.isShutdown = false
   }
 
@@ -41,55 +43,12 @@ class BatchLogRecordProcessor {
     }
 
     // Store the log record (already enriched by Logger.emit)
-    this._logRecords.push(logRecord)
+    this.#logRecords.push(logRecord)
 
-    if (this._logRecords.length >= this._maxExportBatchSize) {
-      this._export()
-    } else if (this._logRecords.length === 1) {
-      this._startTimer()
-    }
-  }
-
-  /**
-   * Starts the batch timeout timer.
-   * @private
-   */
-  _startTimer () {
-    if (this._timer) {
-      return
-    }
-
-    this._timer = setTimeout(() => {
-      this._export()
-    }, this._batchTimeout)
-  }
-
-  /**
-   * Exports the current batch of log records.
-   * @private
-   */
-  _export () {
-    if (this._logRecords.length === 0) {
-      return
-    }
-
-    const logRecords = this._logRecords.splice(0, this._maxExportBatchSize)
-    this._clearTimer()
-    this.exporter.export(logRecords, () => {})
-
-    if (this._logRecords.length > 0) {
-      this._startTimer()
-    }
-  }
-
-  /**
-   * Clears the batch timeout timer.
-   * @private
-   */
-  _clearTimer () {
-    if (this._timer) {
-      clearTimeout(this._timer)
-      this._timer = null
+    if (this.#logRecords.length >= this.#maxExportBatchSize) {
+      this.#export()
+    } else if (this.#logRecords.length === 1) {
+      this.#startTimer()
     }
   }
 
@@ -104,7 +63,7 @@ class BatchLogRecordProcessor {
         return
       }
 
-      this._export()
+      this.#export()
       resolve()
     })
   }
@@ -115,21 +74,64 @@ class BatchLogRecordProcessor {
    */
   shutdown () {
     if (this.isShutdown) {
-      return this._shutdownPromise || Promise.resolve()
+      return this.#shutdownPromise || Promise.resolve()
     }
 
     this.isShutdown = true
-    this._shutdownPromise = new Promise((resolve) => {
-      this._clearTimer()
+    this.#shutdownPromise = new Promise((resolve) => {
+      this.#clearTimer()
 
-      this._export()
+      this.#export()
 
       const shutdownPromises = this.exporter ? [this.exporter.shutdown()] : []
 
       Promise.all(shutdownPromises).then(resolve)
     })
 
-    return this._shutdownPromise
+    return this.#shutdownPromise
+  }
+
+  /**
+   * Starts the batch timeout timer.
+   * @private
+   */
+  #startTimer () {
+    if (this.#timer) {
+      return
+    }
+
+    this.#timer = setTimeout(() => {
+      this.#export()
+    }, this.#batchTimeout)
+  }
+
+  /**
+   * Exports the current batch of log records.
+   * @private
+   */
+  #export () {
+    if (this.#logRecords.length === 0) {
+      return
+    }
+
+    const logRecords = this.#logRecords.splice(0, this.#maxExportBatchSize)
+    this.#clearTimer()
+    this.exporter.export(logRecords, () => {})
+
+    if (this.#logRecords.length > 0) {
+      this.#startTimer()
+    }
+  }
+
+  /**
+   * Clears the batch timeout timer.
+   * @private
+   */
+  #clearTimer () {
+    if (this.#timer) {
+      clearTimeout(this.#timer)
+      this.#timer = null
+    }
   }
 }
 

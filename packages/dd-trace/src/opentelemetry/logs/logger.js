@@ -18,6 +18,8 @@ const { trace, context } = require('@opentelemetry/api')
  * @class Logger
  */
 class Logger {
+  #instrumentationLibrary
+
   /**
    * Creates a new Logger instance.
    *
@@ -30,7 +32,7 @@ class Logger {
    */
   constructor (loggerProvider, instrumentationLibrary) {
     this.loggerProvider = loggerProvider
-    this._instrumentationLibrary = {
+    this.#instrumentationLibrary = {
       name: instrumentationLibrary?.name || 'dd-trace-js',
       version: instrumentationLibrary?.version || require('../../../../../package.json').version
     }
@@ -76,7 +78,7 @@ class Logger {
     const activeContext = logRecord.context || context.active()
 
     // Extract span context from the active context for trace correlation
-    const spanContext = this._getSpanContext(activeContext)
+    const spanContext = this.#getSpanContext(activeContext)
 
     // Create enriched log record with all expected fields
     // Contains: severityText, severityNumber, body, timestamp, observedTimestamp,
@@ -90,7 +92,9 @@ class Logger {
       attributes: logRecord.attributes,
       resource: this.loggerProvider.resource,
       // Newer versions of the OpenTelemetry Logs API require instrumentationScope instead of instrumentationLibrary
-      instrumentationLibrary: logRecord.instrumentationScope || logRecord.instrumentationLibrary || this._instrumentationLibrary,
+      instrumentationLibrary: logRecord.instrumentationScope ||
+                          logRecord.instrumentationLibrary ||
+                          this.#instrumentationLibrary,
       traceId: spanContext?.traceId || '',
       spanId: spanContext?.spanId || '',
       traceFlags: spanContext?.traceFlags || 0
@@ -105,7 +109,7 @@ class Logger {
    * @returns {SpanContext|null} Span context or null if not available
    * @private
    */
-  _getSpanContext (activeContext) {
+  #getSpanContext (activeContext) {
     const activeSpan = trace.getSpan(activeContext)
     if (activeSpan) {
       const spanContext = activeSpan.spanContext()

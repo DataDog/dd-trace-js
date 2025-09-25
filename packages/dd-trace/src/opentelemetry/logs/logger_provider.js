@@ -19,6 +19,8 @@ const log = require('../../log')
  * @implements {import('@opentelemetry/api-logs').LoggerProvider}
  */
 class LoggerProvider {
+  #loggers
+
   /**
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
    *
@@ -30,7 +32,7 @@ class LoggerProvider {
   constructor (options = {}) {
     this.resource = options.resource
     this.processor = options.processor
-    this._loggers = new Map()
+    this.#loggers = new Map()
     this.isShutdown = false
   }
 
@@ -44,7 +46,7 @@ class LoggerProvider {
    */
   getLogger (nameOrOptions, version, options = {}) {
     if (this.isShutdown) {
-      return this._createNoOpLogger()
+      return this.#createNoOpLogger()
     }
 
     let name, loggerOptions
@@ -59,30 +61,10 @@ class LoggerProvider {
     const loggerVersion = loggerOptions.version || ''
     const key = `${name}@${loggerVersion}`
 
-    if (!this._loggers.has(key)) {
-      this._loggers.set(key, new Logger(this, { name, version: loggerVersion }))
+    if (!this.#loggers.has(key)) {
+      this.#loggers.set(key, new Logger(this, { name, version: loggerVersion }))
     }
-    return this._loggers.get(key)
-  }
-
-  /**
-   * Creates a no-op logger for use when the provider is shutdown.
-   * @returns {Logger} A no-op logger instance
-   * @private
-   */
-  _createNoOpLogger () {
-    return {
-      instrumentationLibrary: {
-        name: 'dd-trace-js',
-        version: ''
-      },
-      emit: () => {},
-      debug: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      fatal: () => {}
-    }
+    return this.#loggers.get(key)
   }
 
   /**
@@ -131,6 +113,26 @@ class LoggerProvider {
     }
 
     return this.processor.shutdown()
+  }
+
+  /**
+   * Creates a no-op logger for use when the provider is shutdown.
+   * @returns {Logger} A no-op logger instance
+   * @private
+   */
+  #createNoOpLogger () {
+    return {
+      instrumentationLibrary: {
+        name: 'dd-trace-js',
+        version: ''
+      },
+      emit: () => {},
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      fatal: () => {}
+    }
   }
 }
 

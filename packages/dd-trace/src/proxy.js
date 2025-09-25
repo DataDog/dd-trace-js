@@ -302,8 +302,9 @@ class Tracer extends NoopProxy {
         exporter,
         config.otelLogsBatchTimeout,
         config.otelLogsMaxExportBatchSize,
-        config.otelLogsMaxQueueSize,
-        config.otelLogsExportTimeoutMillis
+        // TODO: add support for max queue size and export timeout
+        // config.otelLogsMaxQueueSize,
+        // config.otelLogsExportTimeoutMillis
       )
 
       // Create logger provider with processor for Datadog Agent export

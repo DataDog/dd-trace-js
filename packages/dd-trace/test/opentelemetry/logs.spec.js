@@ -1,5 +1,8 @@
 'use strict'
 
+// Increase max listeners to avoid warnings in tests
+process.setMaxListeners(50)
+
 const assert = require('assert')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -20,11 +23,12 @@ describe('OpenTelemetry Logs', () => {
 
   function mockOtlpExport (validator, protocol = 'protobuf') {
     const OtlpHttpLogExporter = require('../../src/opentelemetry/logs/otlp_http_log_exporter')
+    const { _logsService } = require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()
     sinon.stub(OtlpHttpLogExporter.prototype, '_sendPayload').callsFake((payload, callback) => {
       try {
         const decoded = protocol === 'json'
           ? JSON.parse(payload.toString())
-          : require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()._logsService.decode(payload)
+          : _logsService.decode(payload)
         validator(decoded)
         callback({ code: 0 })
       } catch (error) {
@@ -117,7 +121,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const { logs } = setupTracer()
-      logs.getLogger('test-logger').emit({ 
+      logs.getLogger('test-logger').emit({
         body: 'Scope test',
         instrumentationScope: { name: 'custom-scope', version: '2.0.0' }
       })
