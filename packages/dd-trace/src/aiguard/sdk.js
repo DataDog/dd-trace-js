@@ -47,14 +47,12 @@ class AIGuard extends NoopAIGuard {
 
     let endpoint = config.aiguard?.endpoint
     if (!endpoint) {
-      endpoint = config.site === 'datad0g.com'
-        ? 'https://dd.datad0g.com/api/v2/ai-guard'
-        : `https://app.${config.site}/api/v2/ai-guard`
+      endpoint = `https://app.${config.site}/api/v2/ai-guard`
     }
     this._evaluateUrl = new URL(`${endpoint}/evaluate`)
 
     if (!config.apiKey || !config.appKey) {
-      const message = 'AIGuard: missing api and/or app key, use env DD_API_KEY and DD_APP_KEY'
+      const message = 'AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY'
       log.error(message)
       throw new Error(message)
     }
