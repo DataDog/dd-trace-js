@@ -193,13 +193,13 @@ async function execHelper (command, options) {
   if (command.startsWith('yarn')) {
     try {
       console.log('Commencing exec execution...', command) // eslint-disable-line no-console
-      await exec(command, options)
+      await execWithTimeout(command, options)
       console.log('Success it ran!') // eslint-disable-line no-console
     } catch (e) {
       console.error('We caught, commencing retry, error:', // eslint-disable-line no-console
         e, 'failed command:', command)
       try {
-        await exec(command, options)
+        await execWithTimeout(command, options)
         console.log('Success on the second try!') // eslint-disable-line no-console
       } catch {
         console.error('Retry failed, command:', command) // eslint-disable-line no-console
@@ -209,6 +209,15 @@ async function execHelper (command, options) {
     console.log('Commencing exec execution without retrying:', command) // eslint-disable-line no-console
     await exec(command, options)
   }
+}
+
+function execWithTimeout (command, options, timeoutMs = 10000) {
+  return Promise.race([
+    exec(command, options),
+    new Promise((resolve, reject) =>
+      setTimeout(() => reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`)), timeoutMs)
+    )
+  ])
 }
 
 async function createSandbox (dependencies = [], isGitRepo = false,
