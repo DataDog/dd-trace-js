@@ -18,7 +18,7 @@ class BatchLogRecordProcessor {
    * @param {number} exportTimeoutMillis - Timeout for export operations
    */
   constructor (exporter, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
-    this._exporter = exporter
+    this.exporter = exporter
     this._batchTimeout = batchTimeout
     this._maxExportBatchSize = maxExportBatchSize
     this._maxQueueSize = maxQueueSize
@@ -27,7 +27,7 @@ class BatchLogRecordProcessor {
     this._logRecords = []
     this._timer = null
     this._shutdownPromise = null
-    this._isShutdown = false
+    this.isShutdown = false
   }
 
   /**
@@ -36,7 +36,7 @@ class BatchLogRecordProcessor {
    * @param {Object} logRecord - The enriched log record with trace correlation and metadata
    */
   onEmit (logRecord) {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       return
     }
 
@@ -75,7 +75,7 @@ class BatchLogRecordProcessor {
 
     const logRecords = this._logRecords.splice(0, this._maxExportBatchSize)
     this._clearTimer()
-    this._exporter.export(logRecords, () => {})
+    this.exporter.export(logRecords, () => {})
 
     if (this._logRecords.length > 0) {
       this._startTimer()
@@ -99,7 +99,7 @@ class BatchLogRecordProcessor {
    */
   forceFlush () {
     return new Promise((resolve) => {
-      if (this._isShutdown) {
+      if (this.isShutdown) {
         resolve()
         return
       }
@@ -114,17 +114,17 @@ class BatchLogRecordProcessor {
    * @returns {Promise<void>} Promise that resolves when shutdown is complete
    */
   shutdown () {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       return this._shutdownPromise || Promise.resolve()
     }
 
-    this._isShutdown = true
+    this.isShutdown = true
     this._shutdownPromise = new Promise((resolve) => {
       this._clearTimer()
 
       this._export()
 
-      const shutdownPromises = this._exporter ? [this._exporter.shutdown()] : []
+      const shutdownPromises = this.exporter ? [this.exporter.shutdown()] : []
 
       Promise.all(shutdownPromises).then(resolve)
     })

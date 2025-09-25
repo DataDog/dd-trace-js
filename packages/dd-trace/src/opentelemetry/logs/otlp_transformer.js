@@ -20,7 +20,7 @@ class OtlpTransformer {
    */
   constructor (resourceAttributes, protocol) {
     this._resourceAttributes = this._transformAttributes(resourceAttributes)
-    this._protocol = protocol
+    this.protocol = protocol
     this._protobufTypes = null
   }
 
@@ -44,7 +44,7 @@ class OtlpTransformer {
    */
   transformLogRecords (logRecords) {
     // Use the configured protocol to determine serialization format
-    if (this._protocol === 'http/json') {
+    if (this.protocol === 'http/json') {
       return this._transformToJson(logRecords)
     }
     // Default to protobuf for http/protobuf or any other protocol

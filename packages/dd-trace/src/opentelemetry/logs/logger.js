@@ -29,8 +29,8 @@ class Logger {
    * @param {number} [instrumentationLibrary.dropped_attributes_count] - Number of dropped attributes
    */
   constructor (loggerProvider, instrumentationLibrary) {
-    this._loggerProvider = loggerProvider
-    this.instrumentationLibrary = {
+    this.loggerProvider = loggerProvider
+    this._instrumentationLibrary = {
       name: instrumentationLibrary?.name || 'dd-trace-js',
       version: instrumentationLibrary?.version || require('../../../../../package.json').version
     }
@@ -41,7 +41,7 @@ class Logger {
    * @returns {Resource} The resource attributes
    */
   get resource () {
-    return this._loggerProvider.resource
+    return this.loggerProvider.resource
   }
 
   /**
@@ -50,11 +50,11 @@ class Logger {
    * @param {LogRecord} logRecord - The log record to emit
    */
   emit (logRecord) {
-    if (this._loggerProvider._isShutdown) {
+    if (this.loggerProvider.isShutdown) {
       return
     }
 
-    if (!this._loggerProvider._processor) {
+    if (!this.loggerProvider.processor) {
       return
     }
 
@@ -88,14 +88,15 @@ class Logger {
       severityNumber: logRecord.severityNumber || 0,
       body: logRecord.body || '',
       attributes: logRecord.attributes,
-      resource: this._loggerProvider.resource,
-      instrumentationLibrary: this.instrumentationLibrary,
+      resource: this.loggerProvider.resource,
+      // Newer versions of the OpenTelemetry Logs API require instrumentationScope instead of instrumentationLibrary
+      instrumentationLibrary: logRecord.instrumentationScope || logRecord.instrumentationLibrary || this._instrumentationLibrary,
       traceId: spanContext?.traceId || '',
       spanId: spanContext?.spanId || '',
       traceFlags: spanContext?.traceFlags || 0
     }
 
-    this._loggerProvider._processor.onEmit(enrichedLogRecord)
+    this.loggerProvider.processor.onEmit(enrichedLogRecord)
   }
 
   /**

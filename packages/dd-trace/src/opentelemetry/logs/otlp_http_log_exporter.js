@@ -28,25 +28,25 @@ class OtlpHttpLogExporter {
    * @param {Object} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
-    this._url = url
-    this._protocol = protocol
+    this.url = url
+    this.protocol = protocol
 
     // Set Content-Type based on protocol
-    const contentType = this._protocol === 'http/json'
+    const contentType = this.protocol === 'http/json'
       ? 'application/json'
       : 'application/x-protobuf'
 
-    this._headers = {
+    this.headers = {
       'Content-Type': contentType,
       ...this._parseAdditionalHeaders(headers)
     }
-    this._timeout = timeout
-    this._transformer = new OtlpTransformer(resource, protocol)
+    this.timeout = timeout
+    this.transformer = new OtlpTransformer(resource, protocol)
 
     // Pre-compute telemetry tags for efficiency
     this._telemetryTags = [
-      `protocol:${this._protocol.startsWith('grpc') ? 'grpc' : 'http'}`,
-      `encoding:${this._protocol === 'http/json' ? 'json' : 'protobuf'}`
+      `protocol:${this.protocol.startsWith('grpc') ? 'grpc' : 'http'}`,
+      `encoding:${this.protocol === 'http/json' ? 'json' : 'protobuf'}`
     ]
   }
 
@@ -63,7 +63,7 @@ class OtlpHttpLogExporter {
     }
 
     try {
-      const payload = this._transformer.transformLogRecords(logRecords)
+      const payload = this.transformer.transformLogRecords(logRecords)
 
       // Track telemetry metric for OTLP log records
       try {
@@ -107,7 +107,7 @@ class OtlpHttpLogExporter {
    * @private
    */
   _sendPayload (payload, resultCallback) {
-    const url = new URL(this._url)
+    const url = new URL(this.url)
     const isHttps = url.protocol === 'https:'
     const client = isHttps ? https : http
 
@@ -117,10 +117,10 @@ class OtlpHttpLogExporter {
       path: url.pathname + url.search,
       method: 'POST',
       headers: {
-        ...this._headers,
+        ...this.headers,
         'Content-Length': payload.length
       },
-      timeout: this._timeout
+      timeout: this.timeout
     }
 
     const req = client.request(options, (res) => {

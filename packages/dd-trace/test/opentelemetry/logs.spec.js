@@ -56,7 +56,7 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Core Functionality', () => {
-    it('exports logs with complete OTLP structure and trace correlation', () => {
+    it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded) => {
         const { resource } = decoded.resourceLogs[0]
         const resourceAttrs = {}
@@ -65,6 +65,7 @@ describe('OpenTelemetry Logs', () => {
 
         const { scope, logRecords } = decoded.resourceLogs[0].scopeLogs[0]
         assert.strictEqual(scope.name, 'test-logger')
+        assert.strictEqual(scope.version, '1.0.0')
 
         const log = logRecords[0]
         assert.strictEqual(log.severityText, 'INFO')
@@ -76,7 +77,7 @@ describe('OpenTelemetry Logs', () => {
       const { logs } = setupTracer()
       const { trace, context } = require('@opentelemetry/api')
 
-      logs.getLogger('test-logger').emit({
+      logs.getLogger('test-logger', '1.0.0').emit({
         severityText: 'INFO',
         body: 'Test message',
         context: trace.setSpan(context.active(), createMockSpan()),
@@ -106,23 +107,37 @@ describe('OpenTelemetry Logs', () => {
     it('handles shutdown gracefully', () => {
       const { loggerProvider } = setupTracer()
       loggerProvider.shutdown()
-      assert.strictEqual(loggerProvider._isShutdown, true)
+      assert.strictEqual(loggerProvider.isShutdown, true)
+    })
+
+    it('supports instrumentationScope for compatibility', () => {
+      mockOtlpExport((decoded) => {
+        const log = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(log.body.stringValue, 'Scope test')
+      })
+
+      const { logs } = setupTracer()
+      logs.getLogger('test-logger').emit({ 
+        body: 'Scope test',
+        instrumentationScope: { name: 'custom-scope', version: '2.0.0' }
+      })
     })
   })
 
   describe('Configuration', () => {
-    it('uses default protobuf protocol when no environment variables set', () => {
+    it('uses default protobuf protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
       delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/protobuf')
+      assert(loggerProvider.processor)
+      assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
     })
 
     it('prioritizes logs-specific protocol over generic protocol', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
       process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/json')
+      assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/json')
     })
 
     it('warns and falls back to protobuf when gRPC protocol is set', () => {
@@ -130,7 +145,7 @@ describe('OpenTelemetry Logs', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
 
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider._processor._exporter._transformer._protocol, 'http/protobuf')
+      assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
       assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
 
       logMock.restore()
@@ -154,25 +169,25 @@ describe('OpenTelemetry Logs', () => {
     it('configures custom OTLP endpoint', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider._processor._exporter._url, 'http://custom:4318/v1/logs')
+      assert.strictEqual(loggerProvider.processor.exporter.url, 'http://custom:4318/v1/logs')
     })
 
     it('configures OTLP headers from logs-specific environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'api-key=secret,env=prod'
       const { loggerProvider } = setupTracer()
-      const exporter = loggerProvider._processor._exporter
-      assert.strictEqual(exporter._headers['api-key'], 'secret')
-      assert.strictEqual(exporter._headers.env, 'prod')
+      const exporter = loggerProvider.processor.exporter
+      assert.strictEqual(exporter.headers['api-key'], 'secret')
+      assert.strictEqual(exporter.headers.env, 'prod')
     })
 
     it('prioritizes logs-specific headers over generic OTLP headers', () => {
       process.env.OTEL_EXPORTER_OTLP_HEADERS = 'generic=value,shared=generic'
       process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'logs-specific=value,shared=logs'
       const { loggerProvider } = setupTracer()
-      const exporter = loggerProvider._processor._exporter
-      assert.strictEqual(exporter._headers['logs-specific'], 'value')
-      assert.strictEqual(exporter._headers.shared, 'logs')
-      assert.strictEqual(exporter._headers.generic, undefined)
+      const exporter = loggerProvider.processor.exporter
+      assert.strictEqual(exporter.headers['logs-specific'], 'value')
+      assert.strictEqual(exporter.headers.shared, 'logs')
+      assert.strictEqual(exporter.headers.generic, undefined)
     })
   })
 

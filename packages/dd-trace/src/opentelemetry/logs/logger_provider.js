@@ -29,9 +29,9 @@ class LoggerProvider {
    */
   constructor (options = {}) {
     this.resource = options.resource
-    this._processor = options.processor
+    this.processor = options.processor
     this._loggers = new Map()
-    this._isShutdown = false
+    this.isShutdown = false
   }
 
   /**
@@ -43,7 +43,7 @@ class LoggerProvider {
    * @returns {Logger} Logger instance
    */
   getLogger (nameOrOptions, version, options = {}) {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       return this._createNoOpLogger()
     }
 
@@ -89,7 +89,7 @@ class LoggerProvider {
    * Registers this logger provider as the global provider.
    */
   register () {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       log.warn('Cannot register after shutdown')
       return
     }
@@ -104,15 +104,15 @@ class LoggerProvider {
    * @returns {Promise<void>} Promise that resolves when flush is complete
    */
   forceFlush () {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       return Promise.reject(new Error('LoggerProvider is shutdown'))
     }
 
-    if (!this._processor) {
+    if (!this.processor) {
       return Promise.resolve()
     }
 
-    return this._processor.forceFlush()
+    return this.processor.forceFlush()
   }
 
   /**
@@ -120,17 +120,17 @@ class LoggerProvider {
    * @returns {Promise<void>} Promise that resolves when shutdown is complete
    */
   shutdown () {
-    if (this._isShutdown) {
+    if (this.isShutdown) {
       return Promise.resolve()
     }
 
-    this._isShutdown = true
+    this.isShutdown = true
 
-    if (!this._processor) {
+    if (!this.processor) {
       return Promise.resolve()
     }
 
-    return this._processor.shutdown()
+    return this.processor.shutdown()
   }
 }
 
