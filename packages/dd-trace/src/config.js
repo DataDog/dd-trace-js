@@ -1045,19 +1045,13 @@ class Config {
 
     this._setBoolean(opts, 'aiguard.enabled', options.aiguard?.enabled)
     this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
-    if (options.aiguard?.timeout) {
-      opts['aiguard.timeout'] = maybeInt(options.aiguard.timeout)
-      this._optsUnprocessed['aiguard.timeout'] = options.aiguard.timeout
-    }
-    if (options.experimental?.aiguard?.maxMessagesLength) {
-      opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental.aiguard.maxMessagesLength)
-      this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental.aiguard.maxMessagesLength
-    }
-    if (options.experimental?.aiguard?.maxContentSize) {
-      opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental.aiguard.maxContentSize)
-      this._optsUnprocessed['experimental.aiguard.maxContentSize'] =
-        options.experimental.aiguard.maxContentSize
-    }
+    opts['aiguard.timeout'] = maybeInt(options.aiguard?.timeout)
+    this._optsUnprocessed['aiguard.timeout'] = options.aiguard?.timeout
+    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
+    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
+    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
+
     this._setString(opts, 'appKey', options.appKey)
   }
 
