@@ -41,7 +41,7 @@ class LLMObsPlugin extends TracingPlugin {
 
       ctx.llmobs = {} // initialize context-based namespace
       llmobsStorage.enterWith({ ...parentStore, span })
-      ctx.llmobs.parent = parentStore?.span
+      ctx.llmobs.parent = parentStore
 
       this._tagger.registerLLMObsSpan(span, {
         parent: parentStore?.span,
