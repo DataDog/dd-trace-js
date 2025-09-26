@@ -212,14 +212,23 @@ async function execHelper (command, options) {
 }
 
 function execWithTimeout (command, options, timeoutMs = 30000) {
-  return Promise.race([
-    exec(command, options),
-    new Promise((resolve, reject) =>
-      setTimeout(() => reject(new Error(`Command timed out after ${timeoutMs}ms: ${command}`)), timeoutMs)
-    )
-  ])
-}
+  const execPromise = exec(command, options)
+  const timeoutPromise = new Promise((resolve, reject) =>
+    setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+  )
 
+  return Promise.allSettled([execPromise, timeoutPromise]).then(results => {
+    const [execResult, timeoutResult] = results
+
+    if (execResult.status === 'rejected') {
+      throw execResult.reason
+    }
+
+    if (timeoutResult.status === 'rejected') {
+      throw timeoutResult.reason
+    }
+  })
+}
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
@@ -498,7 +507,7 @@ function setShouldKill (value) {
   })
 }
 
-/* eslint-disable n/no-unsupported-features/node-builtins */
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
@@ -536,7 +545,6 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
     }
   }
 }
-/* eslint-enable n/no-unsupported-features/node-builtins */
 
 function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
