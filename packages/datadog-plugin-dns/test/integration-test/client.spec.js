@@ -19,7 +19,7 @@ describe('esm', () => {
     this.timeout(20000)
     sandbox = await createSandbox([], false, [
       './packages/datadog-plugin-dns/test/integration-test/*'])
-    variants = varySandbox(sandbox, 'server.mjs', null, 'dns', 'lookup')
+    variants = varySandbox(sandbox, 'server.mjs', 'dns', 'lookup')
   })
 
   after(async () => {
@@ -36,8 +36,8 @@ describe('esm', () => {
   })
 
   context('dns', () => {
-    for (const variant of ['default', 'star', 'destructure']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)
