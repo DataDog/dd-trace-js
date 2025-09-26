@@ -5,7 +5,8 @@ const childProcess = require('child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const fs = require('fs')
+const { existsSync, readFileSync, unlinkSync } = require('fs')
+const fs = require('fs/promises')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
@@ -218,7 +219,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const out = path.join(folder, `dd-trace-${version}.tgz`)
   const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
-  fs.mkdirSync(folder)
+  await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
@@ -250,14 +251,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
-    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-    if (!fs.existsSync(localRemotePath)) {
+    if (!existsSync(localRemotePath)) {
       await exec(`git init --bare ${localRemotePath}`)
     }
 
@@ -333,7 +334,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   const cleanup = function () {
     let msgs
     try {
-      msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
+      msgs = readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
     } catch (e) {
       if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
@@ -356,7 +357,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
       }
       msgs[i] = [telemetryType, parsed]
     }
-    fs.unlinkSync(process.env.FORWARDER_OUT)
+    unlinkSync(process.env.FORWARDER_OUT)
     delete process.env.FORWARDER_OUT
     delete process.env.DD_TELEMETRY_FORWARDER_PATH
     return msgs
