@@ -312,13 +312,10 @@ class Tracer extends NoopProxy {
     )
 
     // Create logger provider with processor for Datadog Agent export
-    const loggerProvider = new LoggerProvider({
-      resource: { attributes: resourceAttributes },
-      processor
-    })
+    const loggerProvider = new LoggerProvider({ processor })
 
     // Register the logger provider globally with OpenTelemetry API
-    logs.setGlobalLoggerProvider(loggerProvider)
+    loggerProvider.register()
   }
 
   profilerStarted () {

@@ -656,7 +656,7 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_TIMEOUT,
-      OTEL_EXPORTERS_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTERS_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
@@ -679,7 +679,7 @@ class Config {
     this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
     // Only set if there's a custom URL, otherwise let calc phase handle the default
-    const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTERS_OTLP_ENDPOINT
+    const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTER_OTLP_ENDPOINT
     if (customOtelLogsUrl) {
       this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
     }

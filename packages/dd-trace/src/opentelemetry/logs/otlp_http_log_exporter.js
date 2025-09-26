@@ -64,8 +64,16 @@ class OtlpHttpLogExporter {
     }
 
     const payload = this.transformer.transformLogRecords(logRecords)
-    this._sendPayload(payload, resultCallback)
+    this.#sendPayload(payload, resultCallback)
     tracerMetrics.count('otel.log_records', this.#telemetryTags).inc(logRecords.length)
+  }
+
+  /**
+   * Shuts down the exporter.
+   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   */
+  shutdown () {
+    return Promise.resolve()
   }
 
   /**
@@ -74,7 +82,7 @@ class OtlpHttpLogExporter {
    * @param {Function} resultCallback - Callback for the result
    * @private
    */
-  _sendPayload (payload, resultCallback) {
+  #sendPayload (payload, resultCallback) {
     const url = new URL(this.url)
 
     const options = {
@@ -119,14 +127,6 @@ class OtlpHttpLogExporter {
 
     req.write(payload)
     req.end()
-  }
-
-  /**
-   * Shuts down the exporter.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
-   */
-  shutdown () {
-    return Promise.resolve()
   }
 
   /**

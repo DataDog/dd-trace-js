@@ -1,10 +1,11 @@
 'use strict'
 const { logs } = require('@opentelemetry/api-logs')
+const { context } = require('@opentelemetry/api')
 const Logger = require('./logger')
 const log = require('../../log')
+const ContextManager = require('../context_manager')
 
 /**
- * @typedef {import('@opentelemetry/resources').Resource} Resource
  * @typedef {import('@opentelemetry/api-logs').Logger} Logger
  * @typedef {import('./batch_log_processor')} BatchLogRecordProcessor
  */
@@ -20,19 +21,19 @@ const log = require('../../log')
  */
 class LoggerProvider {
   #loggers
+  #contextManager
 
   /**
    * Creates a new LoggerProvider instance with a single processor for Datadog Agent export.
    *
    * @param {Object} [options] - LoggerProvider options
-   * @param {Resource} [options.resource] - Resource attributes
    * @param {BatchLogRecordProcessor} [options.processor] - Single LogRecordProcessor instance for
    *   exporting logs to Datadog Agent
    */
   constructor (options = {}) {
-    this.resource = options.resource
     this.processor = options.processor
     this.#loggers = new Map()
+    this.#contextManager = new ContextManager()
     this.isShutdown = false
   }
 
@@ -75,7 +76,8 @@ class LoggerProvider {
       log.warn('Cannot register after shutdown')
       return
     }
-
+    // Set context manager, this is required to correlate logs to spans
+    context.setGlobalContextManager(this.#contextManager)
     if (!logs.setGlobalLoggerProvider(this)) {
       logs.getLoggerProvider().setDelegate(this)
     }
@@ -83,7 +85,7 @@ class LoggerProvider {
 
   /**
    * Forces a flush of all pending log records.
-   * @returns {Promise<void>} Promise that resolves when flush is complete
+   * @returns {Promise<void>} Promise that resolves when flush is n ssue cncomplete
    */
   forceFlush () {
     if (this.isShutdown) {
