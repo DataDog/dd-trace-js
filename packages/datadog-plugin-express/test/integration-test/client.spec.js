@@ -22,7 +22,7 @@ describe('esm', () => {
       this.timeout(50000)
       sandbox = await createSandbox([`'express@${version}'`], false,
         ['./packages/datadog-plugin-express/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'express')
+      variants = varySandbox(sandbox, 'server.mjs', 'express')
     })
 
     after(async function () {
@@ -38,9 +38,9 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of ['default', 'star', 'destructure']) {
+    for (const variant of varySandbox.VARIANTS) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
-        it('is instrumented', async () => {
+        it(`is instrumented loaded with ${variant}`, async () => {
           proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
           const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2
           const whichMiddleware = semver.intersects(version, '<5.0.0')
