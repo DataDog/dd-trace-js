@@ -21,7 +21,7 @@ describe('AIGuard SDK', () => {
     aiguard: {
       enabled: true,
       endpoint: 'https://aiguard.com',
-      timeout: 10e3
+      timeout: 10_000
     },
     experimental: {
       aiguard: {
