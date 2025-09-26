@@ -11,8 +11,8 @@ on:
       runNightly:
         description: 'Whether to run nightly tests'
         required: false
-        default: false
-        type: boolean
+        default: 'false'
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}

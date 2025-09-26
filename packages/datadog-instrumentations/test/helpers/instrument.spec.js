@@ -3,8 +3,6 @@
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
-const { executionAsyncId } = require('node:async_hooks')
-
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
 
