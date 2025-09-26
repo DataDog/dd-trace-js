@@ -318,7 +318,7 @@ function varySandbox (sandbox, filename, variants, namedVariant, packageName = v
   const variantFilenames = /** @type {Variants} */ ({})
 
   for (const [variant, value] of Object.entries(variants)) {
-    const variantFilename = `${prefix}-${variant}.${suffix}`
+    const variantFilename = `${prefix}-${variant}${suffix}`
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
     if (variant !== 'default') {
