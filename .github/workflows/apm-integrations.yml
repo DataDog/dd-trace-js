@@ -467,7 +467,7 @@ jobs:
       - uses: ./.github/actions/node/nightly
         if: inputs.runNightly == 'true'
       - run: yarn test:plugins:ci
-        if: inputs.runNightly == true'
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
