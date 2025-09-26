@@ -14,16 +14,28 @@ let isGitEnabled = isTrue(getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_C
 const GIT_CACHE_DIR = getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR') ||
   path.join(os.tmpdir(), 'dd-trace-git-cache')
 
-if (isGitEnabled) {
+function ensureCacheDir () {
+  if (!isGitEnabled) return false
+
   try {
-    if (!fs.existsSync(GIT_CACHE_DIR)) {
+    if (fs.existsSync(GIT_CACHE_DIR)) {
+      const stats = fs.statSync(GIT_CACHE_DIR)
+      if (!stats.isDirectory()) {
+        throw new Error(`Cache directory path exists but is not a directory: ${GIT_CACHE_DIR}`)
+      }
+    } else {
       fs.mkdirSync(GIT_CACHE_DIR, { recursive: true })
     }
+    return true
   } catch (err) {
     log.error('Failed to create git cache directory, disabling cache', err)
     isGitEnabled = false
+    return false
   }
 }
+
+// Initialize cache directory at module load time
+ensureCacheDir()
 
 function getCacheKey (cmd, flags) {
   // Create a hash of the command and flags to use as cache key
@@ -54,6 +66,9 @@ function getCache (cacheKey) {
 
 function setCache (cacheKey, result) {
   if (!isGitEnabled) return
+
+  // Ensure cache directory exists
+  if (!ensureCacheDir()) return
 
   try {
     const cacheFilePath = getCacheFilePath(cacheKey)
@@ -108,6 +123,7 @@ function cachedExec (cmd, flags, options) {
 }
 
 module.exports = {
-  cachedExec,
   getCacheKey,
+  getCacheFilePath,
+  cachedExec
 }
