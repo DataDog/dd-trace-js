@@ -126,8 +126,6 @@ module.exports = {
   otelLogsTimeout: 10_000,
   otelLogsBatchTimeout: 5000,
   otelLogsMaxExportBatchSize: 512,
-  otelLogsMaxQueueSize: 2048,
-  otelLogsExportTimeoutMillis: 30_000,
   lookup: undefined,
   inferredProxyServicesEnabled: false,
   memcachedCommandEnabled: false,

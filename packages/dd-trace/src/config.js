@@ -660,9 +660,7 @@ class Config {
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTERS_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
-      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
-      OTEL_BSP_MAX_QUEUE_SIZE,
-      OTEL_BSP_EXPORT_TIMEOUT
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -698,8 +696,6 @@ class Config {
     this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT || OTEL_EXPORTERS_OTLP_TIMEOUT)
     this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
     this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
-    this._setUnit(env, 'otelLogsMaxQueueSize', OTEL_BSP_MAX_QUEUE_SIZE)
-    this._setUnit(env, 'otelLogsExportTimeoutMillis', OTEL_BSP_EXPORT_TIMEOUT)
 
     this._setBoolean(env, 'apmTracingEnabled', coalesce(
       DD_APM_TRACING_ENABLED,
