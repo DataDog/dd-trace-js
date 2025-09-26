@@ -158,11 +158,11 @@ class Tracer extends NoopProxy {
         }
 
         if (config.flaggingProvider.enabled) {
-          rc.setProductHandler('FFE_FLAGS', (action, conf, configId) => {
+          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
             // Feed UFC config directly to flagging provider
             if (this.flaggingProvider) {
               if (action === 'apply' || action === 'modify') {
-                this.flaggingProvider._setConfiguration(conf)
+                this.flaggingProvider._setConfiguration(conf.ufc)
               } else if (action === 'unapply') {
                 // For now, just pass empty config
                 this.flaggingProvider._setConfiguration({})

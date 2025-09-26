@@ -124,7 +124,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
+          config: { ufc: ufcPayloads.testBooleanAndStringFlags }
         })
 
         // Wait for RC delivery then evaluate flags
@@ -205,7 +205,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: ufcPayloads.testBooleanAndStringFlags
+          config: { ufc: ufcPayloads.testBooleanAndStringFlags }
         })
 
         setTimeout(async () => {
@@ -271,7 +271,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: ufcPayloads.simpleStringFlagForAck
+        config: { ufc: ufcPayloads.simpleStringFlagForAck }
       })
 
       // Trigger request to start remote config polling
@@ -322,7 +322,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: ufcPayloads.simpleBooleanFlag
+        config: { ufc: ufcPayloads.simpleBooleanFlag }
       })
 
       axios.get('/').catch(done)
