@@ -22,6 +22,12 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 // This is set by the setShouldKill function
 let shouldKill
 
+/**
+ * @param {string} filename
+ * @param {string} cwd
+ * @param {string|function} expectedOut
+ * @param {string} expectedSource
+ */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
@@ -59,7 +65,14 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 // This is set by the useSandbox function
 let sandbox
 
-// This _must_ be used with the useSandbox function
+/**
+ * This _must_ be used with the useSandbox function
+ *
+ * @param {string} filename
+ * @param {string|function} expectedOut
+ * @param {string[]} expectedTelemetryPoints
+ * @param {string} expectedSource
+ */
 async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
@@ -75,6 +88,11 @@ async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetr
   }
 }
 
+/**
+ * @param {number} pid
+ * @param {[string, { metadata: Record<string, unknown>, points: { name: string, tags: string[] }[] }][]} msgs
+ * @param {string[]} expectedTelemetryPoints
+ */
 function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
   let points = []
   for (const [telemetryType, data] of msgs) {
@@ -92,9 +110,13 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     return a === b ? 0 : a < b ? -1 : 1
   }
 
+  /**
+   * @param {...string} args
+   * @returns {{ name: string, tags: string[] }[]}
+   */
   function getPoints (...args) {
     const expectedPoints = []
-    let currentPoint = {}
+    let currentPoint = /** @type {{ name?: string, tags?: string[] }} */ ({})
     for (const arg of args) {
       if (!currentPoint.name) {
         currentPoint.name = 'library_entrypoint.' + arg
@@ -107,6 +129,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
     return expectedPoints
   }
 
+  /**
+   * @param {Record<string, unknown>} actualMetadata
+   * @param {number} pid
+   */
   function assertMetadata (actualMetadata, pid) {
     const expectedBasicMetadata = {
       language_name: 'nodejs',
@@ -168,7 +194,7 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
         if (code !== 0) {
           return reject(new Error(`Process exited with status code ${code}.`))
         }
-        resolve()
+        resolve(undefined)
       })
 
     proc.stdout.on('data', data => {
@@ -189,6 +215,12 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   })
 }
 
+/**
+ * @param {string[]} dependencies
+ * @param {boolean} isGitRepo
+ * @param {string[]} integrationTestsPaths
+ * @param {string} [followUpCommand]
+ */
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
@@ -318,6 +350,9 @@ function varySandbox (sandbox, filename, variants, bindingName, namedVariant, pa
   return variantFilenames
 }
 
+/**
+ * @param {boolean} shouldExpectTelemetryPoints
+ */
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
@@ -366,6 +401,9 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   return cleanup
 }
 
+/**
+ * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} url
+ */
 async function curl (url) {
   if (url !== null && typeof url === 'object') {
     if (url.then) {
@@ -387,12 +425,23 @@ async function curl (url) {
   })
 }
 
+/**
+ * @param {FakeAgent} agent
+ * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
+ * @param {function} fn
+ * @param {number} [timeout]
+ * @param {number} [expectedMessageCount]
+ * @param {boolean} [resolveAtFirstSuccess]
+ */
 async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMessageCount, resolveAtFirstSuccess) {
   const resultPromise = agent.assertMessageReceived(fn, timeout, expectedMessageCount, resolveAtFirstSuccess)
   await curl(procOrUrl)
   return resultPromise
 }
 
+/**
+ * @param {number} port
+ */
 function getCiVisAgentlessConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
@@ -407,6 +456,9 @@ function getCiVisAgentlessConfig (port) {
   }
 }
 
+/**
+ * @param {number} port
+ */
 function getCiVisEvpProxyConfig (port) {
   // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
@@ -420,15 +472,26 @@ function getCiVisEvpProxyConfig (port) {
   }
 }
 
+/**
+ * @param {object[][]} spans
+ * @param {string} name
+ */
 function checkSpansForServiceName (spans, name) {
   return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
 }
 
+/**
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {function} [stdioHandler]
+ * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ */
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
-  let env = {
+  let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: agentPort
-  }
+    DD_TRACE_AGENT_PORT: String(agentPort)
+  })
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
@@ -436,6 +499,9 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   }, stdioHandler)
 }
 
+/**
+ * @param {Record<string, string|undefined>} env
+ */
 function useEnv (env) {
   before(() => {
     Object.assign(process.env, env)
@@ -447,6 +513,9 @@ function useEnv (env) {
   })
 }
 
+/**
+ * @param {unknown[]} args
+ */
 function useSandbox (...args) {
   before(async () => {
     sandbox = await createSandbox(...args)
@@ -458,10 +527,16 @@ function useSandbox (...args) {
   })
 }
 
+/**
+ * @returns {string}
+ */
 function sandboxCwd () {
   return sandbox.folder
 }
 
+/**
+ * @param {boolean} value
+ */
 function setShouldKill (value) {
   before(() => {
     shouldKill = value
@@ -471,6 +546,7 @@ function setShouldKill (value) {
   })
 }
 
+// @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
@@ -510,6 +586,10 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
   }
 }
 
+/**
+ * @param {string} actual
+ * @param {string} [msg]
+ */
 function assertUUID (actual, msg = 'not a valid UUID') {
   assert.match(actual, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/, msg)
 }

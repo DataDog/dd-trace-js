@@ -137,10 +137,10 @@ moduleTypes.forEach(({
       // Install cypress' browser before running the tests
       await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
 
-      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
+      await /** @type {Promise<void>} */ (new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
         resolve()
-      }))
+      })))
     })
 
     after(async () => {
