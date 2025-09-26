@@ -119,6 +119,13 @@ module.exports = {
   isTestManagementEnabled: false,
   isImpactedTestsEnabled: false,
   logInjection: true,
+  otelLogsEnabled: false,
+  otelLogsUrl: undefined, // Will be computed using agent host
+  otelLogsHeaders: '',
+  otelLogsProtocol: 'http/protobuf',
+  otelLogsTimeout: 10_000,
+  otelLogsBatchTimeout: 5000,
+  otelLogsMaxExportBatchSize: 512,
   lookup: undefined,
   inferredProxyServicesEnabled: false,
   memcachedCommandEnabled: false,

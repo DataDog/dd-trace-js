@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package opentelemetry.proto.common.v1;
+
+option go_package = "go.opentelemetry.io/collector/pdata/pcommon";
+
+// AnyValue is used to represent any type of attribute value. AnyValue may contain a
+// simple scalar or an arbitrary complex structure including arrays and nested objects.
+// AnyValue is a oneof type and can be one of the following:
+// - string_value: A string value.
+// - bool_value: A boolean value.
+// - int_value: An integer value.
+// - double_value: A double value.
+// - array_value: An array of AnyValue values.
+// - kvlist_value: A key-value list of AnyValue values.
+// - bytes_value: A bytes value.
+message AnyValue {
+  oneof value {
+    string string_value = 1;
+    bool bool_value = 2;
+    int64 int_value = 3;
+    double double_value = 4;
+    ArrayValue array_value = 5;
+    KeyValueList kvlist_value = 6;
+    bytes bytes_value = 7;
+  }
+}
+
+// ArrayValue is a list of AnyValue messages. We need ArrayValue as a message
+// since oneof in AnyValue does not allow repeated fields.
+message ArrayValue {
+  // Array of values. The array may be empty (contain 0 elements).
+  repeated AnyValue values = 1;
+}
+
+// KeyValueList is a list of KeyValue messages. We need KeyValueList as a message
+// since oneof in AnyValue does not allow repeated fields.
+message KeyValueList {
+  // A collection of key/value pairs of key-value pairs. The list may be empty (may
+  // contain 0 elements).
+  repeated KeyValue values = 1;
+}
+
+// KeyValue is a key-value pair that is used to store metadata about the telemetry
+// record.
+message KeyValue {
+  string key = 1;
+  AnyValue value = 2;
+}
+
+// InstrumentationScope is a message representing the instrumentation scope information
+// such as the fully qualified name and version.
+message InstrumentationScope {
+  // An empty instrumentation scope name means the name is unknown.
+  string name = 1;
+  string version = 2;
+  repeated KeyValue attributes = 3;
+  uint32 dropped_attributes_count = 4;
+}
