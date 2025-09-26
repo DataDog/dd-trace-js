@@ -5,8 +5,11 @@ on:
 
 jobs:
   nightly:
-    runs-on: ubumtue-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: ./.github/workflows/apm-integrations
+        with:
+          runNightly: true
+      - uses: ./.github/workflows/apm-capabilities
         with:
           runNightly: true
