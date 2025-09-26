@@ -24,7 +24,7 @@ function removeGitFromPath () {
     .join(path.delimiter)
 }
 
-describe.only('git-cache integration tests', () => {
+describe('git-cache integration tests', () => {
   let sandbox, cwd, gitCache, testRepoPath
   let originalPath, originalCwd
   let cacheDir
