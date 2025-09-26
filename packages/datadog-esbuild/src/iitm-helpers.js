@@ -54,6 +54,7 @@ function isBareSpecifier (specifier) {
 async function processModule({ path, internal, context, parentGetSource, parentResolve, excludeDefault}) {
   let exportNames
   if (internal) {
+    // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
     const srcUrl = pathToFileURL(path)

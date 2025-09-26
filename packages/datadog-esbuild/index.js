@@ -10,7 +10,8 @@ const extractPackageAndModulePath = require(
 const { pathToFileURL, fileURLToPath } = require('url')
 const { processModule } = require('./src/iitm-helpers.js')
 
-
+const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
+const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -64,6 +65,33 @@ function isESMBuild (build) {
   const outputFile = build.initialOptions.outfile?.toLowerCase?.()
   const outExtension = build.initialOptions.outExtension?.['.js']
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
+}
+
+function isESMFile(fullPathToModule, modulePackageJsonPath, packageJson) {
+  if (fullPathToModule.endsWith('.mjs')) return true
+  if (fullPathToModule.endsWith('.cjs')) return false
+
+  const pathParts = fullPathToModule.split(path.sep)
+  do {
+    pathParts.pop()
+
+    const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
+    if (packageJsonPath === modulePackageJsonPath) {
+      return packageJson.type === 'module'
+    }
+
+    try {
+      const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
+      const packageJson = JSON.parse(packageJsonContent)
+      if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
+        return packageJson.type === 'module'
+      }
+    } catch (err) {
+      // file does not exit, continue
+    }
+  } while (pathParts.length > 0)
+
+  return packageJson.type === 'module'
 }
 
 function getGitMetadata () {
@@ -138,6 +166,7 @@ ${build.initialOptions.banner.js}`
     console.warn('Warning: No git metadata available - skipping injection')
   }
 
+  // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
 
   build.onResolve({ filter: /.*/ }, async args => {
@@ -173,19 +202,18 @@ ${build.initialOptions.banner.js}`
       }
       return
     }
-    // this works for some things, but more package.json could be between file and node_modules
-    // width interesting data, like "type": "commonjs" in an esm module
-    const extracted = extractPackageAndModulePath(fullPathToModule)
 
+    const extracted = extractPackageAndModulePath(fullPathToModule)
 
     const internal = builtins.has(args.path)
 
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // TODO if internal + import-statement + is esmBuild => behaviour should be different
+      // Internal module like http/fs is imported and the build output is ESM 
       if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
-        fullPathToModule = `/_dd_internal_/${fullPathToModule}._dd_esbuild_intercepted`
+        fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
+
         return {
           path: fullPathToModule,
           pluginData: {
@@ -222,38 +250,9 @@ ${build.initialOptions.banner.js}`
 
       const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
-
-      function isESMFile(fullPathToModule, modulePackageJsonPath, packageJson) {
-        if (fullPathToModule.endsWith('.mjs')) return true
-        if (fullPathToModule.endsWith('.cjs')) return false
-
-        const pathParts = fullPathToModule.split(path.sep)
-        do {
-          pathParts.pop()
-
-          const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
-          if (packageJsonPath === modulePackageJsonPath) {
-            return packageJson.type === 'module'
-          }
-
-          try {
-            const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
-            const packageJson = JSON.parse(packageJsonContent)
-            if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
-              return packageJson.type === 'module'
-            }
-          } catch (err) {
-            // file does not exit, continue
-          }
-        } while (pathParts.length > 0)
-
-        return packageJson.type === 'module'
-
-      }
       const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
-      let esmData
       if (isESM && !interceptedESMModules.has(fullPathToModule)) {
-        fullPathToModule += '._dd_esbuild_intercepted'
+        fullPathToModule += ESM_INTERCEPTED_SUFFIX
       }
 
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
@@ -289,24 +288,24 @@ ${build.initialOptions.banner.js}`
       ? `${data.pkg}/${data.path}`
       : data.pkg
 
-    // Read the content of the module file of interest
-    
+    // Read the content of the module file of interest    
     let contents
     
-
     if (data.isESM) {
-      if (args.path.endsWith('._dd_esbuild_intercepted')) {
-        args.path = args.path.slice(0, -1 * '._dd_esbuild_intercepted'.length)
-        if (data.internal) {
-          args.path = args.path.slice('/_dd_internal_/'.length)
-        }
-        interceptedESMModules.add(args.path)
+      if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+        args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
 
+        if (data.internal) {
+          args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
+        }
+
+        interceptedESMModules.add(args.path)
 
         const setters = await processModule({ 
           path: args.path,
           internal: data.internal,
           context: {},
+          // TODO this is too tied to iitm
           async parentGetSource (url, context) {
             return {
               source: fs.readFileSync(fileURLToPath(url), 'utf8'),
@@ -314,18 +313,22 @@ ${build.initialOptions.banner.js}`
               shortCircuit: true
             }
           },
+          // TODO this is too tied to iitm
           async parentResolve (specifier, context) {
-            // we will assume this is called for an esm module
+            // we will assume this is called from an esm module
             const conditions = ['import']
             const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
+
             return {
               url: specifier // TODO use require.resolve with canditates etc.
             }
           },
           excludeDefault: true
         })
+
         const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
         const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+        // TODO move export default namespace line to "setters" in processModule
         contents = `
 import { register } from ${JSON.stringify(iitmPath)}
 import * as namespace from ${JSON.stringify(args.path)}
@@ -363,7 +366,6 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
       }
       `
     }
-
 
     // https://esbuild.github.io/plugins/#on-load-results
     return {
