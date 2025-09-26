@@ -76,7 +76,6 @@ describe('git', () => {
       ciWorkspacePath: 'ciWorkspacePath',
       headCommitSha: 'headCommitSha'
     }
-    debugger
     const metadata = getGitMetadata(ciMetadata)
 
     expect(metadata).to.contain(
