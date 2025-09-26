@@ -5,7 +5,7 @@ const childProcess = require('child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const { existsSync, readFileSync, unlinkSync } = require('fs')
+const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const { builtinModules } = require('module')
 const os = require('os')
@@ -292,7 +292,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  * @returns {object} A map from variant names to resulting filenames
  */
 function varySandbox (sandbox, filename, variants, bindingName, namedVariant, packageName) {
-  const origFileData = fs.readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
   const [prefix, suffix] = filename.split('.')
   const variantFilenames = {}
   packageName = packageName || bindingName
@@ -313,7 +313,7 @@ function varySandbox (sandbox, filename, variants, bindingName, namedVariant, pa
     if (variant !== 'default') {
       newFileData = origFileData.replace(variants.default, `${variants[variant]}`)
     }
-    fs.writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
+    writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }
   return variantFilenames
 }
