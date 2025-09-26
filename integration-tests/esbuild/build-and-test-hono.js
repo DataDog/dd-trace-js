@@ -41,16 +41,16 @@ esbuild.build({
   console.log('::::: BUILD COMPLETED :::::')
   // process.env.DD_TRACE_DEBUG = 'true'
   try {
-    const data = spawn('node', [SCRIPT], { env: { ...process.env, DD_TRACE_DEBUG: 'true' }})
-    data.stdout?.on('data', (data) => {
-      console.log(data.toString())
-    })
-    data.stderr?.on('data', (data) => {
-      console.error(data.toString())
-    })
-    data.on('close', (code) => {
-      console.log(`Child process exited with code ${code}`)
-    })
+    // const data = spawn('node', [SCRIPT], { env: { ...process.env, DD_TRACE_DEBUG: 'true' }})
+    // data.stdout?.on('data', (data) => {
+    //   console.log(data.toString())
+    // })
+    // data.stderr?.on('data', (data) => {
+    //   console.error(data.toString())
+    // })
+    // data.on('close', (code) => {
+    //   console.log(`Child process exited with code ${code}`)
+    // })
     // console.log(data.stdout?.toString())
     // console.error(data.stderr?.toString())
   } catch (error) {

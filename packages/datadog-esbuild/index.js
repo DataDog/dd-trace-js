@@ -8,7 +8,7 @@ const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
 const { pathToFileURL, fileURLToPath } = require('url')
-const { processModule } = require('./src/iitm-helpers.js')
+const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -65,33 +65,6 @@ function isESMBuild (build) {
   const outputFile = build.initialOptions.outfile?.toLowerCase?.()
   const outExtension = build.initialOptions.outExtension?.['.js']
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
-}
-
-function isESMFile(fullPathToModule, modulePackageJsonPath, packageJson) {
-  if (fullPathToModule.endsWith('.mjs')) return true
-  if (fullPathToModule.endsWith('.cjs')) return false
-
-  const pathParts = fullPathToModule.split(path.sep)
-  do {
-    pathParts.pop()
-
-    const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
-    if (packageJsonPath === modulePackageJsonPath) {
-      return packageJson.type === 'module'
-    }
-
-    try {
-      const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
-      const packageJson = JSON.parse(packageJsonContent)
-      if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
-        return packageJson.type === 'module'
-      }
-    } catch (err) {
-      // file does not exit, continue
-    }
-  } while (pathParts.length > 0)
-
-  return packageJson.type === 'module'
 }
 
 function getGitMetadata () {
@@ -210,7 +183,7 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // Internal module like http/fs is imported and the build output is ESM 
+      // Internal module like http/fs is imported and the build output is ESM
       if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
 
@@ -288,9 +261,9 @@ ${build.initialOptions.banner.js}`
       ? `${data.pkg}/${data.path}`
       : data.pkg
 
-    // Read the content of the module file of interest    
+    // Read the content of the module file of interest
     let contents
-    
+
     if (data.isESM) {
       if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
         args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
@@ -301,29 +274,10 @@ ${build.initialOptions.banner.js}`
 
         interceptedESMModules.add(args.path)
 
-        const setters = await processModule({ 
+        const setters = await processModule({
           path: args.path,
           internal: data.internal,
-          context: {},
-          // TODO this is too tied to iitm
-          async parentGetSource (url, context) {
-            return {
-              source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-              format: 'module',
-              shortCircuit: true
-            }
-          },
-          // TODO this is too tied to iitm
-          async parentResolve (specifier, context) {
-            // we will assume this is called from an esm module
-            const conditions = ['import']
-            const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
-
-            return {
-              url: specifier // TODO use require.resolve with canditates etc.
-            }
-          },
-          excludeDefault: true
+          context: { format: 'module' }
         })
 
         const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
@@ -332,7 +286,6 @@ ${build.initialOptions.banner.js}`
         contents = `
 import { register } from ${JSON.stringify(iitmPath)}
 import * as namespace from ${JSON.stringify(args.path)}
-export default namespace;
 // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } })
 const set = {}

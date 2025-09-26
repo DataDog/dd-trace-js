@@ -1,18 +1,15 @@
 'use strict'
 
-// Inspired by import-in-the-middle
-
+// Based in import-in-the-middle
 const { pathToFileURL, fileURLToPath } = require('url')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 const fs = require('fs')
+const path = require('path')
 
-let getExports
 const getExportsImporting = (url) => import(url).then(Object.keys)
-if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
-  getExports = require('import-in-the-middle/lib/get-exports.js')
-} else {
-  getExports = getExportsImporting
-}
+const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
+  ? require('import-in-the-middle/lib/get-exports.js')
+  : getExportsImporting
 
 /**
  * Determines if a specifier represents an export all ESM line.
@@ -37,8 +34,8 @@ function isBareSpecifier (specifier) {
 
   // Valid URLs are not bare specifiers. (file:, http:, node:, etc.)
 
-  // eslint-disable-next-line no-prototype-builtins
   if (URL.hasOwnProperty('canParse')) {
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins
     return !URL.canParse(specifier)
   }
 
@@ -46,26 +43,44 @@ function isBareSpecifier (specifier) {
     // eslint-disable-next-line no-new
     new URL(specifier)
     return false
-  } catch (err) {
+  } catch {
     return true
   }
 }
 
-async function processModule({ path, internal, context, parentGetSource, parentResolve, excludeDefault}) {
-  let exportNames
+function resolve (specifier, context) {
+  // need to discover if it is esm or cjs module
+  const conditions = ['import']
+
+  if (specifier.startsWith('file://')) {
+    specifier = fileURLToPath(specifier)
+  }
+
+  const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
+
+  return {
+    url: pathToFileURL(resolved),
+    format: isESMFile(resolved) ? 'module' : 'commonjs'
+  }
+}
+
+function getSource (url, { format }) {
+  return {
+    source: fs.readFileSync(fileURLToPath(url), 'utf8'),
+    format
+  }
+}
+
+async function processModule ({ path, internal, context, excludeDefault }) {
+  let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
     exportNames = await getExportsImporting(path)
   } else {
-    const srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, {}, async function parentLoad () {
-      return {
-        source: fs.readFileSync(path, 'utf8'),
-        format: 'module',
-        shortCircuit: true
-      }
-    })
+    srcUrl = pathToFileURL(path)
+    exportNames = await getExports(srcUrl, context, getSource)
   }
+
   const starExports = new Set()
   const setters = new Map()
 
@@ -100,32 +115,33 @@ async function processModule({ path, internal, context, parentGetSource, parentR
     if (n === 'default' && excludeDefault) continue
 
     if (isStarExportLine(n) === true) {
+      // export * from 'wherever'
       const [, modFile] = n.split('* from ')
-  
+
       // Relative paths need to be resolved relative to the parent module
       const newSpecifier = isBareSpecifier(modFile) ? modFile : new URL(modFile, srcUrl).href
       // We need to call `parentResolve` to resolve bare specifiers to a full
       // URL. We also need to call `parentResolve` for all sub-modules to get
       // the `format`. We can't rely on the parents `format` to know if this
       // sub-module is ESM or CJS!
-      const result = await parentResolve(newSpecifier, { parentURL: srcUrl })
-  
+
+      const result = resolve(newSpecifier, { parentURL: srcUrl })
+
+      // eslint-disable-next-line no-await-in-loop
       const subSetters = await processModule({
-        srcUrl: result.url,
+        path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
-        parentGetSource,
-        parentResolve,
         excludeDefault: true
       })
-  
+
       for (const [name, setter] of subSetters.entries()) {
         addSetter(name, setter, true)
       }
     } else {
-      const variableName = `$${n.replace(/[^a-zA-Z0-9_$]/g, '_')}`
+      const variableName = `$${n.replaceAll(/[^a-zA-Z0-9_$]/g, '_')}`
       const objectKey = JSON.stringify(n)
-      const reExportedName = n === 'default' || NODE_MAJOR < 16 ? n : objectKey
-  
+      const reExportedName = n === 'default' ? n : objectKey
+
       addSetter(n, `
       let ${variableName}
       try {
@@ -142,10 +158,38 @@ async function processModule({ path, internal, context, parentGetSource, parentR
       `)
     }
   }
-  
+
   return setters
 }
 
+function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
+  if (fullPathToModule.endsWith('.mjs')) return true
+  if (fullPathToModule.endsWith('.cjs')) return false
+
+  const pathParts = fullPathToModule.split(path.sep)
+  do {
+    pathParts.pop()
+
+    const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
+    if (packageJsonPath === modulePackageJsonPath) {
+      return packageJson.type === 'module'
+    }
+
+    try {
+      const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
+      const packageJson = JSON.parse(packageJsonContent)
+      if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
+        return packageJson.type === 'module'
+      }
+    } catch {
+      // file does not exit, continue
+    }
+  } while (pathParts.length > 0)
+
+  return packageJson.type === 'module'
+}
+
 module.exports = {
-    processModule
+  processModule,
+  isESMFile
 }
