@@ -7,9 +7,8 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
-const { resolve, load } = require('import-in-the-middle/hook.mjs')
 const { pathToFileURL, fileURLToPath } = require('url')
-const { processModule } = require('./iitm-helpers.js')
+const { processModule } = require('./src/iitm-helpers.js')
 
 
 
@@ -102,7 +101,8 @@ function getGitMetadata () {
 
 module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
-  if (isESMBuild(build)) {
+  const esmBuild = isESMBuild(build)
+  if (esmBuild) {
     build.initialOptions.banner ??= {}
     build.initialOptions.banner.js ??= ''
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
@@ -138,8 +138,6 @@ ${build.initialOptions.banner.js}`
     console.warn('Warning: No git metadata available - skipping injection')
   }
 
-
-  const toInterceptESMModules = new Set()
   const interceptedESMModules = new Set()
 
   build.onResolve({ filter: /.*/ }, async args => {
@@ -185,8 +183,24 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
+      // TODO if internal + import-statement + is esmBuild => behaviour should be different
+      if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule = `/_dd_internal_/${fullPathToModule}._dd_esbuild_intercepted`
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            pkg: extracted?.pkg,
+            path: extracted?.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM: true
+          }
+        }
+      }
       // The file namespace is used when requiring files from disk in userland
-
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
@@ -242,11 +256,6 @@ ${build.initialOptions.banner.js}`
         fullPathToModule += '._dd_esbuild_intercepted'
       }
 
-      console.log(`${fullPathToModule} is ${isESM ? 'ESM' : 'CommonJS'}`)
-      // console.log('path', args.path)
-      // console.log('packageJson', packageJson)
-
-
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
@@ -261,8 +270,7 @@ ${build.initialOptions.banner.js}`
           pkgOfInterest: true,
           kind: args.kind,
           internal,
-          isESM,
-          esmData
+          isESM
         }
       }
     }
@@ -289,11 +297,15 @@ ${build.initialOptions.banner.js}`
     if (data.isESM) {
       if (args.path.endsWith('._dd_esbuild_intercepted')) {
         args.path = args.path.slice(0, -1 * '._dd_esbuild_intercepted'.length)
+        if (data.internal) {
+          args.path = args.path.slice('/_dd_internal_/'.length)
+        }
         interceptedESMModules.add(args.path)
 
 
         const setters = await processModule({ 
           path: args.path,
+          internal: data.internal,
           context: {},
           async parentGetSource (url, context) {
             return {
@@ -306,17 +318,18 @@ ${build.initialOptions.banner.js}`
             // we will assume this is called for an esm module
             const conditions = ['import']
             const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
-            console.log('resolved', resolved)
             return {
               url: specifier // TODO use require.resolve with canditates etc.
             }
           },
           excludeDefault: true
         })
+        const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+        const toRegister = data.internal ? args.path : pathToFileURL(args.path)
         contents = `
-// import { register } from '$\{iitmURL}'
+import { register } from ${JSON.stringify(iitmPath)}
 import * as namespace from ${JSON.stringify(args.path)}
-
+export default namespace;
 // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
 const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } })
 const set = {}
@@ -324,11 +337,8 @@ const get = {}
 
 ${Array.from(setters.values()).join('\n')}
 
-// register($\{JSON.stringify(realUrl)}, _, set, get, $\{JSON.stringify(specifiers.get(realUrl))})
+register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)})
 `
-        // contents = `import * as namespace from ${JSON.stringify(args.path)}
-        // console.log('iepa kaixooo!!')
-        // export default namespace;`
       } else {
         contents = fs.readFileSync(args.path, 'utf8')
       }

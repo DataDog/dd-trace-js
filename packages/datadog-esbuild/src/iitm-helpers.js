@@ -3,13 +3,15 @@
 // Inspired by import-in-the-middle
 
 const { pathToFileURL, fileURLToPath } = require('url')
-const { NODE_MAJOR, NODE_MINOR } = require('process')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
+const fs = require('fs')
 
 let getExports
+const getExportsImporting = (url) => import(url).then(Object.keys)
 if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
   getExports = require('import-in-the-middle/lib/get-exports.js')
 } else {
-  getExports = (url) => import(url).then(Object.keys)
+  getExports = getExportsImporting
 }
 
 /**
@@ -49,15 +51,20 @@ function isBareSpecifier (specifier) {
   }
 }
 
-async function processModule({ path, context, parentGetSource, parentResolve, excludeDefault}) {
-  const srcUrl = pathToFileURL(path)
-  const exportNames = await getExports(srcUrl, {}, async function parentLoad () {
-    return {
-      source: fs.readFileSync(path, 'utf8'),
-      format: 'module',
-      shortCircuit: true
-    }
-  })
+async function processModule({ path, internal, context, parentGetSource, parentResolve, excludeDefault}) {
+  let exportNames
+  if (internal) {
+    exportNames = await getExportsImporting(path)
+  } else {
+    const srcUrl = pathToFileURL(path)
+    exportNames = await getExports(srcUrl, {}, async function parentLoad () {
+      return {
+        source: fs.readFileSync(path, 'utf8'),
+        format: 'module',
+        shortCircuit: true
+      }
+    })
+  }
   const starExports = new Set()
   const setters = new Map()
 
