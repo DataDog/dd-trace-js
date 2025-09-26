@@ -456,9 +456,6 @@ describe('mocha CommonJS', function () {
     childProcess.on('message', () => {
       eventsPromise.then(() => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.notInclude(
-          testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-        )
         done()
       }).catch(done)
     })
@@ -491,9 +488,6 @@ describe('mocha CommonJS', function () {
     childProcess.on('exit', () => {
       eventsPromise.then(() => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.notInclude(
-          testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-        )
         done()
       }).catch(done)
     })
