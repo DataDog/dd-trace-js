@@ -6,6 +6,13 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_call:
+    inputs:
+      runNightly:
+        description: 'Whether to run nightly tests'
+        required: false
+        default: 'false'
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -23,6 +30,8 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:trace:core:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   tracing-ubuntu:
@@ -39,7 +48,9 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
       - run: yarn test:trace:core:ci
+        if: inputs.runNightly == 'true'
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   tracing-windows:
@@ -52,5 +63,7 @@ jobs:
           cache: 'true'
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
       - run: yarn test:trace:core:ci
+        if: inputs.runNightly == 'true'
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1

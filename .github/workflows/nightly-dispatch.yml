@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: ./.github/workflows/apm-integrations
         with:
-          runNightly: true
+          runNightly: 'true'
       - uses: ./.github/workflows/apm-capabilities
         with:
-          runNightly: true
+          runNightly: 'true'

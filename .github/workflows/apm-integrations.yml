@@ -427,9 +427,9 @@ jobs:
     strategy:
       matrix:
         node-version: ${{ fromJSON(
-                  inputs.runNightly == 'false' &&
-                  '["oldest","maintenance","latest"]' ||
-                  '["nightly"]'
+                  (inputs.runNightly == 'true' &&
+                  '["nightly"]') ||
+                  '["oldest","maintenance","latest"]'
                 ) }}
     runs-on: ubuntu-latest
     env:
@@ -478,9 +478,9 @@ jobs:
     strategy:
       matrix:
         node-version: ${{ fromJSON(
-                  inputs.runNightly == 'false' &&
-                  '["oldest","latest"]' ||
-                  '["nightly"]'
+                  inputs.runNightly == 'true' &&
+                  '["nightly"]' ||
+                  '["oldest","latest"]'
                 ) }}
     runs-on: ubuntu-latest
     services:

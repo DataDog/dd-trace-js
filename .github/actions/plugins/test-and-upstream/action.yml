@@ -12,24 +12,24 @@ runs:
     - uses: ./.github/actions/install
 
     - uses: ./.github/actions/node/oldest-maintenance-lts
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
       shell: bash
 
     - uses: ./.github/actions/node/latest
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ inputs.runNightly == 'false' }}
+      if: inputs.runNightly != 'true'
       shell: bash
 
     - uses: ./.github/actions/node/nightly
