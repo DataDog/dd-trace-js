@@ -20,14 +20,14 @@ const {
   NAME,
   PROPAGATED_PARENT_ID_KEY,
   ROOT_PARENT_ID,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY
+  PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
 
 // global registry of LLMObs spans
@@ -146,11 +146,11 @@ class LLMObsTagger {
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
           break
-        case 'cacheWriteInputTokens':
-          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheReadInputTokens':
+        case 'cacheReadTokens':
           processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWriteTokens':
+          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
           break
       }
 
