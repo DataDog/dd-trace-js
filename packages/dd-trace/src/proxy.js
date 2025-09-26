@@ -11,6 +11,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+let LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter, logs, os
 const {
   setBaggageItem,
   getBaggageItem,
@@ -202,7 +203,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.otelLogsEnabled) {
-        this._initializeOpenTelemetryLogs(config)
+        this.#initializeOpenTelemetryLogs(config)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
@@ -265,61 +266,62 @@ class Tracer extends NoopProxy {
     }
   }
 
-  _initializeOpenTelemetryLogs (config) {
-    try {
-      const { LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter } = require('./opentelemetry/logs')
-      const { logs } = require('@opentelemetry/api-logs')
-      const os = require('os')
+  #initializeOpenTelemetryLogs (config) {
+    LoggerProvider ??= require('./opentelemetry/logs').LoggerProvider
+    BatchLogRecordProcessor ??= require('./opentelemetry/logs').BatchLogRecordProcessor
+    OtlpHttpLogExporter ??= require('./opentelemetry/logs').OtlpHttpLogExporter
+    logs ??= require('@opentelemetry/api-logs').logs
+    os ??= require('os')
 
-      // Build resource attributes
-      const resourceAttributes = {
-        'service.name': config.service,
-        'service.version': config.version,
-        'deployment.environment': config.env
-      }
-
-      // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
-      if (config.tags && Object.keys(config.tags).length > 0) {
-        Object.assign(resourceAttributes, config.tags)
-      }
-
-      // Add host.name if reportHostname is enabled
-      if (config.reportHostname) {
-        resourceAttributes['host.name'] = os.hostname()
-      }
-
-      // Create OTLP exporter using resolved config values
-      const exporter = new OtlpHttpLogExporter(
-        config.otelLogsUrl,
-        config.otelLogsHeaders,
-        config.otelLogsTimeout,
-        config.otelLogsProtocol,
-        resourceAttributes
-      )
-
-      // Create batch processor for exporting logs to Datadog Agent
-      const processor = new BatchLogRecordProcessor(
-        exporter,
-        config.otelLogsBatchTimeout,
-        config.otelLogsMaxExportBatchSize,
-        // TODO: add support for max queue size and export timeout
-        // config.otelLogsMaxQueueSize,
-        // config.otelLogsExportTimeoutMillis
-      )
-
-      // Create logger provider with processor for Datadog Agent export
-      const loggerProvider = new LoggerProvider({
-        resource: { attributes: resourceAttributes },
-        processor
-      })
-
-      // Register the logger provider globally with OpenTelemetry API
-      logs.setGlobalLoggerProvider(loggerProvider)
-
-      log.debug('OpenTelemetry logs initialized successfully')
-    } catch (error) {
-      log.error('Failed to initialize OpenTelemetry logs:', error)
+    // Build resource attributes
+    const resourceAttributes = {
+      'service.name': config.service,
+      'service.version': config.version,
+      'deployment.environment': config.env
     }
+
+    // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
+    // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
+    if (config.tags) {
+      const filteredTags = { ...config.tags }
+      delete filteredTags.service
+      delete filteredTags.version
+      delete filteredTags.env
+      Object.assign(resourceAttributes, filteredTags)
+    }
+
+    // Add host.name if reportHostname is enabled
+    if (config.reportHostname) {
+      resourceAttributes['host.name'] = os.hostname()
+    }
+
+    // Create OTLP exporter using resolved config values
+    const exporter = new OtlpHttpLogExporter(
+      config.otelLogsUrl,
+      config.otelLogsHeaders,
+      config.otelLogsTimeout,
+      config.otelLogsProtocol,
+      resourceAttributes
+    )
+
+    // Create batch processor for exporting logs to Datadog Agent
+    const processor = new BatchLogRecordProcessor(
+      exporter,
+      config.otelLogsBatchTimeout,
+      config.otelLogsMaxExportBatchSize,
+      // TODO: add support for max queue size and export timeout
+      // config.otelLogsMaxQueueSize,
+      // config.otelLogsExportTimeoutMillis
+    )
+
+    // Create logger provider with processor for Datadog Agent export
+    const loggerProvider = new LoggerProvider({
+      resource: { attributes: resourceAttributes },
+      processor
+    })
+
+    // Register the logger provider globally with OpenTelemetry API
+    logs.setGlobalLoggerProvider(loggerProvider)
   }
 
   profilerStarted () {

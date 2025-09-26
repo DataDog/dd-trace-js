@@ -1,6 +1,5 @@
 'use strict'
 
-const https = require('https')
 const http = require('http')
 const { URL } = require('url')
 const log = require('../../log')
@@ -47,7 +46,7 @@ class OtlpHttpLogExporter {
 
     // Pre-compute telemetry tags for efficiency
     this.#telemetryTags = [
-      `protocol:${this.protocol.startsWith('grpc') ? 'grpc' : 'http'}`,
+      'protocol:http',
       `encoding:${this.protocol === 'http/json' ? 'json' : 'protobuf'}`
     ]
   }
@@ -64,22 +63,9 @@ class OtlpHttpLogExporter {
       return
     }
 
-    try {
-      const payload = this.transformer.transformLogRecords(logRecords)
-
-      // Track telemetry metric for OTLP log records
-      try {
-        tracerMetrics.count('otel.log_records', this.#telemetryTags)
-          .inc(logRecords.length)
-      } catch (telemetryError) {
-        log.debug('Error tracking OTLP log records telemetry:', telemetryError)
-      }
-
-      this._sendPayload(payload, resultCallback)
-    } catch (error) {
-      log.error('Error transforming log records:', error)
-      resultCallback({ code: 1, error })
-    }
+    const payload = this.transformer.transformLogRecords(logRecords)
+    this._sendPayload(payload, resultCallback)
+    tracerMetrics.count('otel.log_records', this.#telemetryTags).inc(logRecords.length)
   }
 
   /**
@@ -90,12 +76,10 @@ class OtlpHttpLogExporter {
    */
   _sendPayload (payload, resultCallback) {
     const url = new URL(this.url)
-    const isHttps = url.protocol === 'https:'
-    const client = isHttps ? https : http
 
     const options = {
       hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 4318),
+      port: url.port,
       path: url.pathname + url.search,
       method: 'POST',
       headers: {
@@ -105,7 +89,7 @@ class OtlpHttpLogExporter {
       timeout: this.timeout
     }
 
-    const req = client.request(options, (res) => {
+    const req = http.request(options, (res) => {
       let data = ''
 
       res.on('data', (chunk) => {
@@ -156,13 +140,14 @@ class OtlpHttpLogExporter {
       return {}
     }
 
-    return Object.fromEntries(
-      headersString
-        .split(',')
-        .map(pair => pair.trim().split('='))
-        .filter(([key, value]) => key && value)
-        .map(([key, value]) => [key.trim(), value.trim()])
-    )
+    const headers = {}
+    for (const pair of headersString.split(',')) {
+      const [key, value] = pair.trim().split('=')
+      if (key && value) {
+        headers[key.trim()] = value.trim()
+      }
+    }
+    return headers
   }
 }
 

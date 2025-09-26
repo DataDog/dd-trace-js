@@ -2,7 +2,7 @@
 
 const { sanitizeAttributes } = require('@opentelemetry/core')
 const { trace, context } = require('@opentelemetry/api')
-
+const packageVersion = require('../../../../../package.json').version
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/api').SpanContext} SpanContext
@@ -34,7 +34,7 @@ class Logger {
     this.loggerProvider = loggerProvider
     this.#instrumentationLibrary = {
       name: instrumentationLibrary?.name || 'dd-trace-js',
-      version: instrumentationLibrary?.version || require('../../../../../package.json').version
+      version: instrumentationLibrary?.version || packageVersion
     }
   }
 
@@ -113,10 +113,11 @@ class Logger {
     const activeSpan = trace.getSpan(activeContext)
     if (activeSpan) {
       const spanContext = activeSpan.spanContext()
-      if (spanContext && spanContext.traceId && spanContext.spanId) {
+      if (spanContext?.traceId && spanContext.spanId) {
         return {
           traceId: spanContext.traceId,
-          spanId: spanContext.spanId
+          spanId: spanContext.spanId,
+          traceFlags: spanContext.traceFlags
         }
       }
     }

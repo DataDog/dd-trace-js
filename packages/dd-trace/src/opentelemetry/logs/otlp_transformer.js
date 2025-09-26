@@ -3,6 +3,35 @@
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { getProtobufTypes } = require('./protobuf_loader')
 
+// Global severity mapping constant - no need to regenerate
+const SEVERITY_MAP = {
+  [SeverityNumber.TRACE]: 'SEVERITY_NUMBER_TRACE',
+  [SeverityNumber.TRACE2]: 'SEVERITY_NUMBER_TRACE2',
+  [SeverityNumber.TRACE3]: 'SEVERITY_NUMBER_TRACE3',
+  [SeverityNumber.TRACE4]: 'SEVERITY_NUMBER_TRACE4',
+  [SeverityNumber.DEBUG]: 'SEVERITY_NUMBER_DEBUG',
+  [SeverityNumber.DEBUG2]: 'SEVERITY_NUMBER_DEBUG2',
+  [SeverityNumber.DEBUG3]: 'SEVERITY_NUMBER_DEBUG3',
+  [SeverityNumber.DEBUG4]: 'SEVERITY_NUMBER_DEBUG4',
+  [SeverityNumber.INFO]: 'SEVERITY_NUMBER_INFO',
+  [SeverityNumber.INFO2]: 'SEVERITY_NUMBER_INFO2',
+  [SeverityNumber.INFO3]: 'SEVERITY_NUMBER_INFO3',
+  [SeverityNumber.INFO4]: 'SEVERITY_NUMBER_INFO4',
+  [SeverityNumber.WARN]: 'SEVERITY_NUMBER_WARN',
+  [SeverityNumber.WARN2]: 'SEVERITY_NUMBER_WARN2',
+  [SeverityNumber.WARN3]: 'SEVERITY_NUMBER_WARN3',
+  [SeverityNumber.WARN4]: 'SEVERITY_NUMBER_WARN4',
+  [SeverityNumber.ERROR]: 'SEVERITY_NUMBER_ERROR',
+  [SeverityNumber.ERROR2]: 'SEVERITY_NUMBER_ERROR2',
+  [SeverityNumber.ERROR3]: 'SEVERITY_NUMBER_ERROR3',
+  [SeverityNumber.ERROR4]: 'SEVERITY_NUMBER_ERROR4',
+  [SeverityNumber.FATAL]: 'SEVERITY_NUMBER_FATAL',
+  [SeverityNumber.FATAL2]: 'SEVERITY_NUMBER_FATAL2',
+  [SeverityNumber.FATAL3]: 'SEVERITY_NUMBER_FATAL3',
+  [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4'
+}
+const log = require('../../log')
+
 /**
  * OtlpTransformer transforms log records to OTLP format.
  *
@@ -161,48 +190,12 @@ class OtlpTransformer {
     const { _severityNumber } = this.#getProtobufTypes()
 
     if (!_severityNumber) {
-      // eslint-disable-next-line no-console
-      console.error('_severityNumber is undefined')
+      log.error('_severityNumber is undefined')
       return 9 // Default to INFO
     }
 
-    const severityMap = this.#createSeverityMap(_severityNumber)
-    return severityMap[severityNumber] || _severityNumber.values.SEVERITY_NUMBER_INFO
-  }
-
-  /**
-   * Creates a mapping from OpenTelemetry severity numbers to protobuf severity numbers.
-   * @param {Object} severityEnum - Protobuf severity enum
-   * @returns {Object} Severity mapping object
-   * @private
-   */
-  #createSeverityMap (severityEnum) {
-    const map = {}
-    map[SeverityNumber.TRACE] = severityEnum.values.SEVERITY_NUMBER_TRACE
-    map[SeverityNumber.TRACE2] = severityEnum.values.SEVERITY_NUMBER_TRACE2
-    map[SeverityNumber.TRACE3] = severityEnum.values.SEVERITY_NUMBER_TRACE3
-    map[SeverityNumber.TRACE4] = severityEnum.values.SEVERITY_NUMBER_TRACE4
-    map[SeverityNumber.DEBUG] = severityEnum.values.SEVERITY_NUMBER_DEBUG
-    map[SeverityNumber.DEBUG2] = severityEnum.values.SEVERITY_NUMBER_DEBUG2
-    map[SeverityNumber.DEBUG3] = severityEnum.values.SEVERITY_NUMBER_DEBUG3
-    map[SeverityNumber.DEBUG4] = severityEnum.values.SEVERITY_NUMBER_DEBUG4
-    map[SeverityNumber.INFO] = severityEnum.values.SEVERITY_NUMBER_INFO
-    map[SeverityNumber.INFO2] = severityEnum.values.SEVERITY_NUMBER_INFO2
-    map[SeverityNumber.INFO3] = severityEnum.values.SEVERITY_NUMBER_INFO3
-    map[SeverityNumber.INFO4] = severityEnum.values.SEVERITY_NUMBER_INFO4
-    map[SeverityNumber.WARN] = severityEnum.values.SEVERITY_NUMBER_WARN
-    map[SeverityNumber.WARN2] = severityEnum.values.SEVERITY_NUMBER_WARN2
-    map[SeverityNumber.WARN3] = severityEnum.values.SEVERITY_NUMBER_WARN3
-    map[SeverityNumber.WARN4] = severityEnum.values.SEVERITY_NUMBER_WARN4
-    map[SeverityNumber.ERROR] = severityEnum.values.SEVERITY_NUMBER_ERROR
-    map[SeverityNumber.ERROR2] = severityEnum.values.SEVERITY_NUMBER_ERROR2
-    map[SeverityNumber.ERROR3] = severityEnum.values.SEVERITY_NUMBER_ERROR3
-    map[SeverityNumber.ERROR4] = severityEnum.values.SEVERITY_NUMBER_ERROR4
-    map[SeverityNumber.FATAL] = severityEnum.values.SEVERITY_NUMBER_FATAL
-    map[SeverityNumber.FATAL2] = severityEnum.values.SEVERITY_NUMBER_FATAL2
-    map[SeverityNumber.FATAL3] = severityEnum.values.SEVERITY_NUMBER_FATAL3
-    map[SeverityNumber.FATAL4] = severityEnum.values.SEVERITY_NUMBER_FATAL4
-    return map
+    const severityName = SEVERITY_MAP[severityNumber] || 'SEVERITY_NUMBER_INFO'
+    return _severityNumber.values[severityName]
   }
 
   /**

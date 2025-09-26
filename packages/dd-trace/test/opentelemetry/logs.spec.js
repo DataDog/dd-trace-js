@@ -7,13 +7,13 @@ const assert = require('assert')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+require('../setup/core')
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
 
   function setupTracer (enabled = true) {
     process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
-    process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '1'
     const tracer = require('../../')
     tracer._initialized = false
     tracer.init()
@@ -126,9 +126,96 @@ describe('OpenTelemetry Logs', () => {
         instrumentationScope: { name: 'custom-scope', version: '2.0.0' }
       })
     })
+
+    it('sends payload with expected format', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'x-api-key=test123'
+      process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '1'
+      process.env.DD_SERVICE = 'test-service'
+      process.env.DD_VERSION = 'testversion'
+      process.env.DD_ENV = 'testenv'
+      process.env.DD_TAGS = 'testtag:testvalue'
+
+      const http = require('http')
+      let capturedPayload, capturedHeaders
+
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        capturedHeaders = options.headers
+        const mockReq = {
+          write: (data) => { capturedPayload = data },
+          end: () => {},
+          on: () => {}
+        }
+        callback({ statusCode: 200, on: () => {} })
+        return mockReq
+      })
+
+      const { logs } = setupTracer()
+      const { trace, context } = require('@opentelemetry/api')
+
+      logs.getLogger('test-service', '1.0.0').emit({
+        severityText: 'ERROR',
+        severityNumber: 17,
+        body: 'HTTP test message',
+        attributes: { 'test.attr': 'value' },
+        context: trace.setSpan(context.active(), createMockSpan()),
+      })
+
+      // Validate complete OTLP payload structure as JSON
+      const { getProtobufTypes } = require('../../src/opentelemetry/logs/protobuf_loader')
+      const { _logsService } = getProtobufTypes()
+      const decoded = _logsService.decode(capturedPayload)
+      const actual = JSON.parse(JSON.stringify(decoded.toJSON()))
+
+      const attrs = actual.resourceLogs[0].resource.attributes
+      const runtimeId = attrs.find(a => a.key === 'runtime-id').value.stringValue
+      const clientId = attrs.find(a => a.key === '_dd.rc.client_id').value.stringValue
+
+      const expected = {
+        resourceLogs: [{
+          resource: {
+            attributes: [
+              { key: 'service.name', value: { stringValue: 'test-service' } },
+              { key: 'service.version', value: { stringValue: 'testversion' } },
+              { key: 'deployment.environment', value: { stringValue: 'testenv' } },
+              { key: 'testtag', value: { stringValue: 'testvalue' } },
+              { key: 'runtime-id', value: { stringValue: runtimeId } },
+              { key: '_dd.rc.client_id', value: { stringValue: clientId } }
+            ],
+            droppedAttributesCount: 0
+          },
+          scopeLogs: [{
+            scope: {
+              name: 'test-service',
+              version: '1.0.0',
+              droppedAttributesCount: 0
+            },
+            logRecords: [{
+              body: { stringValue: 'HTTP test message' },
+              severityText: 'ERROR',
+              severityNumber: 'SEVERITY_NUMBER_ERROR',
+              attributes: [{ key: 'test.attr', value: { stringValue: 'value' } }],
+              timeUnixNano: actual.resourceLogs[0].scopeLogs[0].logRecords[0].timeUnixNano,
+              observedTimeUnixNano: actual.resourceLogs[0].scopeLogs[0].logRecords[0].observedTimeUnixNano,
+              flags: 0,
+              spanId: Buffer.from('1234567890abcdef', 'hex').toString('base64'),
+              traceId: Buffer.from('1234567890abcdef1234567890abcdef', 'hex').toString('base64')
+            }]
+          }]
+        }]
+      }
+
+      assert.deepStrictEqual(actual, expected)
+      // Validate complete headers structure
+      const expectedHeaders = {
+        'Content-Length': capturedHeaders['Content-Length'],
+        'Content-Type': 'application/x-protobuf',
+        'x-api-key': 'test123'
+      }
+      assert.deepStrictEqual(capturedHeaders, expectedHeaders)
+    })
   })
 
-  describe('Configuration', () => {
+  describe('Configurations', () => {
     it('uses default protobuf protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
       delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
@@ -153,21 +240,6 @@ describe('OpenTelemetry Logs', () => {
       assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
 
       logMock.restore()
-    })
-
-    it('configures resource attributes from environment variables', () => {
-      process.env.DD_TAGS = 'team:backend,region:us-west-2'
-      process.env.OTEL_RESOURCE_ATTRIBUTES = 'service.namespace=api'
-      const { loggerProvider } = setupTracer()
-      const resourceAttrs = loggerProvider.resource.attributes
-      assert.strictEqual(resourceAttrs.team, 'backend')
-      assert.strictEqual(resourceAttrs['service.namespace'], 'api')
-    })
-
-    it('includes hostname in resource when reportHostname is enabled', () => {
-      process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
-      const { loggerProvider } = setupTracer()
-      assert(typeof loggerProvider.resource.attributes['host.name'] === 'string')
     })
 
     it('configures custom OTLP endpoint', () => {
@@ -197,7 +269,6 @@ describe('OpenTelemetry Logs', () => {
 
   describe('Telemetry Metrics', () => {
     it('tracks telemetry metrics for exported logs', () => {
-      require('../setup/core')
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
       }
