@@ -163,6 +163,7 @@ interface Plugins {
   "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
+  "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -1337,6 +1338,12 @@ declare namespace tracer {
      * [amqplib](https://github.com/squaremo/amqp.node) module.
      */
     interface amqplib extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
+     */
+    interface anthropic extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments
