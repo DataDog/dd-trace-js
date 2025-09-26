@@ -208,13 +208,8 @@ const { useEnv } = require('../../../../integration-tests/helpers')
  */
 function useLlmObs ({
   plugin,
-  tracerConfigOptions = {
-    llmobs: {
-      mlApp: 'test',
-      agentlessEnabled: false
-    }
-  },
-  closeOptions = { ritmReset: false }
+  tracerConfigOptions = {},
+  closeOptions = {}
 }) {
   if (!plugin) {
     throw new TypeError(
@@ -222,24 +217,13 @@ function useLlmObs ({
     )
   }
 
-  if (!tracerConfigOptions.llmobs) {
-    throw new TypeError(
-      '`loadOptions.llmobs` is required when using `useLlmobs`'
-    )
-  }
-
+  /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
+
+  /** @type {Promise<Array<Array<Object>>>} */
   let llmobsTracesPromise
 
-  useEnv({
-    _DD_LLMOBS_FLUSH_INTERVAL: 0
-  })
-
-  before(() => {
-    return agent.load(plugin, {}, tracerConfigOptions)
-  })
-
-  beforeEach(() => {
+  const resetTracesPromises = () => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
@@ -252,14 +236,31 @@ function useLlmObs ({
         .map(trace => trace.spans[0])
         .sort((a, b) => a.start_ns - b.start_ns)
     })
+  }
+
+  useEnv({
+    _DD_LLMOBS_FLUSH_INTERVAL: 0
   })
 
+  before(() => {
+    return agent.load(plugin, {}, {
+      llmobs: {
+        mlApp: 'test',
+        agentlessEnabled: false
+      },
+      ...tracerConfigOptions
+    })
+  })
+
+  beforeEach(resetTracesPromises)
+
   after(() => {
-    return agent.close(closeOptions)
+    return agent.close({ ritmReset: false, ...closeOptions })
   })
 
   return async function () {
     const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+    resetTracesPromises()
 
     return { apmSpans, llmobsSpans }
   }
