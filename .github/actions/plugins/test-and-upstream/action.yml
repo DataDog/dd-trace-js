@@ -1,27 +1,46 @@
 name: Plugin and Upstream Tests
 description: Run plugin tests and upstream test suite
+inputs:
+  runNightly:
+    description: 'Whether to run nightly tests'
+    default: 'false'
+
 runs:
   using: composite
   steps:
     - uses: ./.github/actions/testagent/start
-    - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
+
+    - uses: ./.github/actions/node/oldest-maintenance-lts
+      if: ${{ runNightly == 'false' }}
     - run: yarn test:plugins:ci
+      if: ${{ runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
+      if: ${{ runNightly == 'false' }}
       shell: bash
+
     - uses: ./.github/actions/node/latest
+      if: ${{ runNightly == 'false' }}
     - run: yarn test:plugins:ci
+      if: ${{ runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
+      if: ${{ runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
+      if: ${{ runNightly == 'false' }}
       shell: bash
+
     - uses: ./.github/actions/node/nightly
+      if: ${{ runNightly == 'true' }}
     - run: yarn test:plugins:ci
+      if: ${{ runNightly == 'true' }}
       shell: bash
     - run: yarn test:plugins:upstream
+      if: ${{ runNightly == 'true' }}
       shell: bash
+
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
     - if: always()
       uses: ./.github/actions/testagent/logs

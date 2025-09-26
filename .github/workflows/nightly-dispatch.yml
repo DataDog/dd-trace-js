@@ -1,0 +1,12 @@
+name: Nightly Testing
+
+on:
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubumtue-latest
+    steps:
+      - uses: ./.github/workflows/apm-integrations
+        with:
+          runNightly: true

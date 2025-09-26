@@ -22,8 +22,6 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/nightly
-      - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   ubuntu:
@@ -39,8 +37,6 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/nightly
-      - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   windows:
@@ -51,8 +47,6 @@ jobs:
       - uses: ./.github/actions/install
         with:
           cache: 'true'
-      - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/nightly
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 

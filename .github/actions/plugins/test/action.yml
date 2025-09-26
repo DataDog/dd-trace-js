@@ -2,7 +2,7 @@ name: Plugin Tests
 description: Run plugin tests
 inputs:
   skipNightly:
-    description: "Wheter to skip nightly testing"
+    description: "Whether to skip nightly testing"
     required: false
     default: 'false'
 

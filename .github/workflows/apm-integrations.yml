@@ -6,6 +6,13 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_call:
+    inputs:
+      runNightly:
+        description: 'Whether to run nightly tests'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -89,6 +96,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   amqplib:
     runs-on: ubuntu-latest
@@ -103,6 +112,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   apollo:
     runs-on: ubuntu-latest
@@ -111,6 +122,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   avsc:
     runs-on: ubuntu-latest
@@ -120,6 +133,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   axios:
     runs-on: ubuntu-latest
@@ -264,6 +279,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   dns:
     runs-on: ubuntu-latest
@@ -359,6 +376,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   grpc:
     runs-on: ubuntu-latest
@@ -481,6 +500,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -831,6 +852,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   redis:
     runs-on: ubuntu-latest
