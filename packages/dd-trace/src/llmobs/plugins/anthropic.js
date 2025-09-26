@@ -238,22 +238,22 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
 
     const inputTokens = usage.input_tokens
     const outputTokens = usage.output_tokens
-    const cacheWriteInputTokens = usage.cache_creation_input_tokens
-    const cacheReadInputTokens = usage.cache_read_input_tokens
+    const cacheWriteTokens = usage.cache_creation_input_tokens
+    const cacheReadTokens = usage.cache_read_input_tokens
 
     const metrics = {}
 
     metrics.inputTokens =
       (inputTokens ?? 0) +
-      (cacheWriteInputTokens ?? 0) +
-      (cacheReadInputTokens ?? 0)
+      (cacheWriteTokens ?? 0) +
+      (cacheReadTokens ?? 0)
 
     if (outputTokens) metrics.outputTokens = outputTokens
     const totalTokens = metrics.inputTokens + (outputTokens ?? 0)
     if (totalTokens) metrics.totalTokens = totalTokens
 
-    if (cacheWriteInputTokens != null) metrics.cacheWriteInputTokens = cacheWriteInputTokens
-    if (cacheReadInputTokens != null) metrics.cacheReadInputTokens = cacheReadInputTokens
+    if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
+    if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
 
     this._tagger.tagMetrics(span, metrics)
   }
