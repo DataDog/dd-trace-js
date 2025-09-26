@@ -37,15 +37,16 @@ git worktree add $WORKTREE_DIR
 cd $WORKTREE_DIR
 
 git fetch origin
-gh pr checkout $PR_ID
+gh pr checkout $PR_ID --repo DataDog/dd-trace-js
 git rebase --gpg-sign $BASE_COMMIT
 git push --force
 git push origin HEAD:$TEMP_BRANCH
 
 gh pr create \
+  --repo DataDog/dd-trace-js \
   --head $TEMP_BRANCH \
   --draft \
   --label "semver-patch" \
   --title "Temp: Run CI on community PR #$PR_ID" \
   --body "This is a temporary PR to allow running CI on the community PR #$PR_ID. It should be closed after CI has completed running."
-gh pr view $TEMP_BRANCH --web
+gh pr view $TEMP_BRANCH --web --repo DataDog/dd-trace-js
