@@ -20,7 +20,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'pino@${version}'`],
         false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'pino')
+      variants = varySandbox(sandbox, 'server.mjs', 'pino')
     })
 
     after(async () => {
@@ -36,8 +36,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['default', 'star', 'destructure']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(
           sandbox.folder,
           variants[variant],
