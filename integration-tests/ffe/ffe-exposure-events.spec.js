@@ -49,40 +49,6 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
 
     cwd = sandbox.folder
     appFile = path.join(cwd, 'app', 'exposure-events.js')
-
-    // This should not be merged in and should be fixed in the upstream package
-    // Fix flagging-core package.json exports in sandbox
-    try {
-      const fs = require('fs')
-      const flaggingCorePkgPath = path.join(cwd, 'node_modules/@datadog/flagging-core/package.json')
-
-      if (fs.existsSync(flaggingCorePkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(flaggingCorePkgPath, 'utf8'))
-
-        if (!pkg.exports) {
-          pkg.exports = {
-            '.': {
-              types: './cjs/index.d.ts',
-              import: './esm/index.js',
-              require: './cjs/index.js'
-            },
-            './src/configuration/exposureEvent': {
-              types: './cjs/configuration/exposureEvent.d.ts',
-              import: './esm/configuration/exposureEvent.js',
-              require: './cjs/configuration/exposureEvent.js'
-            },
-            './src/configuration/exposureEvent.types': {
-              types: './cjs/configuration/exposureEvent.types.d.ts',
-              import: './esm/configuration/exposureEvent.types.js',
-              require: './cjs/configuration/exposureEvent.types.js'
-            }
-          }
-          fs.writeFileSync(flaggingCorePkgPath, JSON.stringify(pkg, null, 2))
-        }
-      }
-    } catch (err) {
-      // Continue if fix fails - test will show the actual error
-    }
   })
 
   after(async function () {

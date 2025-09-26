@@ -260,36 +260,6 @@ class Tracer extends NoopProxy {
         this._tracingInitialized = true
       }
       if (config.flaggingProvider.enabled) {
-        // This should not be merged in and should be fixed in the upstream package
-        // Remove this workaround once @datadog/flagging-core upstream publishes with proper exports field
-        // Fix upstream package.json exports issue before loading SDK
-        try {
-          const fs = require('fs')
-          const path = require('path')
-          const flaggingCorePkgPath = path.join(__dirname, '../../../node_modules/@datadog/flagging-core/package.json')
-          const pkg = JSON.parse(fs.readFileSync(flaggingCorePkgPath, 'utf8'))
-
-          if (!pkg.exports) {
-            pkg.exports = {
-              '.': {
-                types: './cjs/index.d.ts',
-                import: './esm/index.js',
-                require: './cjs/index.js'
-              },
-              './src/configuration/exposureEvent': {
-                types: './cjs/configuration/exposureEvent.d.ts',
-                import: './esm/configuration/exposureEvent.js',
-                require: './cjs/configuration/exposureEvent.js'
-              },
-              './src/configuration/exposureEvent.types': {
-                types: './cjs/configuration/exposureEvent.types.d.ts',
-                import: './esm/configuration/exposureEvent.types.js',
-                require: './cjs/configuration/exposureEvent.types.js'
-              }
-            }
-            fs.writeFileSync(flaggingCorePkgPath, JSON.stringify(pkg, null, 2))
-          }
-        } catch {}
         this._modules.flaggingProvider.enable(config)
         lazyProxy(this, 'flaggingProvider', config, () => require('./ffe/sdk'), this._tracer, config)
       }
