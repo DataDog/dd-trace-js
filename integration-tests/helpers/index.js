@@ -294,7 +294,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-    if (!fs.existsSync(localRemotePath)) {
+    if (!existsSync(localRemotePath)) {
       await execHelper(`git init --bare ${localRemotePath}`)
     }
 
