@@ -307,7 +307,7 @@ jobs:
   integration-guardrails:
     strategy:
       matrix:
-        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
+        version: [18.0.0, 20.0.0, 22.0.0, 24.0.0]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -323,7 +323,7 @@ jobs:
   integration-guardrails-unsupported:
     strategy:
       matrix:
-        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12']
+        version: ['0.8', '0.10', '0.12', '4', '6', '8', '10', '12', '14', '16']
     runs-on: ubuntu-latest
     env:
       DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
