@@ -12,33 +12,33 @@ runs:
     - uses: ./.github/actions/install
 
     - uses: ./.github/actions/node/oldest-maintenance-lts
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
     - run: yarn test:plugins:ci
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
       shell: bash
 
     - uses: ./.github/actions/node/latest
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
     - run: yarn test:plugins:ci
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ runNightly == 'false' }}
+      if: ${{ inputs.runNightly == 'false' }}
       shell: bash
 
     - uses: ./.github/actions/node/nightly
-      if: ${{ runNightly == 'true' }}
+      if: ${{ inputs.runNightly == 'true' }}
     - run: yarn test:plugins:ci
-      if: ${{ runNightly == 'true' }}
+      if: ${{ inputs.runNightly == 'true' }}
       shell: bash
     - run: yarn test:plugins:upstream
-      if: ${{ runNightly == 'true' }}
+      if: ${{ inputs.runNightly == 'true' }}
       shell: bash
 
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
