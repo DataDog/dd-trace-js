@@ -314,7 +314,7 @@ function varySandbox (sandbox, filename, variants, namedVariant, packageName = v
   }
 
   const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
-  const [prefix, suffix] = filename.split('.')
+  const { name: prefix, ext: suffix } = path.parse(filename)
   const variantFilenames = /** @type {Variants} */ ({})
 
   for (const [variant, value] of Object.entries(variants)) {
@@ -332,7 +332,7 @@ function varySandbox (sandbox, filename, variants, namedVariant, packageName = v
 /**
  * @type {string[]}
  */
-varySandbox.variants = ['default', 'star', 'destructure']
+varySandbox.VARIANTS = ['default', 'star', 'destructure']
 
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =

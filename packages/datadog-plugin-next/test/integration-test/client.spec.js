@@ -42,7 +42,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.variants) {
+    for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port, undefined, {
           NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`

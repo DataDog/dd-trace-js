@@ -37,7 +37,7 @@ describe('esm', () => {
   })
 
   context('http2', () => {
-    for (const variant of varySandbox.variants) {
+    for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
