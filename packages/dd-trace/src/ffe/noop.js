@@ -1,5 +1,7 @@
 'use strict'
 
+const { NOOP_REASON } = require('./constants/writers')
+
 class NoopFlaggingProvider {
   constructor (noopTracer) {
     this._tracer = noopTracer
@@ -12,28 +14,28 @@ class NoopFlaggingProvider {
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: 'DEFAULT'
+      reason: NOOP_REASON
     })
   }
 
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: 'DEFAULT'
+      reason: NOOP_REASON
     })
   }
 
   resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: 'DEFAULT'
+      reason: NOOP_REASON,
     })
   }
 
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: 'DEFAULT'
+      reason: NOOP_REASON
     })
   }
 

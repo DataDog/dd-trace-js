@@ -101,8 +101,8 @@ class ExposuresWriter extends BaseFFEWriter {
       },
       subject: {
         id: event.subject?.id || event['subject.id'],
-        type: event.subject?.type || 'user', // defaults to 'user'
-        attributes: event.subject?.attributes || {}, // defaults to empty
+        type: event.subject?.type,
+        attributes: event.subject?.attributes
       }
     }
     return formattedEvent
