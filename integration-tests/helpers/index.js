@@ -211,7 +211,7 @@ async function execHelper (command, options) {
   }
 }
 
-function execWithTimeout (command, options, timeoutMs = 30000) {
+function execWithTimeout (command, options, timeoutMs = 5000) {
   const execPromise = exec(command, options)
   const timeoutPromise = new Promise((resolve, reject) =>
     setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
