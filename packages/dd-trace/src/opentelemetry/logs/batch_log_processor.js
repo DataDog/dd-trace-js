@@ -25,11 +25,10 @@ class BatchLogRecordProcessor {
     this.exporter = exporter
     this.#batchTimeout = batchTimeout
     this.#maxExportBatchSize = maxExportBatchSize
-
+    this.isShutdown = false
     this.#logRecords = []
     this.#timer = null
     this.#shutdownPromise = null
-    this.isShutdown = false
   }
 
   /**

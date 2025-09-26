@@ -654,11 +654,11 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
-      OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
-      OTEL_EXPORTERS_OTLP_TIMEOUT,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE
     } = getEnvironmentVariables()
@@ -693,9 +693,9 @@ class Config {
     } else {
       this._setString(env, 'otelLogsProtocol', requestedProtocol || 'http/protobuf')
     }
-    this._setUnit(env, 'otelLogsTimeout', OTEL_EXPORTER_OTLP_TIMEOUT || OTEL_EXPORTERS_OTLP_TIMEOUT)
-    this._setUnit(env, 'otelLogsBatchTimeout', OTEL_BSP_SCHEDULE_DELAY)
-    this._setUnit(env, 'otelLogsMaxExportBatchSize', OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
+    env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
 
     this._setBoolean(env, 'apmTracingEnabled', coalesce(
       DD_APM_TRACING_ENABLED,
