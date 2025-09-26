@@ -62,6 +62,33 @@ function isESMBuild (build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
+function isESMFile(fullPathToModule, modulePackageJsonPath, packageJson) {
+  if (fullPathToModule.endsWith('.mjs')) return true
+  if (fullPathToModule.endsWith('.cjs')) return false
+
+  const pathParts = fullPathToModule.split(path.sep)
+  do {
+    pathParts.pop()
+
+    const packageJsonPath = [...pathParts, 'package.json'].join(path.sep)
+    if (packageJsonPath === modulePackageJsonPath) {
+      return packageJson.type === 'module'
+    }
+
+    try {
+      const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
+      const packageJson = JSON.parse(packageJsonContent)
+      if (packageJson?.type) { // TODO check if type is inherited or defaulted to commonjs
+        return packageJson.type === 'module'
+      }
+    } catch (err) {
+      // file does not exit, continue
+    }
+  } while (pathParts.length > 1)
+
+  return packageJson.type === 'module'
+}
+
 function getGitMetadata () {
   const gitMetadata = {
     repositoryURL: null,
@@ -158,7 +185,7 @@ ${build.initialOptions.banner.js}`
 
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch (err) {
       if (DEBUG) {
         console.warn(`Warning: Unable to find "${args.path}".` +
@@ -196,6 +223,8 @@ ${build.initialOptions.banner.js}`
 
       const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
+      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
@@ -208,7 +237,8 @@ ${build.initialOptions.banner.js}`
           full: fullPathToModule,
           raw: args.path,
           pkgOfInterest: true,
-          internal
+          internal,
+          isESM
         }
       }
     }
@@ -228,26 +258,29 @@ ${build.initialOptions.banner.js}`
       : data.pkg
 
     // Read the content of the module file of interest
-    const fileCode = fs.readFileSync(args.path, 'utf8')
+    let contents = fs.readFileSync(args.path, 'utf8')
 
-    const contents = `
-      (function() {
-        ${fileCode}
-      })(...arguments);
-      {
-        const dc = require('dc-polyfill');
-        const ch = dc.channel('${CHANNEL}');
-        const mod = module.exports
-        const payload = {
-          module: mod,
-          version: '${data.version}',
-          package: '${data.pkg}',
-          path: '${pkgPath}'
-        };
-        ch.publish(payload);
-        module.exports = payload.module;
+    if (!data.isESM) {
+      contents = `
+        (function() {
+          ${contents}
+        })(...arguments);
+        {
+          const dc = require('dc-polyfill');
+          const ch = dc.channel('${CHANNEL}');
+          const mod = module.exports
+          const payload = {
+            module: mod,
+            version: '${data.version}',
+            package: '${data.pkg}',
+            path: '${pkgPath}'
+          };
+          ch.publish(payload);
+          module.exports = payload.module;
+      }
+      `
     }
-    `
+
 
     // https://esbuild.github.io/plugins/#on-load-results
     return {
@@ -259,12 +292,17 @@ ${build.initialOptions.banner.js}`
 }
 
 // @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory) {
+function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path === '.') {
     path = './'
   } else if (path === '..') {
     path = '../'
   }
 
-  return require.resolve(path, { paths: [directory] })
+  let conditions
+  if (usesImportStatement) {
+    conditions = ['import']
+  }
+
+  return require.resolve(path, { paths: [directory], conditions })
 }
