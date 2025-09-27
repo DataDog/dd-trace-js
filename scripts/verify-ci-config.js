@@ -131,6 +131,7 @@ function pluginErrorMsg (pluginName, title, message) {
 
 // TODO: Check all YAML files instead of having to list them here.
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'apm-integrations.yml'))
+checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'aiguard.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'appsec.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'llmobs.yml'))
 checkPlugins(path.join(__dirname, '..', '.github', 'workflows', 'platform.yml'))
