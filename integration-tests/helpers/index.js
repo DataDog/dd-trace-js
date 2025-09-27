@@ -269,7 +269,15 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   return {
     folder,
-    remove: async () => fs.rm(folder, { force: true, recursive: true })
+    remove: () => {
+      // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
+      // our `integration-guardrails` GitHub Actions workflow
+      if (process.platform === 'win32') {
+        return exec(`Remove-Item -Recurse -Path "${folder}"`, { shell: 'powershell.exe' })
+      } else {
+        return exec(`rm -rf ${folder}`)
+      }
+    }
   }
 }
 
