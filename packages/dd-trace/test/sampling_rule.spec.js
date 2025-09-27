@@ -431,7 +431,7 @@ describe('sampling rule', () => {
 
       const clock = sinon.useFakeTimers({
         now: new Date(),
-        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
       })
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
