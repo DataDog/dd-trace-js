@@ -21,7 +21,6 @@ describe('Plugin', () => {
   let port
   let server
   let tracer
-  let getPort
 
   const clientBuilders = {
     protobuf: buildProtoClient,
@@ -42,8 +41,9 @@ describe('Plugin', () => {
       ClientService = ClientService || TestService
 
       if (server.bindAsync) {
-        server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+        server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
           if (err) return reject(err)
+          port = boundPort
 
           server.addService(TestService.service, service)
           server.start()
@@ -51,7 +51,7 @@ describe('Plugin', () => {
           resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
         })
       } else {
-        server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
+        port = server.bind('127.0.0.1:0', grpc.ServerCredentials.createInsecure())
         server.addService(TestService.service, service)
         server.start()
 
@@ -73,17 +73,11 @@ describe('Plugin', () => {
     return buildGenericService(service, TestService, ClientService)
   }
 
-  before(async () => {
-    getPort = (await import('get-port')).default
+  beforeEach(() => {
+    port = 0
   })
 
   describe('grpc/client', () => {
-    beforeEach(() => {
-      return getPort().then(newPort => {
-        port = newPort
-      })
-    })
-
     afterEach(() => {
       server.forceShutdown()
     })
