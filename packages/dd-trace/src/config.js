@@ -10,7 +10,8 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getGitRepoUrlFromGitConfig, getGitHeadRef } =
+  require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
@@ -18,6 +19,7 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
+const path = require('path')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -390,6 +392,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
+      // try to read Git metadata from the environment variables
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
           getEnvironmentVariable('DD_GIT_REPOSITORY_URL'),
@@ -400,6 +403,7 @@ class Config {
         getEnvironmentVariable('DD_GIT_COMMIT_SHA'),
         this.tags[GIT_COMMIT_SHA]
       )
+      // otherwise, try to read Git metadata from the git.properties file
       if (!this.repositoryUrl || !this.commitSHA) {
         const DD_GIT_PROPERTIES_FILE = coalesce(
           getEnvironmentVariable('DD_GIT_PROPERTIES_FILE'),
@@ -418,6 +422,53 @@ class Config {
           const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
           this.commitSHA = this.commitSHA || commitSHA
           this.repositoryUrl = this.repositoryUrl || repositoryUrl
+        }
+      }
+      // otherwise, try to read Git metadata from the .git/ folder
+      if (!this.repositoryUrl || !this.commitSHA) {
+        const DD_GIT_FOLDER_PATH = coalesce(
+          getEnvironmentVariable('DD_GIT_FOLDER_PATH'),
+          `${process.cwd()}/.git/`
+        )
+        // try to read git config (repository URL)
+        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        try {
+          const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
+          if (gitConfigContent) {
+            const repositoryUrl = getGitRepoUrlFromGitConfig(gitConfigContent)
+            this.repositoryUrl = this.repositoryUrl || repositoryUrl
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git config: %s', gitConfigPath, e)
+          }
+        }
+        // try to read git HEAD and git HEAD ref (commit SHA)
+        const gitHeadPath = path.join(DD_GIT_FOLDER_PATH, 'HEAD')
+        try {
+          const gitHeadContent = fs.readFileSync(gitHeadPath, 'utf8')
+          if (gitHeadContent) {
+            const gitHeadRef = getGitHeadRef(gitHeadContent)
+            const gitHeadRefPath = path.join(DD_GIT_FOLDER_PATH, gitHeadRef)
+            try {
+              const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
+              if (gitHeadRefContent) {
+                const gitHeadSha = gitHeadRefContent.trim()
+                this.commitSHA = this.commitSHA || gitHeadSha
+              }
+            } catch (e) {
+              // Only log error if the user has set a .git/ path
+              if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+                log.error('Error reading git HEAD ref: %s', gitHeadRefPath, e)
+              }
+            }
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git HEAD: %s', gitHeadPath, e)
+          }
         }
       }
     }
