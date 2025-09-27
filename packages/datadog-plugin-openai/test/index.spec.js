@@ -50,7 +50,9 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        clock = sinon.useFakeTimers()
+        clock = sinon.useFakeTimers({
+          toFake: ['Date']
+        })
 
         const requiredModule = require(moduleRequirePath)
         const module = requiredModule.get()
