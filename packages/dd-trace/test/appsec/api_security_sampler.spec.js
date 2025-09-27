@@ -14,7 +14,7 @@ describe('API Security Sampler', () => {
   let apiSecuritySampler, webStub, span, clock, performanceNowStub
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers({ now: 10 })
+    clock = sinon.useFakeTimers({ now: 10, toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     performanceNowStub = sinon.stub(performance, 'now').callsFake(() => clock.now)
 
     webStub = {

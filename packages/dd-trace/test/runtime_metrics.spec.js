@@ -204,7 +204,9 @@ function createGarbage (count = 50) {
           }
         }
 
-        clock = sinon.useFakeTimers()
+        clock = sinon.useFakeTimers({
+          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+        })
 
         runtimeMetrics.start(config)
       })
@@ -263,8 +265,7 @@ function createGarbage (count = 50) {
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
             if (iterations++ % 10000 === 0) {
-              await setTimeout(1)
-              clock.tick(1)
+              await clock.tickAsync(1)
             }
           }
 
@@ -354,8 +355,8 @@ function createGarbage (count = 50) {
           global.gc()
 
           // Wait for GC observer to trigger.
-          await setImmediate()
-          await setImmediate()
+          await clock.tickAsync(0)
+          await clock.tickAsync(0)
 
           clock.tick(60 * 60 * 1000)
 
@@ -382,11 +383,10 @@ function createGarbage (count = 50) {
           let waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
-            await setTimeout(1)
-            clock.tick(1)
+            await clock.tickAsync(1)
           }
           global.gc()
-          await setTimeout(1)
+          await clock.tickAsync(1)
           clock.tick(10000 - waitTime)
           // Should still collect basic metrics
           expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
@@ -408,11 +408,10 @@ function createGarbage (count = 50) {
           waitTime = 60
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
-            await setTimeout(1)
-            clock.tick(1)
+            await clock.tickAsync(1)
           }
           global.gc()
-          await setTimeout(1)
+          await clock.tickAsync(1)
           clock.tick(10000 - waitTime)
 
           // Should still collect other metrics
