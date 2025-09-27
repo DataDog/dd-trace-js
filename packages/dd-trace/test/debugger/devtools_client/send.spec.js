@@ -30,7 +30,9 @@ describe('input message http requests', function () {
   let clock, send, request, jsonBuffer
 
   beforeEach(function () {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     request = sinon.spy()
     request['@noCallThru'] = true

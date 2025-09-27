@@ -597,7 +597,9 @@ describe('dogstatsd', () => {
     })
 
     it('should flush via interval', () => {
-      const clock = sinon.useFakeTimers()
+      const clock = sinon.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      })
 
       client = new CustomMetrics({ dogstatsd: {} })
 

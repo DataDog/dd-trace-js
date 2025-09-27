@@ -30,7 +30,9 @@ describe('BaseLLMObsWriter', () => {
       })
     })
 
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     options = {
       endpoint: '/endpoint',

@@ -5,8 +5,6 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
-const { setTimeout } = require('node:timers/promises')
-
 require('../setup/core')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
@@ -46,7 +44,9 @@ describe('profiler', function () {
 
   function setUpProfiler () {
     interval = 65 * 1000
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     exporterPromise = Promise.resolve()
     exporter = {
       export: sinon.stub().returns(exporterPromise)
@@ -208,7 +208,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -225,7 +225,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -330,7 +330,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await waitForExport()
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       const [
         startWall,

@@ -260,7 +260,9 @@ describe('telemetry app-heartbeat', () => {
   let clock
 
   before(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   after(() => {
@@ -317,7 +319,9 @@ describe('Telemetry extended heartbeat', () => {
   let clock
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   afterEach(() => {
@@ -500,7 +504,9 @@ describe('Telemetry retry', () => {
   const HEARTBEAT_INTERVAL = 60000
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     pluginsByName = {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
@@ -896,7 +902,9 @@ describe('AVM OSS', () => {
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
-          clock = sinon.useFakeTimers()
+          clock = sinon.useFakeTimers({
+            toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+          })
 
           storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {

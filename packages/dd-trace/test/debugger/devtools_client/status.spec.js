@@ -25,7 +25,9 @@ describe('diagnostic message http requests', function () {
   ]
 
   beforeEach(function () {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     request = sinon.spy()
     request['@noCallThru'] = true

@@ -16,7 +16,9 @@ describe('Scheduler', () => {
   let scheduler
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     stub = sinon.stub()
     scheduler = new Scheduler(stub, INTERVAL)
   })

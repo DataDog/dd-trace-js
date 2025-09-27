@@ -204,7 +204,9 @@ function createGarbage (count = 50) {
           }
         }
 
-        clock = sinon.useFakeTimers()
+        clock = sinon.useFakeTimers({
+          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+        })
 
         runtimeMetrics.start(config)
       })

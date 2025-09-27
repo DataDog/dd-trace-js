@@ -14,7 +14,9 @@ describe('Telemetry logs', () => {
   let start, send
 
   before(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   after(() => {
