@@ -701,15 +701,15 @@ describe('checkAndFetchBranch', () => {
     )
   })
 
-  it('logs error if a command throws', () => {
-    const logErrorSpy = sinon.spy()
+  it('logs debug if a command throws', () => {
+    const logDebugSpy = sinon.spy()
     execFileSyncStub.throws(new Error('git command failed'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
       child_process: { execFileSync: execFileSyncStub },
-      '../../log': { error: logErrorSpy }
+      '../../log': { debug: logDebugSpy }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(logErrorSpy).to.have.been.called
+    expect(logDebugSpy).to.have.been.called
   })
 })
 

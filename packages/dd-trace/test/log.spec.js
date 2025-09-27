@@ -249,6 +249,24 @@ describe('log', () => {
         expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
         expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
       })
+
+      it('should allow a message + Error + LogConfig', () => {
+        log.error('this is an error with a log config', log.NO_TRANSMIT)
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error with a log config')
+      })
+
+      it('should allow a message + NoTransmitError', () => {
+        log.error('this is an error without a log config', new log.NoTransmitError('bad underlying thing'))
+
+        expect(console.error).to.have.been.called
+        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error without a log config')
+        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
+        expect(console.error.secondCall.args[0]).to.have.property('message', 'bad underlying thing')
+      })
     })
 
     describe('toggle', () => {

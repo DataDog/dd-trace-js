@@ -211,10 +211,21 @@ class Span {
     return this
   }
 
-  addLink (context, attributes) {
-    // extract dd context
+  addLink (link, attrs) {
+    // TODO: Remove this once we remove addLink(context, attrs) in v6.0.0
+    if (link instanceof SpanContext) {
+      link = { context: link, attributes: attrs ?? {} }
+    }
+
+    const { context, attributes } = link
+    // Extract dd context
     const ddSpanContext = context._ddContext
-    this._ddSpan.addLink(ddSpanContext, attributes)
+    this._ddSpan.addLink({ context: ddSpanContext, attributes })
+    return this
+  }
+
+  addLinks (links) {
+    links.forEach(link => this.addLink(link))
     return this
   }
 

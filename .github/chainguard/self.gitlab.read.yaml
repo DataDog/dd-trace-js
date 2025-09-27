@@ -1,0 +1,8 @@
+issuer: https://gitlab.ddbuild.io
+
+subject_pattern: "project_path:DataDog/apm-reliability/dd-trace-js:ref_type:(branch|tag):ref:.*"
+
+permissions:
+  contents: read
+  actions: read
+  pull_requests: read

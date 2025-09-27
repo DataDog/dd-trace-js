@@ -1,5 +1,6 @@
 'use strict'
 
+const { before, beforeEach, after } = require('mocha')
 const chai = require('chai')
 
 const tracerVersion = require('../../../../package.json').version
@@ -196,6 +197,7 @@ function fromBuffer (spanProperty, isNumber = false) {
 
 const agent = require('../plugins/agent')
 const assert = require('node:assert')
+const { useEnv } = require('../../../../integration-tests/helpers')
 
 /**
  * @param {Object} options
@@ -204,15 +206,10 @@ const assert = require('node:assert')
  * @param {Object} options.closeOptions
  * @returns {function(): Promise<{ apmSpans: Array, llmobsSpans: Array }>}
  */
-function useLlmobs ({
+function useLlmObs ({
   plugin,
-  tracerConfigOptions = {
-    llmobs: {
-      mlApp: 'test',
-      agentlessEnabled: false
-    }
-  },
-  closeOptions = { ritmReset: false, wipe: true }
+  tracerConfigOptions = {},
+  closeOptions = {}
 }) {
   if (!plugin) {
     throw new TypeError(
@@ -220,20 +217,13 @@ function useLlmobs ({
     )
   }
 
-  if (!tracerConfigOptions.llmobs) {
-    throw new TypeError(
-      '`loadOptions.llmobs` is required when using `useLlmobs`'
-    )
-  }
-
+  /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
+
+  /** @type {Promise<Array<Array<Object>>>} */
   let llmobsTracesPromise
 
-  before(() => {
-    return agent.load(plugin, {}, tracerConfigOptions)
-  })
-
-  beforeEach(() => {
+  const resetTracesPromises = () => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
@@ -246,14 +236,31 @@ function useLlmobs ({
         .map(trace => trace.spans[0])
         .sort((a, b) => a.start_ns - b.start_ns)
     })
+  }
+
+  useEnv({
+    _DD_LLMOBS_FLUSH_INTERVAL: 0
   })
 
+  before(() => {
+    return agent.load(plugin, {}, {
+      llmobs: {
+        mlApp: 'test',
+        agentlessEnabled: false
+      },
+      ...tracerConfigOptions
+    })
+  })
+
+  beforeEach(resetTracesPromises)
+
   after(() => {
-    return agent.close(closeOptions)
+    return agent.close({ ritmReset: false, ...closeOptions })
   })
 
   return async function () {
     const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+    resetTracesPromises()
 
     return { apmSpans, llmobsSpans }
   }
@@ -263,7 +270,7 @@ module.exports = {
   expectedLLMObsLLMSpanEvent,
   expectedLLMObsNonLLMSpanEvent,
   deepEqualWithMockValues,
-  useLlmobs,
+  useLlmObs,
   MOCK_ANY,
   MOCK_NUMBER,
   MOCK_STRING,

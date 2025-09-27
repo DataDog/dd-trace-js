@@ -135,7 +135,7 @@ const extractQueueMetadata = queueURL => {
   let partition = 'aws'
   if (region.startsWith('cn-')) {
     partition = 'aws-cn'
-  } else if (region.startsWith('us-gov')) {
+  } else if (region.startsWith('us-gov-')) {
     partition = 'aws-us-gov'
   }
 

@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
-const getPort = require('get-port')
 
 const path = require('node:path')
 const Readable = require('node:stream').Readable
@@ -22,6 +21,7 @@ describe('Plugin', () => {
   let port
   let server
   let tracer
+  let getPort
 
   const clientBuilders = {
     protobuf: buildProtoClient,
@@ -72,6 +72,10 @@ describe('Plugin', () => {
 
     return buildGenericService(service, TestService, ClientService)
   }
+
+  before(async () => {
+    getPort = (await import('get-port')).default
+  })
 
   describe('grpc/client', () => {
     beforeEach(() => {

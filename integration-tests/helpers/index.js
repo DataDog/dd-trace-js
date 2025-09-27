@@ -5,7 +5,8 @@ const childProcess = require('child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const fs = require('fs')
+const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
+const fs = require('fs/promises')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
@@ -218,7 +219,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const out = path.join(folder, `dd-trace-${version}.tgz`)
   const allDependencies = [`file:${out}`].concat(cappedDependencies)
 
-  fs.mkdirSync(folder)
+  await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
@@ -250,14 +251,14 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
-    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-    if (!fs.existsSync(localRemotePath)) {
+    if (!existsSync(localRemotePath)) {
       await exec(`git init --bare ${localRemotePath}`)
     }
 
@@ -272,6 +273,66 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     remove: async () => rimraf(folder)
   }
 }
+
+/**
+ * @typedef {{ default: string, star: string, destructure: string }} Variants
+ */
+/**
+ * @overload
+ * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {string} bindingName - The binding name that will be use to bind to the packageName.
+ * @param {string} [namedVariant] - The name of the named variant to use.
+ * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
+ * @returns {Variants} A map from variant names to resulting filenames
+ */
+/**
+ * Creates a bunch of files based on an original file in sandbox. Useful for varying test files
+ * without having to create a bunch of them yourself.
+ *
+ * The variants object should have keys that are named variants, and values that are the text
+ * in the file that's different in each variant. There must always be a "default" variant,
+ * whose value is the original text within the file that will be replaced.
+ *
+ * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {Variants} variants - The variants.
+ * @returns {Variants} A map from variant names to resulting filenames
+ */
+function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+  if (typeof variants === 'string') {
+    const bindingName = variants
+    variants = {
+      default: `import ${bindingName} from '${packageName}'`,
+      star: namedVariant
+        ? `import * as ${bindingName} from '${packageName}'`
+        : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+      destructure: namedVariant
+        ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
+        : `import { default as ${bindingName}} from '${packageName}'`
+    }
+  }
+
+  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const { name: prefix, ext: suffix } = path.parse(filename)
+  const variantFilenames = /** @type {Variants} */ ({})
+
+  for (const [variant, value] of Object.entries(variants)) {
+    const variantFilename = `${prefix}-${variant}${suffix}`
+    variantFilenames[variant] = variantFilename
+    let newFileData = origFileData
+    if (variant !== 'default') {
+      newFileData = origFileData.replace(variants.default, `${value}`)
+    }
+    writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
+  }
+  return variantFilenames
+}
+
+/**
+ * @type {string[]}
+ */
+varySandbox.VARIANTS = ['default', 'star', 'destructure']
 
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
@@ -289,7 +350,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   const cleanup = function () {
     let msgs
     try {
-      msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
+      msgs = readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
     } catch (e) {
       if (shouldExpectTelemetryPoints && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
@@ -312,7 +373,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
       }
       msgs[i] = [telemetryType, parsed]
     }
-    fs.unlinkSync(process.env.FORWARDER_OUT)
+    unlinkSync(process.env.FORWARDER_OUT)
     delete process.env.FORWARDER_OUT
     delete process.env.DD_TELEMETRY_FORWARDER_PATH
     return msgs
@@ -426,6 +487,7 @@ function setShouldKill (value) {
   })
 }
 
+// eslint-disable-next-line n/no-unsupported-features/node-builtins
 const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
@@ -487,5 +549,6 @@ module.exports = {
   useEnv,
   useSandbox,
   sandboxCwd,
-  setShouldKill
+  setShouldKill,
+  varySandbox
 }

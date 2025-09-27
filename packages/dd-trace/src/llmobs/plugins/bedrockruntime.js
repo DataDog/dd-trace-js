@@ -8,10 +8,11 @@ const telemetry = require('../telemetry')
 const {
   extractRequestParams,
   extractTextAndResponseReason,
-  parseModelId
+  parseModelId,
+  extractTextAndResponseReasonFromStream
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
-const ENABLED_OPERATIONS = new Set(['invokeModel'])
+const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
 
 const requestIdsToTokens = {}
 
@@ -19,7 +20,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   constructor () {
     super(...arguments)
 
-    this.addSub('apm:aws:request:complete:bedrockruntime', ({ response }) => {
+    this.addSub('apm:aws:request:complete:bedrockruntime', (ctx) => {
+      const { response } = ctx
       const request = response.request
       const operation = request.operation
       // avoids instrumenting other non supported runtime operations
@@ -32,23 +34,34 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (modelName.includes('embed')) {
         return
       }
-      const span = storage('legacy').getStore()?.span
-      this.setLLMObsTags({ request, span, response, modelProvider, modelName })
+      const span = ctx.currentStore?.span
+      this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName })
     })
 
     this.addSub('apm:aws:response:deserialize:bedrockruntime', ({ headers }) => {
       const requestId = headers['x-amzn-requestid']
       const inputTokenCount = headers['x-amzn-bedrock-input-token-count']
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
+      const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
+      const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
       requestIdsToTokens[requestId] = {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount),
-        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount)
+        outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount),
+        cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount),
+        cacheWriteTokensFromHeaders: cacheWriteTokenCount && Number.parseInt(cacheWriteTokenCount)
       }
+    })
+
+    this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
+      if (!ctx.chunks) ctx.chunks = []
+
+      if (chunk) ctx.chunks.push(chunk)
     })
   }
 
-  setLLMObsTags ({ request, span, response, modelProvider, modelName }) {
+  setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
+    const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
     const parent = llmobsStore.getStore()?.span
@@ -62,7 +75,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     const requestParams = extractRequestParams(request.params, modelProvider)
-    const textAndResponseReason = extractTextAndResponseReason(response, modelProvider, modelName)
+    // for streamed responses, we'll use the coerced response object we formed in the stream handler
+    const textAndResponseReason = isStream
+      ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
+      : extractTextAndResponseReason(response, modelProvider, modelName)
 
     // add metadata tags
     this._tagger.tagMetadata(span, {
@@ -78,14 +94,16 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     )
 
     // add token metrics
-    const { inputTokens, outputTokens, totalTokens } = extractTokens({
+    const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
       requestId: response.$metadata.requestId,
       usage: textAndResponseReason.usage
     })
     this._tagger.tagMetrics(span, {
       inputTokens,
       outputTokens,
-      totalTokens
+      totalTokens,
+      cacheReadTokens,
+      cacheWriteTokens
     })
   }
 }
@@ -93,17 +111,26 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 function extractTokens ({ requestId, usage }) {
   const {
     inputTokensFromHeaders,
-    outputTokensFromHeaders
+    outputTokensFromHeaders,
+    cacheReadTokensFromHeaders,
+    cacheWriteTokensFromHeaders
   } = requestIdsToTokens[requestId] || {}
   delete requestIdsToTokens[requestId]
 
   const inputTokens = usage.inputTokens || inputTokensFromHeaders || 0
   const outputTokens = usage.outputTokens || outputTokensFromHeaders || 0
+  const cacheReadTokens = usage.cacheReadTokens || cacheReadTokensFromHeaders || 0
+  const cacheWriteTokens = usage.cacheWriteTokens || cacheWriteTokensFromHeaders || 0
+
+  // adjust for the fact that bedrock input tokens only count non-cached tokens
+  const normalizedInputTokens = inputTokens + cacheReadTokens + cacheWriteTokens
 
   return {
-    inputTokens,
+    inputTokens: normalizedInputTokens,
     outputTokens,
-    totalTokens: inputTokens + outputTokens
+    totalTokens: normalizedInputTokens + outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   }
 }
 

@@ -521,7 +521,8 @@ function createGarbage (count = 50) {
               }
               if (metric === 'runtime.node.cpu.total') {
                 assert(
-                  number >= expected && number <= expected + 1,
+                  // Subtracting 0.02 since lower numbers can happen due to rounding issues.
+                  number >= expected - 0.02 && number <= expected + 1,
                   `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
                 )
                 totalPercent = number

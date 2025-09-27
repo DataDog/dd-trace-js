@@ -119,6 +119,10 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 
+// vitest worker variables
+const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
+const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g')
@@ -218,6 +222,8 @@ module.exports = {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_LOGS_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -438,36 +444,40 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   )
 }
 
-function getTestEnvironmentMetadata (testFramework, config) {
-  // TODO: eventually these will come from the tracer (generally available)
+function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
   const ciMetadata = getCIMetadata()
-  const {
-    [GIT_COMMIT_SHA]: commitSHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: repositoryUrl,
-    [GIT_TAG]: tag,
-    [GIT_COMMIT_AUTHOR_NAME]: authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-    [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath,
-    [GIT_COMMIT_HEAD_SHA]: headCommitSha
-  } = ciMetadata
-
-  const gitMetadata = getGitMetadata({
-    commitSHA,
-    branch,
-    repositoryUrl,
-    tag,
-    authorName,
-    authorEmail,
-    commitMessage,
-    ciWorkspacePath,
-    headCommitSha
-  })
-
   const userProvidedGitMetadata = getUserProviderGitMetadata()
 
-  checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+  let gitMetadata = {}
+
+  // We don't execute git in test framework workers since the information is in the parent process
+  // and git metadata does not affect the execution of the tests
+  if (!shouldSkipGitMetadataExtraction) {
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+
+    const {
+      [GIT_COMMIT_SHA]: commitSHA,
+      [GIT_BRANCH]: branch,
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_TAG]: tag,
+      [GIT_COMMIT_AUTHOR_NAME]: authorName,
+      [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [CI_WORKSPACE_PATH]: ciWorkspacePath,
+      [GIT_COMMIT_HEAD_SHA]: headCommitSha
+    } = ciMetadata
+    gitMetadata = getGitMetadata({
+      commitSHA,
+      branch,
+      repositoryUrl,
+      tag,
+      authorName,
+      authorEmail,
+      commitMessage,
+      ciWorkspacePath,
+      headCommitSha
+    })
+  }
 
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 

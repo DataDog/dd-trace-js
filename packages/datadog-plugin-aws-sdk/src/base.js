@@ -59,6 +59,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
+        'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk'
@@ -114,6 +115,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      const partition = getPartition(region)
+      if (partition) {
+        span.setTag('aws.partition', partition)
+      }
 
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
@@ -315,6 +321,19 @@ function getHostname (store, region) {
         ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
         : `s3.${region}.amazonaws.com`
   }
+}
+
+function getPartition (region) {
+  if (!region) return
+
+  let partition = 'aws'
+  if (region.startsWith('cn-')) {
+    partition = 'aws-cn'
+  } else if (region.startsWith('us-gov-')) {
+    partition = 'aws-us-gov'
+  }
+
+  return partition
 }
 
 module.exports = BaseAwsSdkPlugin

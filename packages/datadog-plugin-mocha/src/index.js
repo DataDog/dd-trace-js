@@ -22,12 +22,6 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_SESSION_ID,
-  TEST_MODULE_ID,
-  TEST_MODULE,
-  TEST_SUITE_ID,
-  TEST_COMMAND,
-  TEST_SUITE,
   MOCHA_IS_PARALLEL,
   TEST_IS_RUM_ACTIVE,
   TEST_BROWSER_DRIVER,
@@ -54,24 +48,8 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-const id = require('../../dd-trace/src/id')
-const log = require('../../dd-trace/src/log')
 
 const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
-
-function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
-  const testSuiteSpanContext = testSuiteSpan.context()
-  const suiteTags = {
-    [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
-    [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
-    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'mocha'
-  }
-  if (testSuiteSpanContext._parentId) {
-    suiteTags[TEST_MODULE_ID] = testSuiteSpanContext._parentId.toString(10)
-  }
-  return suiteTags
-}
 
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
@@ -79,7 +57,6 @@ class MochaPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new Map()
     this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
@@ -88,7 +65,7 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(suiteFile, this.sourceRoot)
-      const testSuiteSpan = this._testSuites.get(testSuite)
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
 
       if (!coverageFiles.length) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
@@ -163,7 +140,7 @@ class MochaPlugin extends CiPlugin {
       const store = storage('legacy').getStore()
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
-      this._testSuites.set(testSuite, testSuiteSpan)
+      this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
@@ -436,37 +413,6 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:worker-report:trace', (traces) => {
-      const formattedTraces = JSON.parse(traces).map(trace =>
-        trace.map(span => {
-          const formattedSpan = {
-            ...span,
-            span_id: id(span.span_id),
-            trace_id: id(span.trace_id),
-            parent_id: id(span.parent_id)
-          }
-          if (formattedSpan.name === 'mocha.test') {
-            const testSuite = span.meta[TEST_SUITE]
-            const testSuiteSpan = this._testSuites.get(testSuite)
-            if (!testSuiteSpan) {
-              log.warn('Test suite span not found for test span with test suite', testSuite)
-              return formattedSpan
-            }
-            const suiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan)
-            formattedSpan.meta = {
-              ...formattedSpan.meta,
-              ...suiteTags
-            }
-          }
-          return formattedSpan
-        })
-      )
-
-      formattedTraces.forEach(trace => {
-        this.tracer._exporter.export(trace)
-      })
-    })
-
     this.addBind('ci:mocha:global:run', (ctx) => {
       return ctx.currentStore
     })
@@ -522,7 +468,7 @@ class MochaPlugin extends CiPlugin {
     }
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
-    const testSuiteSpan = this._testSuites.get(testSuite)
+    const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
 
     extraTags[TEST_SOURCE_FILE] = this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot
       ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)

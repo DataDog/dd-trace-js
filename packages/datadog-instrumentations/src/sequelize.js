@@ -7,7 +7,7 @@ const {
 
 const shimmer = require('../../datadog-shimmer')
 
-addHook({ name: 'sequelize', versions: ['>=4'] }, Sequelize => {
+addHook({ name: 'sequelize', versions: ['>=4'], file: ['lib/sequelize.js'] }, Sequelize => {
   const startCh = channel('datadog:sequelize:query:start')
   const finishCh = channel('datadog:sequelize:query:finish')
 
