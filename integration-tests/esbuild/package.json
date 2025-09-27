@@ -25,7 +25,6 @@
     "@koa/router": "14.0.0",
     "aws-sdk": "2.1692.0",
     "axios": "1.12.2",
-    "dd-trace": "file:../../dd-trace-6.0.0-pre.tgz",
     "esbuild": "0.25.10",
     "express": "4.21.2",
     "hono": "4.9.7",

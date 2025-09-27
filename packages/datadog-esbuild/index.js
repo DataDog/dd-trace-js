@@ -7,7 +7,7 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
-const { pathToFileURL, fileURLToPath } = require('url')
+const { pathToFileURL } = require('url')
 const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
