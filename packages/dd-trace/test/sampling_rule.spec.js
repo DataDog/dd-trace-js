@@ -429,7 +429,10 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      const clock = sinon.useFakeTimers(new Date())
+      const clock = sinon.useFakeTimers({
+        now: new Date(),
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      })
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
       clock.tick(1000)
