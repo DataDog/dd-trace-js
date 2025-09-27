@@ -20,7 +20,6 @@ const httpNames = ['http', 'node:http']
 const httpsNames = ['https', 'node:https']
 
 addHook({ name: httpNames }, http => {
-  console.log('wrapping http server')
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)

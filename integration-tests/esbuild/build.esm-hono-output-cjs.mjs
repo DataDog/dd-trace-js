@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 import ddPlugin from 'dd-trace/esbuild.js'
 import esbuild from 'esbuild'
 import path from 'node:path'
@@ -25,6 +26,7 @@ const external = [
   'graphql/language/printer',
   'graphql/utilities',
 ]
+
 esbuild.build({
   entryPoints: [entryPoint],
   outfile: SCRIPT,
@@ -36,6 +38,5 @@ esbuild.build({
   format: 'cjs',
   external
 }).catch((err) => {
-  console.error(err) // eslint-disable-line no-console
   process.exit(1)
 })

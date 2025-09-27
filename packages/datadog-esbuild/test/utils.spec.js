@@ -4,7 +4,7 @@ const { processModule } = require('../src/utils.js')
 const assert = require('assert')
 const path = require('path')
 
-describe('iitm-helpers', () => {
+describe('esbuild utils', () => {
   describe('processModule', () => {
     it('should set a single exported method', async () => {
       const setters = await processModule({
@@ -49,4 +49,6 @@ describe('iitm-helpers', () => {
       assert.strictEqual(setters.has('METHODS'), true)
     })
   })
+
+  // TODO add tests for isESM
 })

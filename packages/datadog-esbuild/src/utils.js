@@ -1,25 +1,16 @@
 'use strict'
 
 // Based in import-in-the-middle
-const { pathToFileURL, fileURLToPath } = require('url')
+const { pathToFileURL, fileURLToPath } = require('node:url')
+const fs = require('node:fs')
+const path = require('node:path')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
-const fs = require('fs')
-const path = require('path')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
   ? require('import-in-the-middle/lib/get-exports.js')
   : getExportsImporting
 
-/**
- * Determines if a specifier represents an export all ESM line.
- * Note that the expected `line` isn't 100% valid ESM. It is derived
- * from the `getExports` function wherein we have recognized the true
- * line and re-mapped it to one we expect.
- *
- * @param {string} line
- * @returns {boolean}
- */
 function isStarExportLine (line) {
   return /^\* from /.test(line)
 }
@@ -49,7 +40,7 @@ function isBareSpecifier (specifier) {
 }
 
 function resolve (specifier, context) {
-  // need to discover if it is esm or cjs module
+  // This comes from an import, that is why import makes preference
   const conditions = ['import']
 
   if (specifier.startsWith('file://')) {
@@ -71,6 +62,12 @@ function getSource (url, { format }) {
   }
 }
 
+/**
+ * Generates the pieces of code for the proxy module before the path
+ *
+ * @param {Object} { path, internal, context, excludeDefault }
+ * @returns {Map}
+ */
 async function processModule ({ path, internal, context, excludeDefault }) {
   let exportNames, srcUrl
   if (internal) {
@@ -162,6 +159,14 @@ async function processModule ({ path, internal, context, excludeDefault }) {
   return setters
 }
 
+/**
+ * Determines if a file is a ESM module or CommonJS
+ *
+ * @param {string} fullPathToModule File to analize
+ * @param {string} modulePackageJsonPath Path of the package.json
+ * @param {string} packageJson The content of the module package.json
+ * @returns {boolean} 
+ */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
   if (fullPathToModule.endsWith('.mjs')) return true
   if (fullPathToModule.endsWith('.cjs')) return false

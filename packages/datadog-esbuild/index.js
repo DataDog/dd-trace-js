@@ -7,7 +7,7 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
-const { pathToFileURL } = require('url')
+const { pathToFileURL, fileURLToPath } = require('url')
 const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
@@ -282,7 +282,6 @@ ${build.initialOptions.banner.js}`
 
         const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
         const toRegister = data.internal ? args.path : pathToFileURL(args.path)
-        // TODO move export default namespace line to "setters" in processModule
         contents = `
 import { register } from ${JSON.stringify(iitmPath)}
 import * as namespace from ${JSON.stringify(args.path)}
@@ -342,7 +341,7 @@ function dotFriendlyResolve (path, directory, usesImportStatement) {
   }
 
   if (path.startsWith('file://')) {
-    path = path.slice(7)
+    path = fileURLToPath(path)
   }
   return require.resolve(path, { paths: [directory], conditions })
 }

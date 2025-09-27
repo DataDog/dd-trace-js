@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import ddPlugin from 'dd-trace/esbuild.js'
-
 import esbuild from 'esbuild'
-import path from 'path'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
