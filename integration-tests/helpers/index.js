@@ -11,7 +11,6 @@ const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
-const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
@@ -270,7 +269,15 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   return {
     folder,
-    remove: async () => rimraf(folder)
+    remove: () => {
+      // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
+      // our `integration-guardrails` GitHub Actions workflow
+      if (process.platform === 'win32') {
+        return exec(`Remove-Item -Recurse -Path "${folder}"`, { shell: 'powershell.exe' })
+      } else {
+        return exec(`rm -rf ${folder}`)
+      }
+    }
   }
 }
 
