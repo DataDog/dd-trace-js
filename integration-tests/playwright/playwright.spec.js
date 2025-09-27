@@ -75,6 +75,7 @@ versions.forEach((version) => {
       context(...args)
     }
   }
+
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
