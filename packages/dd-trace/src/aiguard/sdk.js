@@ -11,8 +11,6 @@ const {
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY
 } = require('./tags')
-const log = require('../log')
-const { URL } = require('url')
 
 const ALLOW = 'ALLOW'
 
@@ -42,24 +40,18 @@ class AIGuard extends NoopAIGuard {
     super(tracer)
 
     if (!config.apiKey || !config.appKey) {
-      const message = 'AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY'
-      log.error(message)
-      throw new Error(message)
+      throw new Error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
     }
     this._headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
     }
 
-    if (config.protocolVersion !== '0.4') {
-      log.error('AIGuard: observability of evaluation results requires protocol version 0.4')
-    }
-
     let endpoint = config.aiguard?.endpoint
     if (!endpoint) {
       endpoint = `https://app.${config.site}/api/v2/ai-guard`
     }
-    this._evaluateUrl = new URL(`${endpoint}/evaluate`)
+    this._evaluateUrl = `${endpoint}/evaluate`
 
     this._timeout = config.aiguard.timeout
     this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
@@ -136,11 +128,9 @@ class AIGuard extends NoopAIGuard {
           payload,
           { url: this._evaluateUrl, headers: this._headers, timeout: this._timeout })
       } catch (e) {
-        log.debug('AI Guard API call failed', e)
         throw new AIGuardClientError('Unexpected error calling AI Guard service', { cause: e })
       }
       if (response.status !== 200) {
-        log.debug(`AI Guard API call failed: ${JSON.stringify(response)}`)
         throw new AIGuardClientError(
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
