@@ -188,6 +188,46 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   })
 }
 
+async function execHelper (command, options) {
+  if (command.startsWith('yarn')) {
+    try {
+      console.log('Commencing exec execution...', command) // eslint-disable-line no-console
+      await execWithTimeout(command, options)
+      console.log('Success it ran!') // eslint-disable-line no-console
+    } catch (e) {
+      console.error('We caught, commencing retry, error:', // eslint-disable-line no-console
+        e, 'failed command:', command)
+      try {
+        await execWithTimeout(command, options)
+        console.log('Success on the second try!') // eslint-disable-line no-console
+      } catch {
+        console.error('Retry failed, command:', command) // eslint-disable-line no-console
+      }
+    }
+  } else {
+    console.log('Commencing exec execution without retrying:', command) // eslint-disable-line no-console
+    await exec(command, options)
+  }
+}
+
+function execWithTimeout (command, options, timeoutMs = 5000) {
+  const execPromise = exec(command, options)
+  const timeoutPromise = new Promise((resolve, reject) =>
+    setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms`)), timeoutMs)
+  )
+
+  return Promise.allSettled([execPromise, timeoutPromise]).then(results => {
+    const [execResult, timeoutResult] = results
+
+    if (execResult.status === 'rejected') {
+      throw execResult.reason
+    }
+
+    if (timeoutResult.status === 'rejected') {
+      throw timeoutResult.reason
+    }
+  })
+}
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   const cappedDependencies = dependencies.map(dep => {
@@ -209,8 +249,8 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // yarn-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    await exec('yarn link')
-    await exec('yarn link dd-trace')
+    await execHelper('yarn link')
+    await execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
@@ -222,49 +262,45 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  await exec(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  await execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  try {
-    await exec(addCommand, addOptions)
-  } catch (e) { // retry in case of server error from registry
-    await exec(addCommand, addOptions)
-  }
+  await execHelper(addCommand, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
-      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      await execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await exec(`cp -R ${path} ${folder}`)
+      await execHelper(`cp -R ${path} ${folder}`)
     }
   }
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
-    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+    await execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
-    await exec(`sync ${folder}`)
+    await execHelper(`sync ${folder}`)
   }
 
   if (followUpCommand) {
-    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
+    await execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
   if (isGitRepo) {
-    await exec('git init', { cwd: folder })
+    await execHelper('git init', { cwd: folder })
     await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await exec('git config user.email "john@doe.com"', { cwd: folder })
-    await exec('git config user.name "John Doe"', { cwd: folder })
-    await exec('git config commit.gpgsign false', { cwd: folder })
+    await execHelper('git config user.email "john@doe.com"', { cwd: folder })
+    await execHelper('git config user.name "John Doe"', { cwd: folder })
+    await execHelper('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
     if (!existsSync(localRemotePath)) {
-      await exec(`git init --bare ${localRemotePath}`)
+      await execHelper(`git init --bare ${localRemotePath}`)
     }
 
-    await exec('git add -A', { cwd: folder })
-    await exec('git commit -m "first commit" --no-verify', { cwd: folder })
-    await exec(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await exec('git push --set-upstream origin HEAD', { cwd: folder })
+    await execHelper('git add -A', { cwd: folder })
+    await execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
+    await execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    await execHelper('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
