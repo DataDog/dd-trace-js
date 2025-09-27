@@ -167,6 +167,16 @@ function getToolCallResultContent (content) {
   }
 }
 
+/**
+ * Computes the LLM Observability `ai` span name
+ * @param {string} operation
+ * @param {string} functionId
+ * @returns {string}
+ */
+function getLlmObsSpanName (operation, functionId) {
+  return functionId ? `${functionId}.${operation}` : operation
+}
+
 module.exports = {
   getSpanTags,
   getOperation,
@@ -175,5 +185,6 @@ module.exports = {
   getModelMetadata,
   getGenerationMetadata,
   getToolNameFromTags,
-  getToolCallResultContent
+  getToolCallResultContent,
+  getLlmObsSpanName
 }
