@@ -2,10 +2,11 @@
 
 const http = require('http')
 const https = require('https')
+const { URL } = require('url')
 
 function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
-    const url = opts.url
+    const url = new URL(opts.url)
     const transport = url.protocol === 'https:' ? https : http
     const postData = JSON.stringify(body)
     const options = {
