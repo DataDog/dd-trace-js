@@ -186,5 +186,11 @@
     "workerpool": "^9.2.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
+  },
+  "resolutions": {
+    "convert-source-map": "^1.9.0"
+  },
+  "overrides": {
+    "convert-source-map": "1.9.0"
   }
 }
