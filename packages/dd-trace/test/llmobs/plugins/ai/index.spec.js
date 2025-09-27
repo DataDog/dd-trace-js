@@ -659,5 +659,59 @@ describe('Plugin', () => {
       expect(toolCallSpan).to.deepEqualWithMockValues(expectedToolCallSpan)
       expect(llmSpan2).to.deepEqualWithMockValues(expectedLlmSpan2)
     })
+
+    it('creates a span that respects the functionId', async () => {
+      await ai.generateText({
+        model: openai('gpt-4o-mini'),
+        system: 'You are a helpful assistant',
+        prompt: 'Hello, OpenAI!',
+        maxTokens: 100,
+        temperature: 0.5,
+        experimental_telemetry: {
+          functionId: 'test'
+        }
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents()
+
+      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+        span: apmSpans[0],
+        name: 'test.generateText',
+        spanKind: 'workflow',
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
+        metadata: {
+          maxTokens: 100,
+          temperature: 0.5,
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
+        },
+        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+      })
+
+      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        name: 'test.doGenerate',
+        inputMessages: [
+          { content: 'You are a helpful assistant', role: 'system' },
+          { content: 'Hello, OpenAI!', role: 'user' }
+        ],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+        metadata: {
+          max_tokens: 100,
+          temperature: 0.5,
+        },
+        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+      })
+
+      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
+      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
+    })
   })
 })
