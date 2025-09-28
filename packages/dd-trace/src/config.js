@@ -332,11 +332,10 @@ class Config {
       ''
     )
 
-    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = maybeInt(
       getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
-      options.cloudPayloadTagging?.maxDepth,
-      10
-    )
+      options.cloudPayloadTagging?.maxDepth
+    ) ?? 10
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
@@ -998,7 +997,7 @@ class Config {
     this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
-    this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
+    this._setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
     const ingestion = options.ingestion || {}
     opts['sampler.rateLimit'] = coalesce(options.rateLimit, ingestion.rateLimit)
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
@@ -1123,7 +1122,7 @@ class Config {
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled', DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED ?? true)
       this._setBoolean(calc, 'isFlakyTestRetriesEnabled', DD_CIVISIBILITY_FLAKY_RETRY_ENABLED ?? true)
-      calc.flakyTestRetriesCount = coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5)
+      calc.flakyTestRetriesCount = maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT) ?? 5
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
@@ -1131,7 +1130,7 @@ class Config {
       this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', !isFalse(DD_TEST_FAILED_TEST_REPLAY_ENABLED))
       this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
       this._setBoolean(calc, 'isTestManagementEnabled', !isFalse(DD_TEST_MANAGEMENT_ENABLED))
-      calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
+      calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
     calc['dogstatsd.hostname'] = this._getHostname()
