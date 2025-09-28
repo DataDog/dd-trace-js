@@ -236,8 +236,10 @@ describe('AIGuard SDK', () => {
 
   it('test message length truncation', async () => {
     const maxMessages = config.experimental.aiguard.maxMessagesLength
-    const messages = Array(maxMessages + 1)
-      .fill({ role: 'user', content: 'This is a prompt' })
+    const messages = Array.from({ length: maxMessages + 1 }, (_, i) => ({
+      role: 'user',
+      content: `This is a prompt: ${i}`
+    }))
     mockExecuteRequest({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
     })
@@ -247,7 +249,7 @@ describe('AIGuard SDK', () => {
     assertExecuteRequest(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
-      { messages: messages.slice(0, maxMessages) }
+      { messages: messages.slice(-maxMessages) }
     )
   })
 
