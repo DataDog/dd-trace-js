@@ -13,7 +13,7 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
 
   const [res] = await Promise.all([
     messageReceiver,
-    new Promise((resolve, reject) => {
+    /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error('Process timed out'))
       }, timeout)
@@ -26,10 +26,10 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
           if (code !== 0) {
             reject(new Error(`Process exited with unexpected status code ${code}.`))
           } else {
-            resolve(undefined)
+            resolve()
           }
         })
-    })
+    }))
   ])
 
   return res

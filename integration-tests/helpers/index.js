@@ -172,7 +172,7 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<childProcess.ChildProcess & { url?: string }|undefined>} A promise that resolves when the process
+ * @returns {Promise<childProcess.ChildProcess & { url?: string }|void>} A promise that resolves when the process
  *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
  *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
  */
