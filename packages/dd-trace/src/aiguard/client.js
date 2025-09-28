@@ -9,7 +9,7 @@ async function executeRequest (body, opts) {
   }
 
   const controller = new AbortController()
-  const timeoutId = opts.timeout ? setTimeout(() => controller.abort(), opts.timeout) : null
+  const timeoutId = setTimeout(() => controller.abort(), opts.timeout)
 
   try {
     const response = await fetch(opts.url, {
@@ -19,7 +19,7 @@ async function executeRequest (body, opts) {
       signal: controller.signal
     })
 
-    if (timeoutId) clearTimeout(timeoutId)
+    clearTimeout(timeoutId)
 
     const responseBody = await response.json()
     return {
@@ -27,7 +27,7 @@ async function executeRequest (body, opts) {
       body: responseBody
     }
   } catch (error) {
-    if (timeoutId) clearTimeout(timeoutId)
+    clearTimeout(timeoutId)
     throw error
   }
 }
