@@ -10,7 +10,8 @@ const { executeRequest } = require('./util')
 describe('AIGuard SDK integration tests', () => {
   let sandbox, cwd, appFile, agent, proc, api, url
 
-  before(async () => {
+  before(async function () {
+    this.timeout(process.platform === 'win32' ? 90000 : 30000)
     sandbox = await createSandbox(['express'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'aiguard/server.js')
@@ -59,7 +60,7 @@ describe('AIGuard SDK integration tests', () => {
       const headers = blocking ? { 'x-blocking-enabled': true } : null
       const response = await executeRequest(`${url}${endpoint}`, 'GET', headers)
       if (blocking && action !== 'ALLOW') {
-        expect(response.status).not.to.equal(200)
+        expect(response.status).to.equal(403)
         expect(response.body).to.contain(reason)
       } else {
         expect(response.status).to.equal(200)
