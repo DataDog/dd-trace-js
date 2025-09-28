@@ -871,7 +871,7 @@ class Config {
     tagger.add(tags, options.tags)
 
     this._setBoolean(opts, 'apmTracingEnabled', options.apmTracingEnabled ??
-      !options.experimental?.appsec?.standalone?.enabled
+      (options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled)
     )
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
     this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
