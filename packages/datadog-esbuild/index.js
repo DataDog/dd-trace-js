@@ -142,7 +142,7 @@ ${build.initialOptions.banner.js}`
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
 
-  build.onResolve({ filter: /.*/ }, async args => {
+  build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
