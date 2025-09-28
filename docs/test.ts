@@ -695,13 +695,9 @@ tracer.init({
     enabled: true,
     endpoint: 'http://localhost',
     timeout: 1000,
+    maxMessagesLength: 22,
+    maxContentSize: 1024
   },
-  experimental: {
-    aiguard: {
-      maxMessagesLength: 22,
-      maxContentSize: 1024
-    }
-  }
 })
 
 const aiguard = tracer.aiguard

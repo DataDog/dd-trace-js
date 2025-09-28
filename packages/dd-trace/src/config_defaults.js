@@ -28,6 +28,8 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
 module.exports = {
   'aiguard.enabled': false,
   'aiguard.endpoint': undefined,
+  'aiguard.maxContentSize': 512 * 1024,
+  'aiguard.maxMessagesLength': 16,
   'aiguard.timeout': 10_000, // ms
   apmTracingEnabled: true,
   appKey: undefined,
@@ -72,8 +74,6 @@ module.exports = {
   'dynamicInstrumentation.redactionExcludedIdentifiers': [],
   'dynamicInstrumentation.uploadIntervalSeconds': 1,
   env: undefined,
-  'experimental.aiguard.maxMessagesLength': 16,
-  'experimental.aiguard.maxContentSize': 512 * 1024,
   'experimental.enableGetRumData': false,
   'experimental.exporter': undefined,
   flushInterval: 2000,

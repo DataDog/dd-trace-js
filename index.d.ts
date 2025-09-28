@@ -598,17 +598,6 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
-      },
-
-      aiguard?: {
-        /**
-         * Maximum number of conversational messages allowed to be set in the meta-struct
-         */
-        maxMessagesLength?: number,
-        /**
-         * Max size of the content property set in the meta-struct
-         */
-        maxContentSize?: number
       }
     };
 
@@ -899,7 +888,15 @@ declare namespace tracer {
       /**
        * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
        */
-      timeout?: number
+      timeout?: number,
+      /**
+       * Maximum number of conversational messages allowed to be set in the meta-struct
+       */
+      maxMessagesLength?: number,
+      /**
+       * Max size of the content property set in the meta-struct
+       */
+      maxContentSize?: number
     }
   }
 
@@ -941,7 +938,7 @@ declare namespace tracer {
     scope?: string,
 
     /**
-     * Custom fields to attach to the user (RBAC, Oauth, etc...).
+     * Custom fields to attach to the user (RBAC, Oauth, etc…).
      */
     [key: string]: string | undefined
   }
