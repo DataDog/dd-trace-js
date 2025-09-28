@@ -1,50 +1,35 @@
 'use strict'
 
-const http = require('http')
-const https = require('https')
-const { URL } = require('url')
+async function executeRequest (body, opts) {
+  const postData = JSON.stringify(body)
+  const headers = {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(postData),
+    ...opts.headers
+  }
 
-function executeRequest (body, opts) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(opts.url)
-    const transport = url.protocol === 'https:' ? https : http
-    const postData = JSON.stringify(body)
-    const options = {
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname,
+  const controller = new AbortController()
+  const timeoutId = opts.timeout ? setTimeout(() => controller.abort(), opts.timeout) : null
+
+  try {
+    const response = await fetch(opts.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-        ...opts.headers
-      },
-      timeout: opts.timeout,
-    }
-    const req = transport.request(options)
-    req.on('response', res => {
-      const chunks = []
-      res.on('data', (chunk) => {
-        chunks.push(chunk)
-      })
-      res.on('end', () => {
-        try {
-          const rawBody = Buffer.concat(chunks)
-          resolve({
-            status: res.statusCode,
-            body: JSON.parse(rawBody.toString()),
-          })
-        } catch (e) {
-          reject(e)
-        }
-      })
-      res.on('error', reject)
+      headers,
+      body: postData,
+      signal: controller.signal
     })
-    req.on('error', reject)
-    req.on('timeout', req.abort)
-    req.write(postData)
-    req.end()
-  })
+
+    if (timeoutId) clearTimeout(timeoutId)
+
+    const responseBody = await response.json()
+    return {
+      status: response.status,
+      body: responseBody
+    }
+  } catch (error) {
+    if (timeoutId) clearTimeout(timeoutId)
+    throw error
+  }
 }
 
 module.exports = executeRequest

@@ -8,7 +8,6 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const agent = require('../plugins/agent')
 const NoopAIGuard = require('../../src/aiguard/noop')
-const { URL } = require('url')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -65,13 +64,8 @@ describe('AIGuard SDK', () => {
 
     executeRequest = sinon.stub()
 
-    const client = proxyquire('../../src/aiguard/client', {
-      http: { request: executeRequest },
-      https: { request: executeRequest }
-    })
-
     AIGuard = proxyquire('../../src/aiguard/sdk', {
-      './client': client
+      './client': executeRequest
     })
     aiguard = new AIGuard(tracer, config)
 
@@ -83,36 +77,18 @@ describe('AIGuard SDK', () => {
   })
 
   const mockExecuteRequest = (options) => {
-    const mockRequest = {
-      on: sinon.stub(),
-      write: sinon.stub(),
-      end: sinon.stub(),
-      setTimeout: sinon.stub()
-    }
-    executeRequest.returns(mockRequest)
-    const mockResponse = {
-      statusCode: options.status ?? 200,
-      on: sinon.stub()
-    }
-    mockResponse.on.withArgs('data').callsArgWith(1, Buffer.from(JSON.stringify(options.body)))
-    mockResponse.on.withArgs('end').callsArg(1)
-    mockRequest.on.withArgs('response').callsArgWith(1, mockResponse)
+    executeRequest.resolves({
+      status: options.status ?? 200,
+      body: options.body
+    })
   }
 
   const assertExecuteRequest = (messages) => {
-    const parsedUrl = new URL(`${config.aiguard.endpoint}/evaluate`)
-    const postData = JSON.stringify(
-      { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
-    )
     sinon.assert.calledOnceWithExactly(executeRequest,
+      { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } },
       {
-        hostname: parsedUrl.hostname,
-        port: parsedUrl.port,
-        path: parsedUrl.pathname,
-        method: 'POST',
+        url: `${config.aiguard.endpoint}/evaluate`,
         headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
           'DD-APPLICATION-KEY': config.appKey
         },
