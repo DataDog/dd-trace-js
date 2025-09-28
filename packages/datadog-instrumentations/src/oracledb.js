@@ -40,22 +40,31 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         })
       }
 
-      // The connAttrs are used to pass through the argument to the potential
-      // serviceName method a user might have passed through as well as parsing
-      // the connection string in v5.
-      const connAttrs = connectionAttributes.get(this)
-
-      const details = typeof this.hostName === 'string' ? this : this._impl
-
       let hostname
       let port
       let dbInstance
 
-      if (details) {
+      const details = this._impl ?? this
+      if (details?.nscon?.ntAdapter) {
+        // Thick mode
         dbInstance = details.serviceName
-        hostname = details.hostName ?? details.nscon?.ntAdapter?.hostName
-        port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
+        hostname = details.nscon.ntAdapter.hostName
+        port = String(details.nscon.ntAdapter.port ?? '')
+      } else {
+        // Likely thin mode: accessing the getter should be safe.
+        try {
+          dbInstance = details.serviceName
+          hostname = details.hostName
+          port = String(details.port ?? '')
+        } catch {
+          // Ignored. Accessing the hostName getter in thick mode will throw an error.
+        }
       }
+
+      // The connAttrs are used to pass through the argument to the potential
+      // serviceName method a user might have passed through as well as parsing
+      // the connection string in v5 as well as in thick mode.
+      const connAttrs = connectionAttributes.get(this)
 
       const ctx = {
         dbInstance,
