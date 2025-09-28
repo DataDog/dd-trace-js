@@ -165,7 +165,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
  * @param {string} fullPathToModule File to analize
  * @param {string} modulePackageJsonPath Path of the package.json
  * @param {string} packageJson The content of the module package.json
- * @returns {boolean} 
+ * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
   if (fullPathToModule.endsWith('.mjs')) return true
@@ -183,9 +183,7 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
     try {
       const packageJsonContent = fs.readFileSync(packageJsonPath).toString()
       const packageJson = JSON.parse(packageJsonContent)
-      if (packageJson?.type) { // TODO check if type is mandatory or defaulted to commonjs
-        return packageJson.type === 'module'
-      }
+      return packageJson.type === 'module'
     } catch {
       // file does not exit, continue
     }
