@@ -5,9 +5,9 @@ const { rejects } = require('node:assert/strict')
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 const agent = require('../plugins/agent')
 const NoopAIGuard = require('../../src/aiguard/noop')
+const AIGuard = require('../../src/aiguard/sdk')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -27,8 +27,6 @@ describe('AIGuard SDK', () => {
   }
   let tracer
   let aiguard
-  let executeRequest
-  let AIGuard
 
   const toolCall = [
     { role: 'system', content: 'You are a beautiful AI assistant' },
@@ -58,41 +56,48 @@ describe('AIGuard SDK', () => {
     { role: 'user', content: 'Are you sure?' },
   ]
 
+  let originalFetch
+
   beforeEach(() => {
     tracer = require('../../../dd-trace')
     tracer.init(config)
 
-    executeRequest = sinon.stub()
+    originalFetch = global.fetch
+    global.fetch = sinon.stub()
 
-    AIGuard = proxyquire('../../src/aiguard/sdk', {
-      './client': executeRequest
-    })
     aiguard = new AIGuard(tracer, config)
 
     return agent.load(null, [])
   })
 
   afterEach(() => {
+    global.fetch = originalFetch
     agent.close()
   })
 
-  const mockExecuteRequest = (options) => {
-    executeRequest.resolves({
+  const mockFetch = (options) => {
+    global.fetch.resolves({
       status: options.status ?? 200,
-      body: options.body
+      json: sinon.stub().resolves(options.body)
     })
   }
 
-  const assertExecuteRequest = (messages) => {
-    sinon.assert.calledOnceWithExactly(executeRequest,
-      { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } },
+  const assertFetch = (messages) => {
+    const postData = JSON.stringify(
+      { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
+    )
+    sinon.assert.calledOnceWithExactly(global.fetch,
+      `${config.aiguard.endpoint}/evaluate`,
       {
-        url: `${config.aiguard.endpoint}/evaluate`,
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
           'DD-APPLICATION-KEY': config.appKey
         },
-        timeout: config.aiguard.timeout
+        body: postData,
+        signal: sinon.match.instanceOf(AbortSignal)
       }
     )
   }
@@ -123,7 +128,7 @@ describe('AIGuard SDK', () => {
 
   for (const { action, reason, blocking, suite, target, messages } of testSuite) {
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockExecuteRequest({ body: { data: { attributes: { action, reason, is_blocking_enabled: blocking } } } })
+      mockFetch({ body: { data: { attributes: { action, reason, is_blocking_enabled: blocking } } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
@@ -137,7 +142,7 @@ describe('AIGuard SDK', () => {
         expect(evaluation.reason).to.equal(reason)
       }
 
-      assertExecuteRequest(messages)
+      assertFetch(messages)
       await assertAIGuardSpan({
         'ai_guard.target': target,
         'ai_guard.action': action,
@@ -151,7 +156,7 @@ describe('AIGuard SDK', () => {
 
   it('test evaluate with API error', async () => {
     const errors = [{ status: 400, title: 'Internal server error' }]
-    mockExecuteRequest({
+    mockFetch({
       status: 400,
       body: { errors }
     })
@@ -162,7 +167,7 @@ describe('AIGuard SDK', () => {
         err.name === 'AIGuardClientError' && JSON.stringify(err.errors) === JSON.stringify(errors)
     )
 
-    assertExecuteRequest(toolCall)
+    assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError'
@@ -170,14 +175,14 @@ describe('AIGuard SDK', () => {
   })
 
   it('test evaluate with invalid JSON', async () => {
-    mockExecuteRequest({ body: { message: 'This is an invalid JSON' } })
+    mockFetch({ body: { message: 'This is an invalid JSON' } })
 
     await rejects(
       () => aiguard.evaluate(toolCall),
       err => err.name === 'AIGuardClientError'
     )
 
-    assertExecuteRequest(toolCall)
+    assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError'
@@ -185,14 +190,14 @@ describe('AIGuard SDK', () => {
   })
 
   it('test evaluate with with missing action or response', async () => {
-    mockExecuteRequest({ body: { data: { attributes: { reason: 'I miss something' } } } })
+    mockFetch({ body: { data: { attributes: { reason: 'I miss something' } } } })
 
     await rejects(
       () => aiguard.evaluate(toolCall),
       err => err.name === 'AIGuardClientError'
     )
 
-    assertExecuteRequest(toolCall)
+    assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
       'error.type': 'AIGuardClientError'
@@ -212,13 +217,13 @@ describe('AIGuard SDK', () => {
       role: 'user',
       content: `This is a prompt: ${i}`
     }))
-    mockExecuteRequest({
+    mockFetch({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
     })
 
     await aiguard.evaluate(messages)
 
-    assertExecuteRequest(messages)
+    assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: messages.slice(-maxMessages) }
@@ -229,13 +234,13 @@ describe('AIGuard SDK', () => {
     const maxContent = config.aiguard.maxContentSize
     const content = Array(maxContent + 1).fill('A').join('')
     const messages = [{ role: 'user', content }]
-    mockExecuteRequest({
+    mockFetch({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
     })
 
     await aiguard.evaluate(messages)
 
-    assertExecuteRequest(messages)
+    assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages: [{ role: 'user', content: content.slice(0, maxContent) }] }
