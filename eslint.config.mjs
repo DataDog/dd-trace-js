@@ -523,7 +523,6 @@ export default [
     ]
   },
   {
-    name: 'mocha/recommended',
     ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES
   },
