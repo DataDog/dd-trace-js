@@ -12,6 +12,7 @@ describe('mocha-test-skip-different', () => {
   it.skip('can skip too', () => {
     expect(true).to.equal(false)
   })
+
   it.skip('can skip twice', () => {
     expect(true).to.equal(false)
   })
