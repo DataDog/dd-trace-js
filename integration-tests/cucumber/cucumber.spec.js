@@ -2677,8 +2677,7 @@ versions.forEach(version => {
       })
 
       after(() => {
-        // We can't use main here because in CI it might be "master".
-        // We just use `-` which goes back to the previous branch
+        // Go back to previous branch.
         execSync('git checkout -', { cwd, stdio: 'ignore' })
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
