@@ -65,7 +65,6 @@ if (Number(process.env.EVERYTHING)) {
     'proxyquire',
     'retry',
     'rfdc',
-    'rimraf',
     'semifies',
     'semver',
     'shell-quote',
@@ -81,8 +80,6 @@ if (Number(process.env.EVERYTHING)) {
     'yarn-deduplicate'
   ]
   for (const pkg of packages) {
-    try {
-      require(pkg)
-    } catch {}
+    require(pkg)
   }
 }

@@ -19,7 +19,7 @@ jobs:
       checks: read
       contents: read
     steps:
-      - uses: wechuli/allcheckspassed@e22f45a4f25f4cf821d1273705ac233355400db1 # v1.2.0
+      - uses: wechuli/allcheckspassed@5b5009ffd707b7c6759574c984bb666034b441eb # v2.0.0
         with:
           retries: 30 # once per minute, some checks take up to 15 min, retries are possible
           checks_exclude: devflow.*

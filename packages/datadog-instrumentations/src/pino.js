@@ -73,19 +73,31 @@ function wrapPrettyFactory (prettyFactory) {
   }
 }
 
-addHook({ name: 'pino', versions: ['2 - 3', '4', '>=5 <5.14.0'] }, pino => {
+addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
   const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+
+  return wrapped
 })
 
-addHook({ name: 'pino', versions: ['>=5.14.0 <6.8.0'] }, pino => {
-  const mixinSym = pino.symbols.mixinSym
+addHook({ name: 'pino', versions: ['>=5 <5.14.0'], patchDefault: true }, (pino) => {
+  const asJsonSym = ((pino.default || pino)?.symbols.asJsonSym) || 'asJson'
 
-  return shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
+
+  return wrapped
 })
 
-addHook({ name: 'pino', versions: ['>=6.8.0'] }, pino => {
+addHook({ name: 'pino', versions: ['>=5.14.0 <6.8.0'] }, (pino) => {
+  const mixinSym = (pino.default || pino).symbols.mixinSym
+
+  const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino.default || pino))
+
+  return wrapped
+})
+
+addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino, _1, _2, isIitm) => {
   const mixinSym = pino.symbols.mixinSym
 
   const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))
