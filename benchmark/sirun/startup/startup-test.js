@@ -38,7 +38,6 @@ if (Number(process.env.EVERYTHING)) {
     'eslint-plugin-unicorn',
     'eslint',
     'express',
-    'get-port',
     'glob',
     'globals',
     'graphql',
