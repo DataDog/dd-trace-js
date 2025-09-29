@@ -142,6 +142,7 @@ describe('RASP - lfi', () => {
           if (vulnerableIndex !== 0) {
             desc += ` with vulnerable index ${vulnerableIndex}`
           }
+
           describe(desc, () => {
             runFsMethodTest(`test fs.${methodName}Sync method`, { ...options, getAppFn: getAppSync }, (args) => {
               return require('fs')[`${methodName}Sync`](...args)

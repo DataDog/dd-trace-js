@@ -16,6 +16,7 @@ describe('mocha-test-suite-level-pass', function () {
   it('will pass', () => {
     expect(2).to.equal(2)
   })
+
   it.skip('will skip', () => {
     expect(2).to.equal(2)
   })

@@ -950,6 +950,7 @@ describe('jest CommonJS', () => {
         })
       })
     })
+
     it('can report code coverage', (done) => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
