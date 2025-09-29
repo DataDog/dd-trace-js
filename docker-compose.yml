@@ -9,6 +9,17 @@ services:
         - "127.0.0.1:10000:10000"
         - "127.0.0.1:10001:10001"
         - "127.0.0.1:10002:10002"
+  azureeventhubsemulator:
+    image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+    volumes:
+       - "./packages/datadog-plugin-azure-functions/test/eventhubs-test/config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+    ports:
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:9092:9092"
+    environment:
+      BLOB_SERVER: azurite
+      METADATA_SERVER: azurite
+      ACCEPT_EULA: "Y"
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     ports:

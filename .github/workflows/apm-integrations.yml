@@ -135,7 +135,7 @@ jobs:
         azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
           volumes:
-            - "./Config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+            - "./packages/datadog-plugin-azure-functions/test/eventhubs-test/config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
           ports:
             - "127.0.0.1:5673:5672"
             - "127.0.0.1:9092:9092"
