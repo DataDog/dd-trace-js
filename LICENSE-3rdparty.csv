@@ -3,6 +3,7 @@ require,@datadog/libdatadog,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/openfeature-node-server,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
@@ -38,6 +39,8 @@ dev,@types/node,MIT,Copyright Authors
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
+dev,@openfeature/core,Apache-2.0,Copyright OpenFeature Authors
+dev,@openfeature/server-sdk,Apache-2.0,Copyright OpenFeature Authors
 dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton

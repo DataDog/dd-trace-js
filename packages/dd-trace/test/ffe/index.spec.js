@@ -140,5 +140,4 @@ describe('FlaggingProvider Module', () => {
       expect(flushCh.hasSubscribers).to.be.false
     })
   })
-
 })

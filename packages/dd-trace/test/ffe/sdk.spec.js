@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -72,8 +72,9 @@ describe('FlaggingProvider', () => {
     })
 
     it.skip('should log debug message on creation (requires @datadog/openfeature-node-server)', () => {
-      new FlaggingProvider(mockTracer, mockConfig)
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
 
+      expect(provider).to.exist
       expect(log.debug).to.have.been.calledWith('[FlaggingProvider] Created')
     })
   })
@@ -83,9 +84,12 @@ describe('FlaggingProvider', () => {
       // This test requires the actual FlaggingProvider class which depends on external packages
     })
 
-    it.skip('should handle missing setConfiguration method gracefully (requires @datadog/openfeature-node-server)', () => {
-      // This test requires the actual FlaggingProvider class which depends on external packages
-    })
+    it.skip(
+      'should handle missing setConfiguration method gracefully (requires @datadog/openfeature-node-server)',
+      () => {
+        // This test requires the actual FlaggingProvider class which depends on external packages
+      }
+    )
 
     it.skip('should handle null/undefined configuration (requires @datadog/openfeature-node-server)', () => {
       // This test requires the actual FlaggingProvider class which depends on external packages
@@ -97,8 +101,11 @@ describe('FlaggingProvider', () => {
       // This test requires the actual FlaggingProvider class which depends on external packages
     })
 
-    it.skip('should inherit OpenFeature Provider interface methods from parent (requires @datadog/openfeature-node-server)', () => {
-      // This test requires the actual FlaggingProvider class which depends on external packages
-    })
+    it.skip(
+      'should inherit OpenFeature Provider interface methods from parent (requires @datadog/openfeature-node-server)',
+      () => {
+        // This test requires the actual FlaggingProvider class which depends on external packages
+      }
+    )
   })
 })
