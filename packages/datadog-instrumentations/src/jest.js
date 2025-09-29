@@ -1272,12 +1272,6 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'winston'
 ])
 
-function shouldBypassJestRequireEngine (moduleName) {
-  return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)
-  )
-}
-
 addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
@@ -1289,6 +1283,10 @@ addHook({
     const suiteFilePath = this._testPath
 
     shimmer.wrap(result, 'mock', mock => function (moduleName) {
+      // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
+      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+        LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
+      }
       if (suiteFilePath) {
         const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
         const suiteDir = path.dirname(suiteFilePath)
@@ -1303,7 +1301,7 @@ addHook({
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument
-    if (shouldBypassJestRequireEngine(moduleName)) {
+    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
