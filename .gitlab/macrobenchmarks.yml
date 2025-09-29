@@ -66,21 +66,21 @@ baseline:
     DD_BENCHMARKS_CONFIGURATION: baseline
 
 normal-operation-with-debug-and-http-plugin:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: normal-operation
     DD_TRACE_DEBUG: "true"
     DD_BENCHMARKS_CONFIGURATION: only-tracing
 
 high-load-with-debug-and-http-plugin:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: high-load
     DD_TRACE_DEBUG: "true"
     DD_BENCHMARKS_CONFIGURATION: only-tracing
 
 normal-operation-with-debug-and-without-http-plugin:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: normal-operation
     DD_TRACE_DEBUG: "true"
@@ -88,7 +88,7 @@ normal-operation-with-debug-and-without-http-plugin:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
 
 high-load-with-debug-and-without-http-plugin:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: normal-operation
     DD_TRACE_DEBUG: "true"
@@ -96,13 +96,13 @@ high-load-with-debug-and-without-http-plugin:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
 
 normal-operation-without-debug:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: normal-operation
     DD_BENCHMARKS_CONFIGURATION: only-tracing
 
 high-load-without-debug:
-  extends: .benchmarks
+  extends: .macrobenchmarks
   variables:
     EXPERIMENT: high-load
     DD_BENCHMARKS_CONFIGURATION: only-tracing
