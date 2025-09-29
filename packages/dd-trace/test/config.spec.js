@@ -1,15 +1,18 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { it, describe, beforeEach, afterEach, context } = require('tap').mocha
+const proxyquire = require('proxyquire')
+
+const { readFileSync } = require('node:fs')
+const assert = require('node:assert/strict')
+const { once } = require('node:events')
+
+require('./setup/core')
+
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { it, describe } = require('tap/lib/mocha.js')
-const assert = require('assert/strict')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { once } = require('events')
 
 describe('Config', () => {
   let Config
@@ -40,8 +43,12 @@ describe('Config', () => {
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
+    const configDefaults = proxyquire('../src/config_defaults', {
+      './pkg': pkg
+    })
+
     Config = proxyquire('../src/config', {
-      './pkg': pkg,
+      './config_defaults': configDefaults,
       './log': log,
       './telemetry': { updateConfig },
       fs,
@@ -265,6 +272,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 300)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
@@ -355,6 +364,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 300, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -437,7 +450,7 @@ describe('Config', () => {
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
       { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
-      { name: 'logInjection', value: 'structured', origin: 'default' },
+      { name: 'logInjection', value: true, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
       { name: 'openai.spanCharLimit', value: 128, origin: 'default' },
@@ -511,6 +524,7 @@ describe('Config', () => {
 
   it('should initialize from the default service', () => {
     pkg.name = 'test'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -520,6 +534,7 @@ describe('Config', () => {
 
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -530,6 +545,8 @@ describe('Config', () => {
   it('should initialize from environment variables', () => {
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '500'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_COLLECT_ALL_HEADERS = 'true'
@@ -647,6 +664,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('apmTracingEnabled', false)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 500)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
@@ -754,6 +773,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 500, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -1370,6 +1393,8 @@ describe('Config', () => {
   it('should give priority to the options', () => {
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '42'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
@@ -1441,7 +1466,9 @@ describe('Config', () => {
       apmTracingEnabled: true,
       appsec: {
         apiSecurity: {
-          enabled: true
+          enabled: true,
+          endpointCollectionEnabled: true,
+          endpointCollectionMessageLimit: 150
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
@@ -1548,6 +1575,8 @@ describe('Config', () => {
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 150)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
@@ -1624,7 +1653,9 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         apiSecurity: {
-          enabled: true
+          enabled: true,
+          endpointCollectionEnabled: true,
+          endpointCollectionMessageLimit: 500
         },
         blockedTemplateGraphql: undefined,
         blockedTemplateHtml: undefined,
@@ -1666,7 +1697,9 @@ describe('Config', () => {
       experimental: {
         appsec: {
           apiSecurity: {
-            enabled: false
+            enabled: false,
+            endpointCollectionEnabled: false,
+            endpointCollectionMessageLimit: 42
           },
           blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
@@ -1711,7 +1744,9 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       apiSecurity: {
         enabled: true,
-        sampleDelay: 30
+        sampleDelay: 30,
+        endpointCollectionEnabled: true,
+        endpointCollectionMessageLimit: 500
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,
@@ -2076,13 +2111,6 @@ describe('Config', () => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
 
-    const Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      fs,
-      os
-    })
-
     const config = new Config({
       appsec: {
         enabled: true,
@@ -2415,10 +2443,10 @@ describe('Config', () => {
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:env-var/dd-trace-js.git'
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
-      expect(config).to.have.property('repositoryUrl', 'https://github.com:env-var/dd-trace-js.git')
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
     })
     it('still reads git.properties if one of the env vars is missing', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE

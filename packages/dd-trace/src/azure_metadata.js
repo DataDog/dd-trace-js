@@ -76,10 +76,11 @@ function buildMetadata () {
 }
 
 function getAzureAppMetadata () {
-  // DD_AZURE_APP_SERVICES is an environment variable introduced by the .NET APM team and is set automatically for
-  // anyone using the Datadog APM Extensions (.NET, Java, or Node) for Windows Azure App Services
-  // See: https://github.com/DataDog/datadog-aas-extension/blob/01f94b5c28b7fa7a9ab264ca28bd4e03be603900/node/src/applicationHost.xdt#L20-L21
-  if (getEnvironmentVariable('DD_AZURE_APP_SERVICES') !== undefined) {
+  // WEBSITE_SITE_NAME is the unique name of the website instance within Azure App Services. Its
+  // presence is used to determine if we are running in Azure App Service
+  // See equivalent in dd-trace-dotnet:
+  // https://github.com/DataDog/dd-trace-dotnet/blob/37030168b2996e549ba23231ae732874b53a37e6/tracer/src/Datadog.Trace/Util/EnvironmentHelpers.cs#L99-L155
+  if (getEnvironmentVariable('WEBSITE_SITE_NAME') !== undefined) {
     return buildMetadata()
   }
 }

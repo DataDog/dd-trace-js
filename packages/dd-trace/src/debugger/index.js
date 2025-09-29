@@ -4,6 +4,7 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const getDebuggerConfig = require('./config')
 const log = require('../log')
 
 let worker = null
@@ -25,6 +26,7 @@ function start (config, rc) {
 
   const rcAckCallbacks = new Map()
   const probeChannel = new MessageChannel()
+  const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
   process[Symbol.for('datadog:node:util:types')] = types
@@ -54,18 +56,24 @@ function start (config, rc) {
   })
   probeChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on probe port', err))
 
+  logChannel.port2.on('message', ({ level, args }) => {
+    log[level](...args)
+  })
+  logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
+
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
     {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
       env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: {
-        config: config.serialize(),
+        config: getDebuggerConfig(config),
         parentThreadId,
         probePort: probeChannel.port1,
+        logPort: logChannel.port1,
         configPort: configChannel.port1
       },
-      transferList: [probeChannel.port1, configChannel.port1]
+      transferList: [probeChannel.port1, logChannel.port1, configChannel.port1]
     }
   )
 
@@ -94,13 +102,15 @@ function start (config, rc) {
   worker.unref()
   probeChannel.port1.unref()
   probeChannel.port2.unref()
+  logChannel.port1.unref()
+  logChannel.port2.unref()
   configChannel.port1.unref()
   configChannel.port2.unref()
 }
 
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(config.serialize())
+  configChannel.port2.postMessage(getDebuggerConfig(config))
 }
 
 function readProbeFile (path, cb) {

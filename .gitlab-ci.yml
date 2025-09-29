@@ -4,15 +4,23 @@ stages:
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
   - macrobenchmarks
+  - macrobenchmarks-gate
+  - macrobenchmarks-notify
 
-# TODO(BridgeAR) Activate the gitlab CI job
-#
-# check_config_inversion_local_file:
-#   rules:
-#     - when: on_success
-#   extends: .check_config_inversion_local_file
-#   variables:
-#     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+validate_supported_configurations_local_file:
+  rules:
+    - when: on_success
+  extends: .validate_supported_configurations_local_file
+  variables:
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+
+update_central_configurations_version_range:
+  extends: .update_central_configurations_version_range
+  variables:
+    LOCAL_REPO_NAME: "dd-trace-js"
+    LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
+    LANGUAGE_NAME: "nodejs"
+    MULTIPLE_RELEASE_LINES: "true"
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"

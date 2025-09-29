@@ -22,7 +22,10 @@ var metadata = {
   runtime_name: 'nodejs',
   runtime_version: process.versions.node,
   tracer_version: tracerVersion,
-  pid: process.pid
+  pid: process.pid,
+  result: 'unknown',
+  result_reason: 'unknown',
+  result_class: 'unknown'
 }
 
 var seen = {}
@@ -44,7 +47,7 @@ function shouldSend (point) {
   return true
 }
 
-function sendTelemetry (name, tags) {
+function sendTelemetry (name, tags, resultMetadata) {
   var points = name
   if (typeof name === 'string') {
     points = [{ name: name, tags: tags || [] }]
@@ -59,6 +62,18 @@ function sendTelemetry (name, tags) {
   if (points.length === 0) {
     return
   }
+
+  // Update metadata with provided result metadata
+  var currentMetadata = {}
+  for (var key in metadata) {
+    currentMetadata[key] = metadata[key]
+  }
+  if (resultMetadata) {
+    for (var resultKey in resultMetadata) {
+      currentMetadata[resultKey] = resultMetadata[resultKey]
+    }
+  }
+
   var proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
     stdio: 'pipe'
   })
@@ -73,5 +88,5 @@ function sendTelemetry (name, tags) {
   proc.stdin.on('error', function () {
     log.error('Failed to write telemetry data to telemetry forwarder')
   })
-  proc.stdin.end(JSON.stringify({ metadata: metadata, points: points }))
+  proc.stdin.end(JSON.stringify({ metadata: currentMetadata, points: points }))
 }

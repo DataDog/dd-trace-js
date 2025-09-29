@@ -2,8 +2,7 @@
 
 const {
   addHook,
-  channel,
-  AsyncResource
+  channel
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -89,29 +88,28 @@ function wrapParse (parse) {
       return parse.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      parseStartCh.publish()
-      let document
+    const ctx = { source }
+    return parseStartCh.runStores(ctx, () => {
       try {
-        document = parse.apply(this, arguments)
-        const operation = getOperation(document)
+        ctx.document = parse.apply(this, arguments)
+        const operation = getOperation(ctx.document)
 
-        if (!operation) return document
+        if (!operation) return ctx.document
 
         if (source) {
-          documentSources.set(document, source.body || source)
+          documentSources.set(ctx.document, source.body || source)
         }
+        ctx.docSource = documentSources.get(ctx.document)
 
-        return document
+        return ctx.document
       } catch (err) {
         err.stack
-        parseErrorCh.publish(err)
+        ctx.error = err
+        parseErrorCh.publish(ctx)
 
         throw err
       } finally {
-        parseFinishCh.publish({ source, document, docSource: documentSources.get(document) })
+        parseFinishCh.publish(ctx)
       }
     })
   }
@@ -123,25 +121,25 @@ function wrapValidate (validate) {
       return validate.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      validateStartCh.publish({ docSource: documentSources.get(document), document })
-
+    const ctx = { docSource: documentSources.get(document), document }
+    return validateStartCh.runStores(ctx, () => {
       let errors
       try {
         errors = validate.apply(this, arguments)
         if (errors && errors[0]) {
-          validateErrorCh.publish(errors && errors[0])
+          ctx.error = errors && errors[0]
+          validateErrorCh.publish(ctx)
         }
         return errors
       } catch (err) {
         err.stack
-        validateErrorCh.publish(err)
+        ctx.error = err
+        validateErrorCh.publish(ctx)
 
         throw err
       } finally {
-        validateFinishCh.publish({ document, errors })
+        ctx.errors = errors
+        validateFinishCh.publish(ctx)
       }
     })
   }
@@ -155,44 +153,46 @@ function wrapExecute (execute) {
         return exe.apply(this, arguments)
       }
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      return asyncResource.runInAsyncScope(() => {
-        const args = normalizeArgs(arguments, defaultFieldResolver)
-        const schema = args.schema
-        const document = args.document
-        const source = documentSources.get(document)
-        const contextValue = args.contextValue
-        const operation = getOperation(document, args.operationName)
+      const args = normalizeArgs(arguments, defaultFieldResolver)
+      const schema = args.schema
+      const document = args.document
+      const source = documentSources.get(document)
+      const contextValue = args.contextValue
+      const operation = getOperation(document, args.operationName)
 
-        if (contexts.has(contextValue)) {
-          return exe.apply(this, arguments)
-        }
+      if (contexts.has(contextValue)) {
+        return exe.apply(this, arguments)
+      }
 
+      const ctx = {
+        operation,
+        args,
+        docSource: documentSources.get(document),
+        source,
+        fields: {},
+        abortController: new AbortController()
+      }
+
+      return startExecuteCh.runStores(ctx, () => {
         if (schema) {
           wrapFields(schema._queryType)
           wrapFields(schema._mutationType)
         }
 
-        startExecuteCh.publish({
-          operation,
-          args,
-          docSource: documentSources.get(document)
-        })
+        contexts.set(contextValue, ctx)
 
-        const context = { source, asyncResource, fields: {}, abortController: new AbortController() }
-
-        contexts.set(contextValue, context)
-
-        return callInAsyncScope(exe, asyncResource, this, arguments, context.abortController, (err, res) => {
-          if (finishResolveCh.hasSubscribers) finishResolvers(context)
+        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
+          if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
           const error = err || (res && res.errors && res.errors[0])
 
           if (error) {
-            executeErrorCh.publish(error)
+            ctx.error = error
+            executeErrorCh.publish(ctx)
           }
 
-          finishExecuteCh.publish({ res, args, context })
+          ctx.res = res
+          finishExecuteCh.publish(ctx)
         })
       })
     }
@@ -205,14 +205,17 @@ function wrapResolve (resolve) {
   function resolveAsync (source, args, contextValue, info) {
     if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
-    const context = contexts.get(contextValue)
+    const ctx = contexts.get(contextValue)
 
-    if (!context) return resolve.apply(this, arguments)
+    if (!ctx) return resolve.apply(this, arguments)
 
-    const field = assertField(context, info, args)
+    const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, field.asyncResource, this, arguments, context.abortController, (err) => {
-      updateFieldCh.publish({ field, info, err })
+    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+      field.ctx.error = err
+      field.ctx.info = info
+      field.ctx.field = field
+      updateFieldCh.publish(field.ctx)
     })
   }
 
@@ -221,32 +224,34 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
+function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   cb = cb || (() => {})
 
-  return aR.runInAsyncScope(() => {
-    if (abortController?.signal.aborted) {
-      cb(null, null)
-      throw new AbortError('Aborted')
-    }
+  if (abortController?.signal.aborted) {
+    cb(null, null)
+    throw new AbortError('Aborted')
+  }
 
-    try {
-      const result = fn.apply(thisArg, args)
-      if (result && typeof result.then === 'function') {
-        // bind callback to this scope
-        result.then(
-          aR.bind(res => cb(null, res)),
-          aR.bind(err => cb(err))
-        )
-      } else {
-        cb(null, result)
-      }
-      return result
-    } catch (err) {
-      cb(err)
-      throw err
+  try {
+    const result = fn.apply(thisArg, args)
+    if (result && typeof result.then === 'function') {
+      return result.then(
+        res => {
+          cb(null, res)
+          return res
+        },
+        err => {
+          cb(err)
+          throw err
+        }
+      )
     }
-  })
+    cb(null, result)
+    return result
+  } catch (err) {
+    cb(err)
+    throw err
+  }
 }
 
 function pathToArray (path) {
@@ -259,59 +264,26 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info, args) {
+function assertField (rootCtx, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
 
   const pathString = path.join('.')
-  const fields = context.fields
+  const fields = rootCtx.fields
 
   let field = fields[pathString]
 
   if (!field) {
-    const parent = getParentField(context, path)
-
-    // we want to spawn the new span off of the parent, not a new async resource
-    parent.asyncResource.runInAsyncScope(() => {
-      /* this child resource will run a branched scope off of the parent resource, which
-      accesses the parent span from the storage unit in its own scope */
-      const childResource = new AsyncResource('bound-anonymous-fn')
-
-      childResource.runInAsyncScope(() => {
-        startResolveCh.publish({
-          info,
-          context,
-          args
-        })
-      })
-
-      field = fields[pathString] = {
-        parent,
-        asyncResource: childResource,
-        error: null
-      }
-    })
-  }
-
-  return field
-}
-
-function getParentField (context, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(context, path.slice(0, i))
-    if (field) {
-      return field
+    const fieldCtx = { info, rootCtx, args }
+    startResolveCh.publish(fieldCtx)
+    field = fields[pathString] = {
+      error: null,
+      ctx: fieldCtx
     }
   }
 
-  return {
-    asyncResource: context.asyncResource
-  }
-}
-
-function getField (context, path) {
-  return context.fields[path.join('.')]
+  return field
 }
 
 function wrapFields (type) {
@@ -349,13 +321,13 @@ function wrapFieldType (field) {
 function finishResolvers ({ fields }) {
   Object.keys(fields).reverse().forEach(key => {
     const field = fields[key]
-    const asyncResource = field.asyncResource
-    asyncResource.runInAsyncScope(() => {
-      if (field.error) {
-        resolveErrorCh.publish(field.error)
-      }
-      finishResolveCh.publish(field.finishTime)
-    })
+    field.ctx.finishTime = field.finishTime
+    field.ctx.field = field
+    if (field.error) {
+      field.ctx.error = field.error
+      resolveErrorCh.publish(field.ctx)
+    }
+    finishResolveCh.publish(field.ctx)
   })
 }
 

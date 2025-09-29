@@ -10,6 +10,7 @@ const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
+const TracingPlugin = require('../tracing')
 
 let extractIp
 
@@ -37,8 +38,25 @@ const HTTP2_HEADER_PATH = ':path'
 const contexts = new WeakMap()
 const ends = new WeakMap()
 
+// TODO: change this to no longer rely on creating a dummy plugin to be able to access startSpan
+function createWebPlugin (tracer, config = {}) {
+  const plugin = new TracingPlugin(tracer, tracer._config)
+  plugin.component = 'web'
+  plugin.config = config
+  return plugin
+}
+
+function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
+  if (!web.plugin) {
+    web.plugin = createWebPlugin(tracer, config)
+  }
+
+  return web.plugin.startSpan(name, { ...options, tracer, config }, traceCtx)
+}
+
 const web = {
   TYPE: WEB,
+  plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
@@ -93,7 +111,7 @@ const web = {
     analyticsSampler.sample(span, config.measured, true)
   },
 
-  startSpan (tracer, config, req, res, name) {
+  startSpan (tracer, config, req, res, name, traceCtx) {
     const context = this.patch(req)
 
     let span
@@ -102,7 +120,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, name, req)
+      span = web.startChildSpan(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -163,10 +181,11 @@ const web = {
     const tracer = context.tracer
     const childOf = this.active(req)
     const config = context.config
+    const traceCtx = context.traceCtx
 
     if (config.middleware === false) return this.bindAndWrapMiddlewareErrors(fn, req, tracer, childOf)
 
-    const span = tracer.startSpan(name, { childOf })
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
 
     analyticsSampler.sample(span, config.measured)
 
@@ -258,20 +277,20 @@ const web = {
   },
 
   // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, name, req) {
+  startChildSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
-    const context = contexts.get(req)
+    const reqCtx = contexts.get(req)
     let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
-      const proxySpan = createInferredProxySpan(headers, childOf, tracer, context)
+      const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
-    const span = tracer.startSpan(name, { childOf, links: childOf?._links })
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
 
     return span
   },
@@ -368,7 +387,7 @@ const web = {
 
     return function (statusCode, statusMessage, headers) {
       headers = typeof statusMessage === 'string' ? headers : statusMessage
-      headers = Object.assign(res.getHeaders(), headers)
+      headers = { ...res.getHeaders(), ...headers }
 
       if (req.method.toLowerCase() === 'options' && isOriginAllowed(req, headers)) {
         addAllowHeaders(req, res, headers)

@@ -1,14 +1,15 @@
 'use strict'
 
-require('../setup/tap')
-
-const expect = require('chai').expect
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const EventsProfiler = require('../../src/profiling/profilers/events')
-const { setTimeout } = require('node:timers/promises')
 
 const samplingContextsAvailable = process.platform !== 'win32'
 
@@ -43,7 +44,9 @@ describe('profiler', function () {
 
   function setUpProfiler () {
     interval = 65 * 1000
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     exporterPromise = Promise.resolve()
     exporter = {
       export: sinon.stub().returns(exporterPromise)
@@ -84,7 +87,7 @@ describe('profiler', function () {
 
   describe('not serverless', function () {
     function initProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate
@@ -205,7 +208,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -222,7 +225,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -327,7 +330,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await waitForExport()
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       const [
         startWall,
@@ -395,7 +398,7 @@ describe('profiler', function () {
       sourceMapCreate.rejects(error)
       await profiler._start({ profilers, exporters, logger, sourceMap: true })
       expect(consoleLogger.error.args[0][0]).to.equal(error)
-      expect(profiler._enabled).to.equal(true)
+      expect(profiler.enabled).to.equal(true)
     })
   })
 
@@ -403,7 +406,7 @@ describe('profiler', function () {
     const flushAfterIntervals = 65
 
     function initServerlessProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate
@@ -430,11 +433,11 @@ describe('profiler', function () {
 
     it('should increment profiled intervals after one interval elapses', async () => {
       await profiler._start({ profilers, exporters })
-      expect(profiler._profiledIntervals).to.equal(0)
+      expect(profiler.profiledIntervals).to.equal(0)
 
       clock.tick(interval)
 
-      expect(profiler._profiledIntervals).to.equal(1)
+      expect(profiler.profiledIntervals).to.equal(1)
       sinon.assert.notCalled(exporter.export)
     })
 

@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
@@ -22,7 +26,7 @@ describe('Plugin', () => {
 
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
-      process.env.DD_DATA_STREAMS_ENABLED = true
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
     after(() => {

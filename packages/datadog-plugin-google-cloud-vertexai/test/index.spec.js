@@ -1,17 +1,24 @@
 'use strict'
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
+
 const fs = require('node:fs')
 const path = require('node:path')
+
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 /**
  * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
- * @param {string} scenario the scenario to load
- * @param {number} statusCode the status code to return. defaults to 200
+ * @param {object} options The options for the scenario
+ * @param {string} options.scenario The scenario to load
+ * @param {number} [options.statusCode] The status code to return. defaults to 200
+ * @param {boolean} [options.stream] whether to stream the response
  */
 function useScenario ({ scenario, statusCode = 200, stream = false }) {
   let originalFetch
@@ -100,29 +107,11 @@ describe('Plugin', () => {
             expect(span.meta).to.have.property('span.kind', 'client')
 
             expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-            expect(span.meta).to.have.property('vertexai.request.contents.0.role', 'user')
-            expect(span.meta).to.have.property('vertexai.request.contents.0.parts.0.text', 'Hello, how are you?')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-              'Hello! How can I assist you today?')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
-
-            expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 35)
-            expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 2)
-            expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 37)
-
-            if (model.systemInstruction) {
-              expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
-                'Please provide an answer')
-            }
-            expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
-            expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
           })
 
           const { response } = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
           })
-
           expect(response).to.have.property('candidates')
 
           await checkTraces
@@ -130,8 +119,7 @@ describe('Plugin', () => {
 
         it('makes a successful call with a string argument', async () => {
           const checkTraces = agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
-              'Hello, how are you?')
+            expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
           })
 
           const { response } = await model.generateContent('Hello, how are you?')
@@ -148,11 +136,7 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text', 'undefined')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.function_call.name',
-                'add')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.function_call.args',
-                JSON.stringify({ a: 2, b: 2 }))
+              expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
             })
 
             await model.generateContent('what is 2 + 2?')
@@ -174,24 +158,6 @@ describe('Plugin', () => {
             expect(span.meta).to.have.property('span.kind', 'client')
 
             expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-            expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-              'Hi, how are you doing today my friend?')
-            expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
-
-            expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
-            expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 10)
-            expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 15)
-
-            if (model.systemInstruction) {
-              expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
-                'Please provide an answer')
-            }
-            expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
-            expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
-
-            expect(span.metrics).to.have.property('vertexai.request.stream', 1)
           })
 
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
@@ -226,28 +192,6 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('span.kind', 'client')
 
               expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-
-              expect(span.meta).to.have.property('vertexai.request.contents.0.role', 'user')
-              expect(span.meta).to.have.property('vertexai.request.contents.0.parts.0.text', 'Foobar?')
-              expect(span.meta).to.have.property('vertexai.request.contents.1.role', 'model')
-              expect(span.meta).to.have.property('vertexai.request.contents.1.parts.0.text', 'Foobar!')
-              expect(span.meta).to.have.property('vertexai.request.contents.2.parts.0.text', 'Hello, how are you?')
-
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-                'Hello! How can I assist you today?')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
-
-              expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 35)
-              expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 2)
-              expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 37)
-
-              if (model.systemInstruction) {
-                expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
-                  'Please provide an answer')
-              }
-              expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
-              expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
             })
 
             const chat = model.startChat({
@@ -265,8 +209,7 @@ describe('Plugin', () => {
 
           it('tags a string input', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
-                'Hello, how are you?')
+              expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({})
@@ -279,10 +222,7 @@ describe('Plugin', () => {
 
           it('tags an array of string inputs', async () => {
             const checkTraces = agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.0.text',
-                'Hello, how are you?')
-              expect(traces[0][0].meta).to.have.property('vertexai.request.contents.1.text',
-                'What should I do today?')
+              expect(traces[0][0].meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
             })
 
             const chat = model.startChat({})
@@ -306,24 +246,6 @@ describe('Plugin', () => {
               expect(span.meta).to.have.property('span.kind', 'client')
 
               expect(span.meta).to.have.property('vertexai.request.model', 'gemini-1.5-flash-002')
-              expect(span.meta).to.have.property('vertexai.request.contents.0.text', 'Hello, how are you?')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.finish_reason', 'STOP')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.parts.0.text',
-                'Hi, how are you doing today my friend?')
-              expect(span.meta).to.have.property('vertexai.response.candidates.0.content.role', 'model')
-
-              expect(span.metrics).to.have.property('vertexai.response.usage.prompt_tokens', 5)
-              expect(span.metrics).to.have.property('vertexai.response.usage.completion_tokens', 10)
-              expect(span.metrics).to.have.property('vertexai.response.usage.total_tokens', 15)
-
-              if (model.systemInstruction) {
-                expect(span.meta).to.have.property('vertexai.request.system_instruction.0.text',
-                  'Please provide an answer')
-              }
-              expect(span.meta).to.have.property('vertexai.request.generation_config.max_output_tokens', '50')
-              expect(span.meta).to.have.property('vertexai.request.generation_config.temperature', '1')
-
-              expect(span.metrics).to.have.property('vertexai.request.stream', 1)
             })
 
             const chat = model.startChat({})

@@ -160,12 +160,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
+        earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
         try {
-          const hasKnownTests = !!knownTests?.jest
-          earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
-          this.knownTestsForThisSuite = hasKnownTests
-            ? (knownTests?.jest?.[this.testSuite] || [])
-            : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+          this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+
+          if (!Array.isArray(this.knownTestsForThisSuite)) {
+            log.warn('this.knownTestsForThisSuite is not an array so new test and Early Flake detection is disabled.')
+            this.isEarlyFlakeDetectionEnabled = false
+            this.isKnownTestsEnabled = false
+          }
         } catch {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
@@ -221,19 +224,20 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return hasSnapshotTests
     }
 
-    // Function that receives a list of known tests for a test service and
-    // returns the ones that belong to the current suite
-    getKnownTestsForSuite (knownTests) {
-      if (this.knownTestsForThisSuite) {
-        return this.knownTestsForThisSuite
+    // This function returns an array if the known tests are valid and null otherwise.
+    getKnownTestsForSuite (suiteKnownTests) {
+      // `suiteKnownTests` is `this.testEnvironmentOptions._ddKnownTests`,
+      // which is only set if jest is configured to run in parallel.
+      if (suiteKnownTests) {
+        return suiteKnownTests
       }
-      let knownTestsForSuite = knownTests
-      // If jest is using workers, known tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof knownTestsForSuite === 'string') {
-        knownTestsForSuite = JSON.parse(knownTestsForSuite)
+      // Global variable `knownTests` is set only in the main process.
+      // If jest is configured to run serially, the tests run in the same process, so `knownTests` is set.
+      // The assumption is that if the key `jest` is defined in the dictionary, the response is valid.
+      if (knownTests?.jest) {
+        return knownTests.jest[this.testSuite] || []
       }
-      return knownTestsForSuite
+      return null
     }
 
     getTestManagementTestsForSuite (testManagementTests) {
@@ -469,7 +473,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
         if (this.isKnownTestsEnabled) {
-          const isNew = !this.knownTestsForThisSuite?.includes(originalTestName)
+          const isNew = !this.knownTestsForThisSuite.includes(originalTestName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
             retriedTestsToNumAttempts.set(originalTestName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
@@ -617,9 +621,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 function getTestEnvironment (pkg, jestVersion) {
   if (pkg.default) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default, jestVersion)
-    pkg.default = wrappedTestEnvironment
-    pkg.TestEnvironment = wrappedTestEnvironment
-    return pkg
+    return new Proxy(pkg, {
+      get (target, prop) {
+        if (prop === 'default') {
+          return wrappedTestEnvironment
+        }
+        if (prop === 'TestEnvironment') {
+          return wrappedTestEnvironment
+        }
+        return target[prop]
+      }
+    })
   }
   return getWrappedEnvironment(pkg, jestVersion)
 }
@@ -651,6 +663,11 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+addHook({
+  name: '@happy-dom/jest-environment',
+  versions: ['>=10.0.0']
+}, getTestEnvironment)
+
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   // `scheduleTests` is an async function
   return function (tests) {
@@ -675,8 +692,11 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
-      const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests?.jest || {}, earlyFlakeDetectionFaultyThreshold)
+
+      // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
+      const isFaulty = !knownTests?.jest ||
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
@@ -1260,12 +1280,6 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'winston'
 ])
 
-function shouldBypassJestRequireEngine (moduleName) {
-  return (
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)
-  )
-}
-
 addHook({
   name: 'jest-runtime',
   versions: ['>=24.8.0']
@@ -1277,6 +1291,10 @@ addHook({
     const suiteFilePath = this._testPath
 
     shimmer.wrap(result, 'mock', mock => function (moduleName) {
+      // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
+      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+        LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
+      }
       if (suiteFilePath) {
         const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
         const suiteDir = path.dirname(suiteFilePath)
@@ -1291,7 +1309,7 @@ addHook({
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     // TODO: do this for every library that we instrument
-    if (shouldBypassJestRequireEngine(moduleName)) {
+    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
@@ -1330,7 +1348,7 @@ function sendWrapper (send) {
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
     if (type === CHILD_MESSAGE_CALL) {
       // This is the message that the main process sends to the worker to run a test suite (=test file).
-      // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
+      // In here we modify the `config.testEnvironmentOptions` to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request.at(-1)
       if (args.length > 1) {

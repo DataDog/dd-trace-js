@@ -2,13 +2,13 @@
 
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { storage } = require('../../../datadog-core')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
+const { extractQueueMetadata } = require('../util')
 
 class Sqs extends BaseAwsSdkPlugin {
-  static get id () { return 'sqs' }
-  static get peerServicePrecursors () { return ['queuename'] }
-  static get isPayloadReporter () { return true }
+  static id = 'sqs'
+  static peerServicePrecursors = ['queuename']
+  static isPayloadReporter = true
 
   constructor (...args) {
     super(...args)
@@ -17,36 +17,39 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addSub('apm:aws:response:start:sqs', obj => {
-      const { request, response } = obj
-      const store = storage('legacy').getStore()
+    this.addBind('apm:aws:response:start:sqs', ctx => {
+      const { request, response } = ctx
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
+
+      let store = this._parentMap.get(request)
       let span
       let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
-        obj.needsFinish = true
+        ctx.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
-          tags: {
+          meta: {
             ...this.requestTags.get(request),
             'span.kind': 'server'
           },
           integrationName: 'aws-sdk'
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = this.tracer.startSpan('aws.response', options)
-        this.enter(span, store)
+        span = this.startSpan('aws.response', options, ctx)
+        store = ctx.currentStore
       }
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
 
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
         request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
       )
+
+      return store
     })
 
-    this.addSub('apm:aws:response:finish:sqs', err => {
-      const { span } = storage('legacy').getStore()
-      this.finish(span, null, err)
+    this.addSub('apm:aws:response:finish:sqs', ctx => {
+      if (!ctx.needsFinish) return
+      this.finish(ctx)
     })
   }
 
@@ -90,16 +93,18 @@ class Sqs extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params || (!params.QueueName && !params.QueueUrl)) return {}
-    // 'https://sqs.us-east-1.amazonaws.com/123456789012/my-queue';
-    let queueName = params.QueueName
-    if (params.QueueUrl) {
-      queueName = params.QueueUrl.split('/').at(-1)
-    }
+
+    const queueMetadata = extractQueueMetadata(params.QueueUrl)
+    const queueName = queueMetadata?.queueName || params.QueueName
 
     const tags = {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      queuename: queueName
+      queuename: queueName,
+    }
+
+    if (queueMetadata?.arn) {
+      tags['cloud.resource_id'] = queueMetadata.arn
     }
 
     switch (operation) {

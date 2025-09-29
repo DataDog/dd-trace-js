@@ -76,7 +76,7 @@ export default [
         }
       },
       globals: {
-        ...globals.es2021,
+        ...globals.es2022,
         ...globals.node,
         document: 'readonly',
         navigator: 'readonly',
@@ -124,7 +124,7 @@ export default [
       '@stylistic/quotes': [
         'error',
         'single',
-        { avoidEscape: true, allowTemplateLiterals: false }
+        { avoidEscape: true, allowTemplateLiterals: 'never' }
       ],
       '@stylistic/rest-spread-spacing': ['error', 'never'],
       '@stylistic/semi': ['error', 'never'],
@@ -408,6 +408,10 @@ export default [
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
       'unicorn/prevent-abbreviations': 'off', // too strict
 
+      // These rules require a newer Node.js version than we support
+      'unicorn/no-array-reverse': 'off', // Node.js 20
+      'unicorn/no-array-sort': 'off', // Node.js 20
+
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
@@ -519,8 +523,7 @@ export default [
     ]
   },
   {
-    name: 'mocha/recommended',
-    ...eslintPluginMocha.configs.flat.recommended,
+    ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES
   },
   {
@@ -535,27 +538,16 @@ export default [
   {
     name: 'dd-trace/tests/all',
     files: TEST_FILES,
-    languageOptions: {
-      globals: {
-        sinon: 'readonly',
-        expect: 'readonly',
-        proxyquire: 'readonly',
-        withVersions: 'readonly',
-      }
-    },
     plugins: {
       mocha: eslintPluginMocha,
       n: eslintPluginN
     },
     rules: {
-      'mocha/max-top-level-suites': 'off',
-      'mocha/no-exports': 'off',
-      'mocha/no-global-tests': 'off',
-      'mocha/no-identical-title': 'off',
+      'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-setup-in-describe': 'off',
       'mocha/no-sibling-hooks': 'off',
-      'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
@@ -563,7 +555,28 @@ export default [
     }
   },
   {
-    name: 'dd-trace/tests/integration',
+    name: 'dd-trace/test-optimization/relaxed',
+    files: [
+      'integration-tests/ci-visibility/**/*.js',
+      'integration-tests/ci-visibility/**/*.mjs',
+      'packages/datadog-plugin-jest/test/**/*.js',
+      'packages/datadog-plugin-mocha/test/**/*.js',
+      'packages/datadog-plugin-cucumber/test/**/*.js',
+      'packages/datadog-plugin-cypress/test/**/*.js',
+      'packages/datadog-plugin-playwright/test/**/*.js',
+      'packages/datadog-plugin-vitest/test/**/*.js',
+    ],
+    plugins: {
+      mocha: eslintPluginMocha,
+    },
+    rules: {
+      'no-undef': 'off',
+      'mocha/max-top-level-suites': 'off',
+      'mocha/no-pending-tests': 'off',
+    }
+  },
+  {
+    name: 'dd-trace/tests/integration-and-resources',
     plugins: {
       import: eslintPluginImport
     },
@@ -571,7 +584,12 @@ export default [
       'integration-tests/**/*.js',
       'integration-tests/**/*.mjs',
       'packages/*/test/integration-test/**/*.js',
-      'packages/*/test/integration-test/**/*.mjs'
+      'packages/*/test/integration-test/**/*.mjs',
+      // TODO: Move the files in esm-test to integration-test
+      'packages/datadog-plugin-graphql/test/esm-test/**/*.mjs',
+      'packages/dd-trace/test/appsec/**/resources/**/*.js',
+      // TODO: Move the jest-test.js to integration-test
+      'packages/datadog-plugin-jest/test/jest-test.js',
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off'

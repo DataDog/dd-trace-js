@@ -13,8 +13,8 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       # NOTE: Ok this next bit seems unnecessary, right? The problem is that
       # this repo is currently incompatible with npm, at least with the
       # devDependencies. While this is intended to be corrected, it hasn't yet,
@@ -46,18 +46,18 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn lint
+      - run: npm run lint
 
   package-size-report:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
@@ -70,10 +70,10 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     steps:
     - name: Checkout
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
     - name: Check code meets quality and security standards
       id: datadog-static-analysis
-      uses: DataDog/datadog-static-analyzer-github-action@v1
+      uses: DataDog/datadog-static-analyzer-github-action@2707598b1182dce1d1792186477b5b4132338e1c # v1.2.3
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
         dd_app_key: ${{ secrets.DD_APP_KEY }}
@@ -83,19 +83,20 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
 
-  verify-yaml:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: node scripts/verify-ci-config.js
+  # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
+  # verify-yaml:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: ./.github/actions/node/latest
+  #     - uses: ./.github/actions/install
+  #     - run: node scripts/verify-ci-config.js
 
   yarn-dedupe:
     runs-on: ubuntu-latest
@@ -104,13 +105,13 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: ./.github/actions/node/active-lts
+        uses: ./.github/actions/node/latest
 
       - name: Install dependencies
         uses: ./.github/actions/install

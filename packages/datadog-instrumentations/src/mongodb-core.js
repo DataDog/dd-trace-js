@@ -148,63 +148,66 @@ function wrapCommand (command, operation, name) {
   return wrapped
 }
 
-function instrument (operation, command, ctx, args, server, ns, ops, options = {}) {
+function instrument (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
   const index = args.length - 1
-  let callback = args[index]
+  const callback = args[index]
 
-  if (typeof callback !== 'function') return command.apply(ctx, args)
+  if (typeof callback !== 'function') return command.apply(instance, args)
 
   const serverInfo = server && server.s && server.s.options
-  const callbackResource = new AsyncResource('bound-anonymous-fn')
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-  callback = callbackResource.bind(callback)
-
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ ns, ops, options: serverInfo, name })
-
-    args[index] = shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err, res) {
+  const ctx = {
+    ns,
+    ops,
+    options: serverInfo,
+    name
+  }
+  return startCh.runStores(ctx, () => {
+    args[index] = shimmer.wrapFunction(callback, callback => function (err, res) {
       if (err) {
-        errorCh.publish(err)
+        ctx.error = err
+        errorCh.publish(ctx)
       }
 
-      finishCh.publish()
-
-      if (callback) {
-        return callback.apply(this, arguments)
-      }
-    }))
+      return finishCh.runStores(ctx, callback, this, ...arguments)
+    })
 
     try {
-      return command.apply(ctx, args)
+      return command.apply(instance, args)
     } catch (err) {
-      errorCh.publish(err)
+      ctx.error = err
+      errorCh.publish(ctx)
 
       throw err
     }
   })
 }
 
-function instrumentPromise (operation, command, ctx, args, server, ns, ops, options = {}) {
+function instrumentPromise (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
 
   const serverInfo = server && server.s && server.s.options
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-  return asyncResource.runInAsyncScope(() => {
-    startCh.publish({ ns, ops, options: serverInfo, name })
+  const ctx = {
+    ns,
+    ops,
+    options: serverInfo,
+    name
+  }
 
-    const promise = command.apply(ctx, args)
+  return startCh.runStores(ctx, () => {
+    const promise = command.apply(instance, args)
 
-    return promise.then(function (res) {
-      finishCh.publish()
-      return res
+    promise.then(function (res) {
+      ctx.result = res
+      finishCh.publish(ctx)
     }, function (err) {
-      errorCh.publish(err)
-      finishCh.publish()
-
-      throw err
+      ctx.error = err
+      errorCh.publish(ctx)
+      finishCh.publish(ctx)
     })
+
+    return promise
   })
 }

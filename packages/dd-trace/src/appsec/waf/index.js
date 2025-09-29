@@ -3,6 +3,11 @@
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const Reporter = require('../reporter')
+const Limiter = require('../../rate_limiter')
+const { keepTrace } = require('../../priority_sampler')
+const { ASM } = require('../../standalone/product')
+const web = require('../../plugins/util/web')
+const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
   constructor (diagnosticErrors) {
@@ -11,6 +16,8 @@ class WafUpdateError extends Error {
     this.diagnosticErrors = diagnosticErrors
   }
 }
+
+let limiter = new Limiter(100)
 
 const waf = {
   wafManager: null,
@@ -26,6 +33,8 @@ const waf = {
 
 function init (rules, config) {
   destroy()
+
+  limiter = new Limiter(config.rateLimit)
 
   // dirty require to make startup faster for serverless
   const WAFManager = require('./waf_manager')
@@ -99,8 +108,18 @@ function run (data, req, raspRule) {
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
+  const result = wafContext.run(data, raspRule)
 
-  return wafContext.run(data, raspRule)
+  if (result?.keep) {
+    if (limiter.isAllowed()) {
+      const rootSpan = web.root(req)
+      keepTrace(rootSpan, ASM)
+    } else {
+      updateRateLimitedMetric(req)
+    }
+  }
+
+  return result
 }
 
 function disposeContext (req) {

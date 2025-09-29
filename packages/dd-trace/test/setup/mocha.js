@@ -1,12 +1,17 @@
 'use strict'
 
-require('./core')
-
 const assert = require('node:assert')
 const util = require('node:util')
 const { platform } = require('node:os')
 const path = require('node:path')
+
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+require('./core')
+
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
@@ -15,9 +20,6 @@ const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
-
-// TODO: Remove global
-global.withVersions = withVersions
 
 exports.withVersions = withVersions
 exports.withExports = withExports

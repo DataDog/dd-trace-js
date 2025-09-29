@@ -8,6 +8,7 @@ const {
   ERROR_MESSAGE,
   ERROR_STACK
 } = require('../../dd-trace/src/constants')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer

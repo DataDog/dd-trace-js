@@ -5,21 +5,19 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
-const finishServerCh = channel('apm:http2:server:request:finish')
+const emitCh = channel('apm:http2:server:response:emit')
 
 const names = ['http2', 'node:http2']
 
 addHook({ name: names }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
-  return http2
 })
 
 function wrapCreateServer (createServer) {
@@ -30,18 +28,14 @@ function wrapCreateServer (createServer) {
   }
 }
 
-function wrapResponseEmit (emit) {
-  const asyncResource = new AsyncResource('bound-anonymous-fn')
+function wrapResponseEmit (emit, ctx) {
   return function (eventName, event) {
-    return asyncResource.runInAsyncScope(() => {
-      if (eventName === 'close' && finishServerCh.hasSubscribers) {
-        finishServerCh.publish({ req: this.req })
-      }
-
-      return emit.apply(this, arguments)
-    })
+    ctx.req = this.req
+    ctx.eventName = eventName
+    return emitCh.runStores(ctx, emit, this, ...arguments)
   }
 }
+
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -51,18 +45,17 @@ function wrapEmit (emit) {
     if (eventName === 'request') {
       res.req = req
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      return asyncResource.runInAsyncScope(() => {
-        startServerCh.publish({ req, res })
-
-        shimmer.wrap(res, 'emit', wrapResponseEmit)
+      const ctx = { req, res }
+      return startServerCh.runStores(ctx, () => {
+        shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
 
         try {
           return emit.apply(this, arguments)
-        } catch (err) {
-          errorServerCh.publish(err)
+        } catch (error) {
+          ctx.error = error
+          errorServerCh.publish(ctx)
 
-          throw err
+          throw error
         }
       })
     }

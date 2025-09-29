@@ -1,9 +1,12 @@
 'use strict'
 
+const { promisify } = require('util')
+const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
+const execPromise = promisify(exec)
 
 const { assert } = require('chai')
 
@@ -62,6 +65,7 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
+const RECEIVER_STOP_TIMEOUT = 20000
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
@@ -86,7 +90,8 @@ function shouldTestsRun (type) {
       return version === '6.7.0' && type === 'commonJS'
     }
     if (NODE_MAJOR > 16) {
-      return version === 'latest'
+      // Cypress 15.0.0 has removed support for Node 18
+      return NODE_MAJOR > 18 ? version === 'latest' : version === '14.5.4'
     }
   }
   if (DD_MAJOR === 6) {
@@ -94,7 +99,11 @@ function shouldTestsRun (type) {
       return false
     }
     if (NODE_MAJOR > 16) {
-      return version === '10.2.0' || version === 'latest'
+      // Cypress 15.0.0 has removed support for Node 18
+      if (NODE_MAJOR <= 18) {
+        return version === '10.2.0' || version === '14.5.4'
+      }
+      return version === '10.2.0' || version === '14.5.4' || version === 'latest'
     }
   }
   return false
@@ -112,8 +121,8 @@ moduleTypes.forEach(({
     }
 
     this.retries(2)
-    this.timeout(60000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer, secondWebAppPort
+    this.timeout(80000)
+    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -123,24 +132,15 @@ moduleTypes.forEach(({
       // cypress-fail-fast is required as an incompatible plugin
       sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
-      webAppServer.listen(0, 'localhost', () => {
+
+      const { NODE_OPTIONS, ...restOfEnv } = process.env
+      // Install cypress' browser before running the tests
+      await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
+
+      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
-      })
-      if (version === 'latest') {
-        secondWebAppServer = http.createServer((req, res) => {
-          res.setHeader('Content-Type', 'text/html')
-          res.writeHead(200)
-          res.end(`
-            <!DOCTYPE html>
-            <html>
-              <div class="hella-world">Hella World</div>
-            </html>
-          `)
-        })
-        secondWebAppServer.listen(0, 'localhost', () => {
-          secondWebAppPort = secondWebAppServer.address().port
-        })
-      }
+        resolve()
+      }))
     })
 
     after(async () => {
@@ -155,14 +155,29 @@ moduleTypes.forEach(({
       receiver = await new FakeCiVisIntake().start()
     })
 
+    // Cypress child processes can sometimes hang or take longer to
+    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
+    // because there are pending connections.
     afterEach(async () => {
       childProcess.kill()
-      await receiver.stop()
+
+      // Add timeout to prevent hanging
+      const stopPromise = receiver.stop()
+      const timeoutPromise = new Promise((resolve, reject) =>
+        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
+      )
+
+      try {
+        await Promise.race([stopPromise, timeoutPromise])
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn('Receiver stop timed out:', error.message)
+      }
     })
 
     if (version === '6.7.0') {
       // to be removed when we drop support for cypress@6.7.0
-      it('logs a warning if using a deprecated version of cypress', (done) => {
+      it('logs a warning if using a deprecated version of cypress', async () => {
         let stdout = ''
         const {
           NODE_OPTIONS,
@@ -185,30 +200,32 @@ moduleTypes.forEach(({
           stdout += chunk.toString()
         })
 
-        childProcess.on('exit', () => {
-          assert.include(
-            stdout,
-            'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
-            ' and will not be supported in future versions of dd-trace.'
-          )
-          done()
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end')
+        ])
+        assert.include(
+          stdout,
+          'WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
+          ' and will not be supported in future versions of dd-trace.'
+        )
       })
     }
 
-    it('does not crash if badly init', (done) => {
+    it('does not crash if badly init', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
         ...restEnvVars
       } = getCiVisAgentlessConfig(receiver.port)
 
-      receiver.assertPayloadReceived(() => {
-        const error = new Error('it should not report test events')
-        done(error)
+      let hasReceivedEvents = false
+
+      const eventsPromise = receiver.assertPayloadReceived(() => {
+        hasReceivedEvents = true
       }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
 
-      let testOutput
+      let testOutput = ''
 
       childProcess = exec(
         testCommand,
@@ -230,27 +247,30 @@ moduleTypes.forEach(({
         testOutput += chunk.toString()
       })
 
-      // TODO: remove once we find the source of flakiness
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
+      await Promise.all([
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
 
-      childProcess.on('exit', () => {
+      assert.strictEqual(hasReceivedEvents, false)
+      // TODO: remove try/catch once we find the source of flakiness
+      try {
         assert.notInclude(testOutput, 'TypeError')
-        // TODO: remove try/catch once we find the source of flakiness
-        try {
-          assert.include(testOutput, '1 of 1 failed')
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log('---- Actual test output -----')
-          // eslint-disable-next-line no-console
-          console.log(testOutput)
-          throw e
-        }
-        done()
-      })
+        assert.include(testOutput, '1 of 1 failed')
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.log('---- Actual test output -----')
+        // eslint-disable-next-line no-console
+        console.log(testOutput)
+        // eslint-disable-next-line no-console
+        console.log('---- finish actual test output -----')
+        throw e
+      }
     })
 
-    it('catches errors in hooks', (done) => {
+    it('catches errors in hooks', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -314,14 +334,14 @@ moduleTypes.forEach(({
           stdio: 'pipe'
         }
       )
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
-    it('can run and report tests', (done) => {
+    it('can run and report tests', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
@@ -443,14 +463,13 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
-    it('can report code coverage if it is available', (done) => {
+    it('can report code coverage if it is available', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         ...restEnvVars
@@ -489,15 +508,14 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     context('intelligent test runner', () => {
-      it('can report git metadata', (done) => {
+      it('can report git metadata', async () => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
         )
@@ -521,27 +539,25 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', () => {
-          Promise.all([
-            searchCommitsRequestPromise,
-            packfileRequestPromise
-          ]).then(([searchCommitRequest, packfileRequest]) => {
-            assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
-            assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
-            done()
-          }).catch(done)
-        })
+
+        const [, searchCommitRequest, packfileRequest] = await Promise.all([
+          once(childProcess, 'exit'),
+          searchCommitsRequestPromise,
+          packfileRequestPromise
+        ])
+        assert.propertyVal(searchCommitRequest.headers, 'dd-api-key', '1')
+        assert.propertyVal(packfileRequest.headers, 'dd-api-key', '1')
       })
 
-      it('does not report code coverage if disabled by the API', (done) => {
+      it('does not report code coverage if disabled by the API', async () => {
+        let hasReportedCodeCoverage = false
         receiver.setSettings({
           code_coverage: false,
           tests_skipping: false
         })
 
         receiver.assertPayloadReceived(() => {
-          const error = new Error('it should not report code coverage')
-          done(error)
+          hasReportedCodeCoverage = true
         }, ({ url }) => url.endsWith('/api/v2/citestcov')).catch(() => {})
 
         const receiverPromise = receiver
@@ -569,14 +585,14 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+        assert.isFalse(hasReportedCodeCoverage)
       })
 
-      it('can skip tests received by the intelligent test runner API and still reports code coverage', (done) => {
+      it('can skip tests received by the intelligent test runner API and still reports code coverage', async () => {
         receiver.setSuitesToSkip([{
           type: 'test',
           attributes: {
@@ -640,14 +656,17 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', () => {
-          Promise.all([eventsPromise, skippableRequestPromise, coverageRequestPromise]).then(() => {
-            done()
-          }).catch(done)
-        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+          skippableRequestPromise,
+          coverageRequestPromise
+        ])
       })
 
-      it('does not skip tests if test skipping is disabled by the API', (done) => {
+      it('does not skip tests if test skipping is disabled by the API', async () => {
+        let hasRequestedSkippable = false
         receiver.setSettings({
           code_coverage: true,
           tests_skipping: false
@@ -662,8 +681,7 @@ moduleTypes.forEach(({
         }])
 
         receiver.assertPayloadReceived(() => {
-          const error = new Error('should not request skippable')
-          done(error)
+          hasRequestedSkippable = true
         }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable')).catch(() => {})
 
         const receiverPromise = receiver
@@ -694,14 +712,14 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+        assert.isFalse(hasRequestedSkippable)
       })
 
-      it('does not skip tests if suite is marked as unskippable', (done) => {
+      it('does not skip tests if suite is marked as unskippable', async () => {
         receiver.setSettings({
           code_coverage: true,
           tests_skipping: true
@@ -769,14 +787,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('only sets forced to run if test was going to be skipped by ITR', (done) => {
+      it('only sets forced to run if test was going to be skipped by ITR', async () => {
         receiver.setSettings({
           code_coverage: true,
           tests_skipping: true
@@ -839,14 +856,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', (done) => {
+      it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', async () => {
         receiver.setSuitesToSkip([{
           type: 'test',
           attributes: {
@@ -892,14 +908,15 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', () => {
-          Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
-            done()
-          }).catch(done)
-        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+          skippableRequestPromise
+        ])
       })
 
-      it('reports itr_correlation_id in tests', (done) => {
+      it('reports itr_correlation_id in tests', async () => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)
         const eventsPromise = receiver
@@ -928,14 +945,14 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
       })
 
-      it('reports code coverage relative to the repository root, not working directory', (done) => {
+      it('reports code coverage relative to the repository root, not working directory', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: true,
@@ -985,15 +1002,14 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
       })
     })
 
-    it('still reports correct format if there is a plugin incompatibility', (done) => {
+    it('still reports correct format if there is a plugin incompatibility', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         ...restEnvVars
@@ -1028,14 +1044,13 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
-    it('works if after:run is explicitly used', (done) => {
+    it('works if after:run is explicitly used', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1067,14 +1082,13 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
-    it('works if after:spec is explicitly used', (done) => {
+    it('works if after:spec is explicitly used', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1106,15 +1120,14 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     context('early flake detection', () => {
-      it('retries new tests', (done) => {
+      it('retries new tests', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1182,14 +1195,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1246,14 +1258,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('does not retry tests that are skipped', (done) => {
+      it('does not retry tests that are skipped', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1264,7 +1275,10 @@ moduleTypes.forEach(({
           known_tests_enabled: true
         })
 
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          cypress: {}
+        })
+
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
           ...restEnvVars
@@ -1301,14 +1315,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('does not run EFD if the known tests request fails', (done) => {
+      it('does not run EFD if the known tests request fails', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1320,7 +1333,9 @@ moduleTypes.forEach(({
         })
 
         receiver.setKnownTestsResponseCode(500)
-        receiver.setKnownTests({})
+        receiver.setKnownTests({
+          cypress: {}
+        })
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1355,14 +1370,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('disables early flake detection if known tests should not be requested', (done) => {
+      it('disables early flake detection if known tests should not be requested', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -1419,16 +1433,77 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
+
+      it('disables early flake detection if known tests response is invalid', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: false
         })
+
+        receiver.setKnownTests({
+          'not-cypress': {
+            'cypress/e2e/spec.cy.js': [
+              'other context fails'
+            ]
+          }
+        })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            // new tests are not detected
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
       })
     })
 
     context('flaky test retries', () => {
-      it('retries flaky tests', (done) => {
+      it('retries flaky tests', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -1508,14 +1583,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -1565,12 +1639,13 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
-      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -1623,15 +1698,14 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
     })
 
-    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+    it('correctly calculates test code owners when working directory is not repository root', async () => {
       let command
 
       if (type === 'commonJS') {
@@ -1672,15 +1746,14 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
 
     context('known tests without early flake detection', () => {
-      it('detects new tests without retrying them', (done) => {
+      it('detects new tests without retrying them', async () => {
         receiver.setSettings({
           known_tests_enabled: true
         })
@@ -1731,11 +1804,10 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
     })
 
@@ -1747,6 +1819,31 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.equal(events.length, 4)
+
+            const test = events.find(event => event.type === 'test').content
+            assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
+            assert.equal(test.meta[TEST_STATUS], 'pass')
+          })
+
+        secondWebAppServer = http.createServer((req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.writeHead(200)
+          res.end(`
+            <!DOCTYPE html>
+            <html>
+              <div class="hella-world">Hella World</div>
+            </html>
+          `)
+        })
+
+        const secondWebAppPort = await new Promise(resolve => {
+          secondWebAppServer.listen(0, 'localhost', () => resolve(secondWebAppServer.address().port))
+        })
+
         const specToRun = 'cypress/e2e/multi-origin.js'
 
         childProcess = exec(
@@ -1757,25 +1854,23 @@ moduleTypes.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
-              SPEC_PATTERN: specToRun
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: true
             },
             stdio: 'pipe'
           }
         )
 
-        await receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            assert.equal(events.length, 4)
-
-            const test = events.find(event => event.type === 'test').content
-            assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
-            assert.equal(test.meta[TEST_STATUS], 'pass')
-          })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+          receiverPromise
+        ])
       })
     }
 
-    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
+    it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1805,11 +1900,10 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     context('test management', () => {
@@ -1911,7 +2005,7 @@ moduleTypes.forEach(({
               }
             })
 
-        const runAttemptToFixTest = (done, {
+        const runAttemptToFixTest = async ({
           isAttemptToFix,
           shouldAlwaysPass,
           shouldFailSometimes,
@@ -1950,48 +2044,48 @@ moduleTypes.forEach(({
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (shouldAlwaysPass) {
-                assert.equal(exitCode, 0)
-              } else {
-                // TODO: we need to figure out how to trick cypress into returning exit code 0
-                // even if there are failed tests
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (shouldAlwaysPass) {
+            assert.equal(exitCode, 0)
+          } else {
+            // TODO: we need to figure out how to trick cypress into returning exit code 0
+            // even if there are failed tests
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, { isAttemptToFix: true })
+          await runAttemptToFixTest({ isAttemptToFix: true })
         })
 
-        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, shouldAlwaysPass: true })
         })
 
-        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
         })
 
-        it('does not attempt to fix tests if test management is not enabled', (done) => {
+        it('does not attempt to fix tests if test management is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done)
+          await runAttemptToFixTest()
         })
 
-        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+          await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
 
         /**
@@ -2002,7 +2096,7 @@ moduleTypes.forEach(({
          * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
          * Cypress will run the test, but it won't ignore its result.
          */
-        it('can mark tests as quarantined and tests are not skipped', (done) => {
+        it('can mark tests as quarantined and tests are not skipped', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {
@@ -2021,7 +2115,7 @@ moduleTypes.forEach(({
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, isQuarantined: true })
         })
 
         /**
@@ -2029,7 +2123,7 @@ moduleTypes.forEach(({
          * When a test is disabled and attempted to fix, the spec is to run the test and ignore its result.
          * Cypress will run the test, but it won't ignore its result.
          */
-        it('can mark tests as disabled and tests are not skipped', (done) => {
+        it('can mark tests as disabled and tests are not skipped', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
           receiver.setTestManagementTests({
             cypress: {
@@ -2048,7 +2142,7 @@ moduleTypes.forEach(({
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, isDisabled: true })
         })
       })
 
@@ -2095,7 +2189,7 @@ moduleTypes.forEach(({
               }
             })
 
-        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+        const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
 
           const {
@@ -2119,34 +2213,34 @@ moduleTypes.forEach(({
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isDisabling) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isDisabling) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can disable tests', (done) => {
+        it('can disable tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, true)
+          await runDisableTest(true)
         })
 
-        it('fails if disable is not enabled', (done) => {
+        it('fails if disable is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runDisableTest(done, false)
+          await runDisableTest(false)
         })
 
-        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
@@ -2194,7 +2288,7 @@ moduleTypes.forEach(({
               }
             })
 
-        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+        const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
 
           const {
@@ -2218,40 +2312,40 @@ moduleTypes.forEach(({
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isQuarantining) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isQuarantining) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can quarantine tests', (done) => {
+        it('can quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, true)
+          await runQuarantineTest(true)
         })
 
-        it('fails if quarantine is not enabled', (done) => {
+        it('fails if quarantine is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runQuarantineTest(done, false)
+          await runQuarantineTest(false)
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
     })
 
     context('libraries capabilities', () => {
-      it('adds capabilities to tests', (done) => {
+      it('adds capabilities to tests', async () => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
@@ -2289,11 +2383,10 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => {
-            done()
-          }).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
     })
 
@@ -2397,8 +2490,7 @@ moduleTypes.forEach(({
             }
           })
 
-      const runImpactedTest = (
-        done,
+      const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
@@ -2426,29 +2518,30 @@ moduleTypes.forEach(({
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(done).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', (done) => {
+        it('should be detected as impacted', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
-          runImpactedTest(done, { isModified: true })
+          await runImpactedTest({ isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', (done) => {
+        it('should not be detected as impacted if disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
-          runImpactedTest(done, { isModified: false })
+          await runImpactedTest({ isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          (done) => {
+          async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done,
+            await runImpactedTest(
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
@@ -2456,8 +2549,10 @@ moduleTypes.forEach(({
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+        it('should be retried and marked both as new and modified', async () => {
+          receiver.setKnownTests({
+            cypress: {}
+          })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
@@ -2468,8 +2563,7 @@ moduleTypes.forEach(({
             },
             known_tests_enabled: true
           })
-          runImpactedTest(
-            done,
+          await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
           )
         })

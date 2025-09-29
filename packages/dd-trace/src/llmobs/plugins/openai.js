@@ -10,11 +10,9 @@ function isIterable (obj) {
 }
 
 class OpenAiLLMObsPlugin extends LLMObsPlugin {
-  static get id () { return 'openai' }
-  static get integration () { return 'openai' }
-  static get prefix () {
-    return 'tracing:apm:openai:request'
-  }
+  static id = 'openai'
+  static integration = 'openai'
+  static prefix = 'tracing:apm:openai:request'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const resource = ctx.methodName
@@ -83,8 +81,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const outputTokens = tokenUsage.completion_tokens
       if (outputTokens) metrics.outputTokens = outputTokens
 
-      const totalTokens = tokenUsage.total_toksn || (inputTokens + outputTokens)
+      const totalTokens = tokenUsage.total_tokens || (inputTokens + outputTokens)
       if (totalTokens) metrics.totalTokens = totalTokens
+
+      const promptTokensDetails = tokenUsage.prompt_tokens_details
+      if (promptTokensDetails) {
+        const cacheReadTokens = promptTokensDetails.cached_tokens
+        if (cacheReadTokens) metrics.cacheReadTokens = cacheReadTokens
+      }
     }
 
     return metrics

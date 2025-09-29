@@ -1,0 +1,65 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-4.1\",\n  \"messages\": [\n    {\n      \"role\":
+      \"system\",\n      \"content\": \"You are a helpful assistant.\"\n    },\n    {\n
+      \     \"role\": \"user\",\n      \"content\": \"Hello, OpenAI!\"\n    }\n  ],\n
+      \ \"temperature\": 0.5,\n  \"stream\": false,\n  \"max_tokens\": 100,\n  \"n\":
+      1,\n  \"user\": \"dd-trace-test\"\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '297'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 4.0.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v22.17.0
+    method: POST
+    uri: https://dd.openai.azure.com/chat/completions
+  response:
+    body:
+      string: '{"error":{"code":"404","message": "Resource not found"}}'
+    headers:
+      Content-Length:
+      - '56'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 20 Aug 2025 13:52:23 GMT
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      apim-request-id:
+      - 49a7f7ae-f881-4784-816e-855d03e730d8
+      x-content-type-options:
+      - nosniff
+    status:
+      code: 404
+      message: Resource Not Found
+version: 1

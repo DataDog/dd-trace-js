@@ -43,7 +43,8 @@ describe('graphql', () => {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.isArray(payload)
       assert.strictEqual(payload.length, 2)
-      assert.propertyVal(payload[1][0], 'name', 'express.request')
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.propertyVal(payload[1][0], 'name', 'web.request')
       assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.notProperty(payload[1][0].meta, '_dd.appsec.event')
@@ -104,7 +105,8 @@ describe('graphql', () => {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.isArray(payload)
       assert.strictEqual(payload.length, 2)
-      assert.propertyVal(payload[1][0], 'name', 'express.request')
+      // Apollo server 5 is using Node.js http server instead of express
+      assert.propertyVal(payload[1][0], 'name', 'web.request')
       assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
       assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
       assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')

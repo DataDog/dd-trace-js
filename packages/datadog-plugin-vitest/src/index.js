@@ -47,9 +47,7 @@ const { DD_MAJOR } = require('../../../version')
 const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
 
 class VitestPlugin extends CiPlugin {
-  static get id () {
-    return 'vitest'
-  }
+  static id = 'vitest'
 
   constructor (...args) {
     super(...args)
@@ -57,8 +55,12 @@ class VitestPlugin extends CiPlugin {
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
+      if (!knownTests.vitest) {
+        return onDone(false)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testsForThisTestSuite = knownTests[testSuite] || []
+      const testsForThisTestSuite = knownTests.vitest[testSuite] || []
       onDone(!testsForThisTestSuite.includes(testName))
     })
 

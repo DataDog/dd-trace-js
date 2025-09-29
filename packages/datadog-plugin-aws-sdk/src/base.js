@@ -4,13 +4,12 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
-const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
-  static get id () { return 'aws' }
-  static get isPayloadReporter () { return false }
+  static id = 'aws'
+  static isPayloadReporter = false
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
@@ -34,38 +33,49 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, ({
-      request,
-      operation,
-      awsRegion,
-      awsService
-    }) => {
+    this._parentMap = new WeakMap()
+
+    this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
+      const {
+        request,
+        operation,
+        awsRegion,
+        awsService
+      } = ctx
+
+      const parentStore = ctx.parentStore = storage('legacy').getStore()
+      const childOf = parentStore?.span
+
+      this._parentMap.set(request, parentStore)
+
       if (!this.isEnabled(request)) {
-        return
+        return parentStore
       }
-      const childOf = this.tracer.scope().active()
-      const tags = {
+
+      const meta = {
         'span.kind': 'client',
         'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
+        'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk'
       }
-      if (this.requestTags) this.requestTags.set(request, tags)
+      if (this.requestTags) this.requestTags.set(request, meta)
 
-      const span = this.tracer.startSpan(this.operationFromRequest(request),
-        {
-          childOf,
-          tags,
-          integrationName: 'aws-sdk'
-        })
+      const span = this.startSpan(this.operationFromRequest(request), {
+        childOf,
+        meta,
+        integrationName: 'aws-sdk'
+      }, ctx)
 
       analyticsSampler.sample(span, this.config.measured)
 
-      this.requestInject(span, request)
+      storage('legacy').run(ctx.currentStore, () => {
+        this.requestInject(span, request)
+      })
 
       if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
@@ -73,11 +83,14 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.addTags(requestTags)
       }
 
-      this.enter(span)
-      const store = storage('legacy').getStore()
+      return ctx.currentStore
+    })
 
-      const peerServerlessStorage = storage('peerServerless')
+    this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
+
+      const { awsRegion, awsService, currentStore, request } = ctx
+      const peerServerlessStorage = storage('peerServerless')
 
       // Try to resolve the hostname immediately; if not possible, keep enough
       // information so the region callback can resolve it later.
@@ -86,21 +99,26 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       peerServerlessStorage.enterWith(peerServerlessStore)
 
       if (hostname) {
-        span.setTag('peer.service', hostname)
+        currentStore.span.setTag('peer.service', hostname)
         peerServerlessStore.peerHostname = hostname
       } else {
-        store.awsParams = request.params
-        store.awsService = awsService
+        currentStore.awsParams = request.params
+        currentStore.awsService = awsService
       }
     })
 
-    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, region => {
+    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region }) => {
       const store = storage('legacy').getStore()
       if (!store) return
       const { span } = store
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      const partition = getPartition(region)
+      if (partition) {
+        span.setTag('aws.partition', partition)
+      }
 
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
@@ -114,24 +132,31 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
     })
 
-    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
-      const store = storage('legacy').getStore()
-      if (!store) return
-      const { span } = store
+    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => {
+      const { response, cbExists = false, currentStore } = ctx
+      if (!currentStore) return
+      const { span } = currentStore
       if (!span) return
-      // try to extract DSM context from response if no callback exists as extraction normally happens in CB
-      if (!cbExists && this.serviceIdentifier === 'sqs') {
-        const params = response.request.params
-        const operation = response.request.operation
-        this.responseExtractDSMContext(operation, params, response.data ?? response, span)
-      }
-      this.addResponseTags(span, response)
 
-      if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
-        this.addSpanPointers(span, response)
-      }
+      storage('legacy').run(currentStore, () => {
+        // try to extract DSM context from response if no callback exists as extraction normally happens in CB
+        if (!cbExists && this.serviceIdentifier === 'sqs') {
+          const params = response.request.params
+          const operation = response.request.operation
+          this.responseExtractDSMContext(operation, params, response.data ?? response, span)
+        }
+        this.addResponseTags(span, response)
 
-      this.finish(span, response, response.error)
+        if (this._tracerConfig?.trace?.aws?.addSpanPointers) {
+          this.addSpanPointers(span, response)
+        }
+      })
+
+      this.finish(ctx)
+    })
+
+    this.addBind(`apm:aws:response:start:${this.serviceIdentifier}`, ctx => {
+      return this._parentMap.get(ctx.request)
     })
   }
 
@@ -205,11 +230,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     // implemented by subclasses, or not
   }
 
-  finish (span, response, err) {
-    if (err) {
-      span.setTag('error', err)
+  finish (ctx) {
+    const { currentStore, response } = ctx
+    const { span } = currentStore
+    const error = response?.error || ctx.error
 
-      const requestId = err.RequestId || err.requestId
+    if (error) {
+      span.setTag('error', error)
+
+      const requestId = error.RequestId || error.requestId
       if (requestId) {
         span.addTags({ 'aws.response.request_id': requestId })
       }
@@ -219,7 +248,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       this.config.hooks.request(span, response)
     }
 
-    super.finish()
+    super.finish(ctx)
   }
 
   configure (config) {
@@ -243,13 +272,11 @@ function normalizeConfig (config, serviceIdentifier) {
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
   const batchPropagationEnabled = isTrue(
-    coalesce(
-      specificConfig.batchPropagationEnabled,
-      getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`),
-      config.batchPropagationEnabled,
-      getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED'),
-      false
-    )
+    specificConfig.batchPropagationEnabled ??
+    getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
+    config.batchPropagationEnabled ??
+    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED') ??
+    false
   )
 
   // Merge the specific config back into the main config
@@ -291,6 +318,19 @@ function getHostname (store, region) {
         ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
         : `s3.${region}.amazonaws.com`
   }
+}
+
+function getPartition (region) {
+  if (!region) return
+
+  let partition = 'aws'
+  if (region.startsWith('cn-')) {
+    partition = 'aws-cn'
+  } else if (region.startsWith('us-gov-')) {
+    partition = 'aws-us-gov'
+  }
+
+  return partition
 }
 
 module.exports = BaseAwsSdkPlugin

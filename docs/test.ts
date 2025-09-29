@@ -121,6 +121,8 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
+      endpointCollectionEnabled: true,
+      endpointCollectionMessageLimit: 300
     },
     rasp: {
       enabled: true,
@@ -582,6 +584,12 @@ const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
+otelSpan.addLink({ context: spanContext })
+otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
+otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
+otelSpan.addLink(spanContext)
+otelSpan.addLink(spanContext, { foo: 'bar' })
+
 // -- LLM Observability --
 const llmobsEnableOptions = {
   mlApp: 'mlApp',
@@ -601,6 +609,27 @@ llmobs.enable({
 
 // manually disable
 llmobs.disable()
+
+// register a processor
+llmobs.registerProcessor((llmobsSpan) => {
+  const drop = llmobsSpan.getTag('drop')
+  if (drop) {
+    return null
+  }
+
+  const redactInput = llmobsSpan.getTag('redactInput')
+  if (redactInput) {
+    llmobsSpan.input = llmobsSpan.input.map(input => {
+      return {
+        ...input,
+      }
+    })
+  }
+
+  return llmobsSpan
+})
+
+llmobs.deregisterProcessor()
 
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})

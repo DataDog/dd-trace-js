@@ -1,5 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
+
 const Scheduler = require('../../src/remote_config/scheduler')
 
 const INTERVAL = 5e3
@@ -10,7 +16,9 @@ describe('Scheduler', () => {
   let scheduler
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     stub = sinon.stub()
     scheduler = new Scheduler(stub, INTERVAL)
   })
@@ -35,7 +43,7 @@ describe('Scheduler', () => {
     })
 
     it('should call the callback once the async operation is done and a delay has passed', () => {
-      let cb
+      let cb = () => { throw new Error('Should not be called') }
       stub.callsFake((_cb) => { cb = _cb })
 
       scheduler.start()

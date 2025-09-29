@@ -1,15 +1,18 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, afterEach, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const { execSync } = require('node:child_process')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
 
-const { execSync } = require('child_process')
-const os = require('os')
-const fs = require('fs')
-const path = require('path')
+require('../../setup/core')
 
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
-const proxyquire = require('proxyquire')
-const execFileSyncStub = sinon.stub().returns('')
+const cachedExecStub = sinon.stub().returns('')
 
 const {
   GIT_COMMIT_SHA,
@@ -28,15 +31,15 @@ const {
   GIT_COMMIT_HEAD_AUTHOR_DATE,
   GIT_COMMIT_HEAD_AUTHOR_EMAIL,
   GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITER_DATE,
-  GIT_COMMIT_HEAD_COMMITER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITER_NAME
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata, unshallowRepository, getGitDiff } = proxyquire('../../../src/plugins/util/git',
   {
-    child_process: {
-      execFileSync: execFileSyncStub
+    './git-cache': {
+      cachedExec: cachedExecStub
     }
   }
 )
@@ -50,7 +53,7 @@ function getFakeDirectory () {
 
 describe('git', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
     delete process.env.DD_GIT_COMMIT_SHA
     delete process.env.DD_GIT_REPOSITORY_URL
     delete process.env.DD_GIT_BRANCH
@@ -85,21 +88,20 @@ describe('git', () => {
       }
     )
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B', ciMetadata.headCommitSha])
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(cachedExecStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
+    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(cachedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
-      ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI', ciMetadata.headCommitSha]
+      ['show', '-s', '--format=\'%H","%aI","%an","%ae","%cI","%cn","%ce","%B\'', ciMetadata.headCommitSha]
     )
   })
 
   it('does not crash if git is not available', () => {
-    execFileSyncStub.returns('')
+    cachedExecStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
 
@@ -118,7 +120,7 @@ describe('git', () => {
     const headCommitMessage = `multi line
       head commit message`
 
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
@@ -128,12 +130,13 @@ describe('git', () => {
       .onCall(3).returns('gitCommitSHA')
       .onCall(4).returns('ciWorkspacePath')
       .onCall(5).returns(false)
-      .onCall(6).returns(headCommitMessage)
-      .onCall(7).returns(
-        'git head author,git.head.author@email.com,2022-02-14T16:22:03-05:00,' +
-        'git head committer,git.head.committer@email.com,2022-02-14T16:23:03-05:00'
+      .onCall(6).returns(
+        'headCommitSha",' +
+        '"2022-02-14T16:22:03-05:00","git head author","git.head.author@email.com",' +
+        '"2022-02-14T16:23:03-05:00","git head committer","git.head.committer@email.com",' +
+        '"' + headCommitMessage
       )
-      .onCall(8).returns('https://github.com/datadog/safe-repository.git')
+      .onCall(7).returns('https://github.com/datadog/safe-repository.git')
 
     const metadata = getGitMetadata({ tag: 'ciTag', headCommitSha: 'headCommitSha' })
 
@@ -153,18 +156,18 @@ describe('git', () => {
       [GIT_COMMIT_HEAD_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
       [GIT_COMMIT_HEAD_AUTHOR_EMAIL]: 'git.head.author@email.com',
       [GIT_COMMIT_HEAD_AUTHOR_NAME]: 'git head author',
-      [GIT_COMMIT_HEAD_COMMITER_DATE]: '2022-02-14T16:23:03-05:00',
-      [GIT_COMMIT_HEAD_COMMITER_EMAIL]: 'git.head.committer@email.com',
-      [GIT_COMMIT_HEAD_COMMITER_NAME]: 'git head committer',
+      [GIT_COMMIT_HEAD_COMMITTER_DATE]: '2022-02-14T16:23:03-05:00',
+      [GIT_COMMIT_HEAD_COMMITTER_EMAIL]: 'git.head.committer@email.com',
+      [GIT_COMMIT_HEAD_COMMITTER_NAME]: 'git head committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
 
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%B'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
   })
 })
 
@@ -174,8 +177,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: (command, flags, options) =>
+        './git-cache': {
+          cachedExec: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
         '../../log': {
@@ -192,8 +195,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: (command, flags, options) =>
+        './git-cache': {
+          cachedExec: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
         '../../log': {
@@ -208,8 +211,8 @@ describe('getCommitsRevList', () => {
   it('returns null if the repository is bigger than the limit', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: (command, flags, options) =>
+        './git-cache': {
+          cachedExec: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         }
       }
@@ -221,8 +224,8 @@ describe('getCommitsRevList', () => {
   it('returns null if execFileSync fails for whatever reason', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: () => { throw new Error('error!') }
+        './git-cache': {
+          cachedExec: () => { throw new Error('error!') }
         }
       }
     )
@@ -239,7 +242,12 @@ describe('generatePackFilesForCommits', () => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
-    statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
+    const realStatSync = fs.statSync
+    statSyncStub = sinon.stub(fs, 'statSync').callsFake((p, ...args) =>
+      p === fakeDirectory || p === 'cwd'
+        ? { isDirectory: () => true }
+        : realStatSync(p, ...args)
+    )
   })
 
   afterEach(() => {
@@ -251,8 +259,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncSpy
+        './git-cache': {
+          cachedExec: execFileSyncSpy
         }
       }
     )
@@ -269,8 +277,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncSpy
+        './git-cache': {
+          cachedExec: execFileSyncSpy
         }
       }
     )
@@ -287,8 +295,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncSpy
+        './git-cache': {
+          cachedExec: execFileSyncSpy
         }
       }
     )
@@ -299,11 +307,11 @@ describe('generatePackFilesForCommits', () => {
 
 describe('unshallowRepository', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('works for the usual case', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git version 2.39.0'
       )
@@ -321,11 +329,11 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    expect(cachedExecStub).to.have.been.calledWith('git', options)
   })
 
   it('works for the usual case with parentOnly', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git version 2.39.0'
       )
@@ -343,11 +351,11 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(true)
-    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    expect(cachedExecStub).to.have.been.calledWith('git', options)
   })
 
   it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git version 2.39.0'
       )
@@ -367,11 +375,11 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    expect(cachedExecStub).to.have.been.calledWith('git', options)
   })
 
   it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git version 2.39.0'
       )
@@ -391,18 +399,18 @@ describe('unshallowRepository', () => {
     ]
 
     unshallowRepository(false)
-    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+    expect(cachedExecStub).to.have.been.calledWith('git', options)
   })
 })
 
 describe('user credentials', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
+    cachedExecStub.reset()
   })
 
   it('scrubs https user credentials', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
@@ -415,7 +423,7 @@ describe('user credentials', () => {
   })
 
   it('scrubs ssh user credentials', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
@@ -452,17 +460,17 @@ describe('isGitAvailable', () => {
 
 describe('getGitDiff', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns the diff between two commits', () => {
     const expectedDiff = 'diff --git a/file.js b/file.js'
-    execFileSyncStub.returns(expectedDiff)
+    cachedExecStub.returns(expectedDiff)
 
     const diff = getGitDiff('base-commit', 'target-commit')
 
     expect(diff).to.equal(expectedDiff)
-    expect(execFileSyncStub).to.have.been.calledWith('git', [
+    expect(cachedExecStub).to.have.been.calledWith('git', [
       'diff',
       '-U0',
       '--word-diff=porcelain',
@@ -473,10 +481,10 @@ describe('getGitDiff', () => {
 
   it('returns the diff between a commit and the current HEAD', () => {
     const expectedDiff = 'diff --git a/file.js b/file.js'
-    execFileSyncStub.returns(expectedDiff)
+    cachedExecStub.returns(expectedDiff)
     const diff = getGitDiff('base-commit')
     expect(diff).to.equal(expectedDiff)
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['diff', '-U0', '--word-diff=porcelain', 'base-commit'])
   })
 
   it('returns an empty string when git command fails because SHAs could not be found', () => {
@@ -484,15 +492,15 @@ describe('getGitDiff', () => {
 
     const { getGitDiff } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         },
         '../../log': {
           error: logErrorSpy
         }
       }
     )
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
 
     const diff = getGitDiff('base-commit', 'target-commit')
 
@@ -503,53 +511,53 @@ describe('getGitDiff', () => {
 
 describe('getGitRemoteName', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns upstream remote name when available', () => {
-    execFileSyncStub.returns('origin/main')
+    cachedExecStub.returns('origin/main')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         }
       }
     )
 
     const remoteName = getGitRemoteName()
     expect(remoteName).to.equal('origin')
-    expect(execFileSyncStub).to.have.been.calledWith('git',
+    expect(cachedExecStub).to.have.been.calledWith('git',
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
   })
 
   it('returns first remote when upstream is not available', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).throws()
       .onCall(1).returns('upstream\norigin')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         }
       }
     )
 
     const remoteName = getGitRemoteName()
     expect(remoteName).to.equal('upstream')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['remote'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['remote'])
   })
 
   it('returns origin when no remotes are available', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).throws()
       .onCall(1).returns('')
 
     const { getGitRemoteName } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         }
       }
     )
@@ -561,32 +569,32 @@ describe('getGitRemoteName', () => {
 
 describe('getSourceBranch', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns the current branch name', () => {
-    execFileSyncStub.returns('feature/my-branch')
+    cachedExecStub.returns('feature/my-branch')
 
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         }
       }
     )
 
     const branch = getSourceBranch()
     expect(branch).to.equal('feature/my-branch')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
   })
 
   it('returns empty string when git command fails', () => {
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
 
     const { getSourceBranch } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
-          execFileSync: execFileSyncStub
+        './git-cache': {
+          cachedExec: cachedExecStub
         }
       }
     )
@@ -598,26 +606,26 @@ describe('getSourceBranch', () => {
 
 describe('checkAndFetchBranch', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('does nothing if the branch exists locally', () => {
-    execFileSyncStub.returns('')
+    cachedExecStub.returns('')
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(execFileSyncStub).not.to.have.been.calledWith(
+    expect(cachedExecStub).not.to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
     // Should not call fetch
-    expect(execFileSyncStub).not.to.have.been.calledWith(
+    expect(cachedExecStub).not.to.have.been.calledWith(
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
@@ -625,44 +633,44 @@ describe('checkAndFetchBranch', () => {
   })
 
   it('fetches the branch if it does not exist locally but exists on remote', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).throws() // local check fails
       .onCall(1).returns('something') // remote check passes
       .onCall(2).returns('') // fetch
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['fetch', '--depth', '1', 'origin', 'my-branch'])
   })
 
   it('does nothing if the branch does not exist locally or on remote', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).throws() // local check fails
       .onCall(1).returns('') // remote check fails
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(execFileSyncStub).not.to.have.been.calledWith(
+    expect(cachedExecStub).not.to.have.been.calledWith(
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
@@ -670,54 +678,54 @@ describe('checkAndFetchBranch', () => {
   })
 
   it('does nothing if the remote does not exist', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).throws() // local check fails
       .onCall(1).throws('') // remote does not exist
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['show-ref', '--verify', '--quiet', 'refs/remotes/origin/my-branch']
     )
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       ['ls-remote', '--heads', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 2000 }
     )
-    expect(execFileSyncStub).not.to.have.been.calledWith(
+    expect(cachedExecStub).not.to.have.been.calledWith(
       'git',
       ['fetch', '--depth', '1', 'origin', 'my-branch'],
       { stdio: 'pipe', timeout: 5000 }
     )
   })
 
-  it('logs error if a command throws', () => {
-    const logErrorSpy = sinon.spy()
-    execFileSyncStub.throws(new Error('git command failed'))
+  it('logs debug if a command throws', () => {
+    const logDebugSpy = sinon.spy()
+    cachedExecStub.throws(new Error('git command failed'))
     const { checkAndFetchBranch } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub },
-      '../../log': { error: logErrorSpy }
+      './git-cache': { cachedExec: cachedExecStub },
+      '../../log': { debug: logDebugSpy }
     })
     checkAndFetchBranch('my-branch', 'origin')
-    expect(logErrorSpy).to.have.been.called
+    expect(logDebugSpy).to.have.been.called
   })
 })
 
 describe('getLocalBranches', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns a list of local branches', () => {
-    execFileSyncStub.returns('branch1\nbranch2\nbranch3')
+    cachedExecStub.returns('branch1\nbranch2\nbranch3')
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     const branches = getLocalBranches('my-origin')
     expect(branches).to.deep.equal(['branch1', 'branch2', 'branch3'])
-    expect(execFileSyncStub).to.have.been.calledWith(
+    expect(cachedExecStub).to.have.been.calledWith(
       'git',
       [
         'for-each-ref',
@@ -729,9 +737,9 @@ describe('getLocalBranches', () => {
 
   it('returns empty array if command throws and logs an error', () => {
     const logErrorSpy = sinon.spy()
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
     const { getLocalBranches } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub },
+      './git-cache': { cachedExec: cachedExecStub },
       '../../log': { error: logErrorSpy }
     })
     const branches = getLocalBranches('origin')
@@ -742,24 +750,24 @@ describe('getLocalBranches', () => {
 
 describe('getMergeBase', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns the merge base commit', () => {
-    execFileSyncStub.returns('abc123')
+    cachedExecStub.returns('abc123')
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     const mergeBase = getMergeBase('main', 'feature')
     expect(mergeBase).to.equal('abc123')
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['merge-base', 'main', 'feature'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['merge-base', 'main', 'feature'])
   })
 
   it('returns empty string if command throws', () => {
     const logErrorSpy = sinon.spy()
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
     const { getMergeBase } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub },
+      './git-cache': { cachedExec: cachedExecStub },
       '../../log': { error: logErrorSpy }
     })
     const mergeBase = getMergeBase('main', 'feature')
@@ -770,24 +778,24 @@ describe('getMergeBase', () => {
 
 describe('getCounts', () => {
   afterEach(() => {
-    execFileSyncStub.reset()
+    cachedExecStub.reset()
   })
 
   it('returns the counts of commits ahead and behind', () => {
-    execFileSyncStub.returns('38\t3')
+    cachedExecStub.returns('38\t3')
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub }
+      './git-cache': { cachedExec: cachedExecStub }
     })
     const counts = getCounts('feature', 'main')
     expect(counts).to.deep.equal({ behind: 38, ahead: 3 })
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-list', '--left-right', '--count', 'main...feature'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-list', '--left-right', '--count', 'main...feature'])
   })
 
   it('returns object with empty values if command throws', () => {
     const logErrorSpy = sinon.spy()
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
     const { getCounts } = proxyquire('../../../src/plugins/util/git', {
-      child_process: { execFileSync: execFileSyncStub },
+      './git-cache': { cachedExec: cachedExecStub },
       '../../log': { error: logErrorSpy }
     })
     const counts = getCounts('feature', 'main')
@@ -799,14 +807,14 @@ describe('getCounts', () => {
 describe('getGitInformationDiscrepancy', () => {
   const { getGitInformationDiscrepancy } = proxyquire('../../../src/plugins/util/git',
     {
-      child_process: {
-        execFileSync: execFileSyncStub
+      './git-cache': {
+        cachedExec: cachedExecStub
       }
     }
   )
 
   it('returns git repository URL and commit SHA', () => {
-    execFileSyncStub
+    cachedExecStub
       .onCall(0).returns('https://github.com/datadog/safe-repository.git')
       .onCall(1).returns('abc123')
 
@@ -817,12 +825,12 @@ describe('getGitInformationDiscrepancy', () => {
       gitCommitSHA: 'abc123'
     })
 
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
-    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(cachedExecStub).to.have.been.calledWith('git', ['config', '--get', 'remote.origin.url'], { stdio: 'pipe' })
+    expect(cachedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
   })
 
   it('returns empty strings when git commands fail', () => {
-    execFileSyncStub.throws(new Error('git command failed'))
+    cachedExecStub.throws(new Error('git command failed'))
 
     const result = getGitInformationDiscrepancy()
 
@@ -830,5 +838,40 @@ describe('getGitInformationDiscrepancy', () => {
       gitRepositoryUrl: '',
       gitCommitSHA: ''
     })
+  })
+})
+
+describe('fetchHeadCommitSha', () => {
+  const { fetchHeadCommitSha } = proxyquire('../../../src/plugins/util/git',
+    {
+      './git-cache': {
+        cachedExec: cachedExecStub
+      }
+    }
+  )
+
+  it('fetches the head commit SHA', () => {
+    const headSha = 'abc123'
+    const remoteName = 'origin'
+
+    cachedExecStub
+      .onCall(0).returns(null)
+      .onCall(1).returns(null)
+      .onCall(2).returns('')
+
+    fetchHeadCommitSha(headSha)
+
+    expect(cachedExecStub).to.have.been.calledWith(
+      'git',
+      [
+        'fetch',
+        '--update-shallow',
+        '--filter=blob:none',
+        '--recurse-submodules=no',
+        '--no-write-fetch-head',
+        remoteName,
+        headSha
+      ]
+    )
   })
 })

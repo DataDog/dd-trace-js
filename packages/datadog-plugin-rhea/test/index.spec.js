@@ -1,6 +1,9 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -50,8 +53,8 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          const expectedProducerHash = '15837999642856815456'
-          const expectedConsumerHash = '18403970455318595370'
+          const expectedProducerHash = '11950901911938809288'
+          const expectedConsumerHash = '13394183765782976023'
 
           it('Should set pathway hash tag on a span when producing', (done) => {
             let produceSpanMeta = {}

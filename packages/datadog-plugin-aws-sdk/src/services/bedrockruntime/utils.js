@@ -23,6 +23,100 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+/**
+ * Coerce the chunks into a single response body.
+ *
+ * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
+ * @param {string} provider
+ * @returns {Object}
+ */
+function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
+  const modelProviderUpper = modelProvider.toUpperCase()
+
+  // streaming unsupported for AMAZON embedding models, COHERE embedding models, STABILITY
+  if (
+    (modelProviderUpper === PROVIDER.AMAZON && modelName.includes('embed')) ||
+    (modelProviderUpper === PROVIDER.COHERE && modelName.includes('embed')) ||
+    modelProviderUpper === PROVIDER.STABILITY
+  ) {
+    return {}
+  }
+
+  let message = ''
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+
+  for (const { chunk: { bytes } } of chunks) {
+    const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
+
+    switch (modelProviderUpper) {
+      case PROVIDER.AMAZON: {
+        message += body?.outputText
+
+        inputTokens = body?.inputTextTokenCount
+        outputTokens = body?.totalOutputTextTokenCount
+
+        break
+      }
+      case PROVIDER.AI21: {
+        const content = body?.choices?.[0]?.delta?.content
+        if (content) {
+          message += content
+        }
+
+        break
+      }
+      case PROVIDER.ANTHROPIC: {
+        if (body.completion) {
+          message += body.completion
+        } else if (body.delta?.text) {
+          message += body.delta.text
+        }
+
+        if (body.message?.usage?.input_tokens) inputTokens = body.message.usage.input_tokens
+        if (body.message?.usage?.output_tokens) outputTokens = body.message.usage.output_tokens
+
+        break
+      }
+      case PROVIDER.COHERE: {
+        if (body?.event_type === 'stream-end') {
+          message = body.response?.text
+        }
+
+        break
+      }
+      case PROVIDER.META: {
+        message += body?.generation
+        break
+      }
+      case PROVIDER.MISTRAL: {
+        message += body?.outputs?.[0]?.text
+        break
+      }
+    }
+
+    // by default, it seems newer versions of the AWS SDK include the input/output token counts in the response body
+    const invocationMetrics = body['amazon-bedrock-invocationMetrics']
+    if (invocationMetrics) {
+      inputTokens = invocationMetrics.inputTokenCount
+      outputTokens = invocationMetrics.outputTokenCount
+      cacheReadTokens = invocationMetrics.cacheReadInputTokenCount
+      cacheWriteTokens = invocationMetrics.cacheWriteInputTokenCount
+    }
+  }
+
+  return new Generation({
+    message,
+    role: 'assistant',
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
+  })
+}
+
 class Generation {
   constructor ({
     message = '',
@@ -30,7 +124,9 @@ class Generation {
     choiceId = '',
     role,
     inputTokens,
-    outputTokens
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -39,7 +135,9 @@ class Generation {
     this.role = role
     this.usage = {
       inputTokens,
-      outputTokens
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens
     }
   }
 }
@@ -149,12 +247,24 @@ function extractRequestParams (params, provider) {
       })
     }
     case PROVIDER.ANTHROPIC: {
-      const prompt = requestBody.prompt || requestBody.messages
+      let prompt = requestBody.prompt
+      if (Array.isArray(requestBody.messages)) { // newer claude models
+        for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
+          const message = requestBody.messages[idx]
+          if (message.role === 'user') {
+            prompt = message.content?.filter(block => block.type === 'text')
+              .map(block => block.text)
+              .join('')
+            break
+          }
+        }
+      }
+
       return new RequestParams({
         prompt,
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
-        maxTokens: requestBody.max_tokens_to_sample,
+        maxTokens: requestBody.max_tokens_to_sample ?? requestBody.max_tokens,
         stopSequences: requestBody.stop_sequences
       })
     }
@@ -253,7 +363,13 @@ function extractTextAndResponseReason (response, provider, modelName) {
         break
       }
       case PROVIDER.ANTHROPIC: {
-        return new Generation({ message: body.completion || body.content, finishReason: body.stop_reason })
+        let message = body.completion
+        if (Array.isArray(body.content)) { // newer claude models
+          message = body.content.find(item => item.type === 'text')?.text ?? body.content
+        } else if (body.content) {
+          message = body.content
+        }
+        return new Generation({ message, finishReason: body.stop_reason })
       }
       case PROVIDER.COHERE: {
         if (modelName.includes('embed')) {
@@ -262,6 +378,15 @@ function extractTextAndResponseReason (response, provider, modelName) {
             return new Generation({ message: embeddings[0] })
           }
         }
+
+        if (body.text) {
+          return new Generation({
+            message: body.text,
+            finishReason: body.finish_reason,
+            choiceId: shouldSetChoiceIds ? body.response_id : undefined
+          })
+        }
+
         const generations = body.generations || []
         if (generations.length > 0) {
           const generation = generations[0]
@@ -307,6 +432,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
 module.exports = {
   Generation,
   RequestParams,
+  extractTextAndResponseReasonFromStream,
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,

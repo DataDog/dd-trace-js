@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+
 const Activation = require('../../src/appsec/activation')
 
 describe('Appsec Activation', () => {

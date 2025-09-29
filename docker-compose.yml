@@ -4,22 +4,11 @@ services:
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
   azurite:
-    image: "mcr.microsoft.com/azure-storage/azurite:latest"
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
     ports:
         - "127.0.0.1:10000:10000"
         - "127.0.0.1:10001:10001"
         - "127.0.0.1:10002:10002"
-  azureeventhubsemulator:
-    image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
-    volumes:
-       - "${CONFIG_PATH}:/Eventhubs_Emulator/ConfigFiles/Config.json"
-    ports:
-      - "127.0.0.1:5673:5672"
-      - "127.0.0.1:9092:9092"
-    environment:
-      BLOB_SERVER: azurite
-      METADATA_SERVER: azurite
-      ACCEPT_EULA: "Y"
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     ports:
@@ -188,25 +177,19 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
-        - "127.0.0.1:9126:9126"
+      - "127.0.0.1:9126:9126"
     environment:
-        - LOG_LEVEL=DEBUG
-        - TRACE_LANGUAGE=javascript
-        - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-        - PORT=9126
+      - LOG_LEVEL=DEBUG
+      - TRACE_LANGUAGE=javascript
+      - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
+      - PORT=9126
+      - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
+      # - AWS_SECRET_ACCESS_KEY # uncomment this line for generating aws service cassettes
+    volumes:
+      # when there are other products not using the cassette feature from the test agent,
+      # we can move this directory to a shared location here, and change the above
+      # environment variable to point to that location
+      - ./packages/dd-trace/test/llmobs/cassettes:/vcr-cassettes
 
-  # Use this for local development when making new VCR cassettes to persist to the test agent
-  # Do not use the above testagent service if using this one.
-  # testagent-vcr:
-  #   image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.24.1
-  #   ports:
-  #     - "127.0.0.1:9126:9126"
-  #   environment:
-  #     - LOG_LEVEL=DEBUG
-  #     - TRACE_LANGUAGE=javascript
-  #     - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-  #     - PORT=9126
-  #   volumes:
-  #     - ${VCR_CASSETTES_PATH:-/tmp/empty-vcr}:/vcr-cassettes:delegated

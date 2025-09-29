@@ -1,6 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+
 const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
@@ -27,7 +30,7 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        return agent.load(['mongodb-core'])
+        return agent.load(['mongodb-core', 'mongoose'])
       })
 
       beforeEach(async () => {

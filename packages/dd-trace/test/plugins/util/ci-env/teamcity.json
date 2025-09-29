@@ -88,7 +88,7 @@
       "ci.job.url": "https://teamcity.com/repo",
       "ci.provider.name": "teamcity",
       "git.pull_request.base_branch": "target-branch",
-      "pr.number": 42
+      "pr.number": "42"
     }
   ]
 ]

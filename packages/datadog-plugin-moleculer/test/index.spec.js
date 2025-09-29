@@ -1,13 +1,28 @@
 'use strict'
 
 const { expect } = require('chai')
-const getPort = require('get-port')
+const assert = require('node:assert')
 const os = require('node:os')
+const net = require('node:net')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
+
+// The returned port could already be in use by another test that was running at
+// the same time. This race condition is not prevented by this function.
+function getPort () {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address()
+      server.close(() => resolve(port))
+    })
+  })
+}
 
 describe('Plugin', () => {
   let broker
@@ -30,14 +45,23 @@ describe('Plugin', () => {
         broker.createService({
           name: 'math',
           actions: {
-            add (ctx) {
+            async add (ctx) {
               const numerify = this.actions.numerify
 
-              return numerify(ctx.params.a) + numerify(ctx.params.b)
+              return await numerify(ctx.params.a) + await numerify(ctx.params.b)
             },
 
             numerify (ctx) {
               return Number(ctx.params)
+            }
+          }
+        })
+
+        broker.createService({
+          name: 'error',
+          actions: {
+            async error (ctx) {
+              throw new Error('Invalid number')
             }
           }
         })
@@ -159,25 +183,61 @@ describe('Plugin', () => {
             'out.host'
           )
 
-          it('should do automatic instrumentation', done => {
+          it('should do automatic instrumentation', async () => {
+            const result = await broker.call('math.add', { a: 5, b: 3 })
+            assert.strictEqual(result, 8)
+
             agent.assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+              const span = traces[0][0]
 
-              expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
-              expect(spans[0]).to.have.property('service', expectedSchema.client.serviceName)
-              expect(spans[0]).to.have.property('resource', 'math.add')
-              expect(spans[0].meta).to.have.property('span.kind', 'client')
-              expect(spans[0].meta).to.have.property('out.host', hostname)
-              expect(spans[0].meta).to.have.property('moleculer.context.action', 'math.add')
-              expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
-              expect(spans[0].meta).to.have.property('moleculer.context.request_id')
-              expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
-              expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
-              expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].metrics).to.have.property('network.destination.port', port)
-            }).then(done, done)
+              assertObjectContains(span, {
+                name: expectedSchema.client.opName,
+                service: expectedSchema.client.serviceName,
+                resource: 'math.add',
+                meta: {
+                  'span.kind': 'client',
+                  'out.host': hostname,
+                  'moleculer.context.action': 'math.add',
+                  'moleculer.context.node_id': `server-${process.pid}`,
+                  'moleculer.context.service': 'math',
+                  'moleculer.namespace': 'multi',
+                  'moleculer.node_id': `server-${process.pid}`,
+                },
+                metrics: {
+                  'network.destination.port': port
+                }
+              })
 
-            broker.call('math.add', { a: 5, b: 3 }).catch(done)
+              assert.strictEqual(typeof span.meta['moleculer.context.request_id'], 'string')
+            })
+          })
+
+          it('should handle error cases', async () => {
+            await assert.rejects(broker.call('error.error'), { message: 'Invalid number' })
+
+            agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assertObjectContains(span, {
+                name: expectedSchema.client.opName,
+                service: expectedSchema.client.serviceName,
+                resource: 'error.error',
+                meta: {
+                  'span.kind': 'client',
+                  'out.host': hostname,
+                  'moleculer.context.action': 'error.error',
+                  'moleculer.context.node_id': `server-${process.pid}`,
+                  'moleculer.context.service': 'error',
+                  'moleculer.namespace': 'multi',
+                  'moleculer.node_id': `server-${process.pid}`,
+                },
+                metrics: {
+                  'network.destination.port': port
+                }
+              })
+
+              assert.strictEqual(typeof span.meta['moleculer.context.request_id'], 'string')
+            })
           })
 
           withNamingSchema(
@@ -329,6 +389,47 @@ describe('Plugin', () => {
           await Promise.all([clientPromise, serverPromise])
 
           expect(spanId.toString()).to.equal(parentId.toString())
+        })
+      })
+      describe('meta propagation', () => {
+        before(() => agent.load('moleculer', {
+          meta: true
+        }))
+
+        before(async () => {
+          const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
+          broker = new ServiceBroker({
+            nodeID: `server-${process.pid}`,
+            logger: false
+          })
+
+          broker.createService({
+            name: 'test',
+            actions: {
+              async first (ctx) {
+                await ctx.call('test.second', null, {
+                  meta: {
+                    a: 'John'
+                  }
+                })
+                return ctx.meta.a
+              },
+              second (ctx) {
+                ctx.meta.a = 'Doe'
+              }
+            }
+          })
+
+          return broker.start()
+        })
+
+        after(() => broker.stop())
+
+        after(() => agent.close({ ritmReset: false }))
+
+        it('should propagate meta from child to parent', async () => {
+          const result = await broker.call('test.first')
+          assert.strictEqual(result, 'Doe')
         })
       })
     })

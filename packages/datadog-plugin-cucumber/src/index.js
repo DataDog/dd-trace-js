@@ -21,12 +21,6 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_SUITE_ID,
-  TEST_SESSION_ID,
-  TEST_COMMAND,
-  TEST_MODULE,
-  TEST_MODULE_ID,
-  TEST_SUITE,
   CUCUMBER_IS_PARALLEL,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -55,36 +49,18 @@ const {
   TEST_BROWSER_DRIVER,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-const id = require('../../dd-trace/src/id')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
-function getTestSuiteTags (testSuiteSpan) {
-  const suiteTags = {
-    [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
-    [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
-    [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'cucumber'
-  }
-  if (testSuiteSpan.context()._parentId) {
-    suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
-  }
-  return suiteTags
-}
-
 class CucumberPlugin extends CiPlugin {
-  static get id () {
-    return 'cucumber'
-  }
+  static id = 'cucumber'
 
   constructor (...args) {
     super(...args)
 
     this.sourceRoot = process.cwd()
-
-    this.testSuiteSpanByPath = {}
 
     this.addSub('ci:cucumber:session:finish', ({
       status,
@@ -187,7 +163,7 @@ class CucumberPlugin extends CiPlugin {
         },
         integrationName: this.constructor.id
       })
-      this.testSuiteSpanByPath[testSuitePath] = testSuiteSpan
+      this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
@@ -196,7 +172,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test-suite:finish', ({ status, testSuitePath }) => {
-      const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
       testSuiteSpan.setTag(TEST_STATUS, status)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
@@ -209,7 +185,7 @@ class CucumberPlugin extends CiPlugin {
       if (!coverageFiles.length) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
-      const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.repositoryRoot))
@@ -303,36 +279,6 @@ class CucumberPlugin extends CiPlugin {
       ctx.currentStore = { ...store, span }
 
       return ctx.currentStore
-    })
-
-    this.addSub('ci:cucumber:worker-report:trace', (traces) => {
-      const formattedTraces = JSON.parse(traces).map(trace =>
-        trace.map(span => ({
-          ...span,
-          span_id: id(span.span_id),
-          trace_id: id(span.trace_id),
-          parent_id: id(span.parent_id)
-        }))
-      )
-
-      // We have to update the test session, test module and test suite ids
-      // before we export them in the main process
-      formattedTraces.forEach(trace => {
-        trace.forEach(span => {
-          if (span.name === 'cucumber.test') {
-            const testSuite = span.meta[TEST_SUITE]
-            const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
-
-            const testSuiteTags = getTestSuiteTags(testSuiteSpan)
-            span.meta = {
-              ...span.meta,
-              ...testSuiteTags
-            }
-          }
-        })
-
-        this.tracer._exporter.export(trace)
-      })
     })
 
     this.addSub('ci:cucumber:test:finish', ({
@@ -503,7 +449,7 @@ class CucumberPlugin extends CiPlugin {
   }
 
   startTestSpan (testName, testSuite, extraTags) {
-    const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
+    const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
     return super.startTestSpan(
       testName,
       testSuite,

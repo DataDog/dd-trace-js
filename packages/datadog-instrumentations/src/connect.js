@@ -102,11 +102,15 @@ function wrapNext (req, next) {
   })
 }
 
-addHook({ name: 'connect', versions: ['>=3'] }, connect => {
+addHook({ name: 'connect', versions: ['>=3.4.0'] }, (connect) => {
   return shimmer.wrapFunction(connect, connect => wrapConnect(connect))
 })
 
-addHook({ name: 'connect', versions: ['2.2.2'] }, connect => {
+addHook({ name: 'connect', versions: ['>=3 <3.4.0'], file: 'lib/connect.js' }, (connect) => {
+  return shimmer.wrapFunction(connect, connect => wrapConnect(connect))
+})
+
+addHook({ name: 'connect', versions: ['2.2.2'], file: 'lib/connect.js' }, connect => {
   shimmer.wrap(connect.proto, 'use', wrapUse)
   shimmer.wrap(connect.proto, 'handle', wrapHandle)
 

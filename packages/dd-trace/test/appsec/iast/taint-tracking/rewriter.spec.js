@@ -1,9 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-const proxyquire = require('proxyquire')
-const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 
 const iastEnabledConfig = {
   iast: {
@@ -117,7 +120,7 @@ describe('IAST Rewriter', () => {
     })
 
     // TODO: This cannot be tested with mocking.
-    it('Should unwrap module compile method on taint tracking disable') // eslint-disable-line mocha/no-pending-tests
+    it('Should unwrap module compile method on taint tracking disable')
 
     it('Should keep original prepareStackTrace fn when calling enable and then disable', () => {
       const orig = Error.prepareStackTrace

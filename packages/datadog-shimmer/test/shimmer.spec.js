@@ -86,7 +86,7 @@ describe('shimmer', () => {
       expect(Object.hasOwn(obj, 'foo')).to.equal(true)
     })
 
-    it('should wrap the method on a frozen object', () => {
+    it('should wrap the method on a frozen method', () => {
       const count = inc => inc
 
       function abc () { return this.answer }
@@ -137,6 +137,12 @@ describe('shimmer', () => {
       shimmer.wrap(obj, 'count', count => inc => count(inc) + 1)
 
       expect(obj.count(1)).to.equal(2)
+    })
+
+    it('should bail, if not receiving a target', () => {
+      const fail = () => { throw new Error() }
+
+      shimmer.wrap(undefined, 'count', fail)
     })
 
     it('should wrap the method from the prototype', () => {
@@ -221,7 +227,7 @@ describe('shimmer', () => {
       expect(obj.count).to.have.property('name', 'count')
     })
 
-    it('should inherit from the original prototype', () => {
+    it('should inherit from the original method prototype', () => {
       const obj = { count: () => {} }
 
       Object.getPrototypeOf(obj.count).test = 'test'
@@ -232,8 +238,7 @@ describe('shimmer', () => {
       expect(Object.getOwnPropertyNames(obj.count)).to.not.include('test')
     })
 
-    it('should inherit from the original prototype', () => {
-      // class A extends Function {}
+    it('should inherit from the original method prototype 2', () => {
       class ExtendedAsyncFunction extends Function {
         foo = 42
       }

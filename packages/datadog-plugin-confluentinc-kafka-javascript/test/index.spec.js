@@ -1,11 +1,16 @@
 'use strict'
 
-const { randomUUID } = require('crypto')
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
+const { randomUUID } = require('node:crypto')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema } = require('./naming')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
@@ -644,6 +649,7 @@ describe('Plugin', () => {
               // wait for the message to be processed before continuing
               await sendMessages(kafka, testTopic, messages)
               await messageProcessedPromise
+              await consumer.disconnect()
 
               for (const call of setOffsetSpy.getCalls()) {
                 expect(call.args[0]).to.not.have.property('type', 'kafka_commit')

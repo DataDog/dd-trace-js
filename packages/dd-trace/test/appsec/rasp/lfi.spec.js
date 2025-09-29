@@ -1,7 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { assert } = require('chai')
+
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
 const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')

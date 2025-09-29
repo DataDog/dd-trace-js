@@ -2,8 +2,7 @@
 
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -16,15 +15,19 @@ const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
 const { errorMonitor } = require('node:events')
 
-addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
-  shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
-  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
-  return pg
-})
-
-addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Client => {
+addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
+})
+
+addHook({ name: 'pg', versions: ['>=8.0.3 <8.15.0', '>=8.15.0 <9'], file: 'lib/client.js' }, Client => {
+  shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
+  return Client
+})
+
+addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
+  return pg
 })
 
 function wrapQuery (query) {
@@ -33,8 +36,6 @@ function wrapQuery (query) {
       return query.apply(this, arguments)
     }
 
-    const callbackResource = new AsyncResource('bound-anonymous-fn')
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
@@ -46,8 +47,9 @@ function wrapQuery (query) {
     const stream = typeof textPropObj.read === 'function'
 
     // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
+    let originalText
     if (!textProp || textProp.configurable) {
-      const originalText = textPropObj.text
+      originalText = textPropObj.text
 
       Object.defineProperty(textPropObj, 'text', {
         get () {
@@ -55,25 +57,24 @@ function wrapQuery (query) {
         }
       })
     }
-
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
-
-      startCh.publish({
-        params: this.connectionParameters,
-        query: textPropObj,
-        processId,
-        abortController,
-        stream
-      })
-
-      const finish = asyncResource.bind(function (error, res) {
-        if (error) {
-          errorCh.publish(error)
-        }
-        finishCh.publish({ result: res?.rows })
-      })
-
+    const abortController = new AbortController()
+    const ctx = {
+      params: this.connectionParameters,
+      query: textPropObj,
+      originalText,
+      processId,
+      abortController,
+      stream
+    }
+    const finish = (error, res) => {
+      if (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
+      }
+      ctx.result = res?.rows
+      return finishCh.publish(ctx)
+    }
+    return startCh.runStores(ctx, () => {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
 
@@ -121,10 +122,10 @@ function wrapQuery (query) {
       }
 
       if (newQuery.callback) {
-        const originalCallback = callbackResource.bind(newQuery.callback)
-        newQuery.callback = function (err, res) {
-          finish(err, res)
-          return originalCallback.apply(this, arguments)
+        const originalCallback = newQuery.callback
+        newQuery.callback = function (err, ...args) {
+          finish(err, ...args)
+          return finishCh.runStores(ctx, originalCallback, this, err, ...args)
         }
       } else if (newQuery.once) {
         newQuery
@@ -139,40 +140,33 @@ function wrapQuery (query) {
 
       try {
         return retval
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        ctx.error = error
+        errorCh.publish(ctx)
       }
     })
   }
 }
-
+const finish = (ctx) => {
+  finishPoolQueryCh.publish(ctx)
+}
 function wrapPoolQuery (query) {
   return function () {
     if (!startPoolQueryCh.hasSubscribers) {
       return query.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
     const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const abortController = new AbortController()
 
-    return asyncResource.runInAsyncScope(() => {
-      const abortController = new AbortController()
+    const ctx = { query: pgQuery, abortController }
 
-      startPoolQueryCh.publish({
-        query: pgQuery,
-        abortController
-      })
-
-      const finish = asyncResource.bind(function () {
-        finishPoolQueryCh.publish()
-      })
-
+    return startPoolQueryCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
-        finish()
+        finish(ctx)
 
         if (typeof cb === 'function') {
           cb(error)
@@ -184,7 +178,7 @@ function wrapPoolQuery (query) {
 
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
-          finish()
+          finish(ctx)
           return cb.apply(this, arguments)
         })
       }
@@ -193,9 +187,9 @@ function wrapPoolQuery (query) {
 
       if (retval?.then) {
         retval.then(() => {
-          finish()
+          finish(ctx)
         }).catch(() => {
-          finish()
+          finish(ctx)
         })
       }
 

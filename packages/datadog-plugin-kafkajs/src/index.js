@@ -6,7 +6,7 @@ const BatchConsumerPlugin = require('./batch-consumer')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class KafkajsPlugin extends CompositePlugin {
-  static get id () { return 'kafkajs' }
+  static id = 'kafkajs'
   static get plugins () {
     return {
       producer: ProducerPlugin,

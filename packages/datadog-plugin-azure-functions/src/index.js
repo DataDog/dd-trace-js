@@ -17,11 +17,11 @@ const triggerMap = {
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
-  static get id () { return 'azure-functions' }
-  static get operation () { return 'invoke' }
-  static get kind () { return 'server' }
-  static get type () { return 'serverless' }
-  static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
+  static id = 'azure-functions'
+  static operation = 'invoke'
+  static kind = 'server'
+  static type = 'serverless'
+  static prefix = 'tracing:datadog:azure:functions:invoke'
 
   bindStart (ctx) {
     const childOf = extractTraceContext(this._tracer, ctx)

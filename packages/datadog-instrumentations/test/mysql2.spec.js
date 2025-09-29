@@ -1,10 +1,14 @@
 'use strict'
 
+const { assert, expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
+
+const { once } = require('node:events')
 const { channel } = require('../src/helpers/instrument')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { assert } = require('chai')
-const semver = require('semver')
-const { once } = require('events')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('mysql2 instrumentation', () => {
   withVersions('mysql2', 'mysql2', version => {

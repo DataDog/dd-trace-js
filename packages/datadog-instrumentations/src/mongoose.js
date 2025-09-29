@@ -2,24 +2,30 @@
 
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
-const { AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-function wrapAddQueue (addQueue) {
-  return function addQueueWithTrace (name) {
-    if (typeof name === 'function') {
-      arguments[0] = AsyncResource.bind(name)
-    } else if (typeof this[name] === 'function') {
-      arguments[0] = AsyncResource.bind((...args) => this[name](...args))
-    }
+const startCh = channel('datadog:mongoose:model:filter:start')
+const finishCh = channel('datadog:mongoose:model:filter:finish')
+// this channel is for wrapping the callback of exec methods and handling store context
+const execStartCh = channel('apm:mongoose:exec:start')
+const execFinishCh = channel('apm:mongoose:exec:finish')
 
-    return addQueue.apply(this, arguments)
-  }
+function wrapAddQueue (addQueue) {
+  const ctx = {}
+
+  return execStartCh.runStores(ctx, () => {
+    return function addQueueWithTrace (name) {
+      return execFinishCh.runStores(ctx, () => {
+        return addQueue.apply(this, arguments)
+      })
+    }
+  })
 }
 
 addHook({
   name: 'mongoose',
-  versions: ['>=4.6.4 <5', '5', '6', '>=7']
+  versions: ['>=4.6.4 <5', '5', '6', '>=7'],
+  file: 'lib/index.js'
 }, mongoose => {
   // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
   if (mongoose.Promise && mongoose.Promise !== global.Promise) {
@@ -30,9 +36,6 @@ addHook({
 
   return mongoose
 })
-
-const startCh = channel('datadog:mongoose:model:filter:start')
-const finishCh = channel('datadog:mongoose:model:filter:finish')
 
 const collectionMethodsWithFilter = [
   'count',
@@ -68,27 +71,21 @@ addHook({
           return method.apply(this, arguments)
         }
 
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-
         const filters = [arguments[0]]
         if (useTwoArguments) {
           filters.push(arguments[1])
         }
 
-        const finish = asyncResource.bind(function () {
-          finishCh.publish()
-        })
-
         let callbackWrapped = false
 
-        const wrapCallbackIfExist = (args) => {
+        const wrapCallbackIfExist = (args, ctx) => {
           const lastArgumentIndex = args.length - 1
 
           if (typeof args[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
             shimmer.wrap(args, lastArgumentIndex, originalCb => {
               return function () {
-                finish()
+                finishCh.publish(ctx)
 
                 return originalCb.apply(this, arguments)
               }
@@ -98,13 +95,13 @@ addHook({
           }
         }
 
-        wrapCallbackIfExist(arguments)
+        const ctx = {
+          filters,
+          methodName
+        }
 
-        return asyncResource.runInAsyncScope(() => {
-          startCh.publish({
-            filters,
-            methodName
-          })
+        return startCh.runStores(ctx, () => {
+          wrapCallbackIfExist(arguments, ctx)
 
           const res = method.apply(this, arguments)
 
@@ -113,7 +110,7 @@ addHook({
             shimmer.wrap(res, 'exec', originalExec => {
               return function wrappedExec () {
                 if (!callbackWrapped) {
-                  wrapCallbackIfExist(arguments)
+                  wrapCallbackIfExist(arguments, ctx)
                 }
 
                 const execResult = originalExec.apply(this, arguments)
@@ -129,7 +126,7 @@ addHook({
                     const reject = arguments[1]
 
                     arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
-                      finish()
+                      finishCh.publish(ctx)
 
                       if (resolve) {
                         return resolve.apply(this, arguments)
@@ -137,7 +134,7 @@ addHook({
                     })
 
                     arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
-                      finish()
+                      finishCh.publish(ctx)
 
                       if (reject) {
                         return reject.apply(this, arguments)
