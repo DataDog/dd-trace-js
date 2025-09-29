@@ -7,7 +7,7 @@ const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
 const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
 
 let server
-let port
+let port = 0
 
 function buildClient (service, callback) {
   service = Object.assign(
