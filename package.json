@@ -130,7 +130,6 @@
     "istanbul-lib-coverage": "^3.2.2",
     "jest-docblock": "^29.7.0",
     "jsonpath-plus": "^10.3.0",
-    "koalas": "^1.0.2",
     "limiter": "^1.1.5",
     "lodash.sortby": "^4.7.0",
     "lru-cache": "^10.4.3",
