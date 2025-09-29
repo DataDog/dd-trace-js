@@ -2286,7 +2286,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('works with happy-dom', (done) => {
+    it('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {
@@ -2347,17 +2347,15 @@ describe('jest CommonJS', () => {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
             ENABLE_HAPPY_DOM: 'true',
-            DD_TRACE_DEBUG: '1',
-            DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
         }
       )
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
 
     it('disables early flake detection if known tests should not be requested', (done) => {
