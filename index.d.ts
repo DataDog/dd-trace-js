@@ -602,6 +602,18 @@ declare namespace tracer {
 
       aiguard?: {
         /**
+         * Set to `true` to enable the SDK.
+         */
+        enabled?: boolean,
+        /**
+         * URL of the AI Guard REST API.
+         */
+        endpoint?: string,
+        /**
+         * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
+         */
+        timeout?: number,
+        /**
          * Maximum number of conversational messages allowed to be set in the meta-struct
          */
         maxMessagesLength?: number,
@@ -883,24 +895,6 @@ declare namespace tracer {
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
      */
     llmobs?: llmobs.LLMObsEnableOptions
-
-    /**
-     * Configuration options for AI Guard
-     */
-    aiguard?: {
-      /**
-       * Set to `true` to enable the SDK.
-       */
-      enabled?: boolean,
-      /**
-       * URL of the AI Guard REST API.
-       */
-      endpoint?: string,
-      /**
-       * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
-       */
-      timeout?: number
-    }
   }
 
   /**

@@ -47,13 +47,13 @@ class AIGuard extends NoopAIGuard {
       'DD-APPLICATION-KEY': config.appKey,
     }
 
-    let endpoint = config.aiguard?.endpoint
+    let endpoint = config.experimental.aiguard.endpoint
     if (!endpoint) {
       endpoint = `https://app.${config.site}/api/v2/ai-guard`
     }
     this._evaluateUrl = `${endpoint}/evaluate`
 
-    this._timeout = config.aiguard.timeout
+    this._timeout = config.experimental.aiguard.timeout
     this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this._maxContentSize = config.experimental.aiguard.maxContentSize
     this._meta = { service: config.service, env: config.env }

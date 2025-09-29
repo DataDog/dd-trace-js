@@ -360,11 +360,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext', 'baggage'])
     expect(config).to.have.property('tracing', true)
-    expect(config).to.have.nested.property('aiguard.enabled', false)
-    expect(config).to.have.nested.property('aiguard.endpoint', undefined)
-    expect(config).to.have.nested.property('aiguard.timeout', 10_000)
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', false)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', undefined)
     expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 16)
     expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 512 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 10_000)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -774,16 +774,17 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('version', '1.0.0')
-    expect(config).to.have.nested.property('aiguard.enabled', true)
-    expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
-    expect(config).to.have.nested.property('aiguard.timeout', 2000)
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
     expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
     expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
@@ -1013,11 +1014,6 @@ describe('Config', () => {
       { sampleRate: 0.1 }
     ]
     const config = new Config({
-      aiguard: {
-        enabled: true,
-        endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
-        timeout: 2000
-      },
       appKey: 'myAppKey',
       appsec: false,
       clientIpEnabled: true,
@@ -1047,8 +1043,11 @@ describe('Config', () => {
       experimental: {
         b3: true,
         aiguard: {
+          enabled: true,
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxMessagesLength: 32,
-          maxContentSize: 1024 * 1024
+          maxContentSize: 1024 * 1024,
+          timeout: 2000
         },
         exporter: 'log',
         enableGetRumData: true,
@@ -1205,11 +1204,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.property('version', '0.1.0')
-    expect(config).to.have.nested.property('aiguard.enabled', true)
-    expect(config).to.have.nested.property('aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
-    expect(config).to.have.nested.property('aiguard.timeout', 2000)
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
     expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
     expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce

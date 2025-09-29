@@ -691,15 +691,13 @@ llmobs.flush()
 // AI Guard typings tests
 
 tracer.init({
-  aiguard: {
-    enabled: true,
-    endpoint: 'http://localhost',
-    timeout: 1000,
-  },
   experimental: {
     aiguard: {
+      enabled: true,
+      endpoint: 'http://localhost',
       maxMessagesLength: 22,
-      maxContentSize: 1024
+      maxContentSize: 1024,
+      timeout: 1000
     }
   }
 })

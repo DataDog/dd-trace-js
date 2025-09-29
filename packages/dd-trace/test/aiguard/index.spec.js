@@ -17,15 +17,13 @@ describe('AIGuard SDK', () => {
     apiKey: 'API_KEY',
     appKey: 'APP_KEY',
     protocolVersion: '0.4',
-    aiguard: {
-      enabled: true,
-      endpoint: 'https://aiguard.com',
-      timeout: 10_000
-    },
     experimental: {
       aiguard: {
+        enabled: true,
+        endpoint: 'https://aiguard.com',
         maxMessagesLength: 16,
-        maxContentSize: 512 * 1024
+        maxContentSize: 512 * 1024,
+        timeout: 10_000
       }
     }
   }
@@ -91,7 +89,7 @@ describe('AIGuard SDK', () => {
       { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
     )
     sinon.assert.calledOnceWithExactly(global.fetch,
-      `${config.aiguard.endpoint}/evaluate`,
+      `${config.experimental.aiguard.endpoint}/evaluate`,
       {
         method: 'POST',
         headers: {
@@ -264,7 +262,7 @@ describe('AIGuard SDK', () => {
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, () => {
       const newConfig = Object.assign({ site }, config)
-      delete newConfig.aiguard.endpoint
+      delete newConfig.experimental.aiguard.endpoint
       const client = new AIGuard(tracer, newConfig)
       expect(client._evaluateUrl.toString()).to.equal(`${endpoint}/evaluate`)
     })

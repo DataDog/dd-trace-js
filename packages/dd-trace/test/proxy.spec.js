@@ -141,7 +141,11 @@ describe('TracerProxy', () => {
 
     config = {
       tracing: true,
-      experimental: {},
+      experimental: {
+        aiguard: {
+          enabled: true
+        }
+      },
       injectionEnabled: [],
       logger: 'logger',
       debug: true,
@@ -159,10 +163,7 @@ describe('TracerProxy', () => {
       },
       configure: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
-      aiguard: {
-        enabled: true
-      }
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 

@@ -864,10 +864,10 @@ class Config {
     this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
     env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
-    this._setBoolean(env, 'aiguard.enabled', DD_AI_GUARD_ENABLED)
-    this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
-    env['aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
-    this._envUnprocessed['aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
+    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
     this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
     env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
@@ -1043,10 +1043,10 @@ class Config {
       this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
     }
 
-    this._setBoolean(opts, 'aiguard.enabled', options.aiguard?.enabled)
-    this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
-    opts['aiguard.timeout'] = maybeInt(options.aiguard?.timeout)
-    this._optsUnprocessed['aiguard.timeout'] = options.aiguard?.timeout
+    this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
+    this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
+    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
+    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
     this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
     opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
