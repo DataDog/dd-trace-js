@@ -4,12 +4,11 @@ const {
   FakeAgent,
   hookFile,
   createSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('../../../../integration-tests/helpers')
 const { spawn } = require('child_process')
-const { assert } = require('chai')
+const { expect, assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
@@ -45,57 +44,55 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    // it('propagates eventdata through an event hub with a cardinality of one', async () => {
-    //   const envArgs = {
-    //     PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-    //   }
-    //   proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
-    //
-    //   return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
-    //     // console.log("this is the payload", payload)
-    //     assert.strictEqual(payload.length, 4)
-    //     assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[2][0].resource, 'EventHub eventHubTest1')
-    //     assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
-    //     assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-    //     assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
-    //     assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-    //     assert.strictEqual(payload[3][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[3][0].resource, 'EventHub eventHubTest1')
-    //     assert.strictEqual(payload[3][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhub')
-    //     assert.strictEqual(payload[3][0].meta['messaging.destination.name'], 'eh1')
-    //     assert.strictEqual(payload[3][0].meta['span.kind'], 'consumer')
-    //     assert.strictEqual(parseLinks(payload[3][0]).length, 1)
-    //   })
-    // }).timeout(60000)
+    it('propagates eventdata through an event hub with a cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
 
-    // it('propagates amqp messages through an event hub with a cardinality of one', async () => {
-    //   const envArgs = {
-    //     PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-    //   }
-    //   proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
 
-    //   return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-amqpmessages', ({ headers, payload }) => {
-    //     // console.log("this is the payload", payload)
-    //     assert.strictEqual(payload.length, 4)
-    //     assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[2][0].resource, 'EventHub eventHubTest1')
-    //     assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
-    //     assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-    //     assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
-    //     assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-    //     assert.strictEqual(payload[3][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[3][0].resource, 'EventHub eventHubTest1')
-    //     assert.strictEqual(payload[3][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[3][0].meta['messaging.system'], 'eventhub')
-    //     assert.strictEqual(payload[3][0].meta['messaging.destination.name'], 'eh1')
-    //     assert.strictEqual(payload[3][0].meta['span.kind'], 'consumer')
-    //     assert.strictEqual(parseLinks(payload[3][0]).length, 1)
-    //   })
-    // }).timeout(60000)
+    it('propagates amqp messages through an event hub with a cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-amqpmessages', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
 
     it('propagates a batch through an event hub with a cardinality of one', async () => {
       const envArgs = {
@@ -104,30 +101,219 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh1-batch', ({ headers, payload }) => {
-        // console.log("this is the payload", payload)
-        // console.log("this is the payload meta", payload[3][0].meta)
+        console.log(payload)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
 
-    // it('propagates context through an event hub with a cardinality of many', async () => {
-    //   const envArgs = {
-    //     PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-    //   }
-    //   proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+    it('propagates eventData through an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
 
-    //   return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eventhubs-test2', ({ headers, payload }) => {
-    //     console.log("this is the payload", payload)
-    //     const links = JSON.parse(payload[2][0].meta['_dd.span_links'])
-    //     expect(links).to.have.lengthOf(4)
-    //     assert.strictEqual(payload.length, 4)
-    //     assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[2][0].resource, 'EventHub eventHubTest2')
-    //     assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
-    //     assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh2')
-    //     assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
-    //   })
-    // }).timeout(60000)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('propagates amqp messages through an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-amqpmessages', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('propagates a batch through an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh2-batch', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('enqueues a single event to an event hub with a cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvent', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('enqueues events to an event hub with a cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvents', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('enqueues amqp messages to an event hub with a cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueAmqp', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('enqueues a single event to an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvent', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('enqueues events to an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvents', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
+        assert.strictEqual(parseLinks(payload[0][3]).length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('enqueues amqp messages to an event hub with a cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueAmqp', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
+        assert.strictEqual(parseLinks(payload[0][3]).length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhub')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('should not add span links when they are disabled', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        'DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED': false
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
+        expect(payload[1][0]).to.not.have.property('_dd.span_links')
+      })
+    }).timeout(60000)
   })
 })
 
@@ -138,7 +324,8 @@ function parseLinks(span) {
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: agentPort
+    DD_TRACE_AGENT_PORT: agentPort,
+    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {

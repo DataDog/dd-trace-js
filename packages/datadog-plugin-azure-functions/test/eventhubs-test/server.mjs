@@ -1,6 +1,9 @@
 import 'dd-trace/init.js'
 import { app } from '@azure/functions'
-import { EventHubProducerClient, EventHubBufferedProducerClient } from '@azure/event-hubs';
+import {
+  EventHubProducerClient,
+  EventHubBufferedProducerClient
+} from '@azure/event-hubs';
 
 const ehClient1 = new EventHubProducerClient(process.env.MyEventHub, 'eh1')
 const ehClient2 = new EventHubProducerClient(process.env.MyEventHub, 'eh2')
@@ -10,7 +13,7 @@ const bufferedClient2 = new EventHubBufferedProducerClient(process.env.MyEventHu
 
 const eventData = [
   { body: "Hello Event Hub 1" },
-  { body: "Hello Event Hub 2" }
+  { body: "Hello Event Hub 2" },
 ]
 
 const amqpMessages = [
@@ -108,6 +111,78 @@ app.http('eh2-batch', {
     eventData.forEach(item => batch.tryAdd(item));
     await ehClient2.sendBatch(batch);
     await ehClient2.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh1-enqueueEvent', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient1.enqueueEvent({ body: "Single enqueue event for eh1" });
+    await bufferedClient1.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh1-enqueueEvents', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient1.enqueueEvents(eventData);
+    await bufferedClient1.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh1-enqueueAmqp', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient1.enqueueEvents(amqpMessages);
+    await bufferedClient1.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh2-enqueueEvent', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient2.enqueueEvent({ body: "Single enqueue event for eh2" });
+    await bufferedClient2.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh2-enqueueEvents', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient2.enqueueEvents(eventData);
+    await bufferedClient2.close();
+    return {
+      status: 200,
+    }
+  }
+})
+
+app.http('eh2-enqueueAmqp', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    await bufferedClient2.enqueueEvents(amqpMessages);
+    await bufferedClient2.close();
     return {
       status: 200,
     }
