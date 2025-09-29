@@ -31,7 +31,7 @@ function getReadmes () {
   return readmes
 }
 
-function diff (beforeSummary, afterSummary, prev = 'master', curr = 'this commit') {
+function diff (beforeSummary, afterSummary, prev = 'main', curr = 'this commit') {
   const diffTree = walk(afterSummary, beforeSummary)
   const html = fs.readFileSync(path.join(__dirname, 'diff.html'), 'utf8')
     .replace('REPLACE_ME_DIFF_DATA', JSON.stringify(diffTree, null, 2))
@@ -56,11 +56,11 @@ function latestVersionResults (jsonStr) {
 }
 
 const main = async () => {
-  const prev = execSync('git rev-parse master').toString().trim()
+  const prev = execSync('git rev-parse main').toString().trim()
   const builds = await getBuildNumsFromGithub(prev)
   const buildId = Object.keys(builds).find(n => n.includes('sirun-all'))
   if (!buildId) {
-    console.error('No `sirun-all` build found on master.')
+    console.error('No `sirun-all` build found on main.')
     return
   }
   const build = builds[buildId]
@@ -68,7 +68,7 @@ const main = async () => {
   const artifacts = JSON.parse(await get(artifactsUrl(build), circleHeaders))
   const artifact = artifacts.find(a => a.path.endsWith('summary.json'))
   if (!artifact) {
-    console.error('summary.json artifact not found on master')
+    console.error('summary.json artifact not found on main')
     console.error('artifacts', JSON.stringify(artifacts, null, 2))
     return
   }
@@ -76,7 +76,7 @@ const main = async () => {
   const currentSummary = latestVersionResults(fs.readFileSync('/tmp/artifacts/summary.json'))
 
   const thisCommit = execSync('git rev-parse HEAD').toString().trim()
-  const { diffTree, html } = diff(prevSummary, currentSummary, 'master', thisCommit)
+  const { diffTree, html } = diff(prevSummary, currentSummary, 'main', thisCommit)
 
   console.log(JSON.stringify(diffTree, null, 2))
 
