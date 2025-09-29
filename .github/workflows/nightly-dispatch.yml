@@ -2,23 +2,49 @@ name: Nightly Testing
 
 on:
   workflow_dispatch:
+    inputs:
+      runApmIntegrations:
+        description: 'APM Integration Tests'
+        required: false
+        default: 'true'
+      runApmCapabilities:
+        description: 'APM Capabilities Tests'
+        required: false
+        default: 'true'
+      runLlmobs:
+        description: 'LLM-OBS Tests'
+        required: false
+        default: 'true'
+      runPlatform:
+        description: 'Platform Tests'
+        required: false
+        default: 'true'
+      runServerless:
+        description: 'Serverless Tests'
+        required: false
+        default: 'true'
 
 jobs:
   nightly:
     runs-on: ubuntu-latest
     steps:
       - uses: ./.github/workflows/apm-integrations
+        if: inputs.runApmIntegrations == 'true'
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/apm-capabilities
+        if: inputs.runApmCapabilities == 'true'
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/llmobs
+        if: inputs.runLlmobs == 'true'
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/platform
+        if: inputs.runPlatform == 'true'
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/serverless
+        if: inputs.runServerless == 'true'
         with:
           runNightly: 'true'
