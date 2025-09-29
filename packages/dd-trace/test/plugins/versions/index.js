@@ -1,7 +1,9 @@
 'use strict'
 
 const { subset } = require('semver')
-const latests = require('./package.json').dependencies
+const pkg = require('./package.json')
+const latests = pkg.dependencies
+const resolutions = pkg.resolutions
 
 const exactVersionExp = /^=?\d+\.\d+\.\d+/
 
@@ -41,5 +43,6 @@ function capSubrange (name, subrange) {
 }
 
 module.exports = {
-  getCappedRange
+  getCappedRange,
+  resolutions
 }
