@@ -7,7 +7,7 @@ class ProducerPlugin extends OutboundPlugin {
   static kind = 'producer'
   static type = 'messaging'
 
-  startSpan (options, enterOrCtx) {
+  startSpan (name, options, enterOrCtx) {
     const spanDefaults = {
       kind: this.constructor.kind
     }

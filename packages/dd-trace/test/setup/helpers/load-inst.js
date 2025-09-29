@@ -15,7 +15,12 @@ function loadInstFile (file, instrumentations) {
 
   proxyquire.noPreserveCache()(instPath, {
     './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
+    '../helpers/instrument': instrument,
+    './declarative-instrumentation.js': proxyquire(
+      path.join(__dirname, '../../../../datadog-instrumentations/src/declarative-instrumentation.js'), {
+        './helpers/instrument': instrument
+      }
+    )
   })
 }
 

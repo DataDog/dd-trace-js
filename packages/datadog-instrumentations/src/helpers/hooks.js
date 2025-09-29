@@ -37,6 +37,7 @@ module.exports = {
   'aws-sdk': () => require('../aws-sdk'),
   bluebird: () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
+  bullmq: () => require('../bullmq'),
   bunyan: () => require('../bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),
   child_process: () => require('../child_process'),

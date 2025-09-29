@@ -168,6 +168,7 @@ interface Plugins {
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -221,6 +222,7 @@ interface Plugins {
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
+  "sequelize": tracer.plugins.sequelize;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
@@ -1403,6 +1405,12 @@ declare namespace tracer {
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bullmq](https://github.com/npmjs/package/bullmq) library.
+     */
+    interface bullmq extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
@@ -2063,6 +2071,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [sharedb](https://github.com/share/sharedb) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [sequelize](https://github.com/npmjs/package/sequelize) library.
+     */
+    interface sequelize extends Instrumentation {}
+
     interface sharedb extends Integration {
       /**
        * Hooks to run before spans are finished.

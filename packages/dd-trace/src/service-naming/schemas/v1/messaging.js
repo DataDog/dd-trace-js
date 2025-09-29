@@ -20,6 +20,10 @@ const messaging = {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService
     },
+    bullmq: {
+      opName: () => 'bullmq.send',
+      serviceName: identityService
+    },
     kafkajs: {
       opName: () => 'kafka.send',
       serviceName: identityService
@@ -43,6 +47,10 @@ const messaging = {
     amqp10: amqpInbound,
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.process',
+      serviceName: identityService
+    },
+    bullmq: {
+      opName: () => 'bullmq.receive',
       serviceName: identityService
     },
     kafkajs: {

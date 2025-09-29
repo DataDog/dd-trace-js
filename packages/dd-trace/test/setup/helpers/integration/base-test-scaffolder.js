@@ -4,16 +4,21 @@ const { describe, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../mocha')
 const { TestAgentClient } = require('../test-agent/client')
+const scaffolders = require('./integration-class-test-scaffolders')
 
 // Core test scaffolding with APM test agent integration
-function createTestSuite (pluginName, packageName, TestSetupClass, testCallback, options = {}) {
+function createIntegrationTestSuite (pluginName, packageName, TestSetupClass, options, testCallback) {
+  const opts = options || {}
   const config = {
-    skipVersions: options.skipVersions || false,
-    additionalPlugins: options.additionalPlugins || [],
-    pluginConfig: options.pluginConfig || {},
-    testAgentOptions: options.testAgentOptions || { host: 'localhost', port: 9126 },
-    validateTestSetup: options.validateTestSetup || null,
-    ...options
+    skipVersions: opts.skipVersions || false,
+    additionalPlugins: opts.additionalPlugins || [],
+    pluginConfig: opts.pluginConfig || {},
+    testAgentOptions: opts.testAgentOptions || { host: 'localhost', port: 9126 },
+    validateTestSetup: opts.validateTestSetup || null,
+    pluginName,
+    packageName,
+    TestSetupClass,
+    ...opts
   }
 
   describe('Plugin', () => {
@@ -26,7 +31,7 @@ function createTestSuite (pluginName, packageName, TestSetupClass, testCallback,
 }
 
 function createVersionedTests (pluginName, packageName, TestSetupClass, testCallback, config, version) {
-  let testSetup = null
+  const testSetup = new TestSetupClass()
   let mod = null
   let tracer = null
 
@@ -34,16 +39,15 @@ function createVersionedTests (pluginName, packageName, TestSetupClass, testCall
     tracer = require('../../../../../dd-trace')
   })
 
-  createTestBlocks(pluginName, packageName, TestSetupClass, testCallback, config, version, {
-    getTestSetup: () => testSetup,
+  createTestBlocks(pluginName, packageName, testSetup, testCallback, config, version, {
     getMod: () => mod,
     getTracer: () => tracer,
-    setTestSetup: (setup) => { testSetup = setup },
     setMod: (module) => { mod = module }
   })
 }
 
-function createTestBlocks (pluginName, packageName, TestSetupClass, testCallback, config, version, state) {
+function createTestBlocks (pluginName, packageName, testSetup, testCallback, config, version, state) {
+  let helper
   describe('without configuration', () => {
     let testAgentClient = null
     let sessionToken = null
@@ -124,36 +128,48 @@ function createTestBlocks (pluginName, packageName, TestSetupClass, testCallback
 
     beforeEach(async () => {
       if (version) {
-        state.setMod(require(`../../../../../../versions/${packageName}@${version}`).get())
+        helper.mod = require(`../../../../../../versions/${packageName}@${version}`).get()
       } else {
-        state.setMod(require(packageName))
+        helper.mod = require(packageName)
       }
-
-      const setup = new TestSetupClass()
-      await setup.setup(state.getMod())
+      console.log('createTestBlocks beforeEach with version', version)
+      await testSetup.setup(helper.mod)
       if (config.validateTestSetup) {
-        config.validateTestSetup(setup, pluginName)
+        config.validateTestSetup(testSetup, pluginName)
       }
-      state.setTestSetup(setup)
     })
 
     afterEach(async () => {
-      const testSetup = state.getTestSetup()
       if (testSetup && testSetup.cleanup) {
         await testSetup.cleanup()
       }
     })
 
-    testCallback({
-      get testSetup () { return state.getTestSetup() },
-      get mod () { return state.getMod() },
-      get tracer () { return state.getTracer() },
-      get testAgentClient () { return testAgentClient },
-      get sessionToken () { return sessionToken },
+    helper = createTestHelperClass({
+      ...config,
+      testSetup,
+      mod: state.getMod(),
+      tracer: state.getTracer(),
+      testAgentClient,
+      sessionToken,
       pluginName,
-      packageName
+      packageName,
     })
+
+    helper.generateTestCases()
+
+    if (testCallback) {
+      testCallback(helper)
+    }
   })
 }
 
-module.exports = { createTestSuite }
+function createTestHelperClass (config) {
+  const ScaffolderClass = scaffolders[config.pluginType]
+  if (!ScaffolderClass) {
+    throw new Error(`No test scaffolder found for type: ${config.pluginType}`)
+  }
+  return new ScaffolderClass(config)
+}
+
+module.exports = { createIntegrationTestSuite }

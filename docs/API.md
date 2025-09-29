@@ -29,6 +29,7 @@ tracer.use('pg', {
 <h5 id="aws-sdk-tags"></h5>
 <h5 id="aws-sdk-config"></h5>
 <h5 id="azure-functions"></h5>
+<h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
 <h5 id="couchbase"></h5>
@@ -98,6 +99,7 @@ tracer.use('pg', {
 <h5 id="restify"></h5>
 <h5 id="restify-tags"></h5>
 <h5 id="restify-config"></h5>
+<h5 id="sequelize"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="when"></h5>
@@ -110,6 +112,7 @@ tracer.use('pg', {
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [bluebird](./interfaces/export_.plugins.bluebird.html)
+* [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
@@ -156,6 +159,7 @@ tracer.use('pg', {
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)
 * [router](./interfaces/export_.plugins.router.html)
+* [sequelize](./interfaces/export_.plugins.sequelize.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [when](./interfaces/export_.plugins.when.html)

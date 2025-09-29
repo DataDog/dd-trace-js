@@ -1,0 +1,1243 @@
+[
+  {
+    "className": "Queue",
+    "methodName": "waitUntilReady",
+    "args": [],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": false,
+          "canBlockFor1Ms": true
+        },
+        "status": "initializing",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {}
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "add",
+    "args": [
+      "test-job",
+      {
+        "data": "some-data"
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "emit",
+    "args": [
+      "waiting",
+      {
+        "name": "test-job",
+        "data": {
+          "data": "some-data"
+        },
+        "opts": {
+          "attempts": 0
+        },
+        "id": "1",
+        "progress": 0,
+        "returnvalue": null,
+        "stacktrace": null,
+        "priority": 0,
+        "attemptsStarted": 0,
+        "attemptsMade": 0,
+        "stalledCounter": 0,
+        "timestamp": 1758832158324,
+        "toKey": "[Function: bound ]",
+        "queueQualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac"
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Worker",
+    "methodName": "processJob",
+    "args": [
+      {
+        "name": "test-job",
+        "data": {
+          "data": "some-data"
+        },
+        "opts": {
+          "attempts": 0
+        },
+        "id": "1",
+        "progress": 0,
+        "returnvalue": null,
+        "stacktrace": [],
+        "delay": 0,
+        "priority": 0,
+        "attemptsStarted": 1,
+        "attemptsMade": 0,
+        "stalledCounter": 0,
+        "timestamp": 1758832158324,
+        "toKey": "[Function: bound ]",
+        "queueQualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+        "processedOn": 1758832158327,
+        "token": "2f44355e-8b58-4dba-bf8b-7437960f2a4c:1"
+      },
+      "2f44355e-8b58-4dba-bf8b-7437960f2a4c:1",
+      "[Function: anonymous]",
+      {}
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "drainDelay": 5,
+        "concurrency": 1,
+        "lockDuration": 30000,
+        "maxStalledCount": 1,
+        "stalledInterval": 30000,
+        "autorun": true,
+        "runRetryDelay": 15000,
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        },
+        "blockingConnection": true,
+        "lockRenewTime": 15000
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "abortDelayController": null,
+      "blockUntil": 0,
+      "drained": false,
+      "extendLocksTimer": {},
+      "limitUntil": 0,
+      "waiting": null,
+      "running": true,
+      "mainLoopRunning": {},
+      "id": "2f44355e-8b58-4dba-bf8b-7437960f2a4c",
+      "processFn": "[Function: anonymous]",
+      "blockingConnection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": true,
+          "skipWaitingForReady": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]",
+          "connectionName": "bull:dGVzdC1xdWV1ZS01OTk4MGQ0MS00ZWU4LTRlYmEtYjI4OS01ZDM0ZWFiNzE1YWM=",
+          "maxRetriesPerRequest": null
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "stalledCheckStopper": "[Function: anonymous]"
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "addBulk",
+    "args": [
+      [
+        {
+          "name": "bulk-job-1",
+          "data": {}
+        },
+        {
+          "name": "bulk-job-2",
+          "data": {}
+        }
+      ]
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "add",
+    "args": [
+      "delayed-job",
+      {},
+      {
+        "delay": 1000
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "emit",
+    "args": [
+      "waiting",
+      {
+        "name": "delayed-job",
+        "data": {},
+        "opts": {
+          "attempts": 0,
+          "delay": 1000
+        },
+        "id": "4",
+        "progress": 0,
+        "returnvalue": null,
+        "stacktrace": null,
+        "delay": 1000,
+        "priority": 0,
+        "attemptsStarted": 0,
+        "attemptsMade": 0,
+        "stalledCounter": 0,
+        "timestamp": 1758832158437,
+        "toKey": "[Function: bound ]",
+        "queueQualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac"
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "add",
+    "args": [
+      "priority-job",
+      {},
+      {
+        "priority": 1
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Worker",
+    "methodName": "processJob",
+    "args": [
+      {
+        "name": "bulk-job-1",
+        "data": {},
+        "opts": {
+          "attempts": 0
+        },
+        "id": "2",
+        "progress": 0,
+        "returnvalue": null,
+        "stacktrace": [],
+        "delay": 0,
+        "priority": 0,
+        "attemptsStarted": 1,
+        "attemptsMade": 0,
+        "stalledCounter": 0,
+        "timestamp": 1758832158435,
+        "toKey": "[Function: bound ]",
+        "queueQualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+        "processedOn": 1758832158438,
+        "token": "2f44355e-8b58-4dba-bf8b-7437960f2a4c:2"
+      },
+      "2f44355e-8b58-4dba-bf8b-7437960f2a4c:2",
+      "[Function: anonymous]",
+      {}
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "drainDelay": 5,
+        "concurrency": 1,
+        "lockDuration": 30000,
+        "maxStalledCount": 1,
+        "stalledInterval": 30000,
+        "autorun": true,
+        "runRetryDelay": 15000,
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        },
+        "blockingConnection": true,
+        "lockRenewTime": 15000
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "abortDelayController": null,
+      "blockUntil": 0,
+      "drained": false,
+      "extendLocksTimer": {},
+      "limitUntil": 0,
+      "waiting": null,
+      "running": true,
+      "mainLoopRunning": {},
+      "id": "2f44355e-8b58-4dba-bf8b-7437960f2a4c",
+      "processFn": "[Function: anonymous]",
+      "blockingConnection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": true,
+          "skipWaitingForReady": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]",
+          "connectionName": "bull:dGVzdC1xdWV1ZS01OTk4MGQ0MS00ZWU4LTRlYmEtYjI4OS01ZDM0ZWFiNzE1YWM=",
+          "maxRetriesPerRequest": null
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "stalledCheckStopper": "[Function: anonymous]"
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "emit",
+    "args": [
+      "waiting",
+      {
+        "name": "priority-job",
+        "data": {},
+        "opts": {
+          "attempts": 0,
+          "priority": 1
+        },
+        "id": "5",
+        "progress": 0,
+        "returnvalue": null,
+        "stacktrace": null,
+        "priority": 1,
+        "attemptsStarted": 0,
+        "attemptsMade": 0,
+        "stalledCounter": 0,
+        "timestamp": 1758832158440,
+        "toKey": "[Function: bound ]",
+        "queueQualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac"
+      }
+    ],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  },
+  {
+    "className": "Queue",
+    "methodName": "close",
+    "args": [],
+    "this": {
+      "name": "test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "opts": {
+        "prefix": "bull",
+        "connection": {
+          "host": "localhost",
+          "port": 6379
+        }
+      },
+      "closed": false,
+      "hasBlockingConnection": false,
+      "connection": {
+        "extraOptions": {
+          "shared": false,
+          "blocking": false
+        },
+        "capabilities": {
+          "canDoubleTimeout": true,
+          "canBlockFor1Ms": true
+        },
+        "status": "ready",
+        "packageVersion": "5.58.8",
+        "opts": {
+          "port": 6379,
+          "host": "localhost",
+          "retryStrategy": "[Function: retryStrategy]"
+        },
+        "skipVersionCheck": false,
+        "handleClientError": "[Function: anonymous]",
+        "handleClientClose": "[Function: anonymous]",
+        "handleClientReady": "[Function: anonymous]",
+        "initializing": {},
+        "version": "7.0.15"
+      },
+      "qualifiedName": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac",
+      "keys": {
+        "": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:",
+        "active": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+        "wait": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+        "waiting-children": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:waiting-children",
+        "paused": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+        "id": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:id",
+        "delayed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+        "prioritized": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+        "stalled-check": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled-check",
+        "completed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:completed",
+        "failed": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:failed",
+        "stalled": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+        "repeat": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:repeat",
+        "limiter": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+        "meta": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+        "events": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+        "pc": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+        "marker": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:marker",
+        "de": "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:de"
+      },
+      "toKey": "[Function: anonymous]",
+      "scripts": {
+        "queue": {
+          "keys": "[Circular]",
+          "client": "[Circular]",
+          "redisVersion": "7.0.15",
+          "toKey": "[Function: anonymous]",
+          "opts": "[Circular]"
+        },
+        "version": "5.58.8",
+        "moveToFinishedKeys": [
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:wait",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:active",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:prioritized",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:events",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:stalled",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:limiter",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:delayed",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:paused",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:meta",
+          "bull:test-queue-59980d41-4ee8-4eba-b289-5d34eab715ac:pc",
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "token": "a551ba57-1aef-480c-9b11-115abf075648",
+      "libName": "bullmq",
+      "jobsOpts": {}
+    }
+  }
+]

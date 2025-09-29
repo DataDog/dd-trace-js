@@ -1,0 +1,139 @@
+{
+  "package": {
+    "name": "bullmq",
+    "version": "5.58.8",
+    "main": "./dist/cjs/index.js",
+    "description": "Queue for messages and jobs based on Redis",
+    "keywords": [
+      "bull",
+      "bullmq",
+      "queues",
+      "jobs",
+      "redis"
+    ]
+  },
+  "category": "messaging",
+  "exports": [
+    "AsyncFifoQueue",
+    "Backoffs",
+    "QueueKeys",
+    "Child",
+    "ChildPool",
+    "ChildProcessor",
+    "DelayedError",
+    "RateLimitError",
+    "UnrecoverableError",
+    "WaitingChildrenError",
+    "WaitingError",
+    "Scripts",
+    "RedisConnection",
+    "QueueBase",
+    "QueueEvents",
+    "Job",
+    "FlowProducer",
+    "JobScheduler",
+    "QueueEventsProducer",
+    "QueueGetters",
+    "Repeat",
+    "Queue",
+    "Worker"
+  ],
+  "methods": [
+    null
+  ],
+  "dependencies": [
+    "cron-parser",
+    "ioredis",
+    "msgpackr",
+    "node-abort-controller",
+    "semver",
+    "tslib",
+    "uuid"
+  ],
+  "orchestrion_config": {
+    "version": 1,
+    "dc_module": "dc-polyfill",
+    "instrumentations": [
+      {
+        "module_name": "bullmq",
+        "version_range": ">=2.0.0",
+        "file_path": "dist/cjs/classes/queue.js",
+        "function_query": {
+          "name": "add",
+          "type": "method",
+          "kind": "async",
+          "class": "Queue"
+        },
+        "role": "producer",
+        "operator": "tracePromise",
+        "channel_name": "apm:bullmq:queue:add",
+        "context_capture": {
+          "messaging.system": "'bullmq'",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "'produce'"
+        },
+        "available_context": {}
+      },
+      {
+        "module_name": "bullmq",
+        "version_range": ">=1.0.0 <2.0.0",
+        "file_path": "dist/classes/queue.js",
+        "function_query": {
+          "name": "add",
+          "type": "method",
+          "kind": "async",
+          "class": "Queue"
+        },
+        "role": "producer",
+        "operator": "tracePromise",
+        "channel_name": "apm:bullmq:queue:add",
+        "context_capture": {
+          "messaging.system": "'bullmq'",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "'produce'"
+        },
+        "available_context": {}
+      },
+      {
+        "module_name": "bullmq",
+        "version_range": ">=2.0.0",
+        "file_path": "dist/cjs/classes/worker.js",
+        "function_query": {
+          "name": "on",
+          "type": "method",
+          "kind": "sync",
+          "class": "Worker"
+        },
+        "role": "consumer",
+        "operator": "wrapCallback",
+        "channel_name": "apm:bullmq:worker:on",
+        "context_capture": {
+          "messaging.system": "'bullmq'",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "'consume'",
+          "messaging.message.id": "this.keys.id"
+        }
+      },
+      {
+        "module_name": "bullmq",
+        "version_range": ">=1.0.0 <2.0.0",
+        "file_path": "dist/classes/worker.js",
+        "function_query": {
+          "name": "on",
+          "type": "method",
+          "kind": "sync",
+          "class": "Worker"
+        },
+        "role": "consumer",
+        "operator": "wrapCallback",
+        "channel_name": "apm:bullmq:worker:on",
+        "context_capture": {
+          "messaging.system": "'bullmq'",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "'consume'",
+          "messaging.message.id": "this.keys.id"
+        }
+      }
+    ]
+  }
+}

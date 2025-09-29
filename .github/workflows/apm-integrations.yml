@@ -129,6 +129,27 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/upstream
 
+  bullmq:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: bullmq
+      # TODO: If this integration requires external services (e.g., a database or message broker),
+      # add them here. For example:
+      # SERVICES: postgres,redis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+
   bunyan:
     runs-on: ubuntu-latest
     env:
@@ -829,6 +850,24 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/plugins/test
+
+  sequelize:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: sequelize
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
 
   valkey:
     runs-on: ubuntu-latest

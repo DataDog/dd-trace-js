@@ -7,7 +7,7 @@ class ConsumerPlugin extends InboundPlugin {
   static kind = 'consumer'
   static type = 'messaging'
 
-  startSpan (options, enterOrCtx) {
+  startSpan (name, options, enterOrCtx) {
     if (!options.service) {
       options.service = this.config.service || this.serviceName()
     }

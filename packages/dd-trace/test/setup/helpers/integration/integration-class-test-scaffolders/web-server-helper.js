@@ -3,15 +3,28 @@
 const { it } = require('mocha')
 const { expect } = require('chai')
 const agent = require('../../../../plugins/agent')
-const { IntegrationTestHelper } = require('./base-integration-helper')
+const { BaseTestHelper } = require('./base-helper')
 
 // Web server test helper for Express, Fastify, Koa, etc.
-class WebServerTestHelper extends IntegrationTestHelper {
-  constructor (pluginName, packageName, TestSetupClass, options = {}) {
-    super(pluginName, packageName, TestSetupClass, {
-      additionalPlugins: ['http'],
-      ...options
-    })
+class WebServerTestHelper extends BaseTestHelper {
+  static get operations () {
+    return {
+      required: [
+        'makeSuccessfulRequest',
+        'makeErrorRequest'
+      ],
+      optional: [
+        'makeParameterizedRequest',
+        'makeParameterizedRequestError',
+        'makePostRequest',
+        'makePostRequestError'
+      ]
+    }
+  }
+
+  constructor (config) {
+    config.additionalPlugins = config.additionalPlugins.push('http')
+    super(config)
   }
 
   validateTestSetup (testSetup, pluginName) {
@@ -84,6 +97,22 @@ class WebServerTestHelper extends IntegrationTestHelper {
         .catch(done)
 
       helper.testSetup.makePostRequest().catch(done)
+    })
+
+    it('should handle parameterized route errors', (done) => {
+      if (!helper.testSetup.makeParameterizedRequestError) return done()
+      agent.assertSomeTraces(traces => {
+        expect(traces[0][0]).to.have.property('error', 1)
+      }).then(done).catch(done)
+      helper.testSetup.makeParameterizedRequestError().catch(() => {})
+    })
+
+    it('should handle POST request errors', (done) => {
+      if (!helper.testSetup.makePostRequestError) return done()
+      agent.assertSomeTraces(traces => {
+        expect(traces[0][0]).to.have.property('error', 1)
+      }).then(done).catch(done)
+      helper.testSetup.makePostRequestError().catch(() => {})
     })
   }
 }
