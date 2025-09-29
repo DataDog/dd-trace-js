@@ -8,6 +8,7 @@ const telemetryMetrics = require('../../telemetry/metrics')
 
 /**
  * @typedef {import('@opentelemetry/resources').Resource} Resource
+ * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  *
 */
 
@@ -59,7 +60,7 @@ class OtlpHttpLogExporter {
   /**
    * Exports log records via OTLP over HTTP.
    *
-   * @param {Object[]} logRecords - Array of enriched log records to export
+   * @param {LogRecord[]} logRecords - Array of enriched log records to export
    * @param {Function} resultCallback - Callback function for export result
    */
   export (logRecords, resultCallback) {

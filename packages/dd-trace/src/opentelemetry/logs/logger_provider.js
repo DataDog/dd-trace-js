@@ -60,10 +60,11 @@ class LoggerProvider {
     }
 
     const loggerVersion = loggerOptions.version || ''
+    const loggerSchemaUrl = loggerOptions?.schemaUrl || ''
     const key = `${name}@${loggerVersion}`
 
     if (!this.#loggers.has(key)) {
-      this.#loggers.set(key, new Logger(this, { name, version: loggerVersion }))
+      this.#loggers.set(key, new Logger(this, { name, version: loggerVersion, schemaUrl: loggerSchemaUrl }))
     }
     return this.#loggers.get(key)
   }
@@ -124,7 +125,7 @@ class LoggerProvider {
    */
   #createNoOpLogger () {
     return {
-      instrumentationLibrary: {
+      instrumentationScope: {
         name: 'dd-trace-js',
         version: ''
       },

@@ -1,4 +1,10 @@
 'use strict'
+
+/**
+ * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
+ * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
+ */
+
 /**
  * BatchLogRecordProcessor processes log records in batches for efficient export to Datadog Agent.
  *
@@ -32,15 +38,16 @@ class BatchLogRecordProcessor {
   /**
    * Processes a single log record.
    *
-   * @param {Object} logRecord - The enriched log record with trace correlation and metadata
+   * @param {LogRecord} logRecord - The enriched log record with trace correlation and metadata
+   * @param {InstrumentationScope} instrumentationScope - The instrumentation library
    */
-  onEmit (logRecord) {
+  onEmit (logRecord, instrumentationScope) {
     if (this.isShutdown) {
       return
     }
 
     // Store the log record (already enriched by Logger.emit)
-    this.#logRecords.push(logRecord)
+    this.#logRecords.push({ ...logRecord, instrumentationScope })
 
     if (this.#logRecords.length >= this.#maxExportBatchSize) {
       this.#export()

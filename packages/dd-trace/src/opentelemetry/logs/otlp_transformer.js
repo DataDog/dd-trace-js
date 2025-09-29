@@ -1,11 +1,15 @@
 'use strict'
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { loadProtobufDefinitions } = require('./protobuf_loader')
+const { getProtobufTypes } = require('./protobuf_loader')
+const { trace } = require('@opentelemetry/api')
+const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
-*/
+ * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
+ * @typedef {import('@opentelemetry/resources').Resource} Resource
+ */
 
 // Global severity mapping constant - no need to regenerate
 const SEVERITY_MAP = {
@@ -34,7 +38,6 @@ const SEVERITY_MAP = {
   [SeverityNumber.FATAL3]: 'SEVERITY_NUMBER_FATAL3',
   [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4'
 }
-const log = require('../../log')
 
 /**
  * OtlpTransformer transforms log records to OTLP format.
@@ -62,7 +65,7 @@ class OtlpTransformer {
 
   /**
    * Transforms log records to OTLP format based on the configured protocol.
-   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Transformed log records in the appropriate format
    */
   transformLogRecords (logRecords) {
@@ -76,16 +79,16 @@ class OtlpTransformer {
 
   /**
    * Groups log records by instrumentation library (name and version).
-   * @param {Object[]} logRecords - Array of log records to group
-   * @returns {Map<string, Object[]>} Map of instrumentation library key to log records
+   * @param {LogRecord[]} logRecords - Array of log records to group
+   * @returns {Map<string, LogRecord[]>} Map of instrumentation library key to log records
    * @private
    */
-  #groupByInstrumentationLibrary (logRecords) {
+  #groupByInstrumentationScope (logRecords) {
     const grouped = new Map()
 
     for (const record of logRecords) {
-      const instrumentationLibrary = record.instrumentationLibrary || { name: '', version: '0.0.0' }
-      const key = `${instrumentationLibrary.name}@${instrumentationLibrary.version}`
+      const instrumentationScope = record.instrumentationScope || { name: '', version: '0.0.0', schemaUrl: '' }
+      const key = `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
 
       const group = grouped.get(key)
       if (group === undefined) {
@@ -105,14 +108,14 @@ class OtlpTransformer {
   #getProtobufTypes () {
     // Delay the loading of protobuf types to reduce startup overhead
     if (!this.#protobufTypes) {
-      this.#protobufTypes = loadProtobufDefinitions()
+      this.#protobufTypes = getProtobufTypes()
     }
     return this.#protobufTypes
   }
 
   /**
    * Transforms log records to protobuf format.
-   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Protobuf-encoded log records
    * @private
    */
@@ -135,7 +138,7 @@ class OtlpTransformer {
 
   /**
    * Transforms log records to JSON format.
-   * @param {Object[]} logRecords - Array of enriched log records to transform
+   * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} JSON-encoded log records
    * @private
    */
@@ -151,26 +154,28 @@ class OtlpTransformer {
 
   /**
    * Creates scope logs grouped by instrumentation library.
-   * @param {Object[]} logRecords - Array of log records to transform
+   * @param {LogRecord[]} logRecords - Array of log records to transform
    * @returns {Object[]} Array of scope log objects
    * @private
    */
   #transformScope (logRecords) {
     // Group log records by instrumentation library
-    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
+    const groupedRecords = this.#groupByInstrumentationScope(logRecords)
 
     // Create scope logs for each instrumentation library
     const scopeLogs = []
 
     for (const [, records] of groupedRecords.entries()) {
+      const schemaUrl = records[0]?.instrumentationScope?.schemaUrl || ''
       scopeLogs.push({
         scope: {
-          name: records[0]?.instrumentationLibrary?.name || 'dd-trace-js',
-          version: records[0]?.instrumentationLibrary?.version || '',
-          // TODO: Support setting attributes on instrumentation library
+          name: records[0]?.instrumentationScope?.name || 'dd-trace-js',
+          version: records[0]?.instrumentationScope?.version || '',
+          // TODO: Support setting attributes on instrumentation scope
           attributes: [],
           droppedAttributesCount: 0
         },
+        schemaUrl,
         logRecords: records.map(record => this.#transformLogRecord(record))
       })
     }
@@ -180,7 +185,7 @@ class OtlpTransformer {
 
   /**
    * Transforms resource attributes to OTLP resource format.
-   * @returns {Object} OTLP resource object
+   * @returns {Resource} OTLP resource object
    * @private
    */
   #transformResource () {
@@ -192,25 +197,70 @@ class OtlpTransformer {
 
   /**
    * Transforms a single log record to OTLP format.
-   * @param {Object} logRecord - Log record to transform
+   * @param {LogRecord} logRecord - Log record to transform
    * @returns {Object} OTLP log record object
    * @private
    */
   #transformLogRecord (logRecord) {
     const timestamp = logRecord.timestamp || Date.now() * 1_000_000
 
-    return {
+    // Extract span context from the log record's context
+    const spanContext = this.#extractSpanContext(logRecord.context)
+
+    // Only timeUnixNano and body are required
+    const result = {
       timeUnixNano: timestamp,
-      observedTimeUnixNano: timestamp,
-      severityNumber: this.#mapSeverityNumber(logRecord.severityNumber || SeverityNumber.INFO),
-      severityText: logRecord.severityText || 'INFO',
-      body: this.#transformBody(logRecord.body),
-      attributes: this.#transformAttributes(logRecord.attributes),
-      droppedAttributesCount: 0,
-      flags: logRecord.flags || 0,
-      traceId: this.#hexToBytes(logRecord.traceId || ''),
-      spanId: this.#hexToBytes(logRecord.spanId || '')
+      body: this.#transformBody(logRecord.body)
     }
+
+    // Add optional fields only if they are set
+    if (logRecord.observedTimestamp) {
+      result.observedTimeUnixNano = logRecord.observedTimestamp
+    }
+
+    if (logRecord.severityNumber !== undefined) {
+      result.severityNumber = this.#mapSeverityNumber(logRecord.severityNumber)
+    }
+
+    if (logRecord.severityText) {
+      result.severityText = logRecord.severityText
+    }
+
+    if (logRecord.attributes) {
+      result.attributes = this.#transformAttributes(logRecord.attributes)
+    }
+
+    if (spanContext?.traceFlags !== undefined) {
+      result.flags = spanContext.traceFlags
+    }
+
+    // Only include traceId and spanId if they are valid (not empty, undefined, or all zeros)
+    if (spanContext?.traceId && spanContext.traceId !== '00000000000000000000000000000000') {
+      result.traceId = this.#hexToBytes(spanContext.traceId)
+    }
+
+    if (spanContext?.spanId && spanContext.spanId !== '0000000000000000') {
+      result.spanId = this.#hexToBytes(spanContext.spanId)
+    }
+
+    return result
+  }
+
+  /**
+   * Extracts span context from the log record's context.
+   * @param {Object} logContext - The log record's context
+   * @returns {Object|null} Span context or null if not available
+   * @private
+   */
+  #extractSpanContext (logContext) {
+    if (!logContext) return null
+
+    const activeSpan = trace.getSpan(logContext)
+    if (activeSpan) {
+      return activeSpan.spanContext()
+    }
+
+    return null
   }
 
   /**

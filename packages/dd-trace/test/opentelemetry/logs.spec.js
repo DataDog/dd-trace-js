@@ -61,12 +61,6 @@ describe('OpenTelemetry Logs', () => {
     return { restore: () => { log.warn = originalWarn }, getMessage: () => warningMessage }
   }
 
-  function createRealSpan () {
-    const { trace } = require('@opentelemetry/api')
-    const tracer = trace.getTracer('test-tracer')
-    return tracer.startSpan('test-span')
-  }
-
   beforeEach(() => {
     originalEnv = { ...process.env }
   })
@@ -92,6 +86,7 @@ describe('OpenTelemetry Logs', () => {
         const scope = scopeLogs[0]
         assert.strictEqual(scope.scope.name, 'test-logger')
         assert.strictEqual(scope.scope.version, '1.0.0')
+        assert.strictEqual(scope.schemaUrl, 'https://opentelemetry.io/schemas/1.27.0')
         assert.strictEqual(scope.logRecords.length, 2)
 
         const log1 = scope.logRecords[0]
@@ -116,7 +111,7 @@ describe('OpenTelemetry Logs', () => {
         traceFlags: 1,
       }
       context.with(trace.setSpan(context.active(), trace.wrapSpanContext(spanContext)), () => {
-        const logger = logs.getLogger('test-logger', '1.0.0')
+        const logger = logs.getLogger('test-logger', '1.0.0', { schemaUrl: 'https://opentelemetry.io/schemas/1.27.0' })
 
         logger.emit({
           severityText: 'INFO',
@@ -178,6 +173,7 @@ describe('OpenTelemetry Logs', () => {
       process.env.DD_VERSION = 'testversion'
       process.env.DD_ENV = 'testenv'
       process.env.DD_TAGS = 'testtag:testvalue'
+      process.env.DD_TRACE_OTEL_ENABLED = 'true'
 
       mockOtlpExport((decoded, capturedHeaders) => {
         // Validate payload body
@@ -205,6 +201,7 @@ describe('OpenTelemetry Logs', () => {
                 version: '1.0.0',
                 droppedAttributesCount: 0
               },
+              schemaUrl: '',
               logRecords: [{
                 body: { stringValue: 'HTTP test message' },
                 severityText: 'ERROR',
@@ -212,9 +209,9 @@ describe('OpenTelemetry Logs', () => {
                 attributes: [{ key: 'test.attr', value: { stringValue: 'value' } }],
                 timeUnixNano: actual.resourceLogs[0].scopeLogs[0].logRecords[0].timeUnixNano,
                 observedTimeUnixNano: actual.resourceLogs[0].scopeLogs[0].logRecords[0].observedTimeUnixNano,
-                flags: 0,
-                spanId: actual.resourceLogs[0].scopeLogs[0].logRecords[0].spanId,
-                traceId: actual.resourceLogs[0].scopeLogs[0].logRecords[0].traceId
+                flags: 1,
+                traceId: 'AAAAAAAAAAAAAAAAAAAAAQ==',
+                spanId: 'AAAAAAAAAAI='
               }]
             }]
           }]
@@ -230,12 +227,18 @@ describe('OpenTelemetry Logs', () => {
       const { logs } = setupTracer()
       const { trace, context } = require('@opentelemetry/api')
 
+      const spanContext = {
+        traceId: '00000000000000000000000000000001',
+        spanId: '0000000000000002',
+        traceFlags: 1,
+      }
       logs.getLogger('test-service', '1.0.0').emit({
+        observedTimestamp: Date.now() * 1000000,
         severityText: 'ERROR',
         severityNumber: 17,
         body: 'HTTP test message',
         attributes: { 'test.attr': 'value' },
-        context: trace.setSpan(context.active(), createRealSpan())
+        context: trace.setSpan(context.active(), trace.wrapSpanContext(spanContext))
       })
     })
 

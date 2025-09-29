@@ -25,7 +25,7 @@ let _scopeLogs = null
 let _logRecord = null
 let _severityNumber = null
 
-function loadProtobufDefinitions () {
+function getProtobufTypes () {
   if (_root) {
     return { _root, _logsService, _resourceLogs, _scopeLogs, _logRecord, _severityNumber }
   }
@@ -54,12 +54,6 @@ function loadProtobufDefinitions () {
   return { _root, _logsService, _resourceLogs, _scopeLogs, _logRecord, _severityNumber }
 }
 
-// Lazy load the protobuf definitions
-function getProtobufTypes () {
-  return loadProtobufDefinitions()
-}
-
 module.exports = {
   getProtobufTypes,
-  loadProtobufDefinitions
 }

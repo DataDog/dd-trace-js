@@ -1,14 +1,16 @@
 'use strict'
 
 const { sanitizeAttributes } = require('@opentelemetry/core')
-const { trace, context } = require('@opentelemetry/api')
+const { context } = require('@opentelemetry/api')
 const packageVersion = require('../../../../../package.json').version
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/api').SpanContext} SpanContext
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/resources').Resource} Resource
+ * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  */
+
 /**
  * Logger provides methods to emit log records.
  *
@@ -18,21 +20,28 @@ const packageVersion = require('../../../../../package.json').version
  * @class Logger
  */
 class Logger {
-  #instrumentationLibrary
+  #instrumentationScope
 
   /**
    * Creates a new Logger instance.
    *
    * @param {LoggerProvider} loggerProvider - Parent logger provider
-   * @param {Object} [instrumentationLibrary] - Instrumentation library information
-   * @param {string} [instrumentationLibrary.name] - Library name (defaults to 'dd-trace-js')
-   * @param {string} [instrumentationLibrary.version] - Library version (defaults to tracer version)
+   * @param {InstrumentationScope} [instrumentationScope] - Instrumentation scope information (newer API)
+   * @param {Object} [instrumentationLibrary] - Instrumentation library information (legacy API) [DEPRECATED in v1.3.0]
+   * @param {InstrumentationScope} [instrumentationScope.name] - Library name (defaults to 'dd-trace-js')
+   * @param {InstrumentationScope} [instrumentationScope.version] - Library version (defaults to tracer version)
+   * @param {string} [instrumentationLibrary.name] - Library name (legacy, defaults to 'dd-trace-js')
+   * @param {string} [instrumentationLibrary.version] - Library version (legacy, defaults to tracer version)
    */
-  constructor (loggerProvider, instrumentationLibrary) {
+  constructor (loggerProvider, instrumentationScope, instrumentationLibrary) {
     this.loggerProvider = loggerProvider
-    this.#instrumentationLibrary = {
-      name: instrumentationLibrary?.name || 'dd-trace-js',
-      version: instrumentationLibrary?.version || packageVersion
+
+    // Support both newer instrumentationScope and legacy instrumentationLibrary
+    const scope = instrumentationScope || instrumentationLibrary
+    this.#instrumentationScope = {
+      name: scope?.name || 'dd-trace-js',
+      version: scope?.version || packageVersion,
+      schemaUrl: scope?.schemaUrl || '',
     }
   }
 
@@ -48,6 +57,7 @@ class Logger {
    * Emits a log record.
    *
    * @param {LogRecord} logRecord - The log record to emit
+   * @returns {void}
    */
   emit (logRecord) {
     if (this.loggerProvider.isShutdown) {
@@ -67,58 +77,12 @@ class Logger {
       logRecord.timestamp = Date.now() * 1_000_000
     }
 
-    // Set observed timestamp if not provided
-    if (!logRecord.observedTimestamp) {
-      logRecord.observedTimestamp = logRecord.timestamp
+    if (!logRecord.context) {
+      // Store span context in the log record context for trace correlation
+      logRecord.context = context.active()
     }
 
-    // Use the provided context or get the current active context
-    const activeContext = logRecord.context || context.active()
-
-    // Extract span context from the active context for trace correlation
-    const spanContext = this.#getSpanContext(activeContext)
-
-    // Create enriched log record with all expected fields
-    // Contains: severityText, severityNumber, body, timestamp, observedTimestamp,
-    // attributes, resource, instrumentationLibrary, traceId, spanId, traceFlags
-    const enrichedLogRecord = {
-      timestamp: logRecord.timestamp,
-      observedTimestamp: logRecord.observedTimestamp,
-      severityText: logRecord.severityText || '',
-      severityNumber: logRecord.severityNumber || 0,
-      body: logRecord.body || '',
-      attributes: logRecord.attributes,
-      // Newer versions of the OpenTelemetry Logs API require instrumentationScope instead of instrumentationLibrary
-      instrumentationLibrary: logRecord.instrumentationScope ||
-                          logRecord.instrumentationLibrary ||
-                          this.#instrumentationLibrary,
-      traceId: spanContext?.traceId || '',
-      spanId: spanContext?.spanId || '',
-      traceFlags: spanContext?.traceFlags || 0
-    }
-
-    this.loggerProvider.processor.onEmit(enrichedLogRecord)
-  }
-
-  /**
-   * Extracts span context from the OpenTelemetry context for trace correlation.
-   * @param {Object} activeContext - The OpenTelemetry context
-   * @returns {SpanContext|null} Span context or null if not available
-   * @private
-   */
-  #getSpanContext (activeContext) {
-    const activeSpan = trace.getSpan(activeContext)
-    if (activeSpan) {
-      const spanContext = activeSpan.spanContext()
-      if (spanContext?.traceId && spanContext.spanId) {
-        return {
-          traceId: spanContext.traceId,
-          spanId: spanContext.spanId,
-          traceFlags: spanContext.traceFlags
-        }
-      }
-    }
-    return null
+    this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)
   }
 }
 
