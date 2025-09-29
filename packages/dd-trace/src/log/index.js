@@ -1,6 +1,4 @@
 'use strict'
-
-const coalesce = require('koalas')
 const { inspect } = require('util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
@@ -112,13 +110,13 @@ const log = {
   },
 
   isEnabled (fleetStableConfigValue, localStableConfigValue) {
-    return isTrue(coalesce(
-      fleetStableConfigValue,
-      getEnvironmentVariable('DD_TRACE_DEBUG'),
-      getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined,
-      localStableConfigValue,
-      config.enabled
-    ))
+    return isTrue(
+      (fleetStableConfigValue ??
+      getEnvironmentVariable('DD_TRACE_DEBUG') ??
+      getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug') ||
+      (localStableConfigValue ??
+      config.enabled)
+    )
   },
 
   getLogLevel (
@@ -126,14 +124,12 @@ const log = {
     fleetStableConfigValue,
     localStableConfigValue
   ) {
-    return coalesce(
-      optionsValue,
-      fleetStableConfigValue,
-      getEnvironmentVariable('DD_TRACE_LOG_LEVEL'),
-      getEnvironmentVariable('OTEL_LOG_LEVEL'),
-      localStableConfigValue,
+    return optionsValue ??
+      fleetStableConfigValue ??
+      getEnvironmentVariable('DD_TRACE_LOG_LEVEL') ??
+      getEnvironmentVariable('OTEL_LOG_LEVEL') ??
+      localStableConfigValue ??
       config.logLevel
-    )
   }
 }
 
