@@ -76,7 +76,7 @@ export default [
         }
       },
       globals: {
-        ...globals.es2021,
+        ...globals.es2022,
         ...globals.node,
         document: 'readonly',
         navigator: 'readonly',
@@ -410,6 +410,7 @@ export default [
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
+      'unicorn/no-array-sort': 'off', // Node.js 20
 
       // These rules could potentially evaluated again at a much later point
       'unicorn/no-array-callback-reference': 'off',
@@ -522,8 +523,7 @@ export default [
     ]
   },
   {
-    name: 'mocha/recommended',
-    ...eslintPluginMocha.configs.flat.recommended,
+    ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES
   },
   {
@@ -543,14 +543,11 @@ export default [
       n: eslintPluginN
     },
     rules: {
+      'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
-      'mocha/no-exports': 'off',
-      'mocha/no-global-tests': 'off',
-      'mocha/no-identical-title': 'off',
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-setup-in-describe': 'off',
       'mocha/no-sibling-hooks': 'off',
-      'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
@@ -575,6 +572,7 @@ export default [
     rules: {
       'no-undef': 'off',
       'mocha/max-top-level-suites': 'off',
+      'mocha/no-pending-tests': 'off',
     }
   },
   {

@@ -1,14 +1,11 @@
 import 'dd-trace/init.js'
 import { ServiceBroker } from 'moleculer'
-import getPort from 'get-port'
-
-const port = await getPort()
 
 const broker = new ServiceBroker({
   namespace: 'multi',
   nodeID: `server-${process.pid}`,
   logger: false,
-  transporter: `tcp://127.0.0.1:${port}/server-${process.pid}`
+  transporter: `tcp://127.0.0.1:0/server-${process.pid}`
 })
 
 broker.createService({

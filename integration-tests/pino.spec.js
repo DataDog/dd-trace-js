@@ -53,6 +53,7 @@ describe('pino test', () => {
         }
       })
     })
+
     it('Log injection enabled', async () => {
       proc = await spawnProc(startupTestFile, {
         cwd,

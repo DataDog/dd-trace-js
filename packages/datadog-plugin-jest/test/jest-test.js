@@ -100,6 +100,7 @@ describe('jest-test-suite', () => {
       throw error
     }, 100)
   })
+
   it.skip('skips', () => {
     expect(100).toEqual(100)
   })

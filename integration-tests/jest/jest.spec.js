@@ -87,7 +87,9 @@ describe('jest CommonJS', () => {
       'chai@v4',
       'jest-jasmine2',
       'jest-environment-jsdom',
-      'office-addin-mock'
+      '@happy-dom/jest-environment',
+      'office-addin-mock',
+      'winston'
     ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
@@ -949,6 +951,7 @@ describe('jest CommonJS', () => {
         })
       })
     })
+
     it('can report code coverage', (done) => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
@@ -2282,6 +2285,78 @@ describe('jest CommonJS', () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('works with happy-dom', async () => {
+      // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+        }
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // no other tests are considered new
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.notProperty(test.meta, TEST_IS_NEW)
+          })
+          assert.equal(oldTests.length, 1)
+
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+          })
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          // all but one has been retried
+          assert.equal(
+            newTests.length - 1,
+            retriedTests.length
+          )
+          assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+          // Test name does not change
+          newTests.forEach(test => {
+            assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
+          })
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
+            TESTS_TO_RUN: 'test/ci-visibility-test',
+            ENABLE_HAPPY_DOM: 'true',
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
 
     it('disables early flake detection if known tests should not be requested', (done) => {
@@ -4012,6 +4087,25 @@ describe('jest CommonJS', () => {
         })
         runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
       })
+    })
+  })
+
+  describe('winston mocking', () => {
+    it('should allow winston to be mocked and verify createLogger is called', async () => {
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
+            SHOULD_CHECK_RESULTS: '1'
+          }
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.equal(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 })

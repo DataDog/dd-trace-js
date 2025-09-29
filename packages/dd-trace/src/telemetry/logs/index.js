@@ -35,8 +35,8 @@ function onLog (log) {
 }
 
 function onErrorLog (msg) {
-  const { message, cause } = msg
-  if (!message && !cause) return
+  const { message, cause, sendViaTelemetry } = msg
+  if (!sendViaTelemetry || (!message && !cause)) return
 
   const telLog = {
     level: 'ERROR',

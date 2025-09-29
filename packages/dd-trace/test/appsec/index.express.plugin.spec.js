@@ -16,6 +16,7 @@ const { withVersions } = require('../setup/mocha')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+    // eslint-disable-next-line mocha/no-pending-tests
     describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
     return
   }

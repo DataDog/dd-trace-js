@@ -456,9 +456,6 @@ describe('mocha CommonJS', function () {
     childProcess.on('message', () => {
       eventsPromise.then(() => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.notInclude(
-          testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-        )
         done()
       }).catch(done)
     })
@@ -491,9 +488,6 @@ describe('mocha CommonJS', function () {
     childProcess.on('exit', () => {
       eventsPromise.then(() => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.notInclude(
-          testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-        )
         done()
       }).catch(done)
     })
@@ -650,6 +644,7 @@ describe('mocha CommonJS', function () {
         })
       })
     })
+
     it('can report code coverage', (done) => {
       let testOutput
       const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -3510,6 +3505,7 @@ describe('mocha CommonJS', function () {
           }
         )
       })
+
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
           receiver.setKnownTests({

@@ -1,0 +1,118 @@
+interactions:
+- request:
+    body: '{"temperature":0.5,"anthropic_version":"bedrock-2023-05-31","messages":[{"role":"user","content":[{"type":"text","text":"You
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertWhat is the capital of France?","cache_control":{"type":"ephemeral"}}]}],"max_tokens":10}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '5410'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#20.16.0 api/bedrock-runtime#3.422.0
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/us.anthropic.claude-sonnet-4-20250514-v1:0/invoke
+  response:
+    body:
+      string: '{"id":"msg_bdrk_01LL4iC3KoyutR6rpYHbnHcs","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{"type":"text","text":"The
+        capital of France is Paris.\n\nParis is"}],"stop_reason":"max_tokens","stop_sequence":null,"usage":{"input_tokens":4,"cache_creation_input_tokens":1209,"cache_read_input_tokens":0,"output_tokens":10}}'
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '351'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 24 Sep 2025 18:13:59 GMT
+      X-Amzn-Bedrock-Cache-Read-Input-Token-Count:
+      - '0'
+      X-Amzn-Bedrock-Cache-Write-Input-Token-Count:
+      - '1209'
+      X-Amzn-Bedrock-Input-Token-Count:
+      - '4'
+      X-Amzn-Bedrock-Invocation-Latency:
+      - '1180'
+      X-Amzn-Bedrock-Output-Token-Count:
+      - '10'
+      x-amzn-RequestId:
+      - f37a748f-a588-4db0-affb-1864383ef25d
+    status:
+      code: 200
+      message: OK
+version: 1

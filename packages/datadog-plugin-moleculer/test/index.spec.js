@@ -2,14 +2,27 @@
 
 const { expect } = require('chai')
 const assert = require('node:assert')
-const getPort = require('get-port')
 const os = require('node:os')
+const net = require('node:net')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
+
+// The returned port could already be in use by another test that was running at
+// the same time. This race condition is not prevented by this function.
+function getPort () {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address()
+      server.close(() => resolve(port))
+    })
+  })
+}
 
 describe('Plugin', () => {
   let broker

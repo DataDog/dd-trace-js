@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const rimraf = require('rimraf')
 
 const util = require('node:util')
 const os = require('node:os')
@@ -90,7 +89,7 @@ describe('Plugin', () => {
     })
 
     after((done) => {
-      rimraf(tmpdir, realFS, done)
+      realFS.rm(tmpdir, { force: true, recursive: true }, done)
       delete plugins.fs
     })
 
