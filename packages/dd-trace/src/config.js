@@ -868,10 +868,10 @@ class Config {
     this._setString(env, 'aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     env['aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
     this._envUnprocessed['aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
-    env['aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
-    this._envUnprocessed['aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
-    env['aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
-    this._envUnprocessed['aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
     this._setString(env, 'appKey', DD_APP_KEY)
   }
 
@@ -879,6 +879,7 @@ class Config {
     const opts = setHiddenProperty(this, '_options', this._options || {})
     const tags = {}
     setHiddenProperty(this, '_optsUnprocessed', {})
+
     options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
 
     tagger.add(tags, options.tags)
@@ -1046,10 +1047,10 @@ class Config {
     this._setString(opts, 'aiguard.endpoint', options.aiguard?.endpoint)
     opts['aiguard.timeout'] = maybeInt(options.aiguard?.timeout)
     this._optsUnprocessed['aiguard.timeout'] = options.aiguard?.timeout
-    opts['aiguard.maxMessagesLength'] = maybeInt(options.aiguard?.maxMessagesLength)
-    this._optsUnprocessed['aiguard.maxMessagesLength'] = options.aiguard?.maxMessagesLength
-    opts['aiguard.maxContentSize'] = maybeInt(options.aiguard?.maxContentSize)
-    this._optsUnprocessed['aiguard.maxContentSize'] = options.aiguard?.maxContentSize
+    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
+    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
+    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
 
     this._setString(opts, 'appKey', options.appKey)
   }

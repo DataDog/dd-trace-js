@@ -54,8 +54,8 @@ class AIGuard extends NoopAIGuard {
     this._evaluateUrl = `${endpoint}/evaluate`
 
     this._timeout = config.aiguard.timeout
-    this._maxMessagesLength = config.aiguard.maxMessagesLength
-    this._maxContentSize = config.aiguard.maxContentSize
+    this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
+    this._maxContentSize = config.experimental.aiguard.maxContentSize
     this._meta = { service: config.service, env: config.env }
   }
 

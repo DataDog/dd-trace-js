@@ -20,9 +20,13 @@ describe('AIGuard SDK', () => {
     aiguard: {
       enabled: true,
       endpoint: 'https://aiguard.com',
-      timeout: 10_000,
-      maxMessagesLength: 16,
-      maxContentSize: 512 * 1024
+      timeout: 10_000
+    },
+    experimental: {
+      aiguard: {
+        maxMessagesLength: 16,
+        maxContentSize: 512 * 1024
+      }
     }
   }
   let tracer
@@ -212,7 +216,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message length truncation', async () => {
-    const maxMessages = config.aiguard.maxMessagesLength
+    const maxMessages = config.experimental.aiguard.maxMessagesLength
     const messages = Array.from({ length: maxMessages + 1 }, (_, i) => ({
       role: 'user',
       content: `This is a prompt: ${i}`
@@ -231,7 +235,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message content truncation', async () => {
-    const maxContent = config.aiguard.maxContentSize
+    const maxContent = config.experimental.aiguard.maxContentSize
     const content = Array(maxContent + 1).fill('A').join('')
     const messages = [{ role: 'user', content }]
     mockFetch({
