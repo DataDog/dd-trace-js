@@ -1,7 +1,7 @@
 'use strict'
 
 const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { getProtobufTypes } = require('./protobuf_loader')
+const { loadProtobufDefinitions } = require('./protobuf_loader')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -87,12 +87,13 @@ class OtlpTransformer {
       const instrumentationLibrary = record.instrumentationLibrary || { name: '', version: '0.0.0' }
       const key = `${instrumentationLibrary.name}@${instrumentationLibrary.version}`
 
-      if (!grouped.has(key)) {
-        grouped.set(key, [])
+      const group = grouped.get(key)
+      if (group === undefined) {
+        grouped.set(key, [record])
+      } else {
+        group.push(record)
       }
-      grouped.get(key).push(record)
     }
-
     return grouped
   }
 
@@ -104,7 +105,7 @@ class OtlpTransformer {
   #getProtobufTypes () {
     // Delay the loading of protobuf types to reduce startup overhead
     if (!this.#protobufTypes) {
-      this.#protobufTypes = getProtobufTypes()
+      this.#protobufTypes = loadProtobufDefinitions()
     }
     return this.#protobufTypes
   }
@@ -117,21 +118,11 @@ class OtlpTransformer {
    */
   #transformToProtobuf (logRecords) {
     const { _logsService } = this.#getProtobufTypes()
-
-    // Group log records by instrumentation library
-    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
-
-    // Create scope logs for each instrumentation library
-    const scopeLogs = [...groupedRecords.entries()].map(([key, records]) => ({
-      scope: this.#transformScope(records[0]?.instrumentationLibrary),
-      logRecords: records.map(record => this.#transformLogRecord(record))
-    }))
-
     // Create the OTLP LogsData structure
     const logsData = {
       resourceLogs: [{
         resource: this.#transformResource(),
-        scopeLogs
+        scopeLogs: this.#transformScope(logRecords),
       }]
     }
 
@@ -149,38 +140,42 @@ class OtlpTransformer {
    * @private
    */
   #transformToJson (logRecords) {
-    // Group log records by instrumentation library
-    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
-
-    // Create scope logs for each instrumentation library
-    const scopeLogs = [...groupedRecords.entries()].map(([key, records]) => ({
-      scope: this.#transformScope(records[0]?.instrumentationLibrary),
-      logRecords: records.map(record => this.#transformLogRecord(record))
-    }))
-
-    // JSON transformation for http/json protocol
     const logsData = {
       resourceLogs: [{
         resource: this.#transformResource(),
-        scopeLogs
+        scopeLogs: this.#transformScope(logRecords)
       }]
     }
     return Buffer.from(JSON.stringify(logsData))
   }
 
   /**
-   * Transforms instrumentation library information to OTLP scope format.
-   * @param {Object} instrumentationLibrary - Instrumentation library info
-   * @returns {Object} OTLP scope object
+   * Creates scope logs grouped by instrumentation library.
+   * @param {Object[]} logRecords - Array of log records to transform
+   * @returns {Object[]} Array of scope log objects
    * @private
    */
-  #transformScope (instrumentationLibrary) {
-    return {
-      name: instrumentationLibrary?.name || 'dd-trace-js',
-      version: instrumentationLibrary?.version || '',
-      attributes: [],
-      droppedAttributesCount: 0
+  #transformScope (logRecords) {
+    // Group log records by instrumentation library
+    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
+
+    // Create scope logs for each instrumentation library
+    const scopeLogs = []
+
+    for (const [, records] of groupedRecords.entries()) {
+      scopeLogs.push({
+        scope: {
+          name: records[0]?.instrumentationLibrary?.name || 'dd-trace-js',
+          version: records[0]?.instrumentationLibrary?.version || '',
+          // TODO: Support setting attributes on instrumentation library
+          attributes: [],
+          droppedAttributesCount: 0
+        },
+        logRecords: records.map(record => this.#transformLogRecord(record))
+      })
     }
+
+    return scopeLogs
   }
 
   /**

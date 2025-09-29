@@ -141,17 +141,40 @@ class OtlpHttpLogExporter {
    * @private
    */
   #parseAdditionalHeaders (headersString) {
-    if (!headersString || typeof headersString !== 'string') {
-      return {}
-    }
-
     const headers = {}
-    for (const pair of headersString.split(',')) {
-      const [key, value] = pair.trim().split('=')
-      if (key && value) {
-        headers[key.trim()] = value.trim()
+    let key = ''
+    let value = ''
+    let readingKey = true
+
+    for (const char of headersString) {
+      if (readingKey) {
+        if (char === '=') {
+          readingKey = false
+          key = key.trim()
+        } else {
+          key += char
+        }
+      } else if (char === ',') {
+        value = value.trim()
+        if (key && value) {
+          headers[key] = value
+        }
+        key = ''
+        value = ''
+        readingKey = true
+      } else {
+        value += char
       }
     }
+
+    // Add the last pair if present
+    if (!readingKey) {
+      value = value.trim()
+      if (value) {
+        headers[key] = value
+      }
+    }
+
     return headers
   }
 }

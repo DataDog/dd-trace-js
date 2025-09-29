@@ -12,7 +12,6 @@ class BatchLogRecordProcessor {
   #timer
   #batchTimeout
   #maxExportBatchSize
-  #shutdownPromise
 
   /**
    * Creates a new BatchLogRecordProcessor instance.
@@ -21,14 +20,13 @@ class BatchLogRecordProcessor {
    * @param {number} batchTimeout - Timeout in milliseconds for batch processing
    * @param {number} maxExportBatchSize - Maximum number of log records per batch
    */
-  constructor (exporter, batchTimeout, maxExportBatchSize, maxQueueSize, exportTimeoutMillis) {
+  constructor (exporter, batchTimeout, maxExportBatchSize) {
     this.exporter = exporter
     this.#batchTimeout = batchTimeout
     this.#maxExportBatchSize = maxExportBatchSize
     this.isShutdown = false
     this.#logRecords = []
     this.#timer = null
-    this.#shutdownPromise = null
   }
 
   /**
@@ -56,15 +54,10 @@ class BatchLogRecordProcessor {
    * @returns {Promise<void>} Promise that resolves when flush is complete
    */
   forceFlush () {
-    return new Promise((resolve) => {
-      if (this.isShutdown) {
-        resolve()
-        return
-      }
-
+    if (!this.isShutdown) {
       this.#export()
-      resolve()
-    })
+    }
+    return Promise.resolve()
   }
 
   /**
@@ -73,21 +66,13 @@ class BatchLogRecordProcessor {
    */
   shutdown () {
     if (this.isShutdown) {
-      return this.#shutdownPromise || Promise.resolve()
+      return Promise.resolve()
     }
 
     this.isShutdown = true
-    this.#shutdownPromise = new Promise((resolve) => {
-      this.#clearTimer()
-
-      this.#export()
-
-      const shutdownPromises = this.exporter ? [this.exporter.shutdown()] : []
-
-      Promise.all(shutdownPromises).then(resolve)
-    })
-
-    return this.#shutdownPromise
+    this.#clearTimer()
+    this.#export()
+    return this.exporter ? this.exporter.shutdown() : Promise.resolve()
   }
 
   /**
