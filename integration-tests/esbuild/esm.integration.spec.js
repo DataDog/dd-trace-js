@@ -24,7 +24,7 @@ esbuildVersions.forEach((version) => {
     let sandbox, agent, cwd
 
     before(async () => {
-      sandbox = await createSandbox([`esbuild@${version}`], false, [__dirname])
+      sandbox = await createSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
       cwd = sandbox.folder
     })
 
