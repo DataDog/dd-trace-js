@@ -6,6 +6,11 @@ const log = require('../../log')
 const OtlpTransformer = require('./otlp_transformer')
 const telemetryMetrics = require('../../telemetry/metrics')
 
+/**
+ * @typedef {import('@opentelemetry/resources').Resource} Resource
+ *
+*/
+
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 /**
@@ -26,7 +31,7 @@ class OtlpHttpLogExporter {
    * @param {string} headers - Additional HTTP headers as comma-separated key=value string
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {Object} resource - Resource attributes
+   * @param {Resource} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
     this.url = url

@@ -27,8 +27,6 @@ class Logger {
    * @param {Object} [instrumentationLibrary] - Instrumentation library information
    * @param {string} [instrumentationLibrary.name] - Library name (defaults to 'dd-trace-js')
    * @param {string} [instrumentationLibrary.version] - Library version (defaults to tracer version)
-   * @param {Attributes[]} [instrumentationLibrary.attributes] - Additional attributes
-   * @param {number} [instrumentationLibrary.dropped_attributes_count] - Number of dropped attributes
    */
   constructor (loggerProvider, instrumentationLibrary) {
     this.loggerProvider = loggerProvider

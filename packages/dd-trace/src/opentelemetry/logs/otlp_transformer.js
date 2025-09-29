@@ -3,6 +3,10 @@
 const { SeverityNumber } = require('@opentelemetry/api-logs')
 const { getProtobufTypes } = require('./protobuf_loader')
 
+/**
+ * @typedef {import('@opentelemetry/api').Attributes} Attributes
+*/
+
 // Global severity mapping constant - no need to regenerate
 const SEVERITY_MAP = {
   [SeverityNumber.TRACE]: 'SEVERITY_NUMBER_TRACE',
@@ -47,7 +51,7 @@ class OtlpTransformer {
   /**
    * Creates a new OtlpTransformer instance.
    *
-   * @param {Object} resourceAttributes - Resource attributes
+   * @param {Attributes} resourceAttributes - Resource attributes
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    */
   constructor (resourceAttributes, protocol) {
