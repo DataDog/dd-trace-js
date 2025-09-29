@@ -85,20 +85,28 @@ describe('OpenTelemetry Logs', () => {
         resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
         assert(resourceAttrs['service.name'])
 
-        const { scope, logRecords } = decoded.resourceLogs[0].scopeLogs[0]
-        assert.strictEqual(scope.name, 'test-logger')
-        assert.strictEqual(scope.version, '1.0.0')
-        assert.strictEqual(logRecords[0].severityText, 'INFO')
-        assert.strictEqual(logRecords[0].body.stringValue, 'Test message')
-        assert.strictEqual(logRecords[0].traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
-        assert.strictEqual(logRecords[0].spanId.toString('hex'), '1234567890abcdef')
-        assert.strictEqual(logRecords[1].severityText, 'ERROR')
-        assert.strictEqual(logRecords[1].severityNumber, 17)
-        assert.strictEqual(logRecords[1].body.stringValue, 'Test error message')
-        assert.strictEqual(logRecords[1].traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
-        assert.strictEqual(logRecords[1].spanId.toString('hex'), '1234567890abcdef')
+        // Validate we have 2 separate scope logs (one per instrumentation library)
+        const { scopeLogs } = decoded.resourceLogs[0]
+        assert.strictEqual(scopeLogs.length, 1)
+
+        const scope = scopeLogs[0]
+        assert.strictEqual(scope.scope.name, 'test-logger')
+        assert.strictEqual(scope.scope.version, '1.0.0')
+        assert.strictEqual(scope.logRecords.length, 2)
+
+        const log1 = scope.logRecords[0]
+        assert.strictEqual(log1.severityText, 'INFO')
+        assert.strictEqual(log1.body.stringValue, 'Test message')
+        assert.strictEqual(log1.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
+        assert.strictEqual(log1.spanId.toString('hex'), '1234567890abcdef')
+
+        const log2 = scope.logRecords[1]
+        assert.strictEqual(log2.severityText, 'ERROR')
+        assert.strictEqual(log2.severityNumber, 17)
+        assert.strictEqual(log2.body.stringValue, 'Test error message')
+        assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
+        assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
-      process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '2' // Capture both logs in one payload
       const { logs } = setupTracer(true, '2')
       const { trace, context } = require('@opentelemetry/api')
 
@@ -118,6 +126,7 @@ describe('OpenTelemetry Logs', () => {
         logger.emit({
           severityText: 'ERROR',
           severityNumber: 17,
+          instrumentationScope: { name: 'test-logger', version: '1.0.0' },
           body: 'Test error message',
           attributes: { 'error.array': [1, 2, 3] }
         })
@@ -227,6 +236,57 @@ describe('OpenTelemetry Logs', () => {
         body: 'HTTP test message',
         attributes: { 'test.attr': 'value' },
         context: trace.setSpan(context.active(), createRealSpan())
+      })
+    })
+
+    it('groups logs by instrumentation library in separate scope payloads', () => {
+      mockOtlpExport((decoded, capturedHeaders) => {
+        const { resourceLogs } = decoded
+        assert.strictEqual(resourceLogs.length, 1)
+
+        const { scopeLogs } = resourceLogs[0]
+        assert.strictEqual(scopeLogs.length, 2) // Should have 2 separate scope logs
+
+        // First scope: logger1@1.0.0
+        const scope1 = scopeLogs[0]
+        assert.strictEqual(scope1.scope.name, 'logger1')
+        assert.strictEqual(scope1.scope.version, '1.0.0')
+        assert.strictEqual(scope1.logRecords.length, 1)
+        assert.strictEqual(scope1.logRecords[0].severityText, 'INFO')
+        assert.strictEqual(scope1.logRecords[0].body.stringValue, 'Message from logger1')
+
+        // Second scope: logger2@2.0.0
+        const scope2 = scopeLogs[1]
+        assert.strictEqual(scope2.scope.name, 'logger2')
+        assert.strictEqual(scope2.scope.version, '2.0.0')
+        assert.strictEqual(scope2.logRecords.length, 1)
+        assert.strictEqual(scope2.logRecords[0].severityText, 'ERROR')
+        assert.strictEqual(scope2.logRecords[0].body.stringValue, 'Message from logger2')
+      })
+
+      const { logs } = setupTracer(true, '2')
+      const { trace, context } = require('@opentelemetry/api')
+
+      const spanContext = {
+        traceId: '1234567890abcdef1234567890abcdef',
+        spanId: '1234567890abcdef',
+        traceFlags: 1,
+      }
+      context.with(trace.setSpan(context.active(), trace.wrapSpanContext(spanContext)), () => {
+        const logger1 = logs.getLogger('logger1', '1.0.0')
+        const logger2 = logs.getLogger('logger2', '2.0.0')
+
+        logger1.emit({
+          severityText: 'INFO',
+          body: 'Message from logger1',
+          attributes: { logger: 'logger1' }
+        })
+
+        logger2.emit({
+          severityText: 'ERROR',
+          body: 'Message from logger2',
+          attributes: { logger: 'logger2' }
+        })
       })
     })
   })

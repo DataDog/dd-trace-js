@@ -90,7 +90,6 @@ class Logger {
       severityNumber: logRecord.severityNumber || 0,
       body: logRecord.body || '',
       attributes: logRecord.attributes,
-      resource: this.loggerProvider.resource,
       // Newer versions of the OpenTelemetry Logs API require instrumentationScope instead of instrumentationLibrary
       instrumentationLibrary: logRecord.instrumentationScope ||
                           logRecord.instrumentationLibrary ||

@@ -71,6 +71,28 @@ class OtlpTransformer {
   }
 
   /**
+   * Groups log records by instrumentation library (name and version).
+   * @param {Object[]} logRecords - Array of log records to group
+   * @returns {Map<string, Object[]>} Map of instrumentation library key to log records
+   * @private
+   */
+  #groupByInstrumentationLibrary (logRecords) {
+    const grouped = new Map()
+
+    for (const record of logRecords) {
+      const instrumentationLibrary = record.instrumentationLibrary || { name: '', version: '0.0.0' }
+      const key = `${instrumentationLibrary.name}@${instrumentationLibrary.version}`
+
+      if (!grouped.has(key)) {
+        grouped.set(key, [])
+      }
+      grouped.get(key).push(record)
+    }
+
+    return grouped
+  }
+
+  /**
    * Gets the protobuf types, loading them lazily to reduce startup overhead.
    * @returns {Object} Protobuf types object
    * @private
@@ -92,14 +114,20 @@ class OtlpTransformer {
   #transformToProtobuf (logRecords) {
     const { _logsService } = this.#getProtobufTypes()
 
+    // Group log records by instrumentation library
+    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
+
+    // Create scope logs for each instrumentation library
+    const scopeLogs = [...groupedRecords.entries()].map(([key, records]) => ({
+      scope: this.#transformScope(records[0]?.instrumentationLibrary),
+      logRecords: records.map(record => this.#transformLogRecord(record))
+    }))
+
     // Create the OTLP LogsData structure
     const logsData = {
       resourceLogs: [{
         resource: this.#transformResource(),
-        scopeLogs: [{
-          scope: this.#transformScope(logRecords[0]?.instrumentationLibrary),
-          logRecords: logRecords.map(record => this.#transformLogRecord(record))
-        }]
+        scopeLogs
       }]
     }
 
@@ -117,14 +145,20 @@ class OtlpTransformer {
    * @private
    */
   #transformToJson (logRecords) {
+    // Group log records by instrumentation library
+    const groupedRecords = this.#groupByInstrumentationLibrary(logRecords)
+
+    // Create scope logs for each instrumentation library
+    const scopeLogs = [...groupedRecords.entries()].map(([key, records]) => ({
+      scope: this.#transformScope(records[0]?.instrumentationLibrary),
+      logRecords: records.map(record => this.#transformLogRecord(record))
+    }))
+
     // JSON transformation for http/json protocol
     const logsData = {
       resourceLogs: [{
         resource: this.#transformResource(),
-        scopeLogs: [{
-          scope: this.#transformScope(logRecords[0]?.instrumentationLibrary),
-          logRecords: logRecords.map(record => this.#transformLogRecord(record))
-        }]
+        scopeLogs
       }]
     }
     return Buffer.from(JSON.stringify(logsData))
