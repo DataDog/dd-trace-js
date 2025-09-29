@@ -13,3 +13,12 @@ jobs:
       - uses: ./.github/workflows/apm-capabilities
         with:
           runNightly: 'true'
+      - uses: ./.github/workflows/llmobs
+        with:
+          runNightly: 'true'
+      - uses: ./.github/workflows/platform
+        with:
+          runNightly: 'true'
+      - uses: ./.github/workflows/serverless
+        with:
+          runNightly: 'true'

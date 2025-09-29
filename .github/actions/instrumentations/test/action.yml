@@ -1,16 +1,26 @@
 name: Instrumentation Tests
 description: Run instrumentation tests
+inputs:
+  runNightly:
+    description: "Whether to run nightly tests"
+    default: 'false'
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
+    - uses: ./.github/actions/node/oldest-maintenance-lts
+      if: inputs.runNightly != 'true'
     - run: yarn test:instrumentations:ci
+      if: inputs.runNightly != 'true'
       shell: bash
     - uses: ./.github/actions/node/latest
+      if: inputs.runNightly != 'true'
     - run: yarn test:instrumentations:ci
+      if: inputs.runNightly != 'true'
       shell: bash
     - uses: ./.github/actions/node/nightly
+      if: inputs.runNightly == 'true'
     - run: yarn test:instrumentations:ci
+      if: inputs.runNightly == 'true'
       shell: bash
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1

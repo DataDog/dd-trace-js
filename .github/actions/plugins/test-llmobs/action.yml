@@ -1,24 +1,41 @@
 name: Plugin and LLMOBs Tests
 description: Run plugin tests and llmobs test suites
+inputs:
+  runNightly:
+    description: "Whether to run nightly tests"
+    default: 'false'
+
 runs:
   using: composite
   steps:
     - uses: ./.github/actions/testagent/start
-    - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
+
+    - uses: ./.github/actions/node/oldest-maintenance-lts
+      if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
+      if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly != 'true'
       shell: bash
+
     - uses: ./.github/actions/node/latest
+      if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
+      if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly != 'true'
       shell: bash
+
     - uses: ./.github/actions/node/nightly
+      if: inputs.runNightly == 'true'
     - run: yarn test:plugins:ci
+      if: inputs.runNightly == 'true'
       shell: bash
     - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly == 'true'
       shell: bash
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
     - if: always()
