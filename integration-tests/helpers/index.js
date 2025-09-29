@@ -463,6 +463,7 @@ function useEnv (env) {
   before(() => {
     Object.assign(process.env, env)
   })
+
   after(() => {
     for (const key of Object.keys(env)) {
       delete process.env[key]
@@ -474,6 +475,7 @@ function useSandbox (...args) {
   before(async () => {
     sandbox = await createSandbox(...args)
   })
+
   after(() => {
     const oldSandbox = sandbox
     sandbox = undefined
@@ -489,6 +491,7 @@ function setShouldKill (value) {
   before(() => {
     shouldKill = value
   })
+
   after(() => {
     shouldKill = true
   })
