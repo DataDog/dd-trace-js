@@ -88,7 +88,8 @@ describe('jest CommonJS', () => {
       'jest-jasmine2',
       'jest-environment-jsdom',
       '@happy-dom/jest-environment',
-      'office-addin-mock'
+      'office-addin-mock',
+      'winston'
     ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
@@ -4088,6 +4089,25 @@ describe('jest CommonJS', () => {
         })
         runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
       })
+    })
+  })
+
+  describe('winston mocking', () => {
+    it('should allow winston to be mocked and verify createLogger is called', async () => {
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
+            SHOULD_CHECK_RESULTS: '1'
+          }
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.equal(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 })
