@@ -621,9 +621,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 function getTestEnvironment (pkg, jestVersion) {
   if (pkg.default) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default, jestVersion)
-    pkg.default = wrappedTestEnvironment
-    pkg.TestEnvironment = wrappedTestEnvironment
-    return pkg
+    return new Proxy(pkg, {
+      get (target, prop) {
+        if (prop === 'default') {
+          return wrappedTestEnvironment
+        }
+        if (prop === 'TestEnvironment') {
+          return wrappedTestEnvironment
+        }
+        return target[prop]
+      }
+    })
   }
   return getWrappedEnvironment(pkg, jestVersion)
 }
