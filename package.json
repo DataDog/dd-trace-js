@@ -159,7 +159,7 @@
     "@openfeature/server-sdk": "^1.19.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/node": "^18.19.106",
-    "axios": "^1.11.0",
+    "axios": "^1.12.2",
     "benchmark": "^2.1.4",
     "body-parser": "^2.2.0",
     "chai": "^4.5.0",
