@@ -8,13 +8,19 @@ class BaseTestHelper {
   constructor (config) {
     this.pluginName = config.pluginName
     this.packageName = config.packageName
-    this.TestSetupClass = config.TestSetupClass
-    this.options = config.options
     this.testSetup = config.testSetup
-    this.mod = config.mod
-    this.tracer = config.tracer
+    this.getModule = config.getModule
+    this.getTracer = config.getTracer
     this.testAgentClient = config.testAgentClient
     this.sessionToken = config.sessionToken
+  }
+
+  get mod () {
+    return this.getModule()
+  }
+
+  get tracer () {
+    return this.getTracer()
   }
 
   generateTestCases () {
