@@ -3,7 +3,7 @@ name: AI Guard
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: 0 4 * * *
 
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/main' && '--retries 1' || '' }}
 
 jobs:
 

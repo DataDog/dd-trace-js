@@ -5,7 +5,7 @@ on:
     paths:
       - 'eslint-rules/**'
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'eslint-rules/**'
 

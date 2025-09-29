@@ -16,7 +16,7 @@ const {
 } = require('./helpers/terminal')
 const { checkAll } = require('./helpers/requirements')
 
-const main = 'master'
+const main = 'main'
 
 if (params[0] === 'help' || flags.help) {
   log(

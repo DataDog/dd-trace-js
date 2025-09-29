@@ -2,7 +2,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -20,7 +20,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -92,7 +92,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -137,7 +137,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -181,7 +181,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -200,7 +200,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -212,7 +212,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -231,7 +231,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -243,7 +243,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -261,7 +261,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -273,7 +273,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -291,7 +291,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -303,7 +303,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -321,7 +321,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -333,7 +333,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -351,7 +351,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -363,7 +363,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -381,7 +381,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -393,7 +393,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -411,7 +411,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -423,7 +423,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -441,7 +441,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -453,7 +453,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -471,7 +471,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",
@@ -483,7 +483,7 @@
   [
     {
       "BUDDY": "true",
-      "BUDDY_EXECUTION_BRANCH": "master",
+      "BUDDY_EXECUTION_BRANCH": "main",
       "BUDDY_EXECUTION_ID": "buddy-execution-id",
       "BUDDY_EXECUTION_REVISION": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL": "mikebenson@buddy.works",
@@ -503,7 +503,7 @@
       "ci.pipeline.number": "buddy-execution-id",
       "ci.pipeline.url": "https://app.buddy.works/myworkspace/my-project/pipelines/pipeline/456/execution/5d9dc42c422f5a268b389d08",
       "ci.provider.name": "buddy",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.committer.email": "mikebenson@buddy.works",
       "git.commit.committer.name": "Mike Benson",
       "git.commit.message": "Create buddy.yml",

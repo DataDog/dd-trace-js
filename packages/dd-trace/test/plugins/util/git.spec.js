@@ -362,7 +362,7 @@ describe('unshallowRepository', () => {
       .onCall(1).returns('origin')
       .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(3).throws()
-      .onCall(4).returns('origin/master')
+      .onCall(4).returns('origin/main')
 
     const options = [
       'fetch',
@@ -371,7 +371,7 @@ describe('unshallowRepository', () => {
       '--filter=blob:none',
       '--recurse-submodules=no',
       'origin',
-      'origin/master'
+      'origin/main'
     ]
 
     unshallowRepository(false)
@@ -386,7 +386,7 @@ describe('unshallowRepository', () => {
       .onCall(1).returns('origin')
       .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
       .onCall(3).throws()
-      .onCall(4).returns('origin/master')
+      .onCall(4).returns('origin/main')
       .onCall(5).throws()
 
     const options = [
