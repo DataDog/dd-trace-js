@@ -6,45 +6,50 @@ on:
       runApmIntegrations:
         description: 'APM Integration Tests'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
       runApmCapabilities:
         description: 'APM Capabilities Tests'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
       runLlmobs:
         description: 'LLM-OBS Tests'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
       runPlatform:
         description: 'Platform Tests'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
       runServerless:
         description: 'Serverless Tests'
         required: false
-        default: 'true'
+        default: true
+        type: boolean
 
 jobs:
   nightly:
     runs-on: ubuntu-latest
     steps:
       - uses: ./.github/workflows/apm-integrations
-        if: inputs.runApmIntegrations == 'true'
+        if: inputs.runApmIntegrations
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/apm-capabilities
-        if: inputs.runApmCapabilities == 'true'
+        if: inputs.runApmCapabilities
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/llmobs
-        if: inputs.runLlmobs == 'true'
+        if: inputs.runLlmobs
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/platform
-        if: inputs.runPlatform == 'true'
+        if: inputs.runPlatform
         with:
           runNightly: 'true'
       - uses: ./.github/workflows/serverless
-        if: inputs.runServerless == 'true'
+        if: inputs.runServerless
         with:
           runNightly: 'true'
