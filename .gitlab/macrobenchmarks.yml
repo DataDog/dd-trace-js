@@ -90,7 +90,7 @@ normal-operation-with-debug-and-without-http-plugin:
 high-load-with-debug-and-without-http-plugin:
   extends: .macrobenchmarks
   variables:
-    EXPERIMENT: normal-operation
+    EXPERIMENT: high-load
     DD_TRACE_DEBUG: "true"
     DD_TRACE_DISABLED_PLUGINS: http
     DD_BENCHMARKS_CONFIGURATION: only-tracing
