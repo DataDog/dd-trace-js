@@ -33,7 +33,6 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
@@ -48,14 +47,6 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
-
-// We don't want to handle any built-in packages
-// Those packages will still be handled via RITM
-// Attempting to instrument them would fail as they have no package.json file
-for (const pkg of INSTRUMENTED) {
-  if (builtins.has(pkg) || pkg.startsWith('node:')) continue
-  modulesOfInterest.add(pkg)
-}
 
 module.exports.name = 'datadog-esbuild'
 
@@ -337,7 +328,7 @@ function dotFriendlyResolve (path, directory, usesImportStatement) {
   }
   let conditions
   if (usesImportStatement) {
-    conditions = ['import']
+    conditions = new Set(['import', 'node'])
   }
 
   if (path.startsWith('file://')) {
