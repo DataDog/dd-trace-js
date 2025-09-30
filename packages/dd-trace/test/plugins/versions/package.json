@@ -20,6 +20,7 @@
     "@aws-sdk/client-sqs": "3.895.0",
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/smithy-client": "3.374.0",
+    "@azure/event-hubs": "6.0.0",
     "@azure/functions": "4.8.0",
     "@azure/service-bus": "7.9.5",
     "@confluentinc/kafka-javascript": "1.5.0",
