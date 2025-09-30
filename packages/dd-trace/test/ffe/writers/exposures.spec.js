@@ -7,15 +7,15 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-let ExposuresWriter
-let writer
-let exposureEvent
-let request
-let config
-let log
-let clock
-
 describe('FFE Exposures Writer', () => {
+  let ExposuresWriter
+  let writer
+  let exposureEvent
+  let request
+  let config
+  let log
+  let clock
+
   beforeEach(() => {
     exposureEvent = {
       timestamp: 1672531200000,
@@ -53,8 +53,10 @@ describe('FFE Exposures Writer', () => {
     clock = sinon.useFakeTimers()
 
     ExposuresWriter = proxyquire('../../../src/ffe/writers/exposures', {
-      '../../exporters/common/request': request,
-      '../../log': log
+      './base': proxyquire('../../../src/ffe/writers/base', {
+        '../../exporters/common/request': request,
+        '../../log': log
+      })
     })
 
     writer = new ExposuresWriter(config)
@@ -123,26 +125,30 @@ describe('FFE Exposures Writer', () => {
       expect(writer._buffer).to.have.length(0)
       expect(writer._droppedEvents).to.equal(1)
       expect(log.warn).to.have.been.calledWith(
-        sinon.match(/event size .* bytes exceeds limit/)
+        sinon.match(/event size[\s\S]*bytes exceeds limit/)
       )
     })
 
     it('should flush when payload would exceed 5MB limit', () => {
-      sinon.spy(writer, 'flush')
-
-      // Create events that together exceed 5MB
+      // Create events that together exceed 5MB (limit is 5242880 bytes)
       const largeEvent = {
         ...exposureEvent,
-        largeData: 'x'.repeat(3 * 1024 * 1024) // 3MB each
+        largeData: 'x'.repeat(2 * 1024 * 1024) // 2MB each
       }
 
-      writer.append(largeEvent) // First event, buffer = ~3MB
-      writer.append(largeEvent) // Second event would make buffer ~6MB, should trigger flush
+      writer.append(largeEvent) // First event, buffer = ~2MB
+      expect(writer._buffer).to.have.length(1)
 
-      expect(writer.flush).to.have.been.calledOnce
+      writer.append(largeEvent) // Second event, buffer = ~4MB
+      expect(writer._buffer).to.have.length(2)
+
+      writer.append(largeEvent) // Third event would make buffer ~6MB, should trigger flush
+
       expect(log.debug).to.have.been.calledWith(
         sinon.match(/buffer size would exceed .* bytes, flushing first/)
       )
+      // After flush is triggered, buffer should be cleared and new event added
+      expect(writer._buffer).to.have.length(1)
     })
 
     it('should buffer events when disabled', () => {
@@ -286,13 +292,16 @@ describe('FFE Exposures Writer', () => {
       expect(writer._bufferSize).to.equal(0)
     })
 
-    it('should log errors on request failure', () => {
+    it('should log errors on request failure', (done) => {
       request.yieldsAsync(new Error('Network error'))
       writer.append(exposureEvent)
 
       writer.flush()
 
-      expect(log.error).to.have.been.calledOnce
+      clock.tickAsync(0).then(() => {
+        expect(log.error).to.have.been.calledOnce
+        done()
+      })
     })
 
     it('should log success on 2xx response', () => {
@@ -303,13 +312,16 @@ describe('FFE Exposures Writer', () => {
       expect(log.debug).to.have.been.called
     })
 
-    it('should warn on non-2xx response', () => {
+    it('should warn on non-2xx response', (done) => {
       request.yieldsAsync(null, 'Error', 400)
       writer.append(exposureEvent)
 
       writer.flush()
 
-      expect(log.warn).to.have.been.calledOnce
+      clock.tickAsync(0).then(() => {
+        expect(log.warn).to.have.been.calledOnce
+        done()
+      })
     })
   })
 

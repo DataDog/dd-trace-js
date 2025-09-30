@@ -34,13 +34,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveBooleanEvaluation('test-flag', true, {}, {})
       expect(result).to.deep.equal({
         value: true,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
 
       const result2 = await noopProvider.resolveBooleanEvaluation('test-flag', false, {}, {})
       expect(result2).to.deep.equal({
         value: false,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
     })
 
@@ -48,13 +48,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveStringEvaluation('test-flag', 'default', {}, {})
       expect(result).to.deep.equal({
         value: 'default',
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
 
       const result2 = await noopProvider.resolveStringEvaluation('test-flag', 'custom', {}, {})
       expect(result2).to.deep.equal({
         value: 'custom',
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
     })
 
@@ -62,13 +62,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveNumberEvaluation('test-flag', 42, {}, {})
       expect(result).to.deep.equal({
         value: 42,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
 
       const result2 = await noopProvider.resolveNumberEvaluation('test-flag', 0, {}, {})
       expect(result2).to.deep.equal({
         value: 0,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
     })
 
@@ -77,14 +77,14 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveObjectEvaluation('test-flag', defaultObj, {}, {})
       expect(result).to.deep.equal({
         value: defaultObj,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
 
       const emptyObj = {}
       const result2 = await noopProvider.resolveObjectEvaluation('test-flag', emptyObj, {}, {})
       expect(result2).to.deep.equal({
         value: emptyObj,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
     })
 
@@ -92,7 +92,7 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveBooleanEvaluation('test-flag', true)
       expect(result).to.deep.equal({
         value: true,
-        reason: 'DEFAULT'
+        reason: 'STATIC'
       })
     })
   })
@@ -153,7 +153,7 @@ describe('NoopFlaggingProvider', () => {
       ])
 
       const duration = Date.now() - start
-      expect(duration).to.be.lessThan(10) // Should resolve immediately
+      expect(duration).to.be.lessThan(10)
     })
   })
 })

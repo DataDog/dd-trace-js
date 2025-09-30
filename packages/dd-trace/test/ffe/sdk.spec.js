@@ -12,8 +12,8 @@ describe('FlaggingProvider', () => {
   let mockTracer
   let mockConfig
   let mockChannel
-  let mockDatadogNodeServerProvider
   let log
+  let channelStub
 
   beforeEach(() => {
     mockTracer = {
@@ -30,12 +30,7 @@ describe('FlaggingProvider', () => {
       publish: sinon.spy()
     }
 
-    mockDatadogNodeServerProvider = class MockDatadogNodeServerProvider {
-      constructor (options) {
-        this.options = options
-        this.setConfiguration = sinon.stub()
-      }
-    }
+    channelStub = sinon.stub().returns(mockChannel)
 
     log = {
       debug: sinon.spy(),
@@ -44,34 +39,29 @@ describe('FlaggingProvider', () => {
     }
 
     FlaggingProvider = proxyquire('../../src/ffe/sdk', {
-      '@datadog/openfeature-node-server': {
-        DatadogNodeServerProvider: mockDatadogNodeServerProvider
-      },
       'dc-polyfill': {
-        channel: sinon.stub().returns(mockChannel)
+        channel: channelStub
       },
       '../log': log
     })
   })
 
   describe('constructor', () => {
-    it.skip('should initialize with tracer and config (requires @datadog/openfeature-node-server)', () => {
+    it('should initialize with tracer and config', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       expect(provider._tracer).to.equal(mockTracer)
       expect(provider._config).to.equal(mockConfig)
     })
 
-    it.skip('should call parent constructor with exposure channel (requires @datadog/openfeature-node-server)', () => {
+    it('should create exposure channel', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      expect(provider.options).to.deep.equal({
-        configuration: undefined,
-        exposureChannel: mockChannel
-      })
+      expect(provider).to.exist
+      expect(channelStub).to.have.been.calledWith('ffe:exposure:submit')
     })
 
-    it.skip('should log debug message on creation (requires @datadog/openfeature-node-server)', () => {
+    it('should log debug message on creation', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       expect(provider).to.exist
@@ -80,32 +70,31 @@ describe('FlaggingProvider', () => {
   })
 
   describe('_setConfiguration', () => {
-    it.skip('should call setConfiguration when method exists (requires @datadog/openfeature-node-server)', () => {
-      // This test requires the actual FlaggingProvider class which depends on external packages
+    it('should call setConfiguration when method exists', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const setConfigSpy = sinon.spy(provider, 'setConfiguration')
+      const ufc = { flags: { 'test-flag': {} } }
+
+      provider._setConfiguration(ufc)
+
+      expect(setConfigSpy).to.have.been.calledOnceWith(ufc)
+      expect(log.debug).to.have.been.calledWith('[FlaggingProvider] Provider configuration updated')
     })
 
-    it.skip(
-      'should handle missing setConfiguration method gracefully (requires @datadog/openfeature-node-server)',
-      () => {
-        // This test requires the actual FlaggingProvider class which depends on external packages
-      }
-    )
+    it('should handle null/undefined configuration gracefully', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-    it.skip('should handle null/undefined configuration (requires @datadog/openfeature-node-server)', () => {
-      // This test requires the actual FlaggingProvider class which depends on external packages
+      expect(() => provider._setConfiguration(null)).to.not.throw()
+      expect(() => provider._setConfiguration(undefined)).to.not.throw()
     })
   })
 
   describe('inheritance', () => {
-    it.skip('should extend DatadogNodeServerProvider (requires @datadog/openfeature-node-server)', () => {
-      // This test requires the actual FlaggingProvider class which depends on external packages
-    })
+    it('should extend DatadogNodeServerProvider', () => {
+      const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-    it.skip(
-      'should inherit OpenFeature Provider interface methods from parent (requires @datadog/openfeature-node-server)',
-      () => {
-        // This test requires the actual FlaggingProvider class which depends on external packages
-      }
-    )
+      expect(provider).to.be.instanceOf(DatadogNodeServerProvider)
+    })
   })
 })

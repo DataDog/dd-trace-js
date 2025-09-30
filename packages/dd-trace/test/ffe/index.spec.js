@@ -22,7 +22,6 @@ describe('FlaggingProvider Module', () => {
       ffeTimeout: 5000
     }
 
-    // Mock the ExposuresWriter
     mockWriter = {
       append: sinon.spy(),
       flush: sinon.spy(),
@@ -33,7 +32,6 @@ describe('FlaggingProvider Module', () => {
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
     setAgentStrategyStub = sinon.stub()
 
-    // Use proxyquire to inject mocked dependencies
     flaggingProviderModule = proxyquire('../../src/ffe', {
       './writers/exposures': ExposuresWriterStub,
       './writers/util': { setAgentStrategy: setAgentStrategyStub }
