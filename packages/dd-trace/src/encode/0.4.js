@@ -4,7 +4,6 @@ const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { Chunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
-const coalesce = require('koalas')
 const { memoize } = require('../log/utils')
 const { getEnvironmentVariable } = require('../config-helper')
 
@@ -32,10 +31,7 @@ class AgentEncoder {
     this._stringBytes = new Chunk()
     this._writer = writer
     this._reset()
-    this._debugEncoding = isTrue(coalesce(
-      getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'),
-      false
-    ))
+    this._debugEncoding = isTrue(getEnvironmentVariable('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
   }
 

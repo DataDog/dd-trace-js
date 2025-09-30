@@ -112,6 +112,7 @@ versions.forEach(version => {
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
         let envVars, isAgentless, logsEndpoint
+
         beforeEach(() => {
           isAgentless = reportMethod === 'agentless'
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
@@ -269,6 +270,7 @@ versions.forEach(version => {
             })
           })
         })
+
         context('intelligent test runner', () => {
           it('can report git metadata', (done) => {
             const searchCommitsRequestPromise = receiver.payloadReceived(
@@ -1240,7 +1242,8 @@ versions.forEach(version => {
             })
           })
 
-          if (version !== '7.0.0') { // EFD in parallel mode only supported from cucumber>=11
+          if (version !== '7.0.0') {
+            // EFD in parallel mode only supported from cucumber>=11
             context('parallel mode', () => {
               it('retries new tests', (done) => {
                 const NUM_RETRIES_EFD = 3
@@ -1530,7 +1533,8 @@ versions.forEach(version => {
           }
         })
 
-        if (version === 'latest') { // flaky test retries only supported from >=8.0.0
+        if (version === 'latest') {
+          // flaky test retries only supported from >=8.0.0
           context('flaky test retries', () => {
             it('can retry failed tests', (done) => {
               receiver.setSettings({

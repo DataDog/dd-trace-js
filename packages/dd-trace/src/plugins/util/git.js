@@ -1,6 +1,5 @@
 'use strict'
 
-const cp = require('child_process')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
@@ -36,6 +35,7 @@ const {
 } = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { storage } = require('../../../../datadog-core')
+const { cachedExec } = require('./git-cache')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
@@ -58,10 +58,12 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    let result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString()
+    let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
+
     if (shouldTrim) {
       result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
     }
+
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -94,7 +96,7 @@ function isGitAvailable () {
   const isWindows = os.platform() === 'win32'
   const command = isWindows ? 'where' : 'which'
   try {
-    cp.execFileSync(command, ['git'], { stdio: 'pipe' })
+    cachedExec(command, ['git'])
     return true
   } catch {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
@@ -150,27 +152,32 @@ function unshallowRepository (parentOnly = false) {
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
   const start = Date.now()
+  let flags = [
+    ...baseGitOptions,
+    revParseHead
+  ]
   try {
-    cp.execFileSync('git', [
-      ...baseGitOptions,
-      revParseHead
-    ], { stdio: 'pipe' })
+    cachedExec('git', flags)
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
-    log.error('Git plugin error executing git command', err)
+    log.warn(`Git unshallow failed: ${flags.join(' ')}`)
     incrementCountMetric(
       TELEMETRY_GIT_COMMAND_ERRORS,
       { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
     )
-    const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    const upstreamRemote = sanitizedExec(
+      'git',
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']
+    )
+    flags = [
+      ...baseGitOptions,
+      upstreamRemote
+    ]
     try {
-      cp.execFileSync('git', [
-        ...baseGitOptions,
-        upstreamRemote
-      ], { stdio: 'pipe' })
+      cachedExec('git', flags)
     } catch (err) {
-      // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
-      log.error('Git plugin error executing fallback git command', err)
+      // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
+      log.warn(`Git unshallow failed again: ${flags.join(' ')}`)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
@@ -202,7 +209,7 @@ function getLatestCommits () {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
   const startTime = Date.now()
   try {
-    const result = cp.execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
+    const result = cachedExec('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'])
       .toString()
       .split('\n')
       .filter(Boolean)
@@ -272,10 +279,9 @@ function checkAndFetchBranch (branch, remoteName) {
   try {
     // `git show-ref --verify --quiet refs/remotes/${remoteName}/${branch}` will exit 0 if the branch exists
     // Otherwise it will exit 1
-    cp.execFileSync(
+    cachedExec(
       'git',
       ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteName}/${branch}`],
-      { stdio: 'pipe' }
     )
     // branch exists locally, so we finish
   } catch {
@@ -285,22 +291,22 @@ function checkAndFetchBranch (branch, remoteName) {
       // `git ls-remote --heads origin my-branch` will exit 0 even if the branch doesn't exist.
       // The piece of information we need is whether the command outputs anything.
       // `git ls-remote --heads origin my-branch` could exit an error code if the remote does not exist.
-      const remoteHeads = cp.execFileSync(
+      const remoteHeads = cachedExec(
         'git',
         ['ls-remote', '--heads', remoteName, branch],
         { stdio: 'pipe', timeout: 2000 }
       )
       if (remoteHeads) {
         // branch exists, so we'll fetch it
-        cp.execFileSync(
+        cachedExec(
           'git',
           ['fetch', '--depth', '1', remoteName, branch],
           { stdio: 'pipe', timeout: 5000 }
         )
       }
-    } catch (e) {
+    } catch (err) {
       // branch does not exist or couldn't be fetched, so we can't do anything
-      log.debug('Git plugin error checking and fetching branch', e)
+      log.debug('Git plugin error checking and fetching branch', err)
     }
   }
 }
@@ -358,7 +364,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
   const startTime = Date.now()
   try {
-    result = cp.execFileSync(
+    result = cachedExec(
       'git',
       [
         'rev-list',
@@ -403,7 +409,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   // Generates pack files to upload and
   // returns the ordered list of packfiles' paths
   function execGitPackObjects (targetPath) {
-    return cp.execFileSync(
+    return cachedExec(
       'git',
       [
         'pack-objects',

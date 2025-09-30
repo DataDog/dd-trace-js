@@ -2,7 +2,6 @@
 
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
@@ -17,11 +16,9 @@ class MongodbCorePlugin extends DatabasePlugin {
 
     const heartbeatFromEnv = getEnvironmentVariable('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
 
-    this.config.heartbeatEnabled = coalesce(
-      config.heartbeatEnabled,
-      heartbeatFromEnv && isTrue(heartbeatFromEnv),
+    this.config.heartbeatEnabled = config.heartbeatEnabled ??
+      (heartbeatFromEnv && isTrue(heartbeatFromEnv)) ??
       true
-    )
   }
 
   bindStart (ctx) {

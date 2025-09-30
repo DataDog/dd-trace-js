@@ -50,7 +50,9 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        clock = sinon.useFakeTimers()
+        clock = sinon.useFakeTimers({
+          toFake: ['Date']
+        })
 
         const requiredModule = require(moduleRequirePath)
         const module = requiredModule.get()
@@ -1451,7 +1453,7 @@ describe('Plugin', () => {
             await checkTraces
           })
 
-          it('tags multiple responses', async () => {
+          it('tags multiple responses 2', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')

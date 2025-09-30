@@ -53,7 +53,6 @@ dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-unicorn,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson
-dev,get-port,MIT,Copyright Sindre Sorhus
 dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
@@ -64,7 +63,6 @@ dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
 dev,octokit,MIT,Copyright 2023 Octokit contributors
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
-dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola

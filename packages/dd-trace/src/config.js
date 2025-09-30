@@ -214,8 +214,9 @@ function propagationStyle (key, option) {
   // Otherwise, fallback to env var parsing
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
 
-  const envVar = coalesce(getEnvironmentVariable(envKey),
-    getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE'), getEnvironmentVariable('OTEL_PROPAGATORS'))
+  const envVar = getEnvironmentVariable(envKey) ??
+    getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') ??
+    getEnvironmentVariable('OTEL_PROPAGATORS')
   if (envVar !== undefined) {
     return envVar.split(',')
       .filter(v => v !== '')
@@ -269,7 +270,7 @@ class Config {
       this.stableConfig?.fleetEntries?.DD_TRACE_DEBUG,
       this.stableConfig?.localEntries?.DD_TRACE_DEBUG
     )
-    this.logger = coalesce(options.logger, logConfig.logger)
+    this.logger = options.logger ?? logConfig.logger
     this.logLevel = log.getLogLevel(
       options.logLevel,
       this.stableConfig?.fleetEntries?.DD_TRACE_LOG_LEVEL,
@@ -315,38 +316,26 @@ class Config {
       }
     }
 
-    const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
-      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID'),
-      null
-    )
-    const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
-      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TIME'),
-      null
-    )
-    const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
-      getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TYPE'),
-      null
-    )
+    const DD_INSTRUMENTATION_INSTALL_ID = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID') ?? null
+    const DD_INSTRUMENTATION_INSTALL_TIME = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TIME') ?? null
+    const DD_INSTRUMENTATION_INSTALL_TYPE = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TYPE') ?? null
 
     const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
-      coalesce(
-        getEnvironmentVariable('DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING'),
-        options.cloudPayloadTagging?.request,
-        ''
-      ))
+      getEnvironmentVariable('DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING') ??
+      options.cloudPayloadTagging?.request ??
+      ''
+    )
 
     const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
-      coalesce(
-        getEnvironmentVariable('DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING'),
-        options.cloudPayloadTagging?.response,
-        ''
-      ))
-
-    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
-      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
-      options.cloudPayloadTagging?.maxDepth,
-      10
+      getEnvironmentVariable('DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING') ??
+      options.cloudPayloadTagging?.response ??
+      ''
     )
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = maybeInt(
+      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
+      options.cloudPayloadTagging?.maxDepth
+    ) ?? 10
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
@@ -391,20 +380,14 @@ class Config {
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
-        coalesce(
-          getEnvironmentVariable('DD_GIT_REPOSITORY_URL'),
-          this.tags[GIT_REPOSITORY_URL]
-        )
+        getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
+        this.tags[GIT_REPOSITORY_URL]
       )
-      this.commitSHA = coalesce(
-        getEnvironmentVariable('DD_GIT_COMMIT_SHA'),
+      this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
         this.tags[GIT_COMMIT_SHA]
-      )
       if (!this.repositoryUrl || !this.commitSHA) {
-        const DD_GIT_PROPERTIES_FILE = coalesce(
-          getEnvironmentVariable('DD_GIT_PROPERTIES_FILE'),
+        const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
           `${process.cwd()}/git.properties`
-        )
         let gitPropertiesString
         try {
           gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
@@ -442,11 +425,8 @@ class Config {
 
   _getDefaultPropagationStyle (options) {
     // TODO: Remove the experimental env vars as a major?
-    const DD_TRACE_B3_ENABLED = coalesce(
-      options.experimental && options.experimental.b3,
-      getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_B3_ENABLED'),
-      false
-    )
+    const DD_TRACE_B3_ENABLED = options.experimental?.b3 ??
+      getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_B3_ENABLED')
     const defaultPropagationStyle = ['datadog', 'tracecontext']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3', 'b3 single header')
@@ -674,17 +654,14 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
-    // OpenTelemetry logs configuration - processed after OTEL_RESOURCE_ATTRIBUTES
-    // Enable logs if DD_LOGS_OTEL_ENABLED is true
     this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
-    // Only set if there's a custom URL, otherwise let calc phase handle the default
     const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTER_OTLP_ENDPOINT
     if (customOtelLogsUrl) {
+      // Only set if there's a custom URL, otherwise let calc phase handle the default
       this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
     }
     this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
-    // Handle OTLP protocol with grpc warning
     const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
     if (requestedProtocol === 'grpc') {
       log.warn('OTLP gRPC protocol is not supported for logs. ' +
@@ -696,11 +673,12 @@ class Config {
     env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
     env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
     env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
-
-    this._setBoolean(env, 'apmTracingEnabled', coalesce(
-      DD_APM_TRACING_ENABLED,
-      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
-    ))
+    this._setBoolean(
+      env,
+      'apmTracingEnabled',
+      DD_APM_TRACING_ENABLED ??
+        (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
+    )
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
     this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
@@ -743,10 +721,7 @@ class Config {
     env.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
-    this._setBoolean(env, 'crashtracking.enabled', coalesce(
-      DD_CRASHTRACKING_ENABLED,
-      !this._isInServerlessEnvironment()
-    ))
+    this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED ?? !this._isInServerlessEnvironment())
     this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setBoolean(
       env,
@@ -826,10 +801,8 @@ class Config {
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
-      coalesce(
-        DD_PROFILING_ENABLED,
-        this._isInServerlessEnvironment() ? 'false' : undefined
-      )
+      DD_PROFILING_ENABLED ??
+      (this._isInServerlessEnvironment() ? 'false' : undefined)
     )
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
@@ -841,10 +814,7 @@ class Config {
 
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
-    this._setBoolean(env, 'remoteConfig.enabled', coalesce(
-      DD_REMOTE_CONFIGURATION_ENABLED,
-      !this._isInServerlessEnvironment()
-    ))
+    this._setBoolean(env, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
     env['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
@@ -857,10 +827,10 @@ class Config {
     this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
     this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
-    this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(coalesce(
-      maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE),
+    this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
+      maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
-    )))
+    ))
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
     env['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
@@ -884,10 +854,8 @@ class Config {
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
     this._setTags(env, 'tags', tags)
     env.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-    this._setBoolean(env, 'telemetry.enabled', coalesce(
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED,
-      !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
-    ))
+    this._setBoolean(env, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED ??
+      !(this._isInServerlessEnvironment() || JEST_WORKER_ID))
     this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
@@ -932,10 +900,9 @@ class Config {
 
     tagger.add(tags, options.tags)
 
-    this._setBoolean(opts, 'apmTracingEnabled', coalesce(
-      options.apmTracingEnabled,
-      options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled
-    ))
+    this._setBoolean(opts, 'apmTracingEnabled', options.apmTracingEnabled ??
+      (options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled)
+    )
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
     this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
       options.appsec?.apiSecurity?.endpointCollectionEnabled)
@@ -1009,7 +976,6 @@ class Config {
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
-    this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     opts.flushInterval = maybeInt(options.flushInterval)
     this._optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
@@ -1061,7 +1027,7 @@ class Config {
     this._setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
-    this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
+    this._setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
     const ingestion = options.ingestion || {}
     opts['sampler.rateLimit'] = coalesce(options.rateLimit, ingestion.rateLimit)
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
@@ -1096,17 +1062,11 @@ class Config {
   }
 
   _isCiVisibility () {
-    return coalesce(
-      this._optionsArg.isCiVisibility,
-      this._defaults.isCiVisibility
-    )
+    return this._optionsArg.isCiVisibility ?? this._defaults.isCiVisibility
   }
 
   _isCiVisibilityItrEnabled () {
-    return coalesce(
-      getEnvironmentVariable('DD_CIVISIBILITY_ITR_ENABLED'),
-      true
-    )
+    return getEnvironmentVariable('DD_CIVISIBILITY_ITR_ENABLED') ?? true
   }
 
   _getHostname () {
@@ -1114,30 +1074,24 @@ class Config {
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
-    const DD_AGENT_HOST = coalesce(
-      this._optionsArg.hostname,
-      getEnvironmentVariable('DD_AGENT_HOST'),
+    const DD_AGENT_HOST = this._optionsArg.hostname ??
+      getEnvironmentVariable('DD_AGENT_HOST') ??
       defaults.hostname
-    )
     return DD_AGENT_HOST || url?.hostname
   }
 
   _getSpanComputePeerService () {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      coalesce(
-        this._optionsArg.spanAttributeSchema,
-        getEnvironmentVariable('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA')
-      )
+      this._optionsArg.spanAttributeSchema ??
+      getEnvironmentVariable('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA')
     )
 
     const peerServiceSet = (
       this._optionsArg.hasOwnProperty('spanComputePeerService') ||
       getEnvironmentVariables().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
-    const peerServiceValue = coalesce(
-      this._optionsArg.spanComputePeerService,
+    const peerServiceValue = this._optionsArg.spanComputePeerService ??
       getEnvironmentVariable('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
-    )
 
     const spanComputePeerService = (
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
@@ -1151,36 +1105,28 @@ class Config {
   }
 
   _isCiVisibilityGitUploadEnabled () {
-    return coalesce(
-      getEnvironmentVariable('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED'),
-      true
-    )
+    return getEnvironmentVariable('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED') ?? true
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return coalesce(
-      getEnvironmentVariable('DD_CIVISIBILITY_MANUAL_API_ENABLED'),
-      true
-    )
+    return getEnvironmentVariable('DD_CIVISIBILITY_MANUAL_API_ENABLED') ?? true
   }
 
   _isTraceStatsComputationEnabled () {
     const apmTracingEnabled = this._options.apmTracingEnabled !== false &&
       this._env.apmTracingEnabled !== false
 
-    return apmTracingEnabled && coalesce(
-      this._optionsArg.stats,
-      getEnvironmentVariable('DD_TRACE_STATS_COMPUTATION_ENABLED'),
-      getIsGCPFunction() || getIsAzureFunction()
+    return apmTracingEnabled && (
+      this._optionsArg.stats ??
+      getEnvironmentVariable('DD_TRACE_STATS_COMPUTATION_ENABLED') ??
+      (getIsGCPFunction() || getIsAzureFunction())
     )
   }
 
   _getTraceAgentUrl () {
-    return coalesce(
-      this._optionsArg.url,
-      getEnvironmentVariable('DD_TRACE_AGENT_URL'),
+    return this._optionsArg.url ??
+      getEnvironmentVariable('DD_TRACE_AGENT_URL') ??
       null
-    )
   }
 
   // handles values calculated from a mixture of options and env vars
@@ -1204,11 +1150,9 @@ class Config {
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
     if (this._isCiVisibility()) {
-      this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
-        coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
-      this._setBoolean(calc, 'isFlakyTestRetriesEnabled',
-        coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
-      calc.flakyTestRetriesCount = coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5)
+      this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled', DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED ?? true)
+      this._setBoolean(calc, 'isFlakyTestRetriesEnabled', DD_CIVISIBILITY_FLAKY_RETRY_ENABLED ?? true)
+      calc.flakyTestRetriesCount = maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT) ?? 5
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', !isFalse(this._isCiVisibilityManualApiEnabled()))
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
@@ -1216,7 +1160,7 @@ class Config {
       this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', !isFalse(DD_TEST_FAILED_TEST_REPLAY_ENABLED))
       this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
       this._setBoolean(calc, 'isTestManagementEnabled', !isFalse(DD_TEST_MANAGEMENT_ENABLED))
-      calc.testManagementAttemptToFixRetries = coalesce(maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES), 20)
+      calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
 

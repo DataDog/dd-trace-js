@@ -31,6 +31,7 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 100
     cooldown:
       default-days: 1
       exclude:
@@ -43,9 +44,6 @@ updates:
     ignore:
       - dependency-name: "@types/node"
         # Update the types manually with new Node.js version support
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "eslint-plugin-mocha"
-        # ESM only from v11.0.0 onwards
         update-types: ["version-update:semver-major"]
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
@@ -63,6 +61,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/core"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:

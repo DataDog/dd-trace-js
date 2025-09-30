@@ -451,5 +451,37 @@ describe('Plugin', () => {
 
       await checkTraces
     })
+
+    it('creates a span that respects the functionId', async () => {
+      const checkTraces = agent.assertSomeTraces(traces => {
+        const generateTextSpan = traces[0][0]
+        const doGenerateSpan = traces[0][1]
+
+        assert.strictEqual(generateTextSpan.name, 'ai.generateText')
+        assert.strictEqual(generateTextSpan.resource, 'test')
+        assert.strictEqual(generateTextSpan.meta['ai.request.model'], 'gpt-4o-mini')
+        assert.strictEqual(generateTextSpan.meta['ai.request.model_provider'], 'openai')
+
+        assert.strictEqual(doGenerateSpan.name, 'ai.generateText.doGenerate')
+        assert.strictEqual(doGenerateSpan.resource, 'test')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model'], 'gpt-4o-mini')
+        assert.strictEqual(doGenerateSpan.meta['ai.request.model_provider'], 'openai')
+      })
+
+      const result = await ai.generateText({
+        model: openai('gpt-4o-mini'),
+        system: 'You are a helpful assistant',
+        prompt: 'Hello, OpenAI!',
+        maxTokens: 100,
+        temperature: 0.5,
+        experimental_telemetry: {
+          functionId: 'test'
+        }
+      })
+
+      assert.ok(result.text, 'Expected result to be truthy')
+
+      await checkTraces
+    })
   })
 })
