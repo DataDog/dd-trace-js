@@ -282,16 +282,14 @@ ${build.initialOptions.banner.js}`
       }
     }
 
-    if (args.pluginData?.applicationFile) {
-      if (ddIastEnabled) {
-        if (DEBUG) console.log(`REWRITE: ${args.path}`)
-        const fileCode = fs.readFileSync(args.path, 'utf8')
-        const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
-        return {
-          contents: rewritten.content,
-          loader: 'js',
-          resolveDir: path.dirname(args.path)
-        }
+    if (ddIastEnabled && args.pluginData?.applicationFile) {
+      if (DEBUG) console.log(`REWRITE: ${args.path}`)
+      const fileCode = fs.readFileSync(args.path, 'utf8')
+      const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
+      return {
+        contents: rewritten.content,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
       }
     }
   })
