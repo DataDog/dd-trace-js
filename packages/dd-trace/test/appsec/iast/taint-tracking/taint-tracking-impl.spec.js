@@ -143,6 +143,7 @@ describe('TaintTracking', () => {
     ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return
+
       it(`invoking ${propFn} with null argument`, () => {
         const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
         expect(() => propFnInstrumented(null)).to.throw()

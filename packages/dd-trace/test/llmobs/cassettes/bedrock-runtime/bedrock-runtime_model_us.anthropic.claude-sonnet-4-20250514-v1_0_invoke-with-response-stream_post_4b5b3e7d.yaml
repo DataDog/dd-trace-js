@@ -1,0 +1,170 @@
+interactions:
+- request:
+    body: '{"temperature":0.5,"anthropic_version":"bedrock-2023-05-31","messages":[{"role":"user","content":[{"type":"text","text":"You
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertYou are a geography expertYou
+      are a geography expertYou are a geography expertWhat is the capital of Italy?","cache_control":{"type":"ephemeral"}}]}],"max_tokens":10}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '5409'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#20.16.0 api/bedrock-runtime#3.422.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-amzn-bedrock-accept
+      : - application/json
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/us.anthropic.claude-sonnet-4-20250514-v1:0/invoke-with-response-stream
+  response:
+    body:
+      string: !!binary |
+        AAACJwAAAEu6BRVuCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0
+        aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaWJXVnpj
+        MkZuWlY5emRHRnlkQ0lzSW0xbGMzTmhaMlVpT25zaWFXUWlPaUp0YzJkZlltUnlhMTh3TVVkcldH
+        MU1TbE5DYVRGNFRUVjJORXhNZVVVeVZXOGlMQ0owZVhCbElqb2liV1Z6YzJGblpTSXNJbkp2YkdV
+        aU9pSmhjM05wYzNSaGJuUWlMQ0p0YjJSbGJDSTZJbU5zWVhWa1pTMXpiMjV1WlhRdE5DMHlNREkx
+        TURVeE5DSXNJbU52Ym5SbGJuUWlPbHRkTENKemRHOXdYM0psWVhOdmJpSTZiblZzYkN3aWMzUnZj
+        Rjl6WlhGMVpXNWpaU0k2Ym5Wc2JDd2lkWE5oWjJVaU9uc2lhVzV3ZFhSZmRHOXJaVzV6SWpvMExD
+        SmpZV05vWlY5amNtVmhkR2x2Ymw5cGJuQjFkRjkwYjJ0bGJuTWlPakFzSW1OaFkyaGxYM0psWVdS
+        ZmFXNXdkWFJmZEc5clpXNXpJam94TWpBNUxDSnZkWFJ3ZFhSZmRHOXJaVzV6SWpveGZYMTkiLCJw
+        IjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkMifWDU8dYAAAEBAAAAS3IQvWQLOmV2ZW50
+        LXR5cGUHAAVjaHVuaw06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10
+        eXBlBwAFZXZlbnR7ImJ5dGVzIjoiZXlKMGVYQmxJam9pWTI5dWRHVnVkRjlpYkc5amExOXpkR0Z5
+        ZENJc0ltbHVaR1Y0SWpvd0xDSmpiMjUwWlc1MFgySnNiMk5ySWpwN0luUjVjR1VpT2lKMFpYaDBJ
+        aXdpZEdWNGRDSTZJaUo5ZlE9PSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RF
+        RkdISSJ960LhrAAAAO8AAABLLqgXfws6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUH
+        ABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUowZVhC
+        bElqb2lZMjl1ZEdWdWRGOWliRzlqYTE5a1pXeDBZU0lzSW1sdVpHVjRJam93TENKa1pXeDBZU0k2
+        ZXlKMGVYQmxJam9pZEdWNGRGOWtaV3gwWVNJc0luUmxlSFFpT2lKVWFHVWlmWDA9IiwicCI6ImFi
+        Y2RlZmdoaWprbG1ub3BxIn2K/KlLAAAA7wAAAEsuqBd/CzpldmVudC10eXBlBwAFY2h1bmsNOmNv
+        bnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRl
+        cyI6ImV5SjBlWEJsSWpvaVkyOXVkR1Z1ZEY5aWJHOWphMTlrWld4MFlTSXNJbWx1WkdWNElqb3dM
+        Q0prWld4MFlTSTZleUowZVhCbElqb2lkR1Y0ZEY5a1pXeDBZU0lzSW5SbGVIUWlPaUlnWTJGd2FY
+        UmhiQ0J2WmlKOWZRPT0iLCJwIjoiYWJjZGUifaKPoX4AAAEbAAAAS1hAMkcLOmV2ZW50LXR5cGUH
+        AAVjaHVuaw06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAF
+        ZXZlbnR7ImJ5dGVzIjoiZXlKMGVYQmxJam9pWTI5dWRHVnVkRjlpYkc5amExOWtaV3gwWVNJc0lt
+        bHVaR1Y0SWpvd0xDSmtaV3gwWVNJNmV5SjBlWEJsSWpvaWRHVjRkRjlrWld4MFlTSXNJblJsZUhR
+        aU9pSWdTWFJoYkhrZ2FYTWdVbTl0WlNBb0luMTkiLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1
+        dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTIn1oh7OBAAABCQAAAEtCYPalCzpldmVudC10eXBlBwAF
+        Y2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2
+        ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaVkyOXVkR1Z1ZEY5aWJHOWphMTlrWld4MFlTSXNJbWx1
+        WkdWNElqb3dMQ0prWld4MFlTSTZleUowZVhCbElqb2lkR1Y0ZEY5a1pXeDBZU0lzSW5SbGVIUWlP
+        aUpTYjIxaEluMTkiLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xN
+        Tk9QUSJ9x2gjggAAARYAAABLoND29gs6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUH
+        ABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUowZVhC
+        bElqb2lZMjl1ZEdWdWRGOWliRzlqYTE5a1pXeDBZU0lzSW1sdVpHVjRJam93TENKa1pXeDBZU0k2
+        ZXlKMGVYQmxJam9pZEdWNGRGOWtaV3gwWVNJc0luUmxlSFFpT2lJZ2FXNGlmWDA9IiwicCI6ImFi
+        Y2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzIn20
+        X1HdAAAA/wAAAEtOSID9CzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxp
+        Y2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaVky
+        OXVkR1Z1ZEY5aWJHOWphMTlrWld4MFlTSXNJbWx1WkdWNElqb3dMQ0prWld4MFlTSTZleUowZVhC
+        bElqb2lkR1Y0ZEY5a1pXeDBZU0lzSW5SbGVIUWlPaUlnU1hSaGJHbGhiaUo5ZlE9PSIsInAiOiJh
+        YmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5In3NqupOAAAA2wAAAEt6CQk5CzpldmVudC10eXBlBwAF
+        Y2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2
+        ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaVkyOXVkR1Z1ZEY5aWJHOWphMTl6ZEc5d0lpd2lhVzVr
+        WlhnaU9qQjkiLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9Q
+        UVJTVFVWV1hZWjAxMjM0In1lBo0+AAABMAAAAEvuUSxSCzpldmVudC10eXBlBwAFY2h1bmsNOmNv
+        bnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRl
+        cyI6ImV5SjBlWEJsSWpvaWJXVnpjMkZuWlY5a1pXeDBZU0lzSW1SbGJIUmhJanA3SW5OMGIzQmZj
+        bVZoYzI5dUlqb2liV0Y0WDNSdmEyVnVjeUlzSW5OMGIzQmZjMlZ4ZFdWdVkyVWlPbTUxYkd4OUxD
+        SjFjMkZuWlNJNmV5SnZkWFJ3ZFhSZmRHOXJaVzV6SWpveE1IMTkiLCJwIjoiYWJjZGVmZ2hpamts
+        bW5vcHFyc3R1dnd4eXpBQkNERUZHSElKS0xNTk9QUVJTVCJ9AebjDgAAAbQAAABLqjc6AAs6ZXZl
+        bnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdl
+        LXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUowZVhCbElqb2liV1Z6YzJGblpWOXpkRzl3SWl3aVlX
+        MWhlbTl1TFdKbFpISnZZMnN0YVc1MmIyTmhkR2x2YmsxbGRISnBZM01pT25zaWFXNXdkWFJVYjJ0
+        bGJrTnZkVzUwSWpvMExDSnZkWFJ3ZFhSVWIydGxia052ZFc1MElqb3hNQ3dpYVc1MmIyTmhkR2x2
+        Ymt4aGRHVnVZM2tpT2pFME1UQXNJbVpwY25OMFFubDBaVXhoZEdWdVkza2lPakUwTURZc0ltTmhZ
+        MmhsVW1WaFpFbHVjSFYwVkc5clpXNURiM1Z1ZENJNk1USXdPU3dpWTJGamFHVlhjbWwwWlVsdWNI
+        VjBWRzlyWlc1RGIzVnVkQ0k2TUgxOSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFC
+        Q0RFRkdISUpLTE1OT1AifSPCDSA=
+    headers:
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/vnd.amazon.eventstream
+      Date:
+      - Wed, 24 Sep 2025 20:53:33 GMT
+      Transfer-Encoding:
+      - chunked
+      X-Amzn-Bedrock-Content-Type:
+      - application/json
+      x-amzn-RequestId:
+      - 05059263-d49d-408d-a543-fb6d5d34e0b2
+    status:
+      code: 200
+      message: OK
+version: 1

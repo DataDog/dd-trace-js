@@ -4,7 +4,8 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
@@ -13,6 +14,7 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('cassandra-driver', 'cassandra-driver', '>=4.4.0', version => {
@@ -20,6 +22,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
         './packages/datadog-plugin-cassandra-driver/test/integration-test/*'])
+      variants = varySandbox(sandbox, 'server.mjs', 'cassandra-driver', 'Client')
     })
 
     after(async () => {
@@ -35,16 +38,18 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'cassandra.query'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(checkSpansForServiceName(payload, 'cassandra.query'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

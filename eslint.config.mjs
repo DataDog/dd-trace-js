@@ -523,8 +523,7 @@ export default [
     ]
   },
   {
-    name: 'mocha/recommended',
-    ...eslintPluginMocha.configs.flat.recommended,
+    ...eslintPluginMocha.configs.recommended,
     files: TEST_FILES
   },
   {
@@ -544,14 +543,11 @@ export default [
       n: eslintPluginN
     },
     rules: {
+      'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
-      'mocha/no-exports': 'off',
-      'mocha/no-global-tests': 'off',
-      'mocha/no-identical-title': 'off',
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-setup-in-describe': 'off',
       'mocha/no-sibling-hooks': 'off',
-      'mocha/no-skipped-tests': 'off',
       'mocha/no-top-level-hooks': 'off',
       'n/handle-callback-err': 'off',
       'n/no-missing-require': 'off',
@@ -576,6 +572,7 @@ export default [
     rules: {
       'no-undef': 'off',
       'mocha/max-top-level-suites': 'off',
+      'mocha/no-pending-tests': 'off',
     }
   },
   {
