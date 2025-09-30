@@ -113,7 +113,7 @@ describe('Plugin', function () {
           jestCommonOptions = loadedAgent.jestCommonOptions
         })
 
-        it.only('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
+        it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
           const tests = [
             {
               name: 'jest-test-suite tracer and active span are available',
