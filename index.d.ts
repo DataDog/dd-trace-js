@@ -2,7 +2,6 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
-import type { DatadogNodeServerProvider } from "@datadog/openfeature-node-server";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -1088,11 +1087,75 @@ declare namespace tracer {
   /**
    * Feature Flagging Provider (OpenFeature-compatible).
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
    */
-  export interface FlaggingProvider extends DatadogNodeServerProvider {
+  export interface FlaggingProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context?: any, logger?: any): Promise<{ value: boolean; reason: string }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context?: any, logger?: any): Promise<{ value: string; reason: string }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context?: any, logger?: any): Promise<{ value: number; reason: string }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation(flagKey: string, defaultValue: any, context?: any, logger?: any): Promise<{ value: any; reason: string }>;
+
+    /**
+     * Gets the current flag configuration.
+     *
+     * @returns The current configuration object
+     */
+    getConfiguration(): any;
+
+    /**
+     * Sets the flag configuration.
+     *
+     * @param config The configuration object to set
+     */
+    setConfiguration(config: any): void;
+
     /**
      * Internal method to update flag configuration from Remote Config.
      * This method is called automatically when Remote Config delivers UFC updates.
