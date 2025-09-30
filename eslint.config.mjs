@@ -389,7 +389,7 @@ export default [
         },
         {
           name: 'rimraf',
-          message: 'Please use fs.rmSync(path, { recursive: true }) instead.'
+          message: 'Please use fs.rm(path, { recursive: true }) instead.'
         },
         {
           name: 'koalas',
