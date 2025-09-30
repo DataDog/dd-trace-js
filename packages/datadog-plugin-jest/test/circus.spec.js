@@ -65,8 +65,8 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
           coverageReporters: ['none'],
-          reporters: [],
-          silent: true,
+          // reporters: [],
+          // silent: true,
           testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
           testRunner: isHappyDom
             ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
