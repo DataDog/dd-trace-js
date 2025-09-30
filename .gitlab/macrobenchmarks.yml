@@ -64,60 +64,36 @@ baseline:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: baseline
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
-normal-operation-with-debug-and-http-plugin:
+only-tracing:
   extends: .macrobenchmarks
   variables:
-    EXPERIMENT: normal-operation
-    DD_TRACE_DEBUG: "true"
     DD_BENCHMARKS_CONFIGURATION: only-tracing
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
-high-load-with-debug-and-http-plugin:
+only-tracing-with-runtime-metrics-enabled:
   extends: .macrobenchmarks
   variables:
-    EXPERIMENT: high-load
-    DD_TRACE_DEBUG: "true"
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
-
-normal-operation-with-debug-and-without-http-plugin:
-  extends: .macrobenchmarks
-  variables:
-    EXPERIMENT: normal-operation
-    DD_TRACE_DEBUG: "true"
-    DD_TRACE_DISABLED_PLUGINS: http
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
-
-high-load-with-debug-and-without-http-plugin:
-  extends: .macrobenchmarks
-  variables:
-    EXPERIMENT: high-load
-    DD_TRACE_DEBUG: "true"
-    DD_TRACE_DISABLED_PLUGINS: http
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
-
-normal-operation-without-debug:
-  extends: .macrobenchmarks
-  variables:
-    EXPERIMENT: normal-operation
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
-
-high-load-without-debug:
-  extends: .macrobenchmarks
-  variables:
-    EXPERIMENT: high-load
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
+    DD_BENCHMARKS_CONFIGURATION: only-tracing-with-runtime-metrics-enabled
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 check-slo-breaches:
   extends: .check-slo-breaches
   stage: macrobenchmarks-gate
   needs:
     - baseline
-    - normal-operation-with-debug-and-http-plugin
-    - high-load-with-debug-and-http-plugin
-    - normal-operation-with-debug-and-without-http-plugin
-    - high-load-with-debug-and-without-http-plugin
-    - normal-operation-without-debug
-    - high-load-without-debug
+    - only-tracing
+    - only-tracing-with-runtime-metrics-enabled
   artifacts:
     name: "artifacts"
     when: always
