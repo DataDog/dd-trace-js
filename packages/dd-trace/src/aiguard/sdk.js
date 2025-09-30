@@ -73,7 +73,7 @@ class AIGuard extends NoopAIGuard {
   }
 
   _isToolCall (message) {
-    return 'tool_calls' in message || 'tool_call_id' in message
+    return message.tool_calls || message.tool_call_id
   }
 
   _getToolName (message, history) {
@@ -138,7 +138,7 @@ class AIGuard extends NoopAIGuard {
       let action, reason, blockingEnabled
       try {
         const attr = response.body.data.attributes
-        if (!('action' in attr)) {
+        if (!attr.action) {
           throw new Error('Action missing from response')
         }
         action = attr.action
