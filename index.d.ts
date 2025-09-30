@@ -2,6 +2,7 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
+import type { DatadogNodeServerProvider } from "@datadog/openfeature-node-server";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -138,6 +139,16 @@ interface Tracer extends opentracing.Tracer {
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * Feature Flagging Provider (OpenFeature-compatible)
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  flaggingProvider: tracer.FlaggingProvider;
 
   /**
    * @experimental
@@ -593,6 +604,21 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
+      }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
       }
     };
 
@@ -1057,6 +1083,24 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Feature Flagging Provider (OpenFeature-compatible).
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface FlaggingProvider extends DatadogNodeServerProvider {
+    /**
+     * Internal method to update flag configuration from Remote Config.
+     * This method is called automatically when Remote Config delivers UFC updates.
+     *
+     * @internal
+     * @param ufc Universal Flag Configuration object
+     */
+    _setConfiguration(ufc: any): void;
   }
 
   /** @hidden */
