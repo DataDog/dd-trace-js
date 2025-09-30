@@ -426,13 +426,14 @@ class LLMObs extends NoopLLMObs {
     if (!this.enabled) return fn()
 
     const currentStore = storage.getStore()
-    const existingAnnotationContext = currentStore?.annotationContext
-    const mergedAnnotationContext = { ...existingAnnotationContext }
-    for (const key of Object.keys(options)) {
-      Object.assign(mergedAnnotationContext, { [key]: options[key] })
-    }
 
-    const store = { ...currentStore, annotationContext: mergedAnnotationContext }
+    const store = {
+      ...currentStore,
+      annotationContext: {
+        ...currentStore?.annotationContext,
+        ...options
+      }
+    }
 
     return storage.run(store, fn)
   }
