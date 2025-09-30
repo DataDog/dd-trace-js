@@ -430,18 +430,19 @@ class Config {
           getEnvironmentVariable('DD_GIT_FOLDER_PATH'),
           path.join(process.cwd(), '.git')
         )
-        // try to read git config (repository URL)
-        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
-        try {
-          const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
-          if (gitConfigContent) {
-            const repositoryUrl = getGitRepoUrlFromGitConfig(gitConfigContent)
-            this.repositoryUrl = this.repositoryUrl || repositoryUrl
-          }
-        } catch (e) {
-          // Only log error if the user has set a .git/ path
-          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-            log.error('Error reading git config: %s', gitConfigPath, e)
+        if (!this.repositoryUrl) {
+          // try to read git config (repository URL)
+          const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+          try {
+            const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
+            if (gitConfigContent) {
+              this.repositoryUrl = getGitRepoUrlFromGitConfig(gitConfigContent)
+            }
+          } catch (e) {
+            // Only log error if the user has set a .git/ path
+            if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+              log.error('Error reading git config: %s', gitConfigPath, e)
+            }
           }
         }
         // try to read git HEAD and git HEAD ref (commit SHA)
