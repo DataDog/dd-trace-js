@@ -86,7 +86,7 @@ class AIGuard extends NoopAIGuard {
     const id = message.tool_call_id
     for (let i = history.length - 2; i >= 0; i--) {
       const item = history[i]
-      if ('tool_calls' in item) {
+      if (item.tool_calls) {
         for (const toolCall of item.tool_calls) {
           if (toolCall.id === id) {
             return toolCall.function.name
