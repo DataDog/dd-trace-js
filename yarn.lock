@@ -204,10 +204,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/flagging-core@0.1.0-preview.7":
-  version "0.1.0-preview.7"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.7.tgz#a8285218abd5220b10aa3bcdc72efb7dd23d1b25"
-  integrity sha512-6hVk2F6War+B4hp/H3zEjzBg+YqfFUGL6dAVHutNKLgIdchmlBHMI6XZKtcYD2/ruEEdQYhZMdUTClHjzLnrbQ==
+"@datadog/flagging-core@0.1.0-preview.8":
+  version "0.1.0-preview.8"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.8.tgz#36f605e514e9b3cfe7c1df97a9284c591d79e116"
+  integrity sha512-SyUKypGusGzFfFdCM4AqQEjaItA3+qu3eTCUSXREd0xry4/1mgvcOb464+J6WvFmuYgyxuTJjDHiU3nkrzChEQ==
 
 "@datadog/libdatadog@0.7.0":
   version "0.7.0"
@@ -236,13 +236,13 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@0.1.0-preview.7":
-  version "0.1.0-preview.7"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.7.tgz#be55f3f68132a223718e093a3c2364b51a63ee0f"
-  integrity sha512-QIts5F8EUBTU2DnUGxGHfzeicFU+erfSMwmsBu1KMeyy3xz0lShgaNfIdUwilcuvoaLUpKzVaET4COE4zxmj8Q==
+"@datadog/openfeature-node-server@0.1.0-preview.8":
+  version "0.1.0-preview.8"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.8.tgz#437f19679db2da86d3f3bf933a849c295e5d84a1"
+  integrity sha512-eNNsIZ8zy5xEaYCOB03n+LZiPZdZPDSEYzsdiKU/bAZ7f74aZ+31ZRf4srHPA5KKlkYuT+PXDWxcm5E4mH8biw==
   dependencies:
-    "@datadog/flagging-core" "0.1.0-preview.7"
-    "@openfeature/server-sdk" "^1.19.0"
+    "@datadog/flagging-core" "0.1.0-preview.8"
+    "@openfeature/server-sdk" "~1.18.0"
     spark-md5 "^3.0.2"
 
 "@datadog/pprof@5.10.0":
@@ -690,10 +690,10 @@
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
 
-"@openfeature/server-sdk@^1.19.0":
-  version "1.19.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.19.0.tgz#a79ebeeb9f1b116edbf6da5b7e00d293f2344acf"
-  integrity sha512-sxmYKkBCpWWkKX2xJt6bFK15dorfR2lH27lkeKduTFPXRMV+pO7eORUelI9gctXhxvfXbDGK94ybq5fiso3/vg==
+"@openfeature/server-sdk@~1.18.0":
+  version "1.18.0"
+  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
+  integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
 
 "@opentelemetry/api@>=1.0.0 <1.10.0":
   version "1.9.0"
