@@ -120,7 +120,7 @@ describe('IAST Rewriter', () => {
     })
 
     // TODO: This cannot be tested with mocking.
-    it('Should unwrap module compile method on taint tracking disable') // eslint-disable-line mocha/no-pending-tests
+    it('Should unwrap module compile method on taint tracking disable')
 
     it('Should keep original prepareStackTrace fn when calling enable and then disable', () => {
       const orig = Error.prepareStackTrace

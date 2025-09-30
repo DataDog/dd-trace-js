@@ -17,7 +17,8 @@ const {
   getModelMetadata,
   getGenerationMetadata,
   getToolNameFromTags,
-  getToolCallResultContent
+  getToolCallResultContent,
+  getLlmObsSpanName
 } = require('./util')
 
 const SPAN_NAME_TO_KIND_MAPPING = {
@@ -96,7 +97,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    return { kind, name: operation }
+    return { kind, name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']) }
   }
 
   setLLMObsTags (ctx) {

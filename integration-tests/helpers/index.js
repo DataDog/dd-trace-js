@@ -11,7 +11,6 @@ const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
 const assert = require('assert')
-const rimraf = promisify(require('rimraf'))
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
@@ -270,10 +269,30 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   return {
     folder,
-    remove: async () => rimraf(folder)
+    remove: () => {
+      // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
+      // our `integration-guardrails` GitHub Actions workflow
+      if (process.platform === 'win32') {
+        return exec(`Remove-Item -Recurse -Path "${folder}"`, { shell: 'powershell.exe' })
+      } else {
+        return exec(`rm -rf ${folder}`)
+      }
+    }
   }
 }
 
+/**
+ * @typedef {{ default: string, star: string, destructure: string }} Variants
+ */
+/**
+ * @overload
+ * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
+ * @param {string} filename - The file that will be copied and modified for each variant.
+ * @param {string} bindingName - The binding name that will be use to bind to the packageName.
+ * @param {string} [namedVariant] - The name of the named variant to use.
+ * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
+ * @returns {Variants} A map from variant names to resulting filenames
+ */
 /**
  * Creates a bunch of files based on an original file in sandbox. Useful for varying test files
  * without having to create a bunch of them yourself.
@@ -284,39 +303,43 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  *
  * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
- * @param {object} variants - The variants. If empty then a default import style will be added
- * depending on the parameters passed through.
- * @param {object} bindingName - The binding name that will be use to bind to the packageName.
- * @param {object} namedVariant - The name of the named variant to use.
- * @param {object} packageName - The name of the package.
- * @returns {object} A map from variant names to resulting filenames
+ * @param {Variants} variants - The variants.
+ * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (sandbox, filename, variants, bindingName, namedVariant, packageName) {
-  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
-  const [prefix, suffix] = filename.split('.')
-  const variantFilenames = {}
-  packageName = packageName || bindingName
-  const defaultVariants = {
-    default: `import ${bindingName} from '${packageName}'`,
-    star: namedVariant
-      ? `import * as ${bindingName} from '${packageName}'`
-      : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
-    destructure: namedVariant
-      ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
-      : `import { default as ${bindingName}} from '${packageName}'`
+function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+  if (typeof variants === 'string') {
+    const bindingName = variants
+    variants = {
+      default: `import ${bindingName} from '${packageName}'`,
+      star: namedVariant
+        ? `import * as ${bindingName} from '${packageName}'`
+        : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+      destructure: namedVariant
+        ? `import { ${namedVariant} } from '${packageName}'; const ${bindingName} = { ${namedVariant} }`
+        : `import { default as ${bindingName}} from '${packageName}'`
+    }
   }
-  variants = variants || defaultVariants
-  for (const variant in variants) {
-    const variantFilename = `${prefix}-${variant}.${suffix}`
+
+  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const { name: prefix, ext: suffix } = path.parse(filename)
+  const variantFilenames = /** @type {Variants} */ ({})
+
+  for (const [variant, value] of Object.entries(variants)) {
+    const variantFilename = `${prefix}-${variant}${suffix}`
     variantFilenames[variant] = variantFilename
     let newFileData = origFileData
     if (variant !== 'default') {
-      newFileData = origFileData.replace(variants.default, `${variants[variant]}`)
+      newFileData = origFileData.replace(variants.default, `${value}`)
     }
     writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }
   return variantFilenames
 }
+
+/**
+ * @type {string[]}
+ */
+varySandbox.VARIANTS = ['default', 'star', 'destructure']
 
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
@@ -440,6 +463,7 @@ function useEnv (env) {
   before(() => {
     Object.assign(process.env, env)
   })
+
   after(() => {
     for (const key of Object.keys(env)) {
       delete process.env[key]
@@ -451,6 +475,7 @@ function useSandbox (...args) {
   before(async () => {
     sandbox = await createSandbox(...args)
   })
+
   after(() => {
     const oldSandbox = sandbox
     sandbox = undefined
@@ -466,6 +491,7 @@ function setShouldKill (value) {
   before(() => {
     shouldKill = value
   })
+
   after(() => {
     shouldKill = true
   })

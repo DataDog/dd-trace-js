@@ -53,7 +53,9 @@ describe('sdk', () => {
     // remove max listener warnings, we don't care about the writer anyways
     process.removeAllListeners('beforeExit')
 
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   afterEach(() => {

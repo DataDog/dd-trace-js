@@ -26,6 +26,7 @@ describe('Plugin', () => {
 
   ['http', 'https', 'node:http', 'node:https'].forEach(pluginToBeLoaded => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
+
     describe(pluginToBeLoaded, () => {
       function server (app, listener) {
         let server

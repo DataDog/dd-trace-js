@@ -20,7 +20,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'bunyan')
+      variants = varySandbox(sandbox, 'server.mjs', 'bunyan')
     })
 
     after(async () => {
@@ -35,8 +35,8 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of ['default', 'destructure', 'star']) {
-      it(`is instrumented (${variant})`, async () => {
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(
           sandbox.folder,
           variants[variant],
