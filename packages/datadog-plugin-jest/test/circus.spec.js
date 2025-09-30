@@ -85,7 +85,7 @@ describe('Plugin', function () {
   this.timeout(testTimeout)
   this.retries(2)
 
-  const versions = ['@happy-dom/jest-environment']
+  const versions = ['jest-environment-node', 'jest-environment-jsdom', '@happy-dom/jest-environment']
 
   withVersions('jest', versions, (version, moduleName) => {
     afterEach(() => {
