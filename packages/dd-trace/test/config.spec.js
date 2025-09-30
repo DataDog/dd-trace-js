@@ -35,8 +35,6 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
-  const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
-  const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -2400,6 +2398,8 @@ describe('Config', () => {
   context('sci embedding', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
+    const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
     let ddTags
     beforeEach(() => {
       ddTags = process.env.DD_TAGS
