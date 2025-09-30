@@ -5,7 +5,7 @@
   "description": "Basic application to test IAST support on a bundled app with dd-trace via esbuild",
   "main": "app.js",
   "scripts": {
-    "build": "node ./esbuild.js"
+    "build": "DD_IAST_ENABLED=true node ./esbuild.js && DD_IAST_ENABLED=false node ./esbuild-no-iast.js"
   },
   "keywords": [
     "esbuild",

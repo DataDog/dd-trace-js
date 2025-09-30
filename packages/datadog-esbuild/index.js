@@ -45,6 +45,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
+const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
@@ -98,9 +99,7 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
-  const ddIastEnabled = build.initialOptions.define?.__DD_IAST_ENABLED__ === 'true'
-
-  if (ddIastEnabled) {
+  if (DD_IAST_ENABLED) {
     const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
     rewriter = iastRewriter.getRewriter()
   }
@@ -110,7 +109,7 @@ module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
-  if (ddIastEnabled) {
+  if (DD_IAST_ENABLED) {
     build.initialOptions.banner.js =
       `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
       ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
@@ -282,7 +281,7 @@ ${build.initialOptions.banner.js}`
       }
     }
 
-    if (ddIastEnabled && args.pluginData?.applicationFile) {
+    if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
       if (DEBUG) console.log(`REWRITE: ${args.path}`)
       const fileCode = fs.readFileSync(args.path, 'utf8')
       const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
