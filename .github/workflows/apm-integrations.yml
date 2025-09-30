@@ -156,7 +156,7 @@ jobs:
         - uses: ./.github/actions/testagent/start
         - uses: ./.github/actions/node/oldest-maintenance-lts
         - run: |
-            docker cp ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/eventhubs-test/config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+            docker cp ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/eventhubs-test/config.json:/Eventhubs_Emulator/ConfigFiles/Config.json
         - run: docker restart azureeventhubsemulator
         - uses: ./.github/actions/install
         - run: yarn test:plugins:ci
