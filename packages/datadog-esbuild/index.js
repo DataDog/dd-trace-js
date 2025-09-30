@@ -45,7 +45,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
-const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
+const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
