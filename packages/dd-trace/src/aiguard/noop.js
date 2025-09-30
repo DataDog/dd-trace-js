@@ -6,9 +6,7 @@ class NoopAIGuard {
   }
 
   evaluate (messages, opts) {
-    return new Promise((resolve, reject) => {
-      resolve({ action: 'ALLOW', reason: 'AI Guard is not enabled' })
-    })
+    return Promise.resolve({ action: 'ALLOW', reason: 'AI Guard is not enabled' })
   }
 }
 
