@@ -150,6 +150,18 @@
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
   },
+  "peerDependencies": {
+    "@openfeature/core": "^1.9.0",
+    "@openfeature/server-sdk": "~1.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@openfeature/core": {
+      "optional": true
+    },
+    "@openfeature/server-sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@babel/helpers": "^7.27.6",
     "@eslint/eslintrc": "^3.3.1",

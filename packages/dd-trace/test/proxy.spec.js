@@ -369,17 +369,6 @@ describe('TracerProxy', () => {
         expect(flaggingProviderSdk._setConfiguration).to.have.been.calledWith(flagConfig)
       })
 
-      it('should handle FFE_FLAGS unapply action with empty config', () => {
-        config.flaggingProvider.enabled = true
-
-        proxy.init()
-        proxy.flaggingProvider // Trigger lazy loading
-
-        handlers.get('FFE_FLAGS')('unapply', {})
-
-        expect(flaggingProviderSdk._setConfiguration).to.have.been.calledWith({})
-      })
-
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,

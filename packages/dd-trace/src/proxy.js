@@ -162,9 +162,6 @@ class Tracer extends NoopProxy {
             // Feed UFC config directly to flagging provider
             if (action === 'apply' || action === 'modify') {
               this.flaggingProvider._setConfiguration(conf.flag_configuration)
-            } else if (action === 'unapply') {
-              // For now, just pass empty config
-              this.flaggingProvider._setConfiguration({})
             }
           })
         }
