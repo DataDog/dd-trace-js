@@ -1,10 +1,14 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
+
 const gitPropertiesCommitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
 const gitPropertiesRepositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
 const repositoryUrlRegex = /^([\w\d:@/.-]+)$/
 const remoteOriginRegex = /^\[remote\s+"origin"\]/i
 const gitHeadRefRegex = /ref:\s+(refs\/[A-Za-z0-9._/-]+)/
+const commitSHARegex = /^[0-9a-f]{40}$/
 
 function removeUserSensitiveInfo (repositoryUrl) {
   try {
@@ -78,9 +82,54 @@ function getGitHeadRef (gitHeadContent) {
   }
 }
 
+function isValidCommitSHA (sha) {
+  if (!sha) {
+    return false
+  }
+  const shaMatch = sha.match(commitSHARegex)
+  if (shaMatch) {
+    return true
+  }
+  return false
+}
+
+function resolveGitHeadSHA (DD_GIT_FOLDER_PATH) {
+  const gitHeadPath = path.join(DD_GIT_FOLDER_PATH, 'HEAD')
+
+  try {
+    const gitHeadContent = fs.readFileSync(gitHeadPath, 'utf8')
+    if (!gitHeadContent) {
+      return
+    }
+
+    const headContent = gitHeadContent.trim()
+
+    // Handle detached head case
+    if (isValidCommitSHA(headContent)) {
+      return headContent
+    }
+
+    // Handle ref case - extract the ref and read the SHA from the ref file
+    const gitHeadRef = getGitHeadRef(headContent)
+    if (!gitHeadRef) {
+      return
+    }
+    const gitHeadRefPath = path.join(DD_GIT_FOLDER_PATH, gitHeadRef)
+    const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
+    if (gitHeadRefContent) {
+      const headRefContent = gitHeadRefContent.trim()
+      if (isValidCommitSHA(headRefContent)) {
+        return headRefContent
+      }
+    }
+  } catch {}
+}
+
 module.exports = {
   getGitMetadataFromGitProperties,
   removeUserSensitiveInfo,
   getGitHeadRef,
-  getRemoteOriginURL
+  getRemoteOriginURL,
+  resolveGitHeadSHA,
+  isValidCommitSHA
 }

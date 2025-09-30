@@ -2,10 +2,17 @@
 
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
+const path = require('path')
 
 require('./setup/core')
 
-const { getGitMetadataFromGitProperties, getGitHeadRef, getRemoteOriginURL } = require('../src/git_properties')
+const {
+  getGitMetadataFromGitProperties,
+  getGitHeadRef,
+  getRemoteOriginURL,
+  resolveGitHeadSHA,
+  isValidCommitSHA,
+} = require('../src/git_properties')
 
 describe('git_properties', () => {
   describe('getGitMetadataFromGitProperties', () => {
@@ -187,6 +194,63 @@ push = +refs/heads/*:refs/heads/*`)
       expect(headRef).to.equal(undefined)
       const undefinedResult = getGitHeadRef(undefined)
       expect(undefinedResult).to.equal(undefined)
+    })
+  })
+
+  describe('isValidCommitSHA', () => {
+    it('validate correct 40-character sha', () => {
+      const validSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d'
+      expect(isValidCommitSHA(validSHA)).to.equal(true)
+    })
+
+    it('rejects sha that is too short', () => {
+      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7'
+      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
+    })
+
+    it('rejects sha that is too long', () => {
+      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7da'
+      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
+    })
+
+    it('rejects sha with invalid characters', () => {
+      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7g'
+      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
+    })
+
+    it('rejects empty string', () => {
+      expect(isValidCommitSHA('')).to.equal(false)
+    })
+
+    it('rejects null and undefined', () => {
+      expect(isValidCommitSHA(null)).to.equal(false)
+      expect(isValidCommitSHA(undefined)).to.equal(false)
+    })
+  })
+
+  describe('resolveGitHeadSHA', () => {
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
+    const DD_GIT_FOLDER_DETACHED_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder-detached')
+    const DD_GIT_FOLDER_INVALID_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder-invalid')
+
+    it('returns SHA from ref file using fixture data', () => {
+      const result = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+      expect(result).to.equal('964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+    })
+
+    it('returns SHA from detached HEAD using fixture data', () => {
+      const result = resolveGitHeadSHA(DD_GIT_FOLDER_DETACHED_PATH)
+      expect(result).to.equal('964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+    })
+
+    it('returns undefined when git folder does not exist', () => {
+      const result = resolveGitHeadSHA('/nonexistent/path')
+      expect(result).to.equal(undefined)
+    })
+
+    it('returns undefined when HEAD contains invalid content', () => {
+      const result = resolveGitHeadSHA(DD_GIT_FOLDER_INVALID_PATH)
+      expect(result).to.equal(undefined)
     })
   })
 })

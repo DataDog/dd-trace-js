@@ -10,7 +10,7 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, getGitHeadRef } =
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
@@ -446,31 +446,10 @@ class Config {
           }
         }
         if (!this.commitSHA) {
-          // try to read git HEAD and git HEAD ref (commit SHA)
-          const gitHeadPath = path.join(DD_GIT_FOLDER_PATH, 'HEAD')
-          try {
-            const gitHeadContent = fs.readFileSync(gitHeadPath, 'utf8')
-            if (gitHeadContent) {
-              const gitHeadRef = getGitHeadRef(gitHeadContent)
-              const gitHeadRefPath = path.join(DD_GIT_FOLDER_PATH, gitHeadRef)
-              try {
-                const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
-                if (gitHeadRefContent) {
-                  const gitHeadSha = gitHeadRefContent.trim()
-                  this.commitSHA = this.commitSHA || gitHeadSha
-                }
-              } catch (e) {
-                // Only log error if the user has set a .git/ path
-                if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-                  log.error('Error reading git HEAD ref: %s', gitHeadRefPath, e)
-                }
-              }
-            }
-          } catch (e) {
-            // Only log error if the user has set a .git/ path
-            if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-              log.error('Error reading git HEAD: %s', gitHeadPath, e)
-            }
+          // try to read git HEAD (commit SHA)
+          const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+          if (gitHeadSha) {
+            this.commitSHA = gitHeadSha
           }
         }
       }
