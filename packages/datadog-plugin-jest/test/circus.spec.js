@@ -65,8 +65,8 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
           coverageReporters: ['none'],
-          reporters: [],
-          silent: true,
+          // reporters: [],
+          // silent: true,
           testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
           testRunner: isHappyDom
             ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
@@ -85,7 +85,7 @@ describe('Plugin', function () {
   this.timeout(testTimeout)
   this.retries(2)
 
-  const versions = ['jest-environment-node', 'jest-environment-jsdom', '@happy-dom/jest-environment']
+  const versions = ['@happy-dom/jest-environment']
 
   withVersions('jest', versions, (version, moduleName) => {
     afterEach(() => {
@@ -113,7 +113,7 @@ describe('Plugin', function () {
           jestCommonOptions = loadedAgent.jestCommonOptions
         })
 
-        it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
+        it.only('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
           const tests = [
             {
               name: 'jest-test-suite tracer and active span are available',

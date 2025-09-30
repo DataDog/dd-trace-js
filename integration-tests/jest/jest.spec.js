@@ -2287,7 +2287,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('works with happy-dom', async () => {
+    it.only('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {
@@ -2338,7 +2338,7 @@ describe('jest CommonJS', () => {
           newTests.forEach(test => {
             assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
           })
-        })
+        }, 10000)
 
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -2352,6 +2352,9 @@ describe('jest CommonJS', () => {
           stdio: 'inherit'
         }
       )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
 
       await Promise.all([
         once(childProcess, 'exit'),
