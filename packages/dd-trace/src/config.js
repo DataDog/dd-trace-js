@@ -428,7 +428,7 @@ class Config {
       if (!this.repositoryUrl || !this.commitSHA) {
         const DD_GIT_FOLDER_PATH = coalesce(
           getEnvironmentVariable('DD_GIT_FOLDER_PATH'),
-          `${process.cwd()}/.git/`
+          path.join(process.cwd(), '.git')
         )
         // try to read git config (repository URL)
         const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
