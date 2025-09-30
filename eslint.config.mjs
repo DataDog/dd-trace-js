@@ -393,7 +393,7 @@ export default [
         },
         {
           name: 'koalas',
-          message: 'Please use ?? instead.'
+          message: 'Please use nullish coalescing operator (??) instead.'
         }
       ]],
 
