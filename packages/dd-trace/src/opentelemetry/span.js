@@ -177,8 +177,8 @@ class Span {
     return this._parentTracer.resource
   }
 
-  get instrumentationScope () {
-    return this._parentTracer.instrumentationScope
+  get instrumentationLibrary () {
+    return this._parentTracer.instrumentationLibrary
   }
 
   get _spanProcessor () {
