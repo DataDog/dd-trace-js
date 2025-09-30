@@ -42,7 +42,7 @@ function getGitRepoUrlFromGitConfig (gitConfigContent) {
   // Look for [remote "origin"] section and extract the URL
   const repositoryUrlMatch = gitConfigContent.match(gitRemoteOriginRegex)
 
-  if (repositoryUrlMatch && repositoryUrlMatch.length > 1) {
+  if (repositoryUrlMatch?.length > 1) {
     return removeUserSensitiveInfo(repositoryUrlMatch[1])
   }
 }
