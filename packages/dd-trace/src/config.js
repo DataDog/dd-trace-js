@@ -445,30 +445,32 @@ class Config {
             }
           }
         }
-        // try to read git HEAD and git HEAD ref (commit SHA)
-        const gitHeadPath = path.join(DD_GIT_FOLDER_PATH, 'HEAD')
-        try {
-          const gitHeadContent = fs.readFileSync(gitHeadPath, 'utf8')
-          if (gitHeadContent) {
-            const gitHeadRef = getGitHeadRef(gitHeadContent)
-            const gitHeadRefPath = path.join(DD_GIT_FOLDER_PATH, gitHeadRef)
-            try {
-              const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
-              if (gitHeadRefContent) {
-                const gitHeadSha = gitHeadRefContent.trim()
-                this.commitSHA = this.commitSHA || gitHeadSha
-              }
-            } catch (e) {
-              // Only log error if the user has set a .git/ path
-              if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-                log.error('Error reading git HEAD ref: %s', gitHeadRefPath, e)
+        if (!this.commitSHA) {
+          // try to read git HEAD and git HEAD ref (commit SHA)
+          const gitHeadPath = path.join(DD_GIT_FOLDER_PATH, 'HEAD')
+          try {
+            const gitHeadContent = fs.readFileSync(gitHeadPath, 'utf8')
+            if (gitHeadContent) {
+              const gitHeadRef = getGitHeadRef(gitHeadContent)
+              const gitHeadRefPath = path.join(DD_GIT_FOLDER_PATH, gitHeadRef)
+              try {
+                const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
+                if (gitHeadRefContent) {
+                  const gitHeadSha = gitHeadRefContent.trim()
+                  this.commitSHA = this.commitSHA || gitHeadSha
+                }
+              } catch (e) {
+                // Only log error if the user has set a .git/ path
+                if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+                  log.error('Error reading git HEAD ref: %s', gitHeadRefPath, e)
+                }
               }
             }
-          }
-        } catch (e) {
-          // Only log error if the user has set a .git/ path
-          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-            log.error('Error reading git HEAD: %s', gitHeadPath, e)
+          } catch (e) {
+            // Only log error if the user has set a .git/ path
+            if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+              log.error('Error reading git HEAD: %s', gitHeadPath, e)
+            }
           }
         }
       }
