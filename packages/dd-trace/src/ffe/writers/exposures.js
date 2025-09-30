@@ -1,18 +1,33 @@
 'use strict'
 
 const BaseFFEWriter = require('./base')
-const { EXPOSURES_ENDPOINT, EXPOSURES_INTAKE } = require('../constants/writers')
+const {
+  EXPOSURES_ENDPOINT,
+  EVP_PROXY_AGENT_BASE_PATH,
+  EVP_SUBDOMAIN_HEADER_NAME,
+  EVP_SUBDOMAIN_VALUE,
+  EVP_PAYLOAD_SIZE_LIMIT,
+  EVP_EVENT_SIZE_LIMIT
+} = require('../constants/constants')
 
 class ExposuresWriter extends BaseFFEWriter {
   constructor (config) {
+    // Build full EVP endpoint path
+    const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
+    const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
+    const fullEndpoint = `${basePath}/${endpoint}`
+
     super({
       config,
-      endpoint: EXPOSURES_ENDPOINT,
-      intake: EXPOSURES_INTAKE,
+      endpoint: fullEndpoint,
       interval: config.ffeFlushInterval,
-      timeout: config.ffeTimeout
+      timeout: config.ffeTimeout,
+      payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
+      eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
+      headers: {
+        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE
+      }
     })
-    this._config = config
     this._enabled = false // Start disabled until agent strategy is set
     this._pendingEvents = [] // Buffer events until enabled
   }
@@ -22,9 +37,9 @@ class ExposuresWriter extends BaseFFEWriter {
 
     if (enabled && this._pendingEvents.length > 0) {
       // Flush pending events when enabled
-      this._pendingEvents.forEach(({ event, byteLength }) => {
+      for (const { event, byteLength } of this._pendingEvents) {
         super.append(event, byteLength)
-      })
+      }
       this._pendingEvents = []
     }
   }

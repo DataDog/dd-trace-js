@@ -1,10 +1,9 @@
 'use strict'
 
 const logger = require('../../log')
-const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/writers')
+const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/constants')
 
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
-/** @type {AgentInfoExporter} */
 let agentInfoExporter
 
 function setAgentStrategy (config, setWriterEnabledValue) {
@@ -20,7 +19,9 @@ function setAgentStrategy (config, setWriterEnabledValue) {
     }
 
     const endpoints = agentInfo.endpoints
-    const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
+    const normalizedPath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
+    const hasEndpoint = Array.isArray(endpoints) &&
+      endpoints.includes(normalizedPath) || endpoints.includes(normalizedPath + '/')
 
     if (hasEndpoint) {
       logger.debug('FFE Writer enabled - agent has EVP proxy support')

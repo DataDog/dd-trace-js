@@ -411,7 +411,7 @@ function buildExpressServer (agent) {
     })
   })
 
-  app.post('/evp_proxy/v2/api/v2/track/exposures', (req, res) => {
+  app.post('/evp_proxy/v2/api/v2/exposures', (req, res) => {
     res.status(200).send()
     agent.emit('exposures', {
       headers: req.headers,

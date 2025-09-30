@@ -1,8 +1,7 @@
 'use strict'
 
-// UFC (Universal Flag Configuration) payloads for testing
+// Simple UFC (Universal Flag Configuration) payloads for testing
 module.exports = {
-  // Simplified configurations for integration testing
   testBooleanAndStringFlags: {
     flags: {
       'test-boolean-flag': {

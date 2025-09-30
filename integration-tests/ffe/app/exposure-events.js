@@ -12,7 +12,7 @@ const { channel } = require('dc-polyfill')
 const { flaggingProvider } = tracer
 const { OpenFeature } = require('@openfeature/server-sdk')
 
-// Only need flush channel for manual flushing in tests
+// Used to test manual flushing capabilities
 const flushCh = channel('ffe:writers:flush')
 
 OpenFeature.setProvider(flaggingProvider)
@@ -20,6 +20,7 @@ const client = OpenFeature.getClient()
 
 const app = express()
 
+// Used to test remote config polling capabilities
 app.get('/', async (req, res) => {
   res.end('OK')
 })
@@ -30,21 +31,17 @@ app.get('/evaluate-flags', async (req, res) => {
   }
 
   try {
-    const context1 = {
+    const booleanResult = await client.getBooleanValue('test-boolean-flag', false, {
       targetingKey: 'test-user-123',
       user: 'test-user-123',
       plan: 'premium'
-    }
+    })
 
-    const booleanResult = await client.getBooleanValue('test-boolean-flag', false, context1)
-
-    const context2 = {
+    const stringResult = await client.getStringValue('test-string-flag', 'default', {
       targetingKey: 'test-user-456',
       user: 'test-user-456',
       tier: 'enterprise'
-    }
-
-    const stringResult = await client.getStringValue('test-string-flag', 'default', context2)
+    })
 
     res.json({
       results: {

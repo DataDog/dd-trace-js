@@ -3,7 +3,7 @@
 const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { channel } = require('dc-polyfill')
 const log = require('../log')
-const { EXPOSURE_CHANNEL } = require('./constants/writers')
+const { EXPOSURE_CHANNEL } = require('./constants/constants')
 
 class FlaggingProvider extends DatadogNodeServerProvider {
   constructor (tracer, config) {
@@ -19,7 +19,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     log.debug('[FlaggingProvider] Created')
   }
 
-  // Override setConfiguration to add Datadog-specific logging
   _setConfiguration (ufc) {
     if (typeof this.setConfiguration === 'function') {
       this.setConfiguration(ufc)

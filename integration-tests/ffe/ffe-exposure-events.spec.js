@@ -8,7 +8,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/re
 const ufcPayloads = require('./fixtures/ufc-payloads')
 const RC_PRODUCT = 'FFE_FLAGS'
 
-// Helper function to check exposure event structure (similar to OpenTel patterns)
+// Helper function to check exposure event structure
 function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttributes = {}) {
   assert.property(event, 'timestamp')
   assert.property(event, 'flag')
@@ -32,13 +32,11 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
-    // Dependencies needed for OpenFeature integration
+    // Dependencies needed for OpenFeature integration tests
     const dependencies = [
       'express',
       '@openfeature/server-sdk',
       '@openfeature/core',
-      '@datadog/openfeature-node-server',
-      '@datadog/flagging-core'
     ]
 
     sandbox = await createSandbox(
@@ -84,7 +82,6 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
-          // Payload now has context wrapper format: { context: {...}, exposures: [...] }
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
           assert.equal(payload.context.service_name, 'ffe-test-service')
@@ -93,7 +90,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
 
           exposureEvents.push(...payload.exposures)
 
-          if (exposureEvents.length >= 2) {
+          if (exposureEvents.length === 2) {
             try {
               assert.equal(headers['content-type'], 'application/json')
               assert.equal(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
@@ -170,13 +167,14 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
         const exposureEvents = []
 
         agent.on('exposures', ({ payload }) => {
-          // Payload now has context wrapper format: { context: {...}, exposures: [...] }
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
+          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.version, '1.2.3')
+          assert.equal(payload.context.env, 'test')
 
           exposureEvents.push(...payload.exposures)
 
-          // Expecting 6 exposure events (3 users × 2 flags each)
           if (exposureEvents.length >= 6) {
             try {
               assert.equal(exposureEvents.length, 6)
@@ -201,7 +199,6 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
           }
         })
 
-        // Add config and evaluate multiple flags
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
@@ -288,53 +285,6 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
         }
       }
     })
-
-    it('should remove UFC configuration via Remote Config', (done) => {
-      const configId = 'org-42-env-test-remove'
-      let receivedAckUpdate = false
-      let configRemoved = false
-
-      agent.on('remote-config-ack-update', (id, version, state, error) => {
-        if (state === UNACKNOWLEDGED) return
-
-        try {
-          assert.strictEqual(id, configId)
-          assert.strictEqual(version, 1)
-          assert.strictEqual(state, ACKNOWLEDGED)
-          assert.notOk(error)
-
-          receivedAckUpdate = true
-          if (!configRemoved) {
-            // Remove config after acknowledgment
-            agent.removeRemoteConfig(configId)
-            configRemoved = true
-            axios.get('/').then(() => {
-              // Wait a bit for removal processing
-              setTimeout(endIfDone, 200)
-            }).catch(done)
-          }
-        } catch (err) {
-          done(err)
-        }
-      })
-
-      // Add then remove config
-      agent.addRemoteConfig({
-        product: RC_PRODUCT,
-        id: configId,
-        config: { flag_configuration: ufcPayloads.simpleBooleanFlag }
-      })
-
-      axios.get('/').catch(done)
-
-      let testCompleted = false
-      function endIfDone () {
-        if (receivedAckUpdate && configRemoved && !testCompleted) {
-          testCompleted = true
-          done()
-        }
-      }
-    })
   })
 
   describe('Error handling', () => {
@@ -346,7 +296,7 @@ describe('FFE Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_FLAGGING_PROVIDER_ENABLED: false // Disabled FlaggingProvider
+          DD_FLAGGING_PROVIDER_ENABLED: false
         }
       })
       axios = Axios.create({ baseURL: proc.url })

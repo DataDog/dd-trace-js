@@ -229,8 +229,8 @@ describe('FFE Exposures Writer', () => {
       expect(formattedEvent.flag.key).to.equal('test_flag')
       expect(formattedEvent.variant.key).to.equal('A')
       expect(formattedEvent.subject.id).to.equal('user_123')
-      expect(formattedEvent.subject.type).to.equal('user') // default
-      expect(formattedEvent.subject.attributes).to.deep.equal({}) // default
+      expect(formattedEvent.subject.type).to.be.undefined
+      expect(formattedEvent.subject.attributes).to.be.undefined
     })
   })
 

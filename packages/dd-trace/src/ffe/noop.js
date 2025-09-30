@@ -1,6 +1,6 @@
 'use strict'
 
-const { NOOP_REASON } = require('./constants/writers')
+const { NOOP_REASON } = require('./constants/constants')
 
 class NoopFlaggingProvider {
   constructor (noopTracer) {

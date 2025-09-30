@@ -160,13 +160,11 @@ class Tracer extends NoopProxy {
         if (config.flaggingProvider.enabled) {
           rc.setProductHandler('FFE_FLAGS', (action, conf) => {
             // Feed UFC config directly to flagging provider
-            if (this.flaggingProvider) {
-              if (action === 'apply' || action === 'modify') {
-                this.flaggingProvider._setConfiguration(conf.flag_configuration)
-              } else if (action === 'unapply') {
-                // For now, just pass empty config
-                this.flaggingProvider._setConfiguration({})
-              }
+            if (action === 'apply' || action === 'modify') {
+              this.flaggingProvider._setConfiguration(conf.flag_configuration)
+            } else if (action === 'unapply') {
+              // For now, just pass empty config
+              this.flaggingProvider._setConfiguration({})
             }
           })
         }
@@ -248,7 +246,6 @@ class Tracer extends NoopProxy {
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
       }
-
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)

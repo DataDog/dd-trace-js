@@ -8,16 +8,9 @@ const path = require('node:path')
 
 const log = require('../../log')
 
-const {
-  EVP_SUBDOMAIN_HEADER_NAME,
-  EVP_SUBDOMAIN_VALUE,
-  EVP_PROXY_AGENT_BASE_PATH,
-  EVP_PAYLOAD_SIZE_LIMIT,
-  EVP_EVENT_SIZE_LIMIT
-} = require('../constants/writers')
-
 class BaseFFEWriter {
-  constructor ({ interval, timeout, config, endpoint }) {
+  constructor ({ interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers }) {
+    // Private env vars for testing purposes
     this._interval = interval ?? getEnvironmentVariable('_DD_FFE_FLUSH_INTERVAL') ?? 1000 // 1s
     this._timeout = timeout ?? getEnvironmentVariable('_DD_FFE_TIMEOUT') ?? 5000 // 5s
 
@@ -27,11 +20,10 @@ class BaseFFEWriter {
 
     this._config = config
     this._endpoint = endpoint
-
-    // FFE only works with agent EVP proxy, agentless is not supported
-    const { url, endpoint: fullEndpoint } = this._getAgentUrlAndPath()
-    this._baseUrl = url
-    this._endpoint = fullEndpoint
+    this._baseUrl = agentUrl ?? this._getAgentUrl()
+    this._payloadSizeLimit = payloadSizeLimit
+    this._eventSizeLimit = eventSizeLimit
+    this._headers = headers || {}
 
     this._periodic = setInterval(() => {
       this.flush()
@@ -64,17 +56,17 @@ class BaseFFEWriter {
 
     const eventSizeBytes = byteLength || Buffer.byteLength(JSON.stringify(event))
 
-    // Check individual event size limit (1MB)
-    if (eventSizeBytes > EVP_EVENT_SIZE_LIMIT) {
-      log.warn(`${this.constructor.name} event size ${eventSizeBytes}
-        bytes exceeds limit ${EVP_EVENT_SIZE_LIMIT}, dropping event`)
+    // Check individual event size limit if configured
+    if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
+      log.warn(`${this.constructor.name} event size
+        ${eventSizeBytes} bytes exceeds limit ${this._eventSizeLimit}, dropping event`)
       this._droppedEvents++
       return
     }
 
-    // Check if adding this event would exceed payload size limit (5MB)
-    if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
-      log.debug(`${this.constructor.name} buffer size would exceed ${EVP_PAYLOAD_SIZE_LIMIT} bytes, flushing first`)
+    // Check if adding this event would exceed payload size limit if configured
+    if (this._payloadSizeLimit && this._bufferSize + eventSizeBytes > this._payloadSizeLimit) {
+      log.debug(`${this.constructor.name} buffer size would exceed ${this._payloadSizeLimit} bytes, flushing first`)
       this.flush()
     }
 
@@ -92,17 +84,17 @@ class BaseFFEWriter {
 
     const payload = this._encode(this.makePayload(events))
 
-    log.debug('Encoded FFE exposure payload: %s', safeJSONStringify(payload))
+    log.debug('Encoded payload: %s', safeJSONStringify(payload))
 
     const options = this._getOptions()
 
     request(payload, options, (err, resp, code) => {
       if (err) {
-        log.error(`Failed to send FFE exposure events to ${this.url}: ${err.message}`)
+        log.error(`Failed to send events to ${this.url}: ${err.message}`)
       } else if (code >= 200 && code < 300) {
-        log.debug(`Successfully sent ${events.length} FFE exposure events`)
+        log.debug(`Successfully sent ${events.length} events`)
       } else {
-        log.warn(`FFE exposure events request returned status ${code}`)
+        log.warn(`Events request returned status ${code}`)
       }
     })
   }
@@ -126,29 +118,24 @@ class BaseFFEWriter {
     }
   }
 
-  _getAgentUrlAndPath () {
+  _getAgentUrl () {
     const { hostname, port } = this._config
 
     const overrideOriginEnv = getEnvironmentVariable('_DD_FFE_OVERRIDE_ORIGIN')
     const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
 
-    const base = overrideOriginUrl ?? this._config.url ?? new URL(format({
+    return overrideOriginUrl ?? this._config.url ?? new URL(format({
       protocol: 'http:',
       hostname: hostname || 'localhost',
       port: port || 8126
     }))
-
-    return {
-      url: base,
-      endpoint: path.join(EVP_PROXY_AGENT_BASE_PATH + '/', this._endpoint)
-    }
   }
 
   _getOptions () {
     const options = {
       headers: {
         'Content-Type': 'application/json',
-        [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE
+        ...this._headers
       },
       method: 'POST',
       timeout: this._timeout,
@@ -159,14 +146,8 @@ class BaseFFEWriter {
     return options
   }
 
-  // Handle any special encoding logic for FFE based on requirements
   _encode (payload) {
-    return JSON.stringify(payload, (key, value) => {
-      if (typeof value === 'string') {
-        return value
-      }
-      return value
-    })
+    return JSON.stringify(payload)
   }
 }
 
