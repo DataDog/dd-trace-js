@@ -9,8 +9,7 @@ async function executeRequest (body, opts) {
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), opts.timeout)
-  timeoutId.unref()
+  const timeoutId = setTimeout(() => controller.abort(), opts.timeout).unref()
 
   try {
     const response = await fetch(opts.url, {
