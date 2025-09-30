@@ -78,7 +78,7 @@ class AIGuard extends NoopAIGuard {
 
   _getToolName (message, history) {
     // 1. assistant message with tool calls
-    if ('tool_calls' in message) {
+    if (message.tool_calls) {
       const names = message.tool_calls.map((tool) => tool.function.name)
       return names.length === 0 ? null : names.join(',')
     }
