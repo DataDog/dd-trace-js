@@ -36,7 +36,7 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
-  const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures/config/git-folder/')
+  const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
