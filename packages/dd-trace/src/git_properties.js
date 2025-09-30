@@ -1,8 +1,9 @@
 'use strict'
 
-const commitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
-const repositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
-const gitRemoteOriginRegex = /\[remote\s+"origin"\]\s*\n\s*url\s*=\s*([\w\d:@/.-]+)/
+const gitPropertiesCommitSHARegex = /git\.commit\.sha=([a-f\d]{40})/
+const gitPropertiesRepositoryUrlRegex = /git\.repository_url=([\w\d:@/.-]+)/
+const repositoryUrlRegex = /^([\w\d:@/.-]+)$/
+const remoteOriginRegex = /^\[remote\s+"origin"\]/i
 const gitHeadRefRegex = /ref:\s+(refs\/[A-Za-z0-9._/-]+)/
 
 function removeUserSensitiveInfo (repositoryUrl) {
@@ -23,8 +24,8 @@ function getGitMetadataFromGitProperties (gitPropertiesString) {
   if (!gitPropertiesString) {
     return {}
   }
-  const commitSHAMatch = gitPropertiesString.match(commitSHARegex)
-  const repositoryUrlMatch = gitPropertiesString.match(repositoryUrlRegex)
+  const commitSHAMatch = gitPropertiesString.match(gitPropertiesCommitSHARegex)
+  const repositoryUrlMatch = gitPropertiesString.match(gitPropertiesRepositoryUrlRegex)
 
   const repositoryUrl = repositoryUrlMatch ? repositoryUrlMatch[1] : undefined
 
@@ -34,16 +35,33 @@ function getGitMetadataFromGitProperties (gitPropertiesString) {
   }
 }
 
-function getGitRepoUrlFromGitConfig (gitConfigContent) {
+function getRemoteOriginURL (gitConfigContent) {
   if (!gitConfigContent) {
     return
   }
+  const lines = gitConfigContent.split('\n')
+  let index = 0
 
-  // Look for [remote "origin"] section and extract the URL
-  const repositoryUrlMatch = gitConfigContent.match(gitRemoteOriginRegex)
+  // find the remote origin section
+  for (; index < lines.length; index++) {
+    const line = lines[index]
+    if (line[0] !== '[') continue // fast path
+    if (remoteOriginRegex.test(line)) break
+  }
 
-  if (repositoryUrlMatch?.length > 1) {
-    return removeUserSensitiveInfo(repositoryUrlMatch[1])
+  // find the url key/value in the [remote "origin"] section
+  index++
+  for (; index < lines.length; index++) {
+    const line = lines[index]
+    if (line[0] === '[') return // abort, section didn't contain a url
+    const splitAt = line.indexOf('=')
+    if (splitAt === -1) continue
+    const key = line.slice(0, splitAt).trim().toLowerCase()
+    if (key !== 'url') continue
+    const repositoryUrlValue = line.slice(splitAt + 1).trim()
+    const repositoryUrlMatch = repositoryUrlValue.match(repositoryUrlRegex)
+    if (!repositoryUrlMatch) continue
+    return removeUserSensitiveInfo(repositoryUrlMatch[0])
   }
 }
 
@@ -55,9 +73,14 @@ function getGitHeadRef (gitHeadContent) {
   // Extract the ref after 'ref: '
   const gitRefMatch = gitHeadContent.match(gitHeadRefRegex)
 
-  if (gitRefMatch && gitRefMatch.length > 1) {
+  if (gitRefMatch?.length > 1) {
     return gitRefMatch[1]
   }
 }
 
-module.exports = { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getGitRepoUrlFromGitConfig, getGitHeadRef }
+module.exports = {
+  getGitMetadataFromGitProperties,
+  removeUserSensitiveInfo,
+  getGitHeadRef,
+  getRemoteOriginURL
+}

@@ -5,7 +5,7 @@ const { describe, it } = require('tap').mocha
 
 require('./setup/core')
 
-const { getGitMetadataFromGitProperties, getGitRepoUrlFromGitConfig, getGitHeadRef } = require('../src/git_properties')
+const { getGitMetadataFromGitProperties, getGitHeadRef, getRemoteOriginURL } = require('../src/git_properties')
 
 describe('git_properties', () => {
   describe('getGitMetadataFromGitProperties', () => {
@@ -56,45 +56,105 @@ git.repository_url=; rm -rf ;
     })
   })
 
-  describe('getGitRepoUrlFromGitConfig', () => {
+  describe('getRemoteOriginURL', () => {
     it('reads repository URL from .git/config', () => {
-      const repositoryUrl = getGitRepoUrlFromGitConfig(`
-        [remote "origin"]
-        url = git@github.com:DataDog/dd-trace-js.git
-      `)
-      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+url = git@github.com/DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com/DataDog/dd-trace-js.git')
     })
 
     it('filters out credentials', () => {
-      const repositoryUrl = getGitRepoUrlFromGitConfig(`
-        [remote "origin"]
-        url = https://username:password@github.com/datadog/dd-trace-js.git
-      `)
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+url = https://username:password@github.com/datadog/dd-trace-js.git`)
       expect(repositoryUrl).to.equal('https://github.com/datadog/dd-trace-js.git')
     })
 
-    it('ignores other fields', () => {
-      const repositoryUrl = getGitRepoUrlFromGitConfig(`
-        [remote "origin"]
-        url = https://github.com/DataDog/dd-trace-js.git
-        fetch = +refs/heads/*:refs/remotes/origin/*
-      `)
-      expect(repositoryUrl).to.equal('https://github.com/DataDog/dd-trace-js.git')
+    it('handles Windows-style line breaks (CRLF)', () => {
+      const repositoryUrl = getRemoteOriginURL('[remote "origin"]\r\nurl = git@github.com:DataDog/dd-trace-js.git\r\n')
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('handles case-insensitive remote section names', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[REMOTE "Origin"]\n
+url = git@github.com:DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('finds URL when it is not the first key-value pair', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+fetch = +refs/heads/*:refs/remotes/origin/*
+push = +refs/heads/*:refs/heads/*
+url = git@github.com:DataDog/dd-trace-js.git
+mirror = false`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
     })
 
     it('ignores badly formatted files', () => {
-      const repositoryUrl = getGitRepoUrlFromGitConfig(`
-        [remote "origin"]
-        url = ; rm -rf ;
-      `)
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+url = rm -rf ;`)
+      expect(repositoryUrl).to.equal(undefined)
+    })
+
+    it('handles URLs with no spaces around equals sign', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+url=git@github.com:DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('handles URLs with tabs and multiple spaces', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+\turl\t=\tgit@github.com:DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('handles case-insensitive URL key', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+URL = git@github.com:DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('handles mixed case URL key', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+Url = git@github.com:DataDog/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal('git@github.com:DataDog/dd-trace-js.git')
+    })
+
+    it('returns undefined when no origin remote section exists', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "upstream"]
+url = git@github.com:upstream/dd-trace-js.git
+[remote "fork"]
+url = git@github.com:user/dd-trace-js.git`)
+      expect(repositoryUrl).to.equal(undefined)
+    })
+
+    it('returns undefined when origin remote section has no URL', () => {
+      const repositoryUrl = getRemoteOriginURL(`
+[remote "origin"]
+fetch = +refs/heads/*:refs/remotes/origin/*
+push = +refs/heads/*:refs/heads/*`)
       expect(repositoryUrl).to.equal(undefined)
     })
 
     it('does not crash with empty files', () => {
-      const repositoryUrl = getGitRepoUrlFromGitConfig('')
+      const repositoryUrl = getRemoteOriginURL('')
       expect(repositoryUrl).to.equal(undefined)
-      const undefinedResult = getGitRepoUrlFromGitConfig(undefined)
+      const undefinedResult = getRemoteOriginURL(undefined)
       expect(undefinedResult).to.equal(undefined)
+    })
+
+    it('handles null input gracefully', () => {
+      const repositoryUrl = getRemoteOriginURL(null)
+      expect(repositoryUrl).to.equal(undefined)
     })
   })
 

@@ -10,7 +10,7 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getGitRepoUrlFromGitConfig, getGitHeadRef } =
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, getGitHeadRef } =
   require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
@@ -436,7 +436,7 @@ class Config {
           try {
             const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
             if (gitConfigContent) {
-              this.repositoryUrl = getGitRepoUrlFromGitConfig(gitConfigContent)
+              this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
             }
           } catch (e) {
             // Only log error if the user has set a .git/ path
