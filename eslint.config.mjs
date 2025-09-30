@@ -382,6 +382,18 @@ export default [
         {
           name: 'semver',
           message: 'Please use semifies instead.'
+        },
+        {
+          name: 'get-port',
+          message: 'Please listen on port 0 instead.'
+        },
+        {
+          name: 'rimraf',
+          message: 'Please use fs.rmSync(path, { recursive: true }) instead.'
+        },
+        {
+          name: 'koalas',
+          message: 'Please use ?? instead.'
         }
       ]],
 
