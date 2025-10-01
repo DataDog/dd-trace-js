@@ -3,6 +3,7 @@
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
+const cp = require('child_process')
 
 const log = require('../../log')
 const {
@@ -328,13 +329,31 @@ function getLocalBranches (remoteName) {
 }
 
 function getMergeBase (baseBranch, sourceBranch) {
-  return sanitizedExec(
+  console.log('getMergeBase', { baseBranch, sourceBranch })
+
+  const other = cp.execFileSync('git', ['merge-base', baseBranch, sourceBranch]).toString()
+  console.log('other', other)
+
+  const mergeBase = sanitizedExec(
     'git',
     ['merge-base', baseBranch, sourceBranch],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
   )
+  console.log('mergeBase', mergeBase)
+
+  const mergeBase2 = sanitizedExec(
+    'git',
+    ['merge-base', baseBranch, sourceBranch],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } },
+    false
+  )
+  console.log('mergeBase2', mergeBase2)
+
+  return mergeBase
 }
 
 function getCounts (sourceBranch, candidateBranch) {
