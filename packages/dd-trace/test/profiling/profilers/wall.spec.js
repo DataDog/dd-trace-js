@@ -119,7 +119,8 @@ describe('profilers/native/wall', () => {
 
     const info = profiler.getInfo()
 
-    expect(info.asyncContextCount).to.not.be.undefined
+    expect(info.totalAsyncContextCount).to.not.be.undefined
+    expect(info.usedAsyncContextCount).to.not.be.undefined
     expect(info.settings.asyncContextFrameEnabled).to.not.be.undefined
     expect(info.settings.codeHotspotsEnabled).to.not.be.undefined
     expect(info.settings.cpuProfilingEnabled).to.not.be.undefined
