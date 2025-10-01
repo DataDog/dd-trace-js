@@ -183,12 +183,12 @@ function runGit(args, opts = {}) {
 function getMergeBase (baseBranch, sourceBranch) {
   const step = 200
   const maxDepth = 5000
-  const shallowSince = "2 day ago" // e.g., "2025-04-01"
+  const shallowSince = '2 day ago' // e.g., '2025-04-01'
 
   // Ensure we're in a repo
-  const inside = runGit(["rev-parse", "--is-inside-work-tree"])
-  if (inside !== "true") {
-    throw new Error("Not a git repository here.")
+  const inside = runGit(['rev-parse', '--is-inside-work-tree'])
+  if (inside !== 'true') {
+    throw new Error('Not a git repository here.')
   }
 
   // Prepare a local remote-tracking ref for the target branch with minimal payload
@@ -196,21 +196,21 @@ function getMergeBase (baseBranch, sourceBranch) {
   const refspec = `+refs/heads/${baseBranch}:${targetRef}`
 
   // First, create the local tracking ref with the smallest possible history
-  const baseFetchArgs = ["fetch", "--no-tags", "--filter=blob:none", "origin", refspec]
+  const baseFetchArgs = ['fetch', '--no-tags', '--filter=blob:none', 'origin', refspec]
   if (shallowSince) {
     // Prefer a date fence if you roughly know when the branch diverged
     baseFetchArgs.splice(2, 0, `--shallow-since=${shallowSince}`)
   } else {
-    baseFetchArgs.splice(2, 0, "--depth=1")
+    baseFetchArgs.splice(2, 0, '--depth=1')
   }
   runGit(baseFetchArgs)
 
   // Try an immediate merge-base with minimal history
-  let base = ""
+  let base = ''
   try {
-    base = runGit(["merge-base", targetRef, sourceBranch])
+    base = runGit(['merge-base', targetRef, sourceBranch])
   } catch {
-    base = ""
+    base = ''
   }
   if (base) return base
 
@@ -220,18 +220,18 @@ function getMergeBase (baseBranch, sourceBranch) {
     // Deepen the currently checked-out history (your pipeline commit side)
     // (No refspec => deepen the mapped refs for 'origin' works for detached HEAD as well)
     try {
-      runGit(["fetch", "--no-tags", "--filter=blob:none", `--deepen=${step}`, "origin"])
+      runGit(['fetch', '--no-tags', '--filter=blob:none', `--deepen=${step}`, 'origin'])
     } catch { /* ignore transient failures and keep trying */ }
 
     // Deepen the target branch tracking ref
     try {
-      runGit(["fetch", "--no-tags", "--filter=blob:none", `--deepen=${step}`, "origin", refspec])
+      runGit(['fetch', '--no-tags', '--filter=blob:none', `--deepen=${step}`, 'origin', refspec])
     } catch { /* ignore transient failures */ }
 
     try {
-      base = runGit(["merge-base", targetRef, sourceBranch])
+      base = runGit(['merge-base', targetRef, sourceBranch])
     } catch {
-      base = ""
+      base = ''
     }
     curDepth += step
   }
@@ -239,7 +239,7 @@ function getMergeBase (baseBranch, sourceBranch) {
   if (!base) {
     throw new Error(
       `No merge-base found after deepening to ~${maxDepth} commits.\n` +
-      `Possible causes: unrelated histories, very old fork point, or branch was force-pushed/rebased.`
+      'Possible causes: unrelated histories, very old fork point, or branch was force-pushed/rebased.'
     )
   }
   return base
@@ -681,7 +681,7 @@ function getGitMetadata (ciMetadata) {
     GIT_TAG, tag
   ]
 
-  for (let i = 0 i < entries.length i += 2) {
+  for (let i = 0; i < entries.length; i += 2) {
     const value = entries[i + 1]
     if (value) {
       tags[entries[i]] = value
