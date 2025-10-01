@@ -117,7 +117,6 @@ function cachedExec (cmd, flags, options) {
     setCache(cacheKey, result)
     return result
   } catch (err) {
-    console.log('failed cachedExec', err)
     const cacheValue = '__GIT_COMMAND_FAILED__' +
       JSON.stringify({
         code: err.code,

@@ -998,11 +998,15 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
   }
 }
 
-function getPullRequestBaseBranch (pullRequestBaseBranch) {
+function getPullRequestBaseBranch (pullRequestBaseBranch, ciSourceBranch) {
   const remoteName = getGitRemoteName()
   console.log('remoteName', remoteName)
 
-  const sourceBranch = getSourceBranch()
+  let sourceBranch = ciSourceBranch
+
+  if (!sourceBranch) {
+    sourceBranch = getSourceBranch()
+  }
   console.log('sourceBranch', sourceBranch)
   // TODO: We will get the default branch name from the backend in the future.
   const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
