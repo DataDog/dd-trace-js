@@ -9,7 +9,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   constructor (tracer, config) {
     // Call parent constructor with required options
     super({
-      configuration: undefined,
       exposureChannel: channel(EXPOSURE_CHANNEL)
     })
 

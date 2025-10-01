@@ -2,6 +2,9 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
+import { type DatadogNodeServerProvider } from '@datadog/openfeature-node-server';
+
+type FlaggingConfiguration = ReturnType<DatadogNodeServerProvider['getConfiguration']>;
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -1147,14 +1150,14 @@ declare namespace tracer {
      *
      * @returns The current configuration object
      */
-    getConfiguration(): any;
+    getConfiguration(): FlaggingConfiguration;
 
     /**
      * Sets the flag configuration.
      *
      * @param config The configuration object to set
      */
-    setConfiguration(config: any): void;
+    setConfiguration(config: FlaggingConfiguration): void;
 
     /**
      * Internal method to update flag configuration from Remote Config.
