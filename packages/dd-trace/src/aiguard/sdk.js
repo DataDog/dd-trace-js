@@ -59,24 +59,24 @@ class AIGuard extends NoopAIGuard {
     this._initialized = true
   }
 
-  _truncate (messages) {
+  #truncate (messages) {
     const size = Math.min(messages.length, this._maxMessagesLength)
     const result = messages.slice(-size)
 
     for (let i = 0; i < size; i++) {
       const message = result[i]
-      if ('content' in message && message.content.length > this._maxContentSize) {
+      if (message.content?.length > this._maxContentSize) {
         result[i] = { ...message, content: message.content.slice(0, this._maxContentSize) }
       }
     }
     return result
   }
 
-  _isToolCall (message) {
+  #isToolCall (message) {
     return message.tool_calls || message.tool_call_id
   }
 
-  _getToolName (message, history) {
+  #getToolName (message, history) {
     // 1. assistant message with tool calls
     if (message.tool_calls) {
       const names = message.tool_calls.map((tool) => tool.function.name)
@@ -104,17 +104,17 @@ class AIGuard extends NoopAIGuard {
     const { block = false } = opts ?? {}
     return this._tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]
-      const target = this._isToolCall(last) ? 'tool' : 'prompt'
+      const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
       if (target === 'tool') {
-        const name = this._getToolName(last, messages)
+        const name = this.#getToolName(last, messages)
         if (name) {
           span.setTag(AI_GUARD_TOOL_NAME_TAG_KEY, name)
         }
       }
       span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: {
-          messages: this._truncate(messages)
+          messages: this.#truncate(messages)
         }
       }
       let response
