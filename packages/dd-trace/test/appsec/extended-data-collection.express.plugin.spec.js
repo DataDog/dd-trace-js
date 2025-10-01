@@ -23,7 +23,7 @@ function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
   }
 }
 
-describe.only('extended data collection', () => {
+describe('extended data collection', () => {
   before(() => {
     return agent.load(['express', 'http'], { client: false })
   })
