@@ -271,6 +271,7 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
+    expect(config).to.have.property('appKey', undefined)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
@@ -370,6 +371,7 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
+      { name: 'appKey', value: undefined, origin: 'default' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
       { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: true, origin: 'default' },
@@ -796,6 +798,7 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
+      { name: 'appKey', value: 'myAppKey', origin: 'env_var' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
       { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: false, origin: 'env_var' },

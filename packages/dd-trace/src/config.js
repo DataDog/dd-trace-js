@@ -887,7 +887,6 @@ class Config {
     this._setBoolean(opts, 'apmTracingEnabled', options.apmTracingEnabled ??
       (options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled)
     )
-    this._setString(opts, 'appKey', options.appKey)
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
     this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
       options.appsec?.apiSecurity?.endpointCollectionEnabled)
@@ -961,12 +960,12 @@ class Config {
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
     this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
-    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
-    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
     this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
     opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
     this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
+    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
+    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
     opts.flushInterval = maybeInt(options.flushInterval)
