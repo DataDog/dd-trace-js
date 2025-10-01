@@ -3,7 +3,7 @@
 require('dd-trace').init()
 
 function busyWait (ms) {
-  return new Promise(resolve => {
+  return /** @type {Promise<void>} */ (new Promise(resolve => {
     let done = false
     function work () {
       if (done) return
@@ -16,9 +16,9 @@ function busyWait (ms) {
     setImmediate(work)
     setTimeout(() => {
       done = true
-      resolve(undefined)
+      resolve()
     }, ms)
-  })
+  }))
 }
 
 const durationMs = Number.parseInt(process.env.TEST_DURATION_MS ?? '500')
