@@ -25,7 +25,11 @@ describe('profilers/native/wall', () => {
         constants: {
           kSampleCount: 0,
           NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
-        }
+        },
+        getMetrics: sinon.stub().returns({
+          totalAsyncContextCount: 0,
+          usedAsyncContextCount: 0
+        })
       }
     }
 
@@ -128,7 +132,8 @@ describe('profilers/native/wall', () => {
     const info = profiler.getInfo()
     profiler.stop()
 
-    expect(info.asyncContextCount).to.not.be.undefined
+    expect(info.totalAsyncContextCount).to.not.be.undefined
+    expect(info.usedAsyncContextCount).to.not.be.undefined
     expect(info.settings.asyncContextFrameEnabled).to.not.be.undefined
     expect(info.settings.codeHotspotsEnabled).to.not.be.undefined
     expect(info.settings.cpuProfilingEnabled).to.not.be.undefined
