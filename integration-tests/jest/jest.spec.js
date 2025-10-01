@@ -2287,11 +2287,8 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
-    it('works with happy-dom', async () => {
-      // happy-dom>=19 can only be used with CJS from node 20 and above
-      if (NODE_MAJOR < 20) {
-        return
-      }
+    // happy-dom>=19 can only be used with CJS from node 20 and above
+    (NODE_MAJOR < 20 ? it.skip : it)('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {
