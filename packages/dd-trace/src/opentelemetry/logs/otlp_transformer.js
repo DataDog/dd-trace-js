@@ -48,7 +48,6 @@ const SEVERITY_MAP = {
  * @class OtlpTransformer
  */
 class OtlpTransformer {
-  #protobufTypes
   #resourceAttributes
 
   /**
@@ -60,7 +59,6 @@ class OtlpTransformer {
   constructor (resourceAttributes, protocol) {
     this.#resourceAttributes = this.#transformAttributes(resourceAttributes)
     this.protocol = protocol
-    this.#protobufTypes = null
   }
 
   /**
@@ -101,26 +99,13 @@ class OtlpTransformer {
   }
 
   /**
-   * Gets the protobuf types, loading them lazily to reduce startup overhead.
-   * @returns {Object} Protobuf types object
-   * @private
-   */
-  #getProtobufTypes () {
-    // Delay the loading of protobuf types to reduce startup overhead
-    if (!this.#protobufTypes) {
-      this.#protobufTypes = getProtobufTypes()
-    }
-    return this.#protobufTypes
-  }
-
-  /**
    * Transforms log records to protobuf format.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Protobuf-encoded log records
    * @private
    */
   #transformToProtobuf (logRecords) {
-    const { _logsService } = this.#getProtobufTypes()
+    const { protoLogsService } = getProtobufTypes()
     // Create the OTLP LogsData structure
     const logsData = {
       resourceLogs: [{
@@ -130,8 +115,8 @@ class OtlpTransformer {
     }
 
     // Serialize to protobuf
-    const message = _logsService.create(logsData)
-    const buffer = _logsService.encode(message).finish()
+    const message = protoLogsService.create(logsData)
+    const buffer = protoLogsService.encode(message).finish()
 
     return buffer
   }
@@ -270,15 +255,15 @@ class OtlpTransformer {
    * @private
    */
   #mapSeverityNumber (severityNumber) {
-    const { _severityNumber } = this.#getProtobufTypes()
+    const { protoSeverityNumber } = getProtobufTypes()
 
-    if (!_severityNumber) {
-      log.error('_severityNumber is undefined')
+    if (!protoSeverityNumber) {
+      log.error('protoSeverityNumber is undefined')
       return 9 // Default to INFO
     }
 
     const severityName = SEVERITY_MAP[severityNumber] || 'SEVERITY_NUMBER_INFO'
-    return _severityNumber.values[severityName]
+    return protoSeverityNumber.values[severityName]
   }
 
   /**

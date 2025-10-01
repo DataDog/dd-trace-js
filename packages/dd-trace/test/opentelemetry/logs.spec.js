@@ -8,7 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 require('../setup/core')
-const { _logsService } = require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()
+const { protoLogsService } = require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -35,7 +35,7 @@ describe('OpenTelemetry Logs', () => {
         end: () => {
           const decoded = protocol === 'json'
             ? JSON.parse(capturedPayload.toString())
-            : _logsService.decode(capturedPayload)
+            : protoLogsService.decode(capturedPayload)
           validator(decoded, capturedHeaders)
           validatorCalled = true
         },

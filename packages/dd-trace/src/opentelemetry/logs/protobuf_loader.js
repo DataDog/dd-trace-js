@@ -19,15 +19,12 @@ const path = require('path')
 const fs = require('fs')
 
 let _root = null
-let _logsService = null
-let _resourceLogs = null
-let _scopeLogs = null
-let _logRecord = null
-let _severityNumber = null
+let protoLogsService = null
+let protoSeverityNumber = null
 
 function getProtobufTypes () {
   if (_root) {
-    return { _root, _logsService, _resourceLogs, _scopeLogs, _logRecord, _severityNumber }
+    return { protoLogsService, protoSeverityNumber }
   }
   // Load the proto files
   const protoDir = __dirname
@@ -45,13 +42,10 @@ function getProtobufTypes () {
   _root = protobuf.loadSync(protoFiles)
 
   // Get the message types
-  _logsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')
-  _resourceLogs = _root.lookupType('opentelemetry.proto.logs.v1.ResourceLogs')
-  _scopeLogs = _root.lookupType('opentelemetry.proto.logs.v1.ScopeLogs')
-  _logRecord = _root.lookupType('opentelemetry.proto.logs.v1.LogRecord')
-  _severityNumber = _root.lookupEnum('opentelemetry.proto.logs.v1.SeverityNumber')
+  protoLogsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')
+  protoSeverityNumber = _root.lookupEnum('opentelemetry.proto.logs.v1.SeverityNumber')
 
-  return { _root, _logsService, _resourceLogs, _scopeLogs, _logRecord, _severityNumber }
+  return { protoLogsService, protoSeverityNumber }
 }
 
 module.exports = {
