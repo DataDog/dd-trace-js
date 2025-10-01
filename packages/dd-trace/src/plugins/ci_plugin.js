@@ -283,11 +283,10 @@ module.exports = class CiPlugin extends Plugin {
       const {
         [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
-        [GIT_COMMIT_HEAD_SHA]: commitHeadSha,
-        [GIT_BRANCH]: ciSourceBranch
+        [GIT_COMMIT_HEAD_SHA]: commitHeadSha
       } = this.testEnvironmentMetadata
 
-      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch, ciSourceBranch)
+      const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
 
       console.log('modified-tests', {
         testEnvironmentMetadata: this.testEnvironmentMetadata,

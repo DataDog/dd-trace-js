@@ -19,7 +19,9 @@ const {
   checkAndFetchBranch,
   getLocalBranches,
   getMergeBase,
-  getCounts
+  getCounts,
+  isShallowRepository,
+  unshallowRepository
 } = require('./git')
 const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
@@ -998,15 +1000,17 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
   }
 }
 
-function getPullRequestBaseBranch (pullRequestBaseBranch, ciSourceBranch) {
+function getPullRequestBaseBranch (pullRequestBaseBranch) {
+  if (isShallowRepository()) {
+    console.log('unshallowing repository')
+    unshallowRepository()
+    console.log('unshallowed')
+  }
+
   const remoteName = getGitRemoteName()
   console.log('remoteName', remoteName)
 
-  let sourceBranch = ciSourceBranch
-
-  if (!sourceBranch) {
-    sourceBranch = getSourceBranch()
-  }
+  const sourceBranch = getSourceBranch()
   console.log('sourceBranch', sourceBranch)
   // TODO: We will get the default branch name from the backend in the future.
   const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']

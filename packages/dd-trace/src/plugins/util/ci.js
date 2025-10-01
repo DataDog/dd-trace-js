@@ -193,12 +193,15 @@ module.exports = {
         CI_MERGE_REQUEST_DIFF_BASE_SHA
       } = env
 
-      console.log('gitlab_ci', {
-        CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
-        CI_MERGE_REQUEST_IID,
-        CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
-        CI_MERGE_REQUEST_DIFF_BASE_SHA
-      })
+      const keysByGitlab = {}
+
+      for (const key in process.env) {
+        if (key.startsWith('CI_')) {
+          keysByGitlab[key] = process.env[key]
+        }
+      }
+
+      console.log('gitlab_ci', keysByGitlab)
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
 
