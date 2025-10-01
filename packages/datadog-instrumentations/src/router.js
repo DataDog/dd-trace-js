@@ -151,17 +151,6 @@ function createWrapRouterMethod (name) {
       }
       const router = original.apply(this, arguments)
 
-      // Handle nested router mounting for 'use' method
-      if (original.name === 'use' && arguments.length >= 2) {
-        const [mountPath, nestedRouter] = arguments
-
-        if (typeof mountPath === 'string' && nestedRouter && typeof nestedRouter === 'function') {
-          const parentPath = getRouterMountPath(this)
-          const fullMountPath = joinPath(parentPath, mountPath)
-          setRouterMountPath(nestedRouter, fullMountPath)
-        }
-      }
-
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
       }
@@ -172,6 +161,17 @@ function createWrapRouterMethod (name) {
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
       if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
+        // Handle nested router mounting for 'use' method
+        if (original.name === 'use' && arguments.length >= 2) {
+          const [mountPath, nestedRouter] = arguments
+
+          if (typeof mountPath === 'string' && nestedRouter && typeof nestedRouter === 'function') {
+            const parentPath = getRouterMountPath(this)
+            const fullMountPath = joinPath(parentPath, mountPath)
+            setRouterMountPath(nestedRouter, fullMountPath)
+          }
+        }
+
         const mountPath = getRouterMountPath(this)
 
         if (mountPath) {

@@ -110,12 +110,19 @@ function wrapAppRoute (route) {
 
 function wrapAppUse (use) {
   return function wrappedUse () {
-    if (arguments.length >= 2) {
-      const mountPath = arguments[0]
-      const router = arguments[1]
+    if (arguments.length === 0) return use.apply(this, arguments)
+
+    // Check if first argument is a mount path or a router/middleware
+    const firstArg = arguments[0]
+    const hasMountPath = typeof firstArg === 'string'
+    const mountPath = hasMountPath ? firstArg : '/'
+    const startIdx = hasMountPath ? 1 : 0
+
+    for (let i = startIdx; i < arguments.length; i++) {
+      const router = arguments[i]
 
       // Register mount path for router and collect existing routes with full app prefix
-      if (typeof mountPath === 'string' && router && typeof router === 'function') {
+      if (router && typeof router === 'function') {
         setRouterMountPath(router, mountPath)
         markAppMounted(router)
 

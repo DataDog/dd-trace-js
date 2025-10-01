@@ -57,37 +57,50 @@ describe('Endpoints collection', () => {
     ]
 
     if (framework === 'fastify') {
-      expectedEndpoints.push({ method: 'OPTIONS', path: '/users/:id?' })
+      expectedEndpoints.push(
+        { method: 'OPTIONS', path: '/users/:id?' },
 
-      // Route with regex - not supported in express5
-      expectedEndpoints.push({ method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' })
-      expectedEndpoints.push({ method: 'OPTIONS', path: '/users/:id?' })// Added with addHttpMethod
-      expectedEndpoints.push({ method: 'MKCOL', path: '/example/near/:lat-:lng/radius/:r' })// Added with addHttpMethod
+        // Route with regex - not supported in express5
+        { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
 
-      // All supported methods route
-      expectedEndpoints.push({ method: 'GET', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'HEAD', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'TRACE', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'DELETE', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'OPTIONS', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'PATCH', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'PUT', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'POST', path: '/all-methods' })
-      expectedEndpoints.push({ method: 'GET', path: '/wildcard/*' })
-      expectedEndpoints.push({ method: 'HEAD', path: '/wildcard/*' })
+        { method: 'OPTIONS', path: '/users/:id?' }, // Added with addHttpMethod
+        { method: 'MKCOL', path: '/example/near/:lat-:lng/radius/:r' }, // Added with addHttpMethod
 
-      // Wildcard routes
-      expectedEndpoints.push({ method: 'GET', path: '*' })
-      expectedEndpoints.push({ method: 'HEAD', path: '*' })
+        // All supported methods route
+        { method: 'GET', path: '/all-methods' },
+        { method: 'HEAD', path: '/all-methods' },
+        { method: 'TRACE', path: '/all-methods' },
+        { method: 'DELETE', path: '/all-methods' },
+        { method: 'OPTIONS', path: '/all-methods' },
+        { method: 'PATCH', path: '/all-methods' },
+        { method: 'PUT', path: '/all-methods' },
+        { method: 'POST', path: '/all-methods' },
+        { method: 'GET', path: '/wildcard/*' },
+        { method: 'HEAD', path: '/wildcard/*' },
+
+        // Wildcard routes
+        { method: 'GET', path: '*' },
+        { method: 'HEAD', path: '*' }
+      )
     }
 
     if (framework === 'express') {
-      expectedEndpoints.push({ method: 'CONNECT', path: '/connect-test' })
-      expectedEndpoints.push({ method: '*', path: '/multi-method' })
-      expectedEndpoints.push({ method: '*', path: '/all-methods' })
-      expectedEndpoints.push({ method: '*', path: '/wildcard/*name' })
-      expectedEndpoints.push({ method: '*', path: '/^\\/login\\/.*$/i' })
-      expectedEndpoints.push({ method: 'OPTIONS', path: '/users/:id' })
+      expectedEndpoints.push(
+        { method: 'CONNECT', path: '/connect-test' },
+        { method: '*', path: '/multi-method' },
+        { method: '*', path: '/all-methods' },
+        { method: '*', path: '/wildcard/*name' },
+        { method: '*', path: '/^\\/login\\/.*$/i' },
+        { method: 'OPTIONS', path: '/users/:id' },
+
+        // Multiple routers without mount path
+        { method: 'PUT', path: '/router1' },
+        { method: 'PUT', path: '/router2' },
+
+        // Nested routers mounted after definitions
+        { method: 'GET', path: '/root/path/path2/endpoint' },
+        { method: 'HEAD', path: '/root/path/path2/endpoint' }
+      )
     }
 
     return expectedEndpoints

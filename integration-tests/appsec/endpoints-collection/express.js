@@ -44,8 +44,28 @@ const apiRouter = express.Router()
 app.use('/v1', apiRouter)
 apiRouter.put('/nested/:id', (_, res) => res.send('ok'))
 
+// Multiple routers without mount path
+const apiRouter1 = express.Router()
+const apiRouter2 = express.Router()
+
+apiRouter1.put('/router1', (_, res) => res.send('ok 1'))
+apiRouter2.put('/router2', (_, res) => res.send('ok 2'))
+
+app.use(apiRouter1, apiRouter2)
+
+// Test nested routers before app.use
+const router1 = express.Router()
+const router2 = express.Router()
+const router3 = express.Router()
+
+router2.use('/path2', router3)
+router3.get('/endpoint', (_, res) => res.send('ok'))
+router1.use('/path', router2)
+
 // Add endpoint during runtime
 setTimeout(() => {
+  app.use('/root', router1)
+
   // Deeply nested routes
   const deepRouter = express.Router()
   deepRouter.get('/nested', (_, res) => res.send('ok'))
