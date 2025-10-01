@@ -174,9 +174,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
 
-  // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to deleted in next major
-
-  // should be standard if !redaction and no headers enabled
+  // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to delete in a major
   if ((!config.headersExtendedCollectionEnabled || config.headersRedaction) && !extendedDataCollection) {
     // Standard collection
     return Object.assign(
@@ -189,13 +187,10 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   const maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
 
   // Extended collection
-  // Set to avoid duplicates
   const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length +
     Object.keys(requestEventCollectedHeaders).length
 
-  const requestExtendedHeadersAvailableCount =
-    maxHeadersCollected -
-    collectedHeadersCount
+  const requestExtendedHeadersAvailableCount = maxHeadersCollected - collectedHeadersCount
 
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
@@ -366,7 +361,7 @@ function reportAttack ({ events: attackData, actions }) {
 
   rootSpan.addTags(newTags)
 
-  // TODO this should be deleted in the next major
+  // TODO this should be deleted in a major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
     reportRequestBody(rootSpan, req.body, true)
   }
@@ -444,7 +439,7 @@ function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) 
     rootSpan.meta_struct['http.request.body'] = value
     if (truncated) {
       const sizeExceedTagKey = comesFromRaspAction
-        ? '_dd.appsec.rasp.request_body_size.exceeded'
+        ? '_dd.appsec.rasp.request_body_size.exceeded' // TODO old metric to delete in a major
         : '_dd.appsec.request_body_size.exceeded'
       rootSpan.setTag(sizeExceedTagKey, 'true')
     }
