@@ -556,9 +556,9 @@ describe('Config', () => {
   it('should initialize from environment variables', () => {
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
-    process.env.DD_AI_GUARD_TIMEOUT = 2000
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 1024 * 1024
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 32
+    process.env.DD_AI_GUARD_TIMEOUT = 2000
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -831,6 +831,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
+      { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
+      { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
+      { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
@@ -1024,7 +1029,6 @@ describe('Config', () => {
       { sampleRate: 0.1 }
     ]
     const config = new Config({
-      appKey: 'myAppKey',
       appsec: false,
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1147,6 +1151,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.property('flushInterval', 5000)
@@ -1214,12 +1223,6 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog'])
     expect(config).to.have.property('version', '0.1.0')
-    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
-    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
-    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
-    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
-    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
-    expect(config).to.have.property('appKey', 'myAppKey')
 
     expect(updateConfig).to.be.calledOnce
 
@@ -1237,6 +1240,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
+      { name: 'experimental.aiguard.enabled', value: true, origin: 'code' },
+      { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
+      { name: 'experimental.aiguard.maxContentSize', value: 1024 * 1024, origin: 'code' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: 32, origin: 'code' },
+      { name: 'experimental.aiguard.timeout', value: 2_000, origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
       { name: 'flushInterval', value: 5000, origin: 'code' },
@@ -1428,6 +1436,11 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'false'
+    process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
+    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 512 * 1024
+    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 16
+    process.env.DD_AI_GUARD_TIMEOUT = 1_000
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -1556,6 +1569,13 @@ describe('Config', () => {
       },
       env: 'development',
       experimental: {
+        aiguard: {
+          enabled: true,
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+          maxContentSize: 1024 * 1024,
+          maxMessagesLength: 32,
+          timeout: 2000
+        },
         b3: false,
         traceparent: false,
         exporter: 'agent',
@@ -1644,6 +1664,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
     expect(config).to.have.property('env', 'development')
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.property('flushMinSpans', 500)

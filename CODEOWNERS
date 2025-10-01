@@ -97,7 +97,7 @@
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
-/.github/workflows/aiguard.yml.yml @DataDog/asm-js
+/.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
 /.github/workflows/debugger.yml @DataDog/debugger
