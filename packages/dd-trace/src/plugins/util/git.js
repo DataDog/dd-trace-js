@@ -73,6 +73,9 @@ function sanitizedExec (
     }
     return result
   } catch (err) {
+    if (flags.includes('--shallow-since')) {
+      console.log('failed cachedExec', err)
+    }
     if (errorMetric) {
       incrementCountMetric(errorMetric.name, {
         ...errorMetric.tags,
@@ -134,10 +137,13 @@ function getGitVersion () {
 
 function unshallowRepository (parentOnly = false) {
   const gitVersion = getGitVersion()
+  console.log('gitVersion', gitVersion)
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
     return
   }
+  console.log('gitVersion.major', gitVersion.major)
+  console.log('gitVersion.minor', gitVersion.minor)
   if (gitVersion.major < 2 || (gitVersion.major === 2 && gitVersion.minor < 27)) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
@@ -145,6 +151,8 @@ function unshallowRepository (parentOnly = false) {
   const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
   const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
 
+  console.log('defaultRemoteName', defaultRemoteName)
+  console.log('revParseHead', revParseHead)
   const baseGitOptions = [
     'fetch',
     parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
@@ -153,6 +161,7 @@ function unshallowRepository (parentOnly = false) {
     '--recurse-submodules=no',
     defaultRemoteName
   ]
+  console.log('baseGitOptions', baseGitOptions)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
   const start = Date.now()
@@ -163,6 +172,7 @@ function unshallowRepository (parentOnly = false) {
   try {
     cachedExec('git', flags)
   } catch (err) {
+    console.log('failed cachedExec', err)
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     log.warn(`Git unshallow failed: ${flags.join(' ')}`)
     incrementCountMetric(
@@ -177,15 +187,18 @@ function unshallowRepository (parentOnly = false) {
       ...baseGitOptions,
       upstreamRemote
     ]
+    console.log('trying unshallow again', flags)
     try {
       cachedExec('git', flags)
     } catch (err) {
+      console.log('failed unshallow again two', err)
       // If the CI is working on a detached HEAD or branch tracking hasn't been set up, the above command will fail.
       log.warn(`Git unshallow failed again: ${flags.join(' ')}`)
       incrementCountMetric(
         TELEMETRY_GIT_COMMAND_ERRORS,
         { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
       )
+      console.log('trying unshallow for the last time')
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
         'git',
@@ -194,6 +207,7 @@ function unshallowRepository (parentOnly = false) {
         null,
         { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } } // we log the error in sanitizedExec
       )
+
     }
   }
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
