@@ -20,7 +20,7 @@ function findWebSpan (payload) {
 }
 
 esbuildVersions.forEach((version) => {
-  describe('ESM is build and runs as expected in a sandbox', () => {
+  describe('ESM is built and runs as expected in a sandbox', () => {
     let sandbox, agent, cwd
 
     before(async () => {
@@ -55,7 +55,7 @@ esbuildVersions.forEach((version) => {
 
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
-          // http web spans are creaed in bundled application
+          // http web spans are created in bundled application
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
@@ -78,7 +78,7 @@ esbuildVersions.forEach((version) => {
 
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
-          // http web spans are creaed in bundled application
+          // http web spans are created in bundled application
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
@@ -101,7 +101,7 @@ esbuildVersions.forEach((version) => {
 
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
-          // http web spans are creaed in bundled application
+          // http web spans are created in bundled application
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
@@ -124,7 +124,7 @@ esbuildVersions.forEach((version) => {
 
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
-          // http web spans are creaed in bundled application
+          // http web spans are created in bundled application
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
