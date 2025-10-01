@@ -187,9 +187,8 @@ function unshallowRepository (parentOnly = false) {
   console.log('revParseHead', revParseHead)
   const baseGitOptions = [
     'fetch',
-    parentOnly ? '--deepen=1' : '--shallow-since="1 month ago"',
+    parentOnly ? '--deepen=1' : '--shallow-since="1 day ago"',
     '--update-shallow',
-    '--filter=blob:none',
     '--recurse-submodules=no',
     defaultRemoteName
   ]
