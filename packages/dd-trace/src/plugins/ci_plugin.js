@@ -288,9 +288,19 @@ module.exports = class CiPlugin extends Plugin {
 
       const baseBranchSha = pullRequestBaseBranchSha || getPullRequestBaseBranch(pullRequestBaseBranch)
 
+      console.log('modified-tests', {
+        pullRequestBaseBranch,
+        pullRequestBaseBranchSha,
+        commitHeadSha,
+        baseBranchSha
+      })
+
       if (baseBranchSha) {
         const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
         const modifiedTests = getModifiedTestsFromDiff(diff)
+
+        console.log('diff', diff)
+        console.log('modifiedTests', modifiedTests)
         if (modifiedTests) {
           return onDone({ err: null, modifiedTests })
         }
