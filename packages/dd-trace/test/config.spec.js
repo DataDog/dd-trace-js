@@ -13,6 +13,7 @@ require('./setup/core')
 
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Config', () => {
   let Config
@@ -2595,11 +2596,39 @@ describe('Config', () => {
     it('overriding max depth', () => {
       process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
       process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
-      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 7
-      const taggingConfig = new Config().cloudPayloadTagging
-      expect(taggingConfig).to.have.property('requestsEnabled', true)
-      expect(taggingConfig).to.have.property('responsesEnabled', true)
-      expect(taggingConfig).to.have.property('maxDepth', 7)
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+
+      let { cloudPayloadTagging } = new Config()
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 7,
+        requestsEnabled: true,
+        responsesEnabled: true
+      })
+
+      delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
+
+      ;({ cloudPayloadTagging } = new Config({ cloudPayloadTagging: { maxDepth: 7 } }))
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 7,
+        requestsEnabled: true,
+        responsesEnabled: true
+      })
+    })
+
+    it('use default max depth if max depth is not a number', () => {
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 'abc'
+
+      let { cloudPayloadTagging } = new Config()
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 10,
+      })
+
+      delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
+
+      ;({ cloudPayloadTagging } = new Config({ cloudPayloadTagging: { maxDepth: NaN } }))
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 10,
+      })
     })
   })
 
