@@ -165,6 +165,86 @@ function waitForLock ({ intervalMs = 500, timeoutMs = 5 * 60 * 1000 } = {}) {
   }
 }
 
+function runGit(args, opts = {}) {
+  try {
+    console.log('running git', args)
+    return cp.execFileSync(
+      "git",
+      args,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts }
+    ).trim()
+  } catch (err) {
+    const stderr = err.stderr?.toString?.() || ""
+    const stdout = err.stdout?.toString?.() || ""
+    err.message = `git ${args.join(" ")}\n${stderr || stdout || err.message}`
+    throw err
+  }
+}
+function getMergeBase (baseBranch, sourceBranch) {
+  const step = 200
+  const maxDepth = 5000
+  const shallowSince = "2 day ago" // e.g., "2025-04-01"
+
+  // Ensure we're in a repo
+  const inside = runGit(["rev-parse", "--is-inside-work-tree"])
+  if (inside !== "true") {
+    throw new Error("Not a git repository here.")
+  }
+
+  // Prepare a local remote-tracking ref for the target branch with minimal payload
+  const targetRef = `refs/remotes/origin/${baseBranch}`
+  const refspec = `+refs/heads/${baseBranch}:${targetRef}`
+
+  // First, create the local tracking ref with the smallest possible history
+  const baseFetchArgs = ["fetch", "--no-tags", "--filter=blob:none", "origin", refspec]
+  if (shallowSince) {
+    // Prefer a date fence if you roughly know when the branch diverged
+    baseFetchArgs.splice(2, 0, `--shallow-since=${shallowSince}`)
+  } else {
+    baseFetchArgs.splice(2, 0, "--depth=1")
+  }
+  runGit(baseFetchArgs)
+
+  // Try an immediate merge-base with minimal history
+  let base = ""
+  try {
+    base = runGit(["merge-base", targetRef, sourceBranch])
+  } catch {
+    base = ""
+  }
+  if (base) return base
+
+  // Incrementally deepen both sides
+  let curDepth = step
+  while (!base && curDepth <= maxDepth) {
+    // Deepen the currently checked-out history (your pipeline commit side)
+    // (No refspec => deepen the mapped refs for 'origin' works for detached HEAD as well)
+    try {
+      runGit(["fetch", "--no-tags", "--filter=blob:none", `--deepen=${step}`, "origin"])
+    } catch { /* ignore transient failures and keep trying */ }
+
+    // Deepen the target branch tracking ref
+    try {
+      runGit(["fetch", "--no-tags", "--filter=blob:none", `--deepen=${step}`, "origin", refspec])
+    } catch { /* ignore transient failures */ }
+
+    try {
+      base = runGit(["merge-base", targetRef, sourceBranch])
+    } catch {
+      base = ""
+    }
+    curDepth += step
+  }
+
+  if (!base) {
+    throw new Error(
+      `No merge-base found after deepening to ~${maxDepth} commits.\n` +
+      `Possible causes: unrelated histories, very old fork point, or branch was force-pushed/rebased.`
+    )
+  }
+  return base
+}
+
 function unshallowRepository (parentOnly = false) {
   console.log('waiting for lock')
   waitForLock()
@@ -375,40 +455,21 @@ function getLocalBranches (remoteName) {
   }
 }
 
-function getMergeBase (baseBranch, sourceBranch) {
-  console.log('getMergeBase', { baseBranch, sourceBranch })
+// function getMergeBase (baseBranch, sourceBranch) {
+//   console.log('getMergeBase', { baseBranch, sourceBranch })
 
-  let other = null
-  try {
-    other = cp.execFileSync(
-      'git', ['merge-base', baseBranch, sourceBranch], { stdio: 'pipe', timeout: 5000 })
-    console.log('other', other)
-    other = other.toString()
-  } catch (err) {
-    console.log('failed merge-base', err)
-  }
+//   let other = null
+//   try {
+//     other = cp.execFileSync(
+//       'git', ['merge-base', baseBranch, sourceBranch], { stdio: 'pipe', timeout: 5000 })
+//     console.log('other', other)
+//     other = other.toString()
+//   } catch (err) {
+//     console.log('failed merge-base', err)
+//   }
 
-  const mergeBase = sanitizedExec(
-    'git',
-    ['merge-base', baseBranch, sourceBranch],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } }
-  )
-  console.log('mergeBase', mergeBase)
-
-  const mergeBase2 = sanitizedExec(
-    'git',
-    ['merge-base', baseBranch, sourceBranch],
-    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_merge_base' } },
-    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_merge_base' } },
-    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_merge_base' } },
-    false
-  )
-  console.log('mergeBase2', mergeBase2)
-
-  return mergeBase
-}
+//   return other
+// }
 
 function getCounts (sourceBranch, candidateBranch) {
   const counts = sanitizedExec(
@@ -620,7 +681,7 @@ function getGitMetadata (ciMetadata) {
     GIT_TAG, tag
   ]
 
-  for (let i = 0; i < entries.length; i += 2) {
+  for (let i = 0 i < entries.length i += 2) {
     const value = entries[i + 1]
     if (value) {
       tags[entries[i]] = value
