@@ -5,7 +5,6 @@ const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
 const log = require('./log')
-const coalesce = require('koalas')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
@@ -335,7 +334,7 @@ class Config {
     )
 
     const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = maybeInt(
-      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
+      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH') ??
       options.cloudPayloadTagging?.maxDepth
     ) ?? 10
 
@@ -1030,8 +1029,7 @@ class Config {
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
-    const ingestion = options.ingestion || {}
-    opts['sampler.rateLimit'] = coalesce(options.rateLimit, ingestion.rateLimit)
+    opts['sampler.rateLimit'] = maybeInt(options.rateLimit ?? options.ingestion.rateLimit)
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
     this._setString(opts, 'service', options.service || tags.service)
     opts.serviceMapping = options.serviceMapping
