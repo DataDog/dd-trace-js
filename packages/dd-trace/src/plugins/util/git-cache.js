@@ -79,6 +79,10 @@ function setCache (cacheKey, result) {
 }
 
 function cachedExec (cmd, flags, options) {
+  if (flags.includes('merge-base')) {
+    console.log('calling cachedExec', {
+      cmd, flags, options, isGitEnabled})
+  }
   if (options === undefined) {
     options = { stdio: 'pipe' }
   }
@@ -87,6 +91,9 @@ function cachedExec (cmd, flags, options) {
   }
   const cacheKey = getCacheKey(cmd, flags)
   const cachedResult = getCache(cacheKey)
+  if (flags.includes('merge-base')) {
+    console.log('cachedResult', cachedResult)
+  }
   if (cachedResult !== null) {
     if (cachedResult.startsWith('__GIT_COMMAND_FAILED__')) {
       let error
@@ -110,6 +117,7 @@ function cachedExec (cmd, flags, options) {
     setCache(cacheKey, result)
     return result
   } catch (err) {
+    console.log('failed cachedExec', err)
     const cacheValue = '__GIT_COMMAND_FAILED__' +
       JSON.stringify({
         code: err.code,

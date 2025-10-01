@@ -59,6 +59,9 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
+    if (flags.includes('merge-base')) {
+      console.log('calling cachedExec', cmd, flags)
+    }
     let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
 
     if (shouldTrim) {
@@ -331,8 +334,15 @@ function getLocalBranches (remoteName) {
 function getMergeBase (baseBranch, sourceBranch) {
   console.log('getMergeBase', { baseBranch, sourceBranch })
 
-  const other = cp.execFileSync('git', ['merge-base', baseBranch, sourceBranch]).toString()
-  console.log('other', other)
+  let other = null
+  try {
+    other = cp.execFileSync(
+      'git', ['merge-base', baseBranch, sourceBranch], { stdio: 'pipe', timeout: 5000 })
+    console.log('other', other)
+    other = other.toString()
+  } catch (err) {
+    console.log('failed merge-base', err)
+  }
 
   const mergeBase = sanitizedExec(
     'git',
