@@ -45,20 +45,13 @@ class AIGuard extends NoopAIGuard {
       this._initialized = false
       return
     }
-
     this._tracer = tracer
-
     this._headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
     }
-
-    let endpoint = config.experimental.aiguard.endpoint
-    if (!endpoint) {
-      endpoint = `https://app.${config.site}/api/v2/ai-guard`
-    }
+    const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
     this._evaluateUrl = `${endpoint}/evaluate`
-
     this._timeout = config.experimental.aiguard.timeout
     this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this._maxContentSize = config.experimental.aiguard.maxContentSize
