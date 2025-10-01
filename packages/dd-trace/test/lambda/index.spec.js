@@ -35,7 +35,7 @@ const restoreEnv = () => {
 const loadAgent = ({ exporter = 'agent' } = {}) => {
   // Make sure the hook is re-registered
   require('../../src/lambda')
-  return agent.load(null, [], {
+  return agent.load([], [], {
     experimental: {
       exporter
     }

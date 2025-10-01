@@ -202,10 +202,33 @@ async function assertIndex (name, version) {
 const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {
+  /**
+   * Load the module.
+   *
+   * @param {string} [id] The name/id of the module to get.
+   * @returns {import('${name}') | never} The module.
+   */
   get (id) { return require(id || '${name}') },
-  getPath (id) { return require.resolve(id || '${name}' ) },
+  /**
+   * Resolve the path for a module id.
+   *
+   * @param {string} [id] The module id to resolve.
+   * @returns {string | never} The resolved path.
+   */
+  getPath (id) { return require.resolve(id || '${name}') },
+  /**
+   * Resolve the package.json path for a module id.
+   *
+   * @param {string} [id] The module id to resolve.
+   * @returns {string | never} The resolved package.json path.
+   */
   pkgJsonPath (id) { return require.resolve((id || '${name}') + '/package.json') },
-  version () { return requirePackageJson('${name}', module).version }
+  /**
+   * Resolve the package's version for a module id.
+   *
+   * @returns {string | never} The resolved package's version.
+   */
+  version () { return requirePackageJson('${name}', /** @type {import('module').Module} */ (module)).version }
 }
 `
   await writeFile(filename(name, version, 'index.js'), index)
@@ -273,13 +296,23 @@ function filename (name, version, file) {
 }
 
 /**
- * @template {string|null} T
- * @param {T} str
- * @returns {T extends null ? undefined : T extends string ? string : never}
+ * @overload
+ * @param {string} str
+ * @returns {string}
+ */
+/**
+ * @overload
+ * @param {null} str
+ * @returns {undefined}
+ */
+/**
+ * @overload
+ * @param {string|null} str
+ * @returns {string|undefined}
  */
 function sha1 (str) {
-  if (!str) return /** @type {any} */ (undefined)
+  if (!str) return
   const shasum = createHash('sha1')
   shasum.update(str)
-  return /** @type {any} */ (shasum.digest('hex'))
+  return shasum.digest('hex')
 }

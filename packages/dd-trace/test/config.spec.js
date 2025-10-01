@@ -564,7 +564,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_RASP_COLLECT_REQUEST_BODY = 'true'
     process.env.DD_APPSEC_RASP_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
-    process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_APPSEC_SCA_ENABLED = 'true'
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'false'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
@@ -584,12 +584,12 @@ describe('Config', () => {
     process.env.DD_HEAP_SNAPSHOT_COUNT = '1'
     process.env.DD_HEAP_SNAPSHOT_DESTINATION = '/tmp'
     process.env.DD_HEAP_SNAPSHOT_INTERVAL = '1800'
-    process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
-    process.env.DD_IAST_DEDUPLICATION_ENABLED = false
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
+    process.env.DD_IAST_DEDUPLICATION_ENABLED = 'false'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
-    process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_REDACTION_ENABLED = 'false'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
@@ -602,8 +602,8 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
-    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = 50
-    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
+    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = '50'
+    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = '0.5'
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_PROFILING_ENABLED = 'true'
@@ -654,8 +654,8 @@ describe('Config', () => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_VERSION = '1.0.0'
-    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = 50
-    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
+    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = '50'
+    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = '0.5'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -1414,8 +1414,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_RASP_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'true'
-    process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
-    process.env.DD_APPSEC_WAF_TIMEOUT = 11
+    process.env.DD_APPSEC_TRACE_RATE_LIMIT = '11'
+    process.env.DD_APPSEC_WAF_TIMEOUT = '11'
     process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
@@ -1433,7 +1433,7 @@ describe('Config', () => {
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
-    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '11'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
@@ -1452,7 +1452,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
-    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
+    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = '2000'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
@@ -2222,7 +2222,7 @@ describe('Config', () => {
       })
 
       it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
-        process.env.DD_TRACE_AGENT_PORT = 12345
+        process.env.DD_TRACE_AGENT_PORT = '12345'
 
         const config = new Config()
 
@@ -2528,7 +2528,7 @@ describe('Config', () => {
   context('payload tagging', () => {
     let env
 
-    const staticConfig = require('../src/payload-tagging/config/aws')
+    const staticConfig = require('../src/payload-tagging/config/aws.json')
 
     beforeEach(() => {
       env = process.env
