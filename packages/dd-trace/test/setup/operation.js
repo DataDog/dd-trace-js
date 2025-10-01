@@ -18,6 +18,7 @@ class RetryOperation extends BaseRetryOperation {
     super(timeouts, { service })
   }
 
+  /** @this {{ _options: { service?: string } }} */
   retry (error) {
     const shouldRetry = super.retry(error)
 
@@ -36,4 +37,8 @@ function logAttempt (service, message) {
   console.error(`[Retrying connection to ${service}] ${message}`)
 }
 
+/**
+ * @typedef {new (service: string) => import('retry/lib/retry_operation')} RetryOperationConstructor
+ */
+/** @type {RetryOperationConstructor} */
 module.exports = RetryOperation
