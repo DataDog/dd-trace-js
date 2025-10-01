@@ -40,22 +40,28 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         })
       }
 
-      // The connAttrs are used to pass through the argument to the potential
-      // serviceName method a user might have passed through as well as parsing
-      // the connection string in v5.
-      const connAttrs = connectionAttributes.get(this)
-
-      const details = typeof this.hostName === 'string' ? this : this._impl
-
       let hostname
       let port
       let dbInstance
 
-      if (details) {
-        dbInstance = details.serviceName
-        hostname = details.hostName ?? details.nscon?.ntAdapter?.hostName
-        port = String(details.port ?? details.nscon?.ntAdapter?.port ?? '')
-      }
+      try {
+        if (this.thin) {
+          const details = this._impl ?? this
+          // Prefer public getters when available (v6), fallback to nscon in v5.
+          dbInstance = this.serviceName ?? details.serviceName
+          hostname = this.hostName ?? details.nscon?.ntAdapter?.hostName
+          const p = this.port ?? details.nscon?.ntAdapter?.port
+          if (p != null) port = String(p)
+        } else {
+          // Avoid host/port getters in thick mode, as they may throw.
+          dbInstance = this.serviceName
+        }
+      } catch {}
+
+      // The connAttrs are used to pass through the argument to the potential
+      // serviceName method a user might have passed through as well as parsing
+      // the connection string in v5 as well as in thick mode.
+      const connAttrs = connectionAttributes.get(this)
 
       const ctx = {
         dbInstance,
