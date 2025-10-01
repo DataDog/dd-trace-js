@@ -135,7 +135,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -144,7 +144,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       try {
@@ -199,7 +199,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -208,7 +208,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       if (msg.payload.request_type !== requestType) return
@@ -242,7 +242,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -251,7 +251,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       try {

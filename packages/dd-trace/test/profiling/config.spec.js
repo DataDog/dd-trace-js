@@ -88,7 +88,7 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[1].codeHotspotsEnabled()).false
@@ -150,7 +150,7 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     if (samplingContextsAvailable) {
@@ -213,7 +213,7 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     if (samplingContextsAvailable) {
       expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)

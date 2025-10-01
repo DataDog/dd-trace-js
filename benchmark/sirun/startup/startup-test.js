@@ -6,7 +6,7 @@ if (Number(process.env.USE_TRACER)) {
 
 if (Number(process.env.EVERYTHING)) {
   // TODO: Add a preparation step that installs these dependencies. That way we
-  // are independent from what is currently installed in case adependency is
+  // are independent from what is currently installed in case a dependency is
   // removed.
   const packages = [
     '@babel/helpers',
