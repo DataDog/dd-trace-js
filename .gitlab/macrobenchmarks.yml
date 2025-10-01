@@ -45,6 +45,8 @@ include:
 
     DDTRACE_INSTALL_VERSION: "git://github.com/Datadog/dd-trace-js.git#${CI_COMMIT_SHA}"
 
+    CI_JOB_NAME: $CI_JOB_GROUP_NAME
+
   # Workaround: Currently we're not running the benchmarks on every PR, but GitHub still shows them as pending.
   # By marking the benchmarks as allow_failure, this should go away. (This workaround should be removed once the
   # benchmarks get changed to run on every PR)
@@ -64,7 +66,6 @@ baseline:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: baseline
-    CI_JOB_NAME: baseline
   parallel:
     matrix:
       - EXPERIMENT: normal-operation
@@ -77,9 +78,7 @@ only-tracing:
   parallel:
     matrix:
       - EXPERIMENT: normal-operation
-        CI_JOB_NAME: only-tracing
       - EXPERIMENT: high-load
-        CI_JOB_NAME: only-tracing
 
 only-tracing-with-runtime-metrics-enabled:
   extends: .macrobenchmarks
@@ -96,7 +95,6 @@ check-slo-breaches:
   needs:
     - baseline
     - only-tracing
-    - only-tracing-with-runtime-metrics-enabled
   artifacts:
     name: "artifacts"
     when: always
