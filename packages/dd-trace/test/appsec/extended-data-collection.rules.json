@@ -53,38 +53,12 @@
       ],
       "transformers": ["lowercase"],
       "on_match": ["extended_data_collection_few_headers"]
-    },
-    {
-      "id": "test-rule-id-3",
-      "name": "test-rule-name-3",
-      "tags": {
-        "type": "a",
-        "category": "custom"
-      },
-      "conditions": [
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.body"
-              }
-            ],
-            "list": [
-              "collect-header-redacted"
-            ]
-          },
-          "operator": "phrase_match"
-        }
-      ],
-      "transformers": ["lowercase"],
-      "on_match": ["extended_data_collection_redacted"]
     }
   ],
   "actions": [
     {
       "id": "extended_data_collection_standard",
       "parameters": {
-        "header_redaction": false,
         "max_collected_headers": 50
       },
       "type": "extended_data_collection"
@@ -92,16 +66,7 @@
     {
       "id": "extended_data_collection_few_headers",
       "parameters": {
-        "header_redaction": false,
         "max_collected_headers": 8
-      },
-      "type": "extended_data_collection"
-    },
-    {
-      "id": "extended_data_collection_redacted",
-      "parameters": {
-        "header_redaction": true,
-        "max_collected_headers": 50
       },
       "type": "extended_data_collection"
     }

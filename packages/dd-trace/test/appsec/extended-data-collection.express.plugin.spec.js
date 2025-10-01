@@ -9,7 +9,21 @@ const axios = require('axios')
 const assert = require('assert')
 const msgpack = require('@msgpack/msgpack')
 
-describe('extended data collection', () => {
+function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
+  if (currentLevel === max) {
+    return {
+      [`s-${currentLevel}`]: `s-${currentLevel}`,
+      [`o-${currentLevel}`]: sheetValue
+    }
+  }
+
+  return {
+    [`s-${currentLevel}`]: `s-${currentLevel}`,
+    [`o-${currentLevel}`]: createDeepObject(sheetValue, currentLevel + 1, max)
+  }
+}
+
+describe.only('extended data collection', () => {
   before(() => {
     return agent.load(['express', 'http'], { client: false })
   })
@@ -211,32 +225,61 @@ describe('extended data collection', () => {
       })
     })
 
-    function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
-      if (currentLevel === max) {
-        return {
-          [`s-${currentLevel}`]: `s-${currentLevel}`,
-          [`o-${currentLevel}`]: sheetValue
-        }
-      }
-
-      return {
-        [`s-${currentLevel}`]: `s-${currentLevel}`,
-        [`o-${currentLevel}`]: createDeepObject(sheetValue, currentLevel + 1, max)
-      }
-    }
-
     it('Should truncate the request body when depth is more than 20 levels', async () => {
       const deepObject = createDeepObject('sheet')
 
       const requestBody = {
-        bodyParam: 'collect-header-redacted',
+        bodyParam: 'collect-standard',
         deepObject
       }
 
       const expectedDeepTruncatedObject = createDeepObject({ 's-19': 's-19' }, 1, 18)
       const expectedRequestBody = {
-        bodyParam: 'collect-header-redacted',
+        bodyParam: 'collect-standard',
         deepObject: expectedDeepTruncatedObject
+      }
+      await axios.post(`http://localhost:${port}/`, requestBody)
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.strictEqual(span.type, 'web')
+
+        const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
+        assert.deepEqual(metaStructBody, expectedRequestBody)
+      })
+    })
+
+    it('Should truncate the request body when string length is more than 4096 characters', async () => {
+      const requestBody = {
+        bodyParam: 'collect-standard',
+        longValue: Array(5000).fill('A').join('')
+      }
+
+      const expectedRequestBody = {
+        bodyParam: 'collect-standard',
+        longValue: Array(4096).fill('A').join('')
+      }
+      await axios.post(`http://localhost:${port}/`, requestBody)
+
+      await agent.assertSomeTraces((traces) => {
+        const span = traces[0][0]
+        assert.strictEqual(span.type, 'web')
+
+        const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
+        assert.deepEqual(metaStructBody, expectedRequestBody)
+      })
+    })
+
+    it('Should truncate the request body when a node has more than 256 elements', async () => {
+      const children = Array(300).fill('item')
+      const requestBody = {
+        bodyParam: 'collect-standard',
+        children
+      }
+
+      const expectedRequestBody = {
+        bodyParam: 'collect-standard',
+        children: children.slice(0, 256)
       }
       await axios.post(`http://localhost:${port}/`, requestBody)
 
