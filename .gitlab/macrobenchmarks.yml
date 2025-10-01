@@ -15,6 +15,10 @@ include:
   interruptible: true
   timeout: 1h
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
+  before_script:
+    - export CI_JOB_NAME=$CI_JOB_GROUP_NAME
+    - |
+      echo "CI_JOB_NAME updated to CI_JOB_GROUP_NAME ($CI_JOB_GROUP_NAME) to ensure consistent naming of benchmark results."
   script:
     - git clone --branch rochdev/parallel-experiments https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
     - bp-runner bp-runner.$EXPERIMENT.yml --debug -t
@@ -44,8 +48,6 @@ include:
     K6_OPTIONS_HIGH_LOAD_MAX_VUS: 4
 
     DDTRACE_INSTALL_VERSION: "git://github.com/Datadog/dd-trace-js.git#${CI_COMMIT_SHA}"
-
-    CI_JOB_NAME: $CI_JOB_GROUP_NAME
 
   # Workaround: Currently we're not running the benchmarks on every PR, but GitHub still shows them as pending.
   # By marking the benchmarks as allow_failure, this should go away. (This workaround should be removed once the
