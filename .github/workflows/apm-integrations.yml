@@ -133,46 +133,26 @@ jobs:
     runs-on: ubuntu-latest
     services:
         azurite:
-          image: "mcr.microsoft.com/azure-storage/azurite:latest"
+          image: mcr.microsoft.com/azure-storage/azurite:3.35.0
           ports:
-            - "127.0.0.1:10000:10000"
-            - "127.0.0.1:10001:10001"
-            - "127.0.0.1:10002:10002"
+            - "10000:10000"
+            - "10001:10001"
+            - "10002:10002"
         azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
-          options: --name azureeventhubsemulator --hostname azureeventhubsemulator
           ports:
-            - "127.0.0.1:5673:5672"
-            - "127.0.0.1:9092:9092"
+            - "5673:5672"
+            - "9092:9092"
           env:
-            BLOB_SERVER: localhost
-            METADATA_SERVER: localhost
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
             ACCEPT_EULA: "Y"
     env:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
     steps:
-        - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         - uses: ./.github/actions/plugins/test
-
-        # - uses: ./.github/actions/testagent/start
-        # - uses: ./.github/actions/node/oldest-maintenance-lts
-        # - run: |
-        #     docker cp ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/eventhubs-test/config.json \
-        #     azureeventhubsemulator:/Eventhubs_Emulator/ConfigFiles/Config.json
-        # - run: docker restart azureeventhubsemulator
-        # - uses: ./.github/actions/install
-        # - run: yarn test:plugins:ci
-        #   shell: bash
-        # - uses: ./.github/actions/node/latest
-        # - run: yarn test:plugins:ci
-        #   shell: bash
-        # - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-        # - if: always()
-        #   uses: ./.github/actions/testagent/logs
-        #   with:
-        #     suffix: test-${{ github.job }}
-
   azure-functions:
     runs-on: ubuntu-latest
     services:
@@ -192,26 +172,26 @@ jobs:
           env:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
+        azurite:
+          image: "mcr.microsoft.com/azure-storage/azurite:3.35.0"
+          ports:
+            - "10000:10000"
+            - "10001:10001"
+            - "10002:10002"
         azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
           ports:
-            - "127.0.0.1:5673:5672"
-            - "127.0.0.1:9092:9092"
+            - "5673:5672"
+            - "9092:9092"
           env:
-            BLOB_SERVER: 127.0.0.1:10000
+            BLOB_SERVER: azurite
             METADATA_SERVER: azurite
             ACCEPT_EULA: "Y"
-        azurite:
-          image: "mcr.microsoft.com/azure-storage/azurite:latest"
-          ports:
-            - "127.0.0.1:10000:10000"
-            - "127.0.0.1:10001:10001"
-            - "127.0.0.1:10002:10002"
     env:
       PLUGINS: azure-functions
-      SERVICES: azureservicebusemulator,azuresqledge,azureeventhubsemulator,azurite
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   azure-service-bus:
@@ -237,7 +217,7 @@ jobs:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
   bunyan:
