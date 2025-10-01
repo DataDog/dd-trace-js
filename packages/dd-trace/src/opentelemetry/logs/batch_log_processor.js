@@ -58,28 +58,25 @@ class BatchLogRecordProcessor {
 
   /**
    * Forces an immediate flush of all pending log records.
-   * @returns {Promise<void>} Promise that resolves when flush is complete
+   * @returns {undefined} Promise that resolves when flush is complete
    */
   forceFlush () {
     if (!this.isShutdown) {
       this.#export()
     }
-    return Promise.resolve()
   }
 
   /**
    * Shuts down the processor and exports any remaining log records.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
     if (this.isShutdown) {
-      return Promise.resolve()
+      this.isShutdown = true
+      this.#clearTimer()
+      this.#export()
+      this.exporter.shutdown()
     }
-
-    this.isShutdown = true
-    this.#clearTimer()
-    this.#export()
-    return this.exporter ? this.exporter.shutdown() : Promise.resolve()
   }
 
   /**
@@ -105,7 +102,9 @@ class BatchLogRecordProcessor {
       return
     }
 
-    const logRecords = this.#logRecords.splice(0, this.#maxExportBatchSize)
+    const logRecords = this.#logRecords.slice(0, this.#maxExportBatchSize)
+    this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
+    
     this.#clearTimer()
     this.exporter.export(logRecords, () => {})
 

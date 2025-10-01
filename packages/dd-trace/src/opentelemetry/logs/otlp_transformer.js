@@ -165,7 +165,7 @@ class OtlpTransformer {
     // Create scope logs for each instrumentation library
     const scopeLogs = []
 
-    for (const [, records] of groupedRecords.entries()) {
+    for (const records of groupedRecords.values()) {
       const schemaUrl = records[0]?.instrumentationScope?.schemaUrl || ''
       scopeLogs.push({
         scope: {
@@ -202,7 +202,7 @@ class OtlpTransformer {
    * @private
    */
   #transformLogRecord (logRecord) {
-    const timestamp = logRecord.timestamp || Date.now() * 1_000_000
+    const timestamp = logRecord.timestamp
 
     // Extract span context from the log record's context
     const spanContext = this.#extractSpanContext(logRecord.context)

@@ -86,36 +86,24 @@ class LoggerProvider {
 
   /**
    * Forces a flush of all pending log records.
-   * @returns {Promise<void>} Promise that resolves when flush is n ssue cncomplete
+   * @returns {undefined} Promise that resolves when flush is n ssue cncomplete
    */
   forceFlush () {
     if (this.isShutdown) {
-      return Promise.reject(new Error('LoggerProvider is shutdown'))
+      throw new Error('LoggerProvider is shutdown')
     }
-
-    if (!this.processor) {
-      return Promise.resolve()
-    }
-
-    return this.processor.forceFlush()
+    return this.processor?.forceFlush()
   }
 
   /**
    * Shuts down the logger provider and all associated processors.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
-    if (this.isShutdown) {
-      return Promise.resolve()
+    if (!this.isShutdown) {
+      this.isShutdown = true
+      this.processor.shutdown()
     }
-
-    this.isShutdown = true
-
-    if (!this.processor) {
-      return Promise.resolve()
-    }
-
-    return this.processor.shutdown()
   }
 
   /**

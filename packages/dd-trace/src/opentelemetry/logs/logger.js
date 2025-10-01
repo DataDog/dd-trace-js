@@ -60,11 +60,7 @@ class Logger {
    * @returns {void}
    */
   emit (logRecord) {
-    if (this.loggerProvider.isShutdown) {
-      return
-    }
-
-    if (!this.loggerProvider.processor) {
+    if (this.loggerProvider.isShutdown || !this.loggerProvider.processor) {
       return
     }
 
@@ -74,7 +70,7 @@ class Logger {
 
     // Set default timestamp if not provided
     if (!logRecord.timestamp) {
-      logRecord.timestamp = Date.now() * 1_000_000
+      logRecord.timestamp = Number(process.hrtime.bigint())
     }
 
     if (!logRecord.context) {

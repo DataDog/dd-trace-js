@@ -328,9 +328,9 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('configures OTLP endpoint from environment variable', () => {
-      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4321/v2/logs'
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider.processor.exporter.url, 'http://custom:4318/v1/logs')
+      assert.strictEqual(loggerProvider.processor.exporter.url, 'http://custom:4321/v2/logs')
     })
 
     it('prioritizes logs-specific endpoint over generic endpoint', () => {

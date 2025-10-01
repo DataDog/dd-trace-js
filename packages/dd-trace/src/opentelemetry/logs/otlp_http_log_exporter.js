@@ -76,10 +76,9 @@ class OtlpHttpLogExporter {
 
   /**
    * Shuts down the exporter.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
-    return Promise.resolve()
   }
 
   /**
