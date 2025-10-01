@@ -1,7 +1,7 @@
 'use strict'
 
-const FNV_64_PRIME = BigInt('0x100000001B3')
-const FNV1_64_INIT = BigInt('0xCBF29CE484222325')
+const FNV_64_PRIME = 0x1_00_00_00_01_B3n
+const FNV1_64_INIT = 0xCB_F2_9C_E4_84_22_23_25n
 
 function fnv (data, hvalInit, fnvPrime, fnvSize) {
   let hval = hvalInit

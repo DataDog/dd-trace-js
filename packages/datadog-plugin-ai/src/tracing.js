@@ -8,14 +8,14 @@ class VercelAITracingPlugin extends TracingPlugin {
   static prefix = 'tracing:dd-trace:vercel-ai'
 
   bindStart (ctx) {
-    const attributes = ctx.attributes
+    const { attributes, name } = ctx
 
     const model = attributes['ai.model.id']
     const modelProvider = getModelProvider(attributes)
 
-    this.startSpan(ctx.name, {
+    this.startSpan(name, {
       meta: {
-        'resource.name': ctx.name,
+        'resource.name': attributes['resource.name'] ?? name,
         'ai.request.model': model,
         'ai.request.model_provider': modelProvider
       }

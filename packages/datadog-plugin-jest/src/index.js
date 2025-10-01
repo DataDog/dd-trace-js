@@ -261,21 +261,6 @@ class JestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:jest:worker-report:trace', traces => {
-      const formattedTraces = JSON.parse(traces).map(trace =>
-        trace.map(span => ({
-          ...span,
-          span_id: id(span.span_id),
-          trace_id: id(span.trace_id),
-          parent_id: id(span.parent_id)
-        }))
-      )
-
-      formattedTraces.forEach(trace => {
-        this.tracer._exporter.export(trace)
-      })
-    })
-
     this.addSub('ci:jest:worker-report:coverage', data => {
       const formattedCoverages = JSON.parse(data).map(coverage => ({
         sessionId: id(coverage.sessionId),
@@ -284,12 +269,6 @@ class JestPlugin extends CiPlugin {
       }))
       formattedCoverages.forEach(formattedCoverage => {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      })
-    })
-
-    this.addSub('ci:jest:worker-report:logs', (logsPayloads) => {
-      JSON.parse(logsPayloads).forEach(({ testConfiguration, logMessage }) => {
-        this.tracer._exporter.exportDiLogs(testConfiguration, logMessage)
       })
     })
 

@@ -171,7 +171,7 @@ module.exports = {
   'tracePropagationStyle.inject': ['datadog', 'tracecontext', 'baggage'],
   'tracePropagationStyle.extract': ['datadog', 'tracecontext', 'baggage'],
   'tracePropagationStyle.otelPropagators': false,
-  traceWebsocketMessagesEnabled: true,
+  traceWebsocketMessagesEnabled: false,
   traceWebsocketMessagesInheritSampling: true,
   traceWebsocketMessagesSeparateTraces: true,
   tracing: true,
