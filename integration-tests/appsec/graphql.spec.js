@@ -14,7 +14,7 @@ describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc
 
   before(async function () {
-    sandbox = await createSandbox(['@apollo/server', 'graphql', 'koalas'])
+    sandbox = await createSandbox(['@apollo/server', 'graphql'])
     cwd = sandbox.folder
     webFile = path.join(cwd, 'graphql/index.js')
   })
