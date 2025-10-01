@@ -487,9 +487,9 @@ class Config {
       DD_AGENT_HOST,
       DD_AI_GUARD_ENABLED,
       DD_AI_GUARD_ENDPOINT,
-      DD_AI_GUARD_TIMEOUT,
-      DD_AI_GUARD_MAX_MESSAGES_LENGTH,
       DD_AI_GUARD_MAX_CONTENT_SIZE,
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH,
+      DD_AI_GUARD_TIMEOUT,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
@@ -654,6 +654,7 @@ class Config {
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this._setString(env, 'appKey', DD_APP_KEY)
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
     this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
@@ -719,6 +720,14 @@ class Config {
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
+    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
@@ -864,15 +873,6 @@ class Config {
     this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
     env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
     env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
-    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
-    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
-    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
-    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
-    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
-    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
-    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
-    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
-    this._setString(env, 'appKey', DD_APP_KEY)
   }
 
   _applyOptions (options) {
@@ -887,6 +887,7 @@ class Config {
     this._setBoolean(opts, 'apmTracingEnabled', options.apmTracingEnabled ??
       (options.experimental?.appsec?.standalone && !options.experimental.appsec.standalone.enabled)
     )
+    this._setString(opts, 'appKey', options.appKey)
     this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
     this._setBoolean(opts, 'appsec.apiSecurity.endpointCollectionEnabled',
       options.appsec?.apiSecurity?.endpointCollectionEnabled)
@@ -958,6 +959,14 @@ class Config {
     this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
+    this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
+    this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
+    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
+    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
+    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
+    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
+    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
     opts.flushInterval = maybeInt(options.flushInterval)
@@ -1042,17 +1051,6 @@ class Config {
     if (llmobsEnabledEnv == null && options.llmobs) {
       this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
     }
-
-    this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
-    this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
-    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
-    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
-    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
-    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
-    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
-    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
-
-    this._setString(opts, 'appKey', options.appKey)
   }
 
   _isCiVisibility () {

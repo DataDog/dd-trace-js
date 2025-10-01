@@ -11,6 +11,7 @@ const {
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY
 } = require('./tags')
+const log = require('../log')
 
 const ALLOW = 'ALLOW'
 
@@ -37,11 +38,16 @@ class AIGuardClientError extends Error {
 
 class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
-    super(tracer)
+    super()
 
     if (!config.apiKey || !config.appKey) {
-      throw new Error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
+      log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
+      this._initialized = false
+      return
     }
+
+    this._tracer = tracer
+
     this._headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
@@ -57,6 +63,7 @@ class AIGuard extends NoopAIGuard {
     this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this._maxContentSize = config.experimental.aiguard.maxContentSize
     this._meta = { service: config.service, env: config.env }
+    this._initialized = true
   }
 
   _truncate (messages) {
@@ -98,6 +105,9 @@ class AIGuard extends NoopAIGuard {
   }
 
   evaluate (messages, opts) {
+    if (!this._initialized) {
+      return super.evaluate(messages, opts)
+    }
     const { block = false } = opts ?? {}
     return this._tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]

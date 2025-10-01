@@ -8,27 +8,17 @@ async function executeRequest (body, opts) {
     ...opts.headers
   }
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), opts.timeout).unref()
+  const response = await fetch(opts.url, {
+    method: 'POST',
+    headers,
+    body: postData,
+    signal: AbortSignal.timeout(opts.timeout)
+  })
 
-  try {
-    const response = await fetch(opts.url, {
-      method: 'POST',
-      headers,
-      body: postData,
-      signal: controller.signal
-    })
-
-    clearTimeout(timeoutId)
-
-    const responseBody = await response.json()
-    return {
-      status: response.status,
-      body: responseBody
-    }
-  } catch (error) {
-    clearTimeout(timeoutId)
-    throw error
+  const responseBody = await response.json()
+  return {
+    status: response.status,
+    body: responseBody
   }
 }
 

@@ -10,7 +10,7 @@ const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
-const noopAIGuard = new NoopAIGuardSDK(noop)
+const noopAIGuard = new NoopAIGuardSDK()
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {

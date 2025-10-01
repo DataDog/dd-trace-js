@@ -249,10 +249,11 @@ describe('AIGuard SDK', () => {
     )
   })
 
-  it('test required fields', () => {
-    expect(
-      () => new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
-    ).to.throw('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
+  it('test missing required fields uses noop as default', async () => {
+    const client = new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
+    const result = await client.evaluate(toolCall)
+    expect(result.action).to.equal('ALLOW')
+    expect(result.reason).to.equal('AI Guard is not enabled')
   })
 
   const sites = [

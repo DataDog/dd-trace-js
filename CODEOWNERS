@@ -3,8 +3,9 @@
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
-/packages/dd-trace/src/ai_guard/ @DataDog/asm-js
-/packages/dd-trace/test/ai_guard/ @DataDog/asm-js
+/integration-tests/aiguard/ @DataDog/asm-js
+/packages/dd-trace/src/aiguard/ @DataDog/asm-js
+/packages/dd-trace/test/aiguard/ @DataDog/asm-js
 
 /integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/datadog-code-origin/ @DataDog/dd-trace-js @DataDog/debugger
@@ -96,7 +97,7 @@
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
-/.github/workflows/aiguardappsec.yml.yml @DataDog/asm-js
+/.github/workflows/aiguard.yml.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
 /.github/workflows/debugger.yml @DataDog/debugger
