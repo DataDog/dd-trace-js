@@ -135,15 +135,47 @@ function getGitVersion () {
   }
 }
 
+function sleepSync (ms) {
+  const sab = new SharedArrayBuffer(4)
+  const i32 = new Int32Array(sab)
+  Atomics.wait(i32, 0, 0, ms)
+}
+
+function waitForLock ({ intervalMs = 500, timeoutMs = 5 * 60 * 1000 } = {}) {
+  const repositoryRoot = getRepositoryRoot()
+  const target = path.resolve(repositoryRoot, '.git/shallow.lock')
+  const start = Date.now()
+
+  while (true) {
+    let exists = true
+    try {
+      fs.accessSync(target, fs.constants.F_OK)
+    } catch (err) {
+      if (err && err.code === 'ENOENT') exists = false
+      else throw err
+    }
+
+    if (!exists) return
+
+    if (Date.now() - start > timeoutMs) {
+      throw new Error(`Timed out waiting for ${target} to disappear`)
+    }
+
+    sleepSync(intervalMs)
+  }
+}
+
 function unshallowRepository (parentOnly = false) {
+  console.log('waiting for lock')
+  waitForLock()
+
+  console.log('waiting for lock done')
+
   const gitVersion = getGitVersion()
-  console.log('gitVersion', gitVersion)
   if (!gitVersion) {
     log.warn('Git version could not be extracted, so git unshallow will not proceed')
     return
   }
-  console.log('gitVersion.major', gitVersion.major)
-  console.log('gitVersion.minor', gitVersion.minor)
   if (gitVersion.major < 2 || (gitVersion.major === 2 && gitVersion.minor < 27)) {
     log.warn('Git version is <2.27, so git unshallow will not proceed')
     return
@@ -207,7 +239,6 @@ function unshallowRepository (parentOnly = false) {
         null,
         { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } } // we log the error in sanitizedExec
       )
-
     }
   }
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
