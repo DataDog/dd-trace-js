@@ -382,6 +382,18 @@ export default [
         {
           name: 'semver',
           message: 'Please use semifies instead.'
+        },
+        {
+          name: 'get-port',
+          message: 'Please listen on port 0 instead.'
+        },
+        {
+          name: 'rimraf',
+          message: 'Please use fs.rm(path, { recursive: true }) instead.'
+        },
+        {
+          name: 'koalas',
+          message: 'Please use nullish coalescing operator (??) instead.'
         }
       ]],
 
