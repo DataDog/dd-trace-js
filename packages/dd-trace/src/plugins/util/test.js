@@ -1000,8 +1000,10 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
 
 function getPullRequestBaseBranch (pullRequestBaseBranch) {
   const remoteName = getGitRemoteName()
+  console.log('remoteName', remoteName)
 
   const sourceBranch = getSourceBranch()
+  console.log('sourceBranch', sourceBranch)
   // TODO: We will get the default branch name from the backend in the future.
   const POSSIBLE_DEFAULT_BRANCHES = ['main', 'master']
 
@@ -1022,6 +1024,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       }
     }
   }
+  console.log('candidateBranches', candidateBranches)
 
   if (candidateBranches.length === 1) {
     return getMergeBase(candidateBranches[0], sourceBranch)
@@ -1048,6 +1051,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     }
   }
 
+  console.log('metrics', metrics)
   function isDefaultBranch (branch) {
     return POSSIBLE_DEFAULT_BRANCHES.some(defaultBranch =>
       branch === defaultBranch || branch === `${remoteName}/${defaultBranch}`
@@ -1070,6 +1074,8 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       bestBranch = branch
     }
   }
+  console.log('bestBranch', bestBranch)
+  console.log('metrics', metrics)
   return bestBranch ? metrics[bestBranch].baseSha : null
 }
 
