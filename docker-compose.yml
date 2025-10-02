@@ -12,7 +12,7 @@ services:
   azureeventhubsemulator:
     image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     volumes:
-       - "${CONFIG_PATH}:/Eventhubs_Emulator/ConfigFiles/Config.json"
+       - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5673:5672"
       - "127.0.0.1:9092:9092"
@@ -31,7 +31,6 @@ services:
       SQL_SERVER: azuresqledge
   azuresqledge:
     image: mcr.microsoft.com/azure-sql-edge:1.0.7
-    platform: linux/amd64
     ports:
       - "127.0.0.1:1433:1433"
     environment:

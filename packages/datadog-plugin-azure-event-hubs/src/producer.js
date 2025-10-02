@@ -42,7 +42,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
       span.setTag('messaging.operation', 'send')
       span.setTag('messaging.batch.message_count', eventDataLength)
 
-      if (typeof (eventData) !== 'EventDataBatchImpl' && Array.isArray(eventData)) {
+      if (eventData.constructor.name !== 'EventDataBatchImpl' && Array.isArray(eventData)) {
         eventData.forEach(event => {
           injectTraceContext(this.tracer, span, event)
         })
@@ -72,7 +72,7 @@ function injectTraceContext (tracer, span, event) {
 
 function batchLinksAreEnabled () {
   const eh = getEnvironmentVariable('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
-  return  eh !== 'false'
+  return eh !== 'false'
 }
 
 module.exports = AzureEventHubsProducerPlugin

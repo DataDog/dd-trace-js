@@ -5,11 +5,11 @@ const {
   hookFile,
   createSandbox,
   curlAndAssertMessage
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
@@ -27,8 +27,8 @@ describe('esm', () => {
         '@azure/service-bus@7.9.2',
       ],
       false,
-      [ './packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/servicebus-test/*'])
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/servicebus-test/*'])
     })
 
     after(async function () {

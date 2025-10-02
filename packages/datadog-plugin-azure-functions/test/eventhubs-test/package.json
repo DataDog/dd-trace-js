@@ -1,9 +1,0 @@
-{
-  "name": "azure-function-node-eventhub-test",
-  "version": "1.0.0",
-  "description": "",
-  "main": "./server.mjs",
-  "scripts": {
-    "start": "func start"
-  }
-}

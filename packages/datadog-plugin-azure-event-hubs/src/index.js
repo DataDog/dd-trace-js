@@ -1,3 +1,5 @@
+'use strict'
+
 const ProducerPlugin = require('./producer')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 

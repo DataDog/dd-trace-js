@@ -5,11 +5,11 @@ const {
   hookFile,
   createSandbox,
   curlAndAssertMessage
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
@@ -26,8 +26,8 @@ describe('esm', () => {
         'azure-functions-core-tools@4',
       ],
       false,
-      [ './packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/*'])
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
     })
 
     after(async function () {
@@ -78,11 +78,10 @@ describe('esm', () => {
   })
 })
 
-
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
-    NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: agentPort
+    NODE_OPTIONS: `--loader=${hookFile} func start`,
+    DD_TRACE_AGENT_PORT: agentPort,
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {

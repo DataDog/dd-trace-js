@@ -1,5 +1,5 @@
 {
-  "name": "azure-function-node-integration-test",
+  "name": "azure-function-tests",
   "version": "1.0.0",
   "description": "",
   "main": "./server.mjs",

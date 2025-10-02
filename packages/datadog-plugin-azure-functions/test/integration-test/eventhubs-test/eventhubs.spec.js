@@ -5,11 +5,11 @@ const {
   hookFile,
   createSandbox,
   curlAndAssertMessage,
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
 const { expect, assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
@@ -23,12 +23,12 @@ describe('esm', () => {
       this.timeout(60000)
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
-        '@azure/event-hubs@6.0.0',
         'azure-functions-core-tools@4',
+        '@azure/event-hubs@6.0.0',
       ],
       false,
       ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/eventhubs-test/*'])
+        './packages/datadog-plugin-azure-functions/test/integration-test/eventhubs-test/*'])
     })
 
     after(async function () {
@@ -49,7 +49,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -74,7 +74,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-amqpmessages', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -99,10 +99,9 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh1-batch', ({ headers, payload }) => {
-        console.log(payload)
         assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
         assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
         assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
@@ -124,7 +123,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -142,7 +141,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-amqpmessages', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -160,7 +159,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh2-batch', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -178,7 +177,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvent', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -196,7 +195,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvents', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -221,7 +220,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueAmqp', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -246,7 +245,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvent', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -264,7 +263,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvents', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -286,7 +285,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueAmqp', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -307,10 +306,9 @@ describe('esm', () => {
     it('should not add span links when they are disabled', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-        'DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED': false
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func' , ['start'] , agent.port, undefined, envArgs)
-
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
         expect(payload[1][0]).to.not.have.property('_dd.span_links')
       })
@@ -318,7 +316,7 @@ describe('esm', () => {
   })
 })
 
-function parseLinks(span) {
+function parseLinks (span) {
   return JSON.parse(span.meta['_dd.span_links'] || '[]')
 }
 
