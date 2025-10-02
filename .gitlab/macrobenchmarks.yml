@@ -16,7 +16,7 @@ include:
   timeout: 1h
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
   script:
-    # TODO: Revert to js/hapi before merging
+    # TODO: Revert to js/hapi after https://github.com/DataDog/benchmarking-platform/pull/199 is merged
     - git clone --branch rochdev/parallel-experiments https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
     - bp-runner bp-runner.$EXPERIMENT.yml --debug -t
   artifacts:
