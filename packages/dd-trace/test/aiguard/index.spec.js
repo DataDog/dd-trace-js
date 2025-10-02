@@ -84,12 +84,12 @@ describe('AIGuard SDK', () => {
     })
   }
 
-  const assertFetch = (messages) => {
+  const assertFetch = (messages, url) => {
     const postData = JSON.stringify(
       { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
     )
     sinon.assert.calledOnceWithExactly(global.fetch,
-      `${config.experimental.aiguard.endpoint}/evaluate`,
+      url ?? `${config.experimental.aiguard.endpoint}/evaluate`,
       {
         method: 'POST',
         headers: {
@@ -261,11 +261,18 @@ describe('AIGuard SDK', () => {
     { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' }
   ]
   for (const { site, endpoint } of sites) {
-    it(`test endpoint discovery: ${site}`, () => {
+    it(`test endpoint discovery: ${site}`, async () => {
       const newConfig = Object.assign({ site }, config)
       delete newConfig.experimental.aiguard.endpoint
       const client = new AIGuard(tracer, newConfig)
-      expect(client._evaluateUrl.toString()).to.equal(`${endpoint}/evaluate`)
+      mockFetch({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } }
+      })
+
+      await client.evaluate(toolCall)
+
+      assertFetch(toolCall, `${endpoint}/evaluate`)
     })
+
   }
 })

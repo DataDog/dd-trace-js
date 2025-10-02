@@ -37,36 +37,45 @@ class AIGuardClientError extends Error {
 }
 
 class AIGuard extends NoopAIGuard {
+  #initialized
+  #tracer
+  #headers
+  #evaluateUrl
+  #timeout
+  #maxMessagesLength
+  #maxContentSize
+  #meta
+
   constructor (tracer, config) {
     super()
 
     if (!config.apiKey || !config.appKey) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
-      this._initialized = false
+      this.#initialized = false
       return
     }
-    this._tracer = tracer
-    this._headers = {
+    this.#tracer = tracer
+    this.#headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
     }
     const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
-    this._evaluateUrl = `${endpoint}/evaluate`
-    this._timeout = config.experimental.aiguard.timeout
-    this._maxMessagesLength = config.experimental.aiguard.maxMessagesLength
-    this._maxContentSize = config.experimental.aiguard.maxContentSize
-    this._meta = { service: config.service, env: config.env }
-    this._initialized = true
+    this.#evaluateUrl = `${endpoint}/evaluate`
+    this.#timeout = config.experimental.aiguard.timeout
+    this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
+    this.#maxContentSize = config.experimental.aiguard.maxContentSize
+    this.#meta = { service: config.service, env: config.env }
+    this.#initialized = true
   }
 
   #truncate (messages) {
-    const size = Math.min(messages.length, this._maxMessagesLength)
+    const size = Math.min(messages.length, this.#maxMessagesLength)
     const result = messages.slice(-size)
 
     for (let i = 0; i < size; i++) {
       const message = result[i]
-      if (message.content?.length > this._maxContentSize) {
-        result[i] = { ...message, content: message.content.slice(0, this._maxContentSize) }
+      if (message.content?.length > this.#maxContentSize) {
+        result[i] = { ...message, content: message.content.slice(0, this.#maxContentSize) }
       }
     }
     return result
@@ -98,11 +107,11 @@ class AIGuard extends NoopAIGuard {
   }
 
   evaluate (messages, opts) {
-    if (!this._initialized) {
+    if (!this.#initialized) {
       return super.evaluate(messages, opts)
     }
     const { block = false } = opts ?? {}
-    return this._tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
+    return this.#tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
@@ -123,13 +132,13 @@ class AIGuard extends NoopAIGuard {
           data: {
             attributes: {
               messages,
-              meta: this._meta,
+              meta: this.#meta,
             }
           }
         }
         response = await executeRequest(
           payload,
-          { url: this._evaluateUrl, headers: this._headers, timeout: this._timeout })
+          { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout })
       } catch (e) {
         throw new AIGuardClientError('Unexpected error calling AI Guard service', { cause: e })
       }
