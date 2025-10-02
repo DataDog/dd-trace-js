@@ -53,10 +53,13 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
 
     switch (modelProviderUpper) {
       case PROVIDER.AMAZON: {
-        message += body?.outputText
-
-        inputTokens = body?.inputTextTokenCount
-        outputTokens = body?.totalOutputTextTokenCount
+        if (body?.outputText) {
+          message += body?.outputText
+          inputTokens = body?.inputTextTokenCount
+          outputTokens = body?.totalOutputTextTokenCount
+        } else if (body?.contentBlockDelta?.delta?.text) {
+          message += body?.contentBlockDelta?.delta?.text ?? ''
+        }
 
         break
       }
