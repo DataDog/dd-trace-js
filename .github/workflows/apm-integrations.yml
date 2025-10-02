@@ -135,14 +135,14 @@ jobs:
         azurite:
           image: mcr.microsoft.com/azure-storage/azurite:3.35.0
           ports:
-            - "10000:10000"
-            - "10001:10001"
-            - "10002:10002"
+            - "127.0.0.1:10000:10000"
+            - "127.0.0.1:10001:10001"
+            - "127.0.0.1:10002:10002"
         azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
           ports:
-            - "5673:5672"
-            - "9092:9092"
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
           env:
             BLOB_SERVER: azurite
             METADATA_SERVER: azurite
@@ -175,14 +175,14 @@ jobs:
         azurite:
           image: "mcr.microsoft.com/azure-storage/azurite:3.35.0"
           ports:
-            - "10000:10000"
-            - "10001:10001"
-            - "10002:10002"
+            - "127.0.0.1:10000:10000"
+            - "127.0.0.1:10001:10001"
+            - "127.0.0.1:10002:10002"
         azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
           ports:
-            - "5673:5672"
-            - "9092:9092"
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
           env:
             BLOB_SERVER: azurite
             METADATA_SERVER: azurite
