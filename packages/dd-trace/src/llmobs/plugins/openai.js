@@ -21,7 +21,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
 
-    const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
+    const inputs = ctx.args[0] // completion, chat completion, embeddings, and responses take one argument
     const operation = getOperation(methodName)
     const kind = operation === 'embedding' ? 'embedding' : 'llm'
 
@@ -55,6 +55,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       this._tagChatCompletion(span, inputs, response, error)
     } else if (operation === 'embedding') {
       this._tagEmbedding(span, inputs, response, error)
+    } else if (operation === 'response') {
+      this._tagResponse(span, inputs, response, error)
     }
 
     if (!error) {
@@ -187,6 +189,41 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagMetadata(span, metadata)
   }
+
+  _tagResponse (span, inputs, response, error) {
+    const { input, model, reasoning, background, ...parameters } = inputs
+
+    // Create input message format
+    const responseInput = [{ content: input }]
+
+    if (error) {
+      this._tagger.tagLLMIO(span, responseInput, [{ content: '' }])
+      return
+    }
+
+    // Create output message format
+    const responseOutput = [{ content: response.output || '' }]
+
+    this._tagger.tagLLMIO(span, responseInput, responseOutput)
+    console.log('hello params', parameters)
+    
+    // Tag metadata
+    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+      if (!['tools', 'functions'].includes(key)) {
+        obj[key] = value
+      }
+      return obj
+    }, {})
+    
+    if (reasoning) {
+      metadata.reasoning = reasoning
+    }
+    if (background !== undefined) {
+      metadata.background = background
+    }
+
+    this._tagger.tagMetadata(span, metadata)
+  }
 }
 
 // TODO: this will be moved to the APM integration
@@ -203,13 +240,18 @@ function normalizeOpenAIResourceName (resource) {
     // embeddings
     case 'embeddings.create':
       return 'createEmbedding'
+
+    // responses
+    case 'responses.create':
+      return 'createResponse'
+
     default:
       return resource
   }
 }
 
 function gateResource (resource) {
-  return ['createCompletion', 'createChatCompletion', 'createEmbedding'].includes(resource)
+  return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse'].includes(resource)
     ? resource
     : undefined
 }
@@ -222,6 +264,8 @@ function getOperation (resource) {
       return 'chat'
     case 'createEmbedding':
       return 'embedding'
+    case 'createResponse':
+      return 'response'
     default:
       // should never happen
       return 'unknown'
