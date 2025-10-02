@@ -81,7 +81,7 @@ const requestHeadersList = [
   ...identificationHeaders
 ]
 
-const authenticationHeadersList = [
+const redactedHeadersList = [
   'authorization',
   'proxy-authorization',
   'www-authenticate',
@@ -101,7 +101,7 @@ const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADE
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
-const AUTHENTICATION_HEADERS = new Set(authenticationHeadersList)
+const REDACTED_HEADERS = new Set(redactedHeadersList)
 
 function init (_config) {
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
@@ -150,7 +150,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = AUTHENTICATION_HEADERS.has(headerName)
+      result[getHeaderTag(tagPrefix, headerName)] = REDACTED_HEADERS.has(headerName)
         ? '<redacted>'
         : String(headerValue)
       counter++
@@ -174,7 +174,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
 
-  // TODO headersExtendedCollectionEnabled and headersRedaction properties should be deprecated to delete in a major
+  // TODO headersExtendedCollectionEnabled and headersRedaction properties are deprecated to delete in a major
   if ((!config.headersExtendedCollectionEnabled || config.headersRedaction) && !extendedDataCollection) {
     // Standard collection
     return Object.assign(
@@ -184,7 +184,8 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
     )
   }
 
-  const maxHeadersCollected = extendedDataCollection?.max_collected_headers || config.maxHeadersCollected
+  // TODO config.maxHeadersCollected is deprecated to delete in a major
+  const maxHeadersCollected = extendedDataCollection?.max_collected_headers ?? config.maxHeadersCollected
 
   // Extended collection
   const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length +

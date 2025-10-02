@@ -59,6 +59,19 @@ describe('extended data collection', () => {
         res.end('DONE')
       })
 
+      app.post('/redacted-headers', (req, res) => {
+        res.setHeader('authorization', 'header-value-1')
+        res.setHeader('proxy-authorization', 'header-value-2')
+        res.setHeader('www-authenticate', 'header-value-4')
+        res.setHeader('proxy-authenticate', 'header-value-5')
+        res.setHeader('authentication-info', 'header-value-6')
+        res.setHeader('proxy-authentication-info', 'header-value-7')
+        res.setHeader('cookie', 'header-value-8')
+        res.setHeader('set-cookie', 'header-value-9')
+
+        res.end('DONE')
+      })
+
       server = app.listen(port, () => {
         port = server.address().port
         done()
@@ -121,23 +134,23 @@ describe('extended data collection', () => {
       })
     })
 
-    it('Should collect request body and request/response headers', async () => {
+    it('Should redact request/response headers', async () => {
       const requestBody = {
-        bodyParam: 'collect-standard',
-        other: 'other',
-        chained: {
-          child: 'one',
-          child2: 2
-        }
+        bodyParam: 'collect-standard'
       }
       await axios.post(
-        `http://localhost:${port}/`,
+        `http://localhost:${port}/redacted-headers`,
         requestBody,
         {
           headers: {
-            'custom-request-header-1': 'custom-request-header-value-1',
-            'custom-request-header-2': 'custom-request-header-value-2',
-            'custom-request-header-3': 'custom-request-header-value-3'
+            authorization: 'header-value-1',
+            'proxy-authorization': 'header-value-2',
+            'www-authenticate': 'header-value-3',
+            'proxy-authenticate': 'header-value-4',
+            'authentication-info': 'header-value-5',
+            'proxy-authentication-info': 'header-value-6',
+            cookie: 'header-value-7',
+            'set-cookie': 'header-value-8'
           }
         }
       )
@@ -145,37 +158,23 @@ describe('extended data collection', () => {
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.strictEqual(span.type, 'web')
-        assert.strictEqual(
-          span.meta['http.request.headers.custom-request-header-1'], 'custom-request-header-value-1'
-        )
-        assert.strictEqual(
-          span.meta['http.request.headers.custom-request-header-2'], 'custom-request-header-value-2'
-        )
-        assert.strictEqual(
-          span.meta['http.request.headers.custom-request-header-3'], 'custom-request-header-value-3'
-        )
+        assert.strictEqual(span.meta['http.request.headers.authorization'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.proxy-authorization'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.www-authenticate'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.proxy-authenticate'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.authentication-info'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.proxy-authentication-info'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.cookie'], '<redacted>')
+        assert.strictEqual(span.meta['http.request.headers.set-cookie'], '<redacted>')
 
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-1'], 'custom-response-header-value-1'
-        )
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-2'], 'custom-response-header-value-2'
-        )
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-3'], 'custom-response-header-value-3'
-        )
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-4'], 'custom-response-header-value-4'
-        )
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-5'], 'custom-response-header-value-5'
-        )
-        assert.strictEqual(
-          span.meta['http.response.headers.custom-response-header-6'], 'custom-response-header-value-6'
-        )
-
-        const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
-        assert.deepEqual(metaStructBody, requestBody)
+        assert.strictEqual(span.meta['http.response.headers.authorization'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.proxy-authorization'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.www-authenticate'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.proxy-authenticate'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.authentication-info'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.proxy-authentication-info'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.cookie'], '<redacted>')
+        assert.strictEqual(span.meta['http.response.headers.set-cookie'], '<redacted>')
       })
     })
 
