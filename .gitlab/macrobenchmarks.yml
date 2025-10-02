@@ -100,6 +100,7 @@ check-slo-breaches:
   needs:
     - baseline
     - only-tracing
+    - only-tracing-with-runtime-metrics-enabled
   artifacts:
     name: "artifacts"
     when: always
