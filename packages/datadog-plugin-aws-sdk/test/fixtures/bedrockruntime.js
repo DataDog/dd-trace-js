@@ -52,7 +52,7 @@ bedrockruntime.models = [
   {
     provider: PROVIDER.AMAZON,
     modelId: 'amazon.nova-pro-v1:0',
-    userPrompt: prompt,
+    userPrompt: '[{"content":"Please respond with one sentence.","role":"system"},{"content":"What is the capital of France?","role":"user"}]',
     requestBody: {
       system: [{ text: 'Please respond with one sentence.' }],
       messages: [
