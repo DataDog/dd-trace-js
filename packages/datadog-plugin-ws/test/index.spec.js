@@ -159,11 +159,11 @@ describe('Plugin', () => {
           wsServer.on('connection', (ws) => {
             ws.send('test message')
           })
-          
+
           client.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
           })
-          
+
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
             expect(traces[0][0]).to.have.property('name', 'websocket.send')
