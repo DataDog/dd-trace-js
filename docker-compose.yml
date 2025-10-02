@@ -4,7 +4,7 @@ services:
     ports:
       - "127.0.0.1:3000-3002:3000-3002"
   azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
     ports:
         - "127.0.0.1:10000:10000"
         - "127.0.0.1:10001:10001"
@@ -31,6 +31,7 @@ services:
       SQL_SERVER: azuresqledge
   azuresqledge:
     image: mcr.microsoft.com/azure-sql-edge:1.0.7
+    platform: linux/amd64
     ports:
       - "127.0.0.1:1433:1433"
     environment:
