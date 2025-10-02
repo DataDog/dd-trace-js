@@ -50,6 +50,43 @@ bedrockruntime.models = [
     }
   },
   {
+    provider: PROVIDER.AMAZON,
+    modelId: 'amazon.nova-pro-v1:0',
+    userPrompt: prompt,
+    requestBody: {
+      system: [{ text: 'Please respond with one sentence.' }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              text: prompt,
+            }
+          ],
+        }
+      ],
+      inferenceConfig: {
+        maxTokens,
+        topP: 0.1,
+        topK: 20,
+        temperature
+      }
+    },
+    response: {
+      inputTokens: 13,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      text: 'The capital of France is Paris.'
+    },
+    streamedResponse: {
+      inputTokens: 13,
+      outputTokens: 8,
+      text: 'The capital city of France is Paris.'
+    },
+    outputRole: 'assistant'
+  },
+  {
     provider: PROVIDER.AI21,
     modelId: 'ai21.jamba-1-5-mini-v1:0',
     userPrompt: prompt,
