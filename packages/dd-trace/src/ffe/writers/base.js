@@ -17,7 +17,7 @@ class BaseFFEWriter {
     this._timeout = (timeout ?? (timeoutEnv ? Number.parseInt(timeoutEnv) : 5000)) || 5000 // 5s
 
     this._buffer = []
-    this._bufferLimit = 1000 // Max events per batch
+    this._bufferLimit = 1000
     this._bufferSize = 0
 
     this._config = config
