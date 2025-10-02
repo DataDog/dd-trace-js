@@ -1,6 +1,6 @@
 'use strict'
 
-describe('test', () => {
+describe('parallel snapshot', () => {
   it('can do multiple snapshots', () => {
     expect('hello').toMatchSnapshot()
 

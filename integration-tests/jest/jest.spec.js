@@ -1620,7 +1620,6 @@ describe('jest CommonJS', () => {
       })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          // TODO: maybe check in stdout for the "Retried by Datadog"
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
@@ -2110,11 +2109,17 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('does not run early flake detection on snapshot tests', (done) => {
+    it('works with snapshot tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      // Tests from ci-visibility/test-early-flake-detection/jest-snapshot.js will be considered new
-      // but we don't retry them because they have snapshots
-      receiver.setKnownTests({ jest: {} })
+
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test-early-flake-detection/jest-snapshot.js': [
+            'test is not new',
+            'test has snapshot and is known'
+          ]
+        }
+      })
 
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -2136,16 +2141,13 @@ describe('jest CommonJS', () => {
           assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-          assert.equal(tests.length, 1)
+          assert.equal(tests.length, 14)
 
           const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 9)
 
-          assert.equal(retriedTests.length, 0)
-
-          // we still detect that it's new
           const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-          assert.equal(newTests.length, 1)
+          assert.equal(newTests.length, 12)
         })
 
       childProcess = exec(runTestsWithCoverageCommand, {
@@ -2158,11 +2160,10 @@ describe('jest CommonJS', () => {
         stdio: 'inherit'
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
 
     it('bails out of EFD if the percentage of new tests is too high', (done) => {
@@ -2612,6 +2613,72 @@ describe('jest CommonJS', () => {
         await Promise.all([
           once(childProcess, 'exit'),
           eventsPromise,
+        ])
+      })
+
+      it('works with snapshot tests', async () => {
+        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+        receiver.setKnownTests({
+          jest: {
+            'ci-visibility/test-early-flake-detection/jest-parallel-snapshot-1.js': [
+              'parallel snapshot is not new',
+              'parallel snapshot has snapshot and is known'
+            ],
+            'ci-visibility/test-early-flake-detection/jest-parallel-snapshot-2.js': [
+              'parallel snapshot 2 is not new',
+              'parallel snapshot 2 has snapshot and is known'
+            ]
+          }
+        })
+
+        const NUM_RETRIES_EFD = 3
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 100
+          },
+          known_tests_enabled: true
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+            // 10 tests: 6 new, 4 known
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // 6*(1 test + 3 retries) + 4*(1 test) = 28
+            assert.equal(tests.length, 28)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            // 6*(3 retries)
+            assert.equal(retriedTests.length, 18)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            // 6*(1 test + 3 retries)
+            assert.equal(newTests.length, 24)
+          })
+
+        childProcess = exec(runTestsWithCoverageCommand, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-parallel-snapshot',
+            RUN_IN_PARALLEL: true,
+            CI: '1' // needs to be run as CI so snapshots are not written
+          },
+          stdio: 'inherit'
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
         ])
       })
     })

@@ -1,0 +1,8 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`parallel snapshot 2 can do multiple snapshots 1`] = `"hello"`;
+exports[`parallel snapshot 2 can do multiple snapshots 2`] = `"good bye"`;
+exports[`parallel snapshot 2 can do multiple snapshots in a different test 1`] = `3`
+exports[`parallel snapshot 2 can do multiple snapshots in a different test 2`] = `4`
+exports[`parallel snapshot 2 is not new 1`] = `"yes"`
+exports[`parallel snapshot 2 is not new 2`] = `"no"`

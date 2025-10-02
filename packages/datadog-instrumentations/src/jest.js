@@ -11,12 +11,8 @@ const {
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
-  addEfdStringToTestName,
-  removeEfdStringFromTestName,
   getIsFaultyEarlyFlakeDetection,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
-  addAttemptToFixStringToTestName,
-  removeAttemptToFixStringFromTestName,
   getTestEndLine,
   isModifiedTest
 } = require('../../dd-trace/src/plugins/util/test')
@@ -92,6 +88,7 @@ const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
 const testSuiteMockedFiles = new Map()
+const testsToBeRetried = new Set()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -209,19 +206,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
-    getHasSnapshotTests () {
-      if (this.hasSnapshotTests !== undefined) {
-        return this.hasSnapshotTests
-      }
-      let hasSnapshotTests = true
+    resetSnapshotState () {
       try {
-        const { _snapshotData } = this.getVmContext().expect.getState().snapshotState
-        hasSnapshotTests = Object.keys(_snapshotData).length > 0
-      } catch {
-        // if we can't be sure, we'll err on the side of caution and assume it has snapshots
+        const expectGlobal = this.getVmContext().expect
+        const { snapshotState: { _counters } } = expectGlobal.getState()
+        if (_counters) {
+          _counters.clear()
+        }
+      } catch (e) {
+        log.warn('Error resetting snapshot state', e)
       }
-      this.hasSnapshotTests = hasSnapshotTests
-      return hasSnapshotTests
     }
 
     // This function returns an array if the known tests are valid and null otherwise.
@@ -293,18 +287,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     // Generic function to handle test retries
-    retryTest (testName, retryCount, addRetryStringToTestName, retryType, event) {
-      // Retrying snapshots has proven to be problematic, so we'll skip them for now
-      // We'll still detect new tests, but we won't retry them.
-      // TODO: do not bail out of retrying tests for the whole test suite
-      if (this.getHasSnapshotTests()) {
-        log.warn('%s is disabled for suites with snapshots', retryType)
-        return
-      }
-
+    retryTest (testName, retryCount, retryType, event) {
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
         if (this.global.test) {
-          this.global.test(addRetryStringToTestName(testName, retryIndex), event.fn, event.timeout)
+          testsToBeRetried.add(testName)
+          this.global.test(testName, event.fn, event.timeout)
         } else {
           log.error('%s could not retry test because global.test is undefined', retryType)
         }
@@ -314,8 +301,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
-      const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
-      return removeAttemptToFixStringFromTestName(removeEfdStringFromTestName(fullTestName))
+      return describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
     }
 
     async handleTestEvent (event, state) {
@@ -337,6 +323,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'test_start') {
+        if (testsToBeRetried.has(event.test.name)) {
+          // This is needed because we're trying tests with the same name
+          this.resetSnapshotState()
+        }
+
         let isNewTest = false
         let numEfdRetry = null
         let numOfAttemptsToFixRetries = null
@@ -344,18 +335,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // Async resource for this test is created here
         // It is used later on by the test_done handler
         const testName = getJestTestName(event.test)
-        const originalTestName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(testName))
 
         let isAttemptToFix = false
         let isDisabled = false
         let isQuarantined = false
         if (this.isTestManagementTestsEnabled) {
-          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
-          isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(originalTestName)
-          isQuarantined = this.testManagementTestsForThisSuite?.quarantined?.includes(originalTestName)
+          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
+          isDisabled = this.testManagementTestsForThisSuite?.disabled?.includes(testName)
+          isQuarantined = this.testManagementTestsForThisSuite?.quarantined?.includes(testName)
           if (isAttemptToFix) {
-            numOfAttemptsToFixRetries = retriedTestsToNumAttempts.get(originalTestName)
-            retriedTestsToNumAttempts.set(originalTestName, numOfAttemptsToFixRetries + 1)
+            numOfAttemptsToFixRetries = retriedTestsToNumAttempts.get(testName)
+            retriedTestsToNumAttempts.set(testName, numOfAttemptsToFixRetries + 1)
           } else if (isDisabled) {
             event.test.mode = 'skip'
           }
@@ -375,17 +365,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (this.isKnownTestsEnabled) {
-          isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          isNewTest = retriedTestsToNumAttempts.has(testName)
         }
 
         if (this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)) {
-          numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
-          retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
+          numEfdRetry = retriedTestsToNumAttempts.get(testName)
+          retriedTestsToNumAttempts.set(testName, numEfdRetry + 1)
         }
 
         const isJestRetry = event.test?.invocations > 1
         const ctx = {
-          name: originalTestName,
+          name: testName,
           suite: this.testSuite,
           testSourceFile: this.testSourceFile,
           displayName: this.displayName,
@@ -431,12 +421,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'add_test') {
-        const originalTestName = this.getTestNameFromAddTestEvent(event, state)
-
         if (event.failing) {
           return
         }
 
+        const originalTestName = this.getTestNameFromAddTestEvent(event, state)
         const isSkipped = event.mode === 'todo' || event.mode === 'skip'
         if (this.isTestManagementTestsEnabled) {
           const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
@@ -445,7 +434,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.retryTest(
               event.testName,
               testManagementAttemptToFixRetries,
-              addAttemptToFixStringToTestName,
               'Test Management (Attempt to Fix)',
               event
             )
@@ -466,8 +454,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.retryTest(
               event.testName,
               earlyFlakeDetectionNumRetries,
-              addEfdStringToTestName,
-              'Early flake detection',
+              'Impacted tests',
               event
             )
           }
@@ -480,7 +467,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               this.retryTest(
                 event.testName,
                 earlyFlakeDetectionNumRetries,
-                addEfdStringToTestName,
                 'Early flake detection',
                 event
               )
@@ -502,15 +488,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
           const testName = getJestTestName(event.test)
-          const originalTestName = removeAttemptToFixStringFromTestName(testName)
-          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
+          isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
-            if (attemptToFixRetriedTestsStatuses.has(originalTestName)) {
-              attemptToFixRetriedTestsStatuses.get(originalTestName).push(status)
+            if (attemptToFixRetriedTestsStatuses.has(testName)) {
+              attemptToFixRetriedTestsStatuses.get(testName).push(status)
             } else {
-              attemptToFixRetriedTestsStatuses.set(originalTestName, [status])
+              attemptToFixRetriedTestsStatuses.set(testName, [status])
             }
-            const testStatuses = attemptToFixRetriedTestsStatuses.get(originalTestName)
+            const testStatuses = attemptToFixRetriedTestsStatuses.get(testName)
             // Check if this is the last attempt to fix.
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
             // If all tests passed, we'll set the attemptToFixPassed flag to true
@@ -531,14 +516,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
           const testName = getJestTestName(event.test)
-          const originalTestName = removeEfdStringFromTestName(testName)
-          const isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
-            if (newTestsTestStatuses.has(originalTestName)) {
-              newTestsTestStatuses.get(originalTestName).push(status)
+            if (newTestsTestStatuses.has(testName)) {
+              newTestsTestStatuses.get(testName).push(status)
               isEfdRetry = true
             } else {
-              newTestsTestStatuses.set(originalTestName, [status])
+              newTestsTestStatuses.set(testName, [status])
             }
           }
         }
@@ -951,13 +935,12 @@ function getCliWrapper (isNewJestVersion) {
 
         for (const { testName, testSuiteAbsolutePath } of failedTests) {
           const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
-          const originalName = removeAttemptToFixStringFromTestName(testName)
           const testManagementTest = testManagementTests
             ?.jest
             ?.suites
             ?.[testSuite]
             ?.tests
-            ?.[originalName]
+            ?.[testName]
             ?.properties
           // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
           if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {

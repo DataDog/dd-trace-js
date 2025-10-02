@@ -277,10 +277,6 @@ module.exports = {
   parseAnnotations,
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
-  removeEfdStringFromTestName,
-  removeAttemptToFixStringFromTestName,
-  addEfdStringToTestName,
-  addAttemptToFixStringToTestName,
   getIsFaultyEarlyFlakeDetection,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
@@ -835,22 +831,6 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
-}
-
-function addEfdStringToTestName (testName, numAttempt) {
-  return `${EFD_STRING} (#${numAttempt}): ${testName}`
-}
-
-function addAttemptToFixStringToTestName (testName, numAttempt) {
-  return `${ATTEMPT_TO_FIX_STRING} (#${numAttempt}): ${testName}`
-}
-
-function removeEfdStringFromTestName (testName) {
-  return testName.replaceAll(EFD_TEST_NAME_REGEX, '')
-}
-
-function removeAttemptToFixStringFromTestName (testName) {
-  return testName.replaceAll(ATTEMPT_TEST_NAME_REGEX, '')
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
