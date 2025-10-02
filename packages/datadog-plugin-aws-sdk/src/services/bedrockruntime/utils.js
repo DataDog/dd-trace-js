@@ -234,17 +234,36 @@ function extractRequestParams (params, provider) {
       })
     }
     case PROVIDER.AMAZON: {
+      let prompt = requestBody.inputText
       if (modelId.includes('embed')) {
-        return new RequestParams({ prompt: requestBody.inputText })
+        return new RequestParams({ prompt })
       }
-      const textGenerationConfig = requestBody.textGenerationConfig || {}
-      return new RequestParams({
-        prompt: requestBody.inputText,
-        temperature: textGenerationConfig.temperature,
-        topP: textGenerationConfig.topP,
-        maxTokens: textGenerationConfig.maxTokenCount,
-        stopSequences: textGenerationConfig.stopSequences
-      })
+      if (requestBody.inputText !== undefined) {
+        const textGenerationConfig = requestBody.textGenerationConfig || {}
+        return new RequestParams({
+          prompt,
+          temperature: textGenerationConfig.temperature,
+          topP: textGenerationConfig.topP,
+          maxTokens: textGenerationConfig.maxTokenCount,
+          stopSequences: textGenerationConfig.stopSequences
+        })
+      }
+      if (Array.isArray(requestBody.messages)) {
+        const inferenceConfig = requestBody.inferenceConfig || {}
+        prompt = requestBody.messages
+          .filter(message => message.role === 'user')
+          .map(message => message.content?.[0]?.text)
+          .join('')
+        return new RequestParams({
+          prompt,
+          temperature: inferenceConfig.temperature,
+          topP: inferenceConfig.topP,
+          maxTokens: inferenceConfig.maxTokens,
+          stopSequences: inferenceConfig.stopSequences
+        })
+      }
+
+      return new RequestParams({ prompt })
     }
     case PROVIDER.ANTHROPIC: {
       let prompt = requestBody.prompt
@@ -350,14 +369,27 @@ function extractTextAndResponseReason (response, provider, modelName) {
         if (modelName.includes('embed')) {
           return new Generation({ message: body.embedding })
         }
-        const results = body.results || []
-        if (results.length > 0) {
-          const result = results[0]
+        if (body.results !== undefined) {
+          const results = body.results || []
+          if (results.length > 0) {
+            const result = results[0]
+            return new Generation({
+              message: result.outputText,
+              finishReason: result.completionReason,
+              inputTokens: body.inputTextTokenCount,
+              outputTokens: result.tokenCount
+            })
+          }
+        } else if (body.output !== undefined) {
+          const output = body.output || {}
           return new Generation({
-            message: result.outputText,
-            finishReason: result.completionReason,
-            inputTokens: body.inputTextTokenCount,
-            outputTokens: result.tokenCount
+            message: output.message?.content[0]?.text,
+            finishReason: body.stopReason,
+            role: output.message?.role,
+            inputTokens: body.usage?.inputTokens,
+            outputTokens: body.usage?.outputTokens,
+            cacheReadInputTokenCount: body.usage?.cacheReadInputTokenCount,
+            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount
           })
         }
         break
