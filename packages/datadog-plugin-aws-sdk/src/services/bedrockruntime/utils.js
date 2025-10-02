@@ -253,12 +253,23 @@ function extractRequestParams (params, provider) {
       }
       if (Array.isArray(requestBody.messages)) {
         const inferenceConfig = requestBody.inferenceConfig || {}
-        prompt = requestBody.messages
-          .filter(message => message.role === 'user')
-          .map(message => message.content?.[0]?.text)
-          .join('')
+        const messages = []
+        if (requestBody.system && Array.isArray(requestBody.system)) {
+          for (const sysMsg of requestBody.system) {
+            messages.push({
+              content: sysMsg.text,
+              role: 'system'
+            })
+          }
+        }
+        messages.push(
+          ...requestBody.messages.map(message => ({
+            content: message.content?.[0]?.text,
+            role: message.role
+          }))
+        )
         return new RequestParams({
-          prompt,
+          prompt: messages,
           temperature: inferenceConfig.temperature,
           topP: inferenceConfig.topP,
           maxTokens: inferenceConfig.maxTokens,
