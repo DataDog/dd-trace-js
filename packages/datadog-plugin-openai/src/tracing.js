@@ -136,6 +136,10 @@ class OpenAiTracingPlugin extends TracingPlugin {
       case 'createEdit':
         createEditRequestExtraction(tags, payload, openaiStore)
         break
+
+      case 'createResponse':
+        createResponseRequestExtraction(tags, payload, openaiStore)
+        break
     }
 
     span.addTags(tags)
@@ -315,6 +319,10 @@ function normalizeMethodName (methodName) {
     case 'embeddings.create':
       return 'createEmbedding'
 
+    // responses
+    case 'responses.create':
+      return 'createResponse'
+
     // files
     case 'files.create':
       return 'createFile'
@@ -378,6 +386,35 @@ function createEditRequestExtraction (tags, payload, openaiStore) {
   openaiStore.instruction = instruction
 }
 
+function createResponseRequestExtraction (tags, payload, openaiStore) {
+  // Extract model information
+  if (payload.model) {
+    tags['openai.request.model'] = payload.model
+  }
+  
+  // Extract input information
+  if (payload.input) {
+    openaiStore.input = payload.input
+    tags['openai.request.input_length'] = payload.input.length
+  }
+  
+  // Extract reasoning configuration
+  if (payload.reasoning) {
+    if (payload.reasoning.effort) {
+      tags['openai.request.reasoning.effort'] = payload.reasoning.effort
+    }
+    openaiStore.reasoning = payload.reasoning
+  }
+  
+  // Extract background flag
+  if (payload.background !== undefined) {
+    tags['openai.request.background'] = payload.background
+  }
+  
+  // Store the full payload for response extraction
+  openaiStore.responseData = payload
+}
+
 function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
@@ -410,6 +447,10 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createChatCompletion':
     case 'createEdit':
       commonCreateResponseExtraction(tags, body, openaiStore, methodName)
+      break
+
+    case 'createResponse':
+      createResponseResponseExtraction(tags, body, openaiStore)
       break
 
     case 'listFiles':
@@ -513,6 +554,26 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
   if (!body.choices) return
 
   openaiStore.choices = body.choices
+}
+
+function createResponseResponseExtraction (tags, body, openaiStore) {
+  // Extract response ID if available
+  if (body.id) {
+    tags['openai.response.id'] = body.id
+  }
+  
+  // Extract status if available
+  if (body.status) {
+    tags['openai.response.status'] = body.status
+  }
+  
+  // Extract model from response if available
+  if (body.model) {
+    tags['openai.response.model'] = body.model
+  }
+  
+  // Store the full response for potential future use
+  openaiStore.response = body
 }
 
 // The server almost always responds with JSON
