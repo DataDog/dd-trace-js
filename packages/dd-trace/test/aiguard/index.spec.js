@@ -273,6 +273,5 @@ describe('AIGuard SDK', () => {
 
       assertFetch(toolCall, `${endpoint}/evaluate`)
     })
-
   }
 })
