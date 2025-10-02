@@ -11,8 +11,8 @@ const log = require('../../log')
 class BaseFFEWriter {
   constructor ({ interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers }) {
     // Private env vars for testing purposes
-    this._interval = interval ?? getEnvironmentVariable('_DD_FFE_FLUSH_INTERVAL') ?? 1000 // 1s
-    this._timeout = timeout ?? getEnvironmentVariable('_DD_FFE_TIMEOUT') ?? 5000 // 5s
+    this._interval = interval ?? Number.parseInt(getEnvironmentVariable('_DD_FFE_FLUSH_INTERVAL')) ?? 1000 // 1s
+    this._timeout = timeout ?? Number.parseInt(getEnvironmentVariable('_DD_FFE_TIMEOUT')) ?? 5000 // 5s
 
     this._buffer = []
     this._bufferLimit = 1000 // Max events per batch
