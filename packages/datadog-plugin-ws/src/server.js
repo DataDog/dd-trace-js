@@ -21,7 +21,7 @@ class WSServerPlugin extends TracingPlugin {
 
     const protocol = `${getRequestProtocol(req)}:`
     const host = options.headers.host
-    const path = req.url
+    const path = req.url.split('?')[0]
     const uri = `${protocol}//${host}${path}`
 
     ctx.args = { options }
