@@ -41,14 +41,9 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
-function getSamplingIntervalMillis (options) {
-  return (options.samplingInterval || 1e3 / 99) // 99Hz
-}
-
 function getMaxSamples (options) {
-  const cpuSamplingInterval = getSamplingIntervalMillis(options)
-  const flushInterval = options.flushInterval || 65 * 1e3 // 60 seconds
-  const maxCpuSamples = flushInterval / cpuSamplingInterval
+  const flushInterval = options.flushInterval || 65 * 1e3 // 65 seconds
+  const maxCpuSamples = flushInterval / options.samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -399,7 +394,7 @@ class EventsProfiler {
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = options.timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
+      ? createPoissonProcessSamplingFilter(options.samplingInterval)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {

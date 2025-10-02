@@ -5,7 +5,6 @@ const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
 const log = require('./log')
-const coalesce = require('koalas')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
@@ -333,7 +332,7 @@ class Config {
     )
 
     const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = maybeInt(
-      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH'),
+      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH') ??
       options.cloudPayloadTagging?.maxDepth
     ) ?? 10
 
@@ -486,11 +485,17 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_ENABLED,
+      DD_AI_GUARD_ENDPOINT,
+      DD_AI_GUARD_MAX_CONTENT_SIZE,
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH,
+      DD_AI_GUARD_TIMEOUT,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
       DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
+      DD_APP_KEY,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -649,6 +654,7 @@ class Config {
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this._setString(env, 'appKey', DD_APP_KEY)
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
     this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
@@ -714,6 +720,14 @@ class Config {
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
+    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
@@ -944,6 +958,14 @@ class Config {
     this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
+    this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
+    this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
+    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
+    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
+    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
+    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
+    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
     opts.flushInterval = maybeInt(options.flushInterval)
@@ -998,8 +1020,7 @@ class Config {
     this._setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     this._setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))
     this._setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
-    const ingestion = options.ingestion || {}
-    opts['sampler.rateLimit'] = coalesce(options.rateLimit, ingestion.rateLimit)
+    opts['sampler.rateLimit'] = maybeInt(options.rateLimit ?? options.ingestion.rateLimit)
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
     this._setString(opts, 'service', options.service || tags.service)
     opts.serviceMapping = options.serviceMapping

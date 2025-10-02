@@ -9,14 +9,15 @@ require('./setup/core')
 describe('RandomSampler', () => {
   let RandomSampler
   let sampler
+  let randomStub
 
   beforeEach(() => {
-    sinon.stub(Math, 'random')
+    randomStub = sinon.stub(Math, 'random')
     RandomSampler = require('../src/random_sampler')
   })
 
   afterEach(() => {
-    Math.random.restore()
+    randomStub.restore()
   })
 
   describe('rate', () => {
@@ -31,7 +32,7 @@ describe('RandomSampler', () => {
     it('should always sample when rate is 1', () => {
       sampler = new RandomSampler(1)
 
-      Math.random.returns(0.9999999999999999)
+      randomStub.returns(0.9999999999999999)
 
       expect(sampler.isSampled()).to.be.true
     })
@@ -39,7 +40,7 @@ describe('RandomSampler', () => {
     it('should never sample when rate is 0', () => {
       sampler = new RandomSampler(0)
 
-      Math.random.returns(0)
+      randomStub.returns(0)
 
       expect(sampler.isSampled()).to.be.false
     })
@@ -47,11 +48,11 @@ describe('RandomSampler', () => {
     it('should sample according to the rate', () => {
       sampler = new RandomSampler(0.1234)
 
-      Math.random.returns(0.1233999999999999)
+      randomStub.returns(0.1233999999999999)
 
       expect(sampler.isSampled()).to.be.true
 
-      Math.random.returns(0.1234)
+      randomStub.returns(0.1234)
 
       expect(sampler.isSampled()).to.be.false
     })
