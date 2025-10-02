@@ -84,7 +84,8 @@ class Tracer extends NoopProxy {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
+      flaggingProvider: new LazyModule(() => require('./ffe'))
     }
   }
 
@@ -157,6 +158,15 @@ class Tracer extends NoopProxy {
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
+        }
+
+        if (config.flaggingProvider.enabled) {
+          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
+            // Feed UFC config directly to flagging provider
+            if (action === 'apply' || action === 'modify') {
+              this.flaggingProvider._setConfiguration(conf.flag_configuration)
+            }
+          })
         }
       }
 
@@ -246,6 +256,10 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
+      if (config.flaggingProvider.enabled) {
+        this._modules.flaggingProvider.enable(config)
+        lazyProxy(this, 'flaggingProvider', config, () => require('./ffe/sdk'), this._tracer, config)
+      }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
@@ -254,6 +268,7 @@ class Tracer extends NoopProxy {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
+      this._modules.flaggingProvider.disable()
     }
 
     if (this._tracingInitialized) {

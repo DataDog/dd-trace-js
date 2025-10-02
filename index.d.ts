@@ -140,6 +140,16 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
+   * Feature Flagging Provider (OpenFeature-compatible)
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  flaggingProvider: tracer.FlaggingProvider;
+
+  /**
    * @experimental
    * Provide same functionality as OpenTelemetry Baggage:
    * https://opentelemetry.io/docs/concepts/signals/baggage/
@@ -593,6 +603,21 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
+      }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
       }
     };
 
@@ -1057,6 +1082,88 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Feature Flagging Provider (OpenFeature-compatible).
+   *
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface FlaggingProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context?: any, logger?: any): Promise<{ value: boolean; reason: string }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context?: any, logger?: any): Promise<{ value: string; reason: string }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context?: any, logger?: any): Promise<{ value: number; reason: string }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation(flagKey: string, defaultValue: any, context?: any, logger?: any): Promise<{ value: any; reason: string }>;
+
+    /**
+     * Gets the current flag configuration.
+     *
+     * @returns The current configuration object
+     */
+    getConfiguration(): any;
+
+    /**
+     * Sets the flag configuration.
+     *
+     * @param config The configuration object to set
+     */
+    setConfiguration(config: any): void;
+
+    /**
+     * Internal method to update flag configuration from Remote Config.
+     * This method is called automatically when Remote Config delivers UFC updates.
+     *
+     * @internal
+     * @param ufc Universal Flag Configuration object
+     */
+    _setConfiguration(ufc: any): void;
   }
 
   /** @hidden */

@@ -27,6 +27,7 @@ describe('TracerProxy', () => {
   let appsec
   let telemetry
   let iast
+  let ffe
   let PluginManager
   let pluginManager
   let flare
@@ -36,6 +37,8 @@ describe('TracerProxy', () => {
   let dogStatsD
   let noopDogStatsDClient
   let NoopDogStatsDClient
+  let FlaggingProviderSdk
+  let flaggingProviderSdk
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -145,7 +148,8 @@ describe('TracerProxy', () => {
       },
       configure: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {}
+      heapSnapshot: {},
+      flaggingProvider: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -170,6 +174,17 @@ describe('TracerProxy', () => {
       enable: sinon.spy(),
       disable: sinon.spy()
     }
+
+    ffe = {
+      enable: sinon.spy(),
+      disable: sinon.spy()
+    }
+
+    flaggingProviderSdk = {
+      _setConfiguration: sinon.spy()
+    }
+
+    FlaggingProviderSdk = sinon.stub().returns(flaggingProviderSdk)
 
     flare = {
       enable: sinon.spy(),
@@ -212,7 +227,9 @@ describe('TracerProxy', () => {
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
-      './flare': flare
+      './flare': flare,
+      './ffe': ffe,
+      './ffe/sdk': FlaggingProviderSdk
     })
 
     proxy = new Proxy()
@@ -326,6 +343,30 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_CONFIG')('unapply', conf)
 
         expect(flare.disable).to.have.been.called
+      })
+
+      it('should setup FFE_FLAGS product handler when flagging provider is enabled', () => {
+        config.flaggingProvider.enabled = true
+
+        proxy.init()
+        proxy.flaggingProvider // Trigger lazy loading
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', { flag_configuration: flagConfig })
+
+        expect(flaggingProviderSdk._setConfiguration).to.have.been.calledWith(flagConfig)
+      })
+
+      it('should handle FFE_FLAGS modify action', () => {
+        config.flaggingProvider.enabled = true
+
+        proxy.init()
+        proxy.flaggingProvider // Trigger lazy loading
+
+        const flagConfig = { flags: { 'modified-flag': {} } }
+        handlers.get('FFE_FLAGS')('modify', { flag_configuration: flagConfig })
+
+        expect(flaggingProviderSdk._setConfiguration).to.have.been.calledWith(flagConfig)
       })
 
       it('should support applying remote config', () => {
