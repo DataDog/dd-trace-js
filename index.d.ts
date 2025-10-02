@@ -1247,7 +1247,7 @@ declare namespace tracer {
        *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
-      evaluate(messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
     }
   }
 
