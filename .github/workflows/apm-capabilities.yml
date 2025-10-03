@@ -13,15 +13,35 @@ on:
         required: false
         default: 'false'
         type: string
+      workflowName:
+        description: 'Workflow Name accessible from inputs'
+        required: false
+        default: 'NightlyCall'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ inputs.runNightly == 'true' && inputs.workflowName || github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
 
 jobs:
+  debug-concurrency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo concurrency group values
+        run: |
+          echo "=== APM Integrations Workflow Context ==="
+          echo "github.workflow: ${{ github.workflow }}"
+          echo "github.job: ${{ github.job }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.ref: ${{ github.workflow_ref }}"
+          echo "github.run_id: ${{ github.run_id }}"
+          echo "inputs.runNightly: ${{ inputs.runNightly }}"
+          echo "---"
+          echo "Current concurrency group: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}"
+          echo "cancel-in-progress: ${{ inputs.runNightly != 'true' }}"
   tracing-macos:
     runs-on: macos-latest
     steps:

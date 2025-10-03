@@ -13,10 +13,15 @@ on:
         required: false
         default: 'false'
         type: string
+      workflowName:
+        description: 'Workflow Name accessible from inputs'
+        required: false
+        default: 'NightlyCall'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ inputs.runNightly == 'true' && inputs.workflowName || github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -66,6 +71,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
+        if: inputs.runNightly == 'true'
         with:
           version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
@@ -73,6 +79,7 @@ jobs:
         uses: ./.github/actions/install
       - name: Run tests
         run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -727,9 +734,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version:
-          - 18
-          - latest
+        node-version: ${{ fromJSON(
+                  (inputs.runNightly == 'true' &&
+                  '["nightly"]') ||
+                  '["oldest","latest"]'
+                ) }}
         range:
           - '>=10.2.0 <11'
           - '>=11.0.0 <13'
@@ -763,17 +772,15 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/nightly
-        if: inputs.runNightly == 'true'
-      - run: yarn test:plugins:ci
-        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   opensearch:

@@ -17,7 +17,7 @@ describe('esm', () => {
   let sandbox
 
   withVersions('grpc', '@grpc/grpc-js', version => {
-    if (!semver.satisfies(version, '>=1.3.0') && nodeMajor > 24) {
+    if (!semver.satisfies(version, '>=1.3.0') && nodeMajor >= 25) {
       return
     }
     before(async function () {

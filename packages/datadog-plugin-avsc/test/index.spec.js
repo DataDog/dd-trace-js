@@ -43,7 +43,7 @@ describe('Plugin', () => {
 
     withVersions('avsc', ['avsc'], (version) => {
       // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-      if (version === '5.0.0' && nodeMajor >= 24) {
+      if (version === '5.0.0' && nodeMajor >= 25) {
         return
       }
       before(() => {

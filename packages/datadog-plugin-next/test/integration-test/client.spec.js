@@ -12,12 +12,17 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
   let variants
+  // These next versions have a dependency which uses a depricated node buffer
+  if (process.env.PACKAGE_VERSION_RANGE === '>=11.0.0 <13' && nodeMajor >= 25) {
+    return
+  }
   // match versions tested with unit tests
   withVersions('next', 'next', '>=11.1 <15.4.1', version => {
     before(async function () {

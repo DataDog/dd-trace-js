@@ -14,10 +14,15 @@ on:
         required: false
         default: 'false'
         type: string
+      workflowName:
+        description: 'Workflow Name accessible from inputs'
+        required: false
+        default: 'NightlyCall'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ inputs.runNightly == 'true' && inputs.workflowName || github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
