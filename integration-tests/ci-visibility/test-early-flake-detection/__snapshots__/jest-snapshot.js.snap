@@ -1,3 +1,11 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`test can do snapshot 1`] = `3`;
+exports[`test can do multiple snapshots 1`] = `"hello"`;
+exports[`test can do multiple snapshots 2`] = `"good bye"`;
+exports[`test can do multiple snapshots in a different test 1`] = `3`
+exports[`test can do multiple snapshots in a different test 2`] = `4`
+exports[`test is not new 1`] = `"yes"`
+exports[`test is not new 2`] = `"no"`
+exports[`test is flaky 1`] = `3`
+exports[`test is flaky 2`] = `"a"`
+
