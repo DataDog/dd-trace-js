@@ -85,7 +85,8 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     error: 0,
     agentless: Number(config.llmobs.agentlessEnabled),
     site: config.site,
-    auto: Number(autoEnabled)
+    auto: Number(autoEnabled),
+    ml_app: config.llmobs.mlApp
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)

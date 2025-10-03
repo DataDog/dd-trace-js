@@ -23,10 +23,11 @@ exports.tracingChannel = function (name) {
 }
 
 /**
- * @param {string} args.name module name
+ * @param {object} args
+ * @param {string|string[]} args.name module name
  * @param {string[]} args.versions array of semver range strings
- * @param {string} args.file path to file within package to instrument
- * @param {string} args.filePattern pattern to match files within package to instrument
+ * @param {string} [args.file='index.js'] path to file within package to instrument
+ * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param Function hook
  */
 exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {

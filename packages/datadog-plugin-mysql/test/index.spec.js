@@ -315,7 +315,7 @@ describe('Plugin', () => {
         let remapStub
 
         before(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -387,7 +387,7 @@ describe('Plugin', () => {
         let connection
 
         before(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -437,7 +437,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -471,7 +471,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -551,7 +551,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           pool = mysql.createPool({

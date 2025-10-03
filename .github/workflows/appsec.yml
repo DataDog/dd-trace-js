@@ -56,7 +56,7 @@ jobs:
       PLUGINS: ldapjs
     services:
       openldap:
-        image: bitnami/openldap:latest
+        image: bitnamilegacy/openldap:latest
         ports:
           - '1389:1389'
           - '1636:1636'

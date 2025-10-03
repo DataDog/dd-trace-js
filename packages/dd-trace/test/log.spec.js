@@ -78,6 +78,48 @@ describe('log', () => {
       const config = proxyquire('../src/log', {}).getConfig()
       expect(config).to.have.property('enabled', true)
     })
+
+    describe('isEnabled', () => {
+      it('prefers fleetStableConfigValue over env and local', () => {
+        const log = proxyquire('../src/log', {})
+        expect(log.isEnabled('true', 'false')).to.equal(true)
+        expect(log.isEnabled('false', 'true')).to.equal(false)
+      })
+
+      it('uses DD_TRACE_DEBUG when fleetStableConfigValue is not set', () => {
+        process.env.DD_TRACE_DEBUG = 'true'
+        let log = proxyquire('../src/log', {})
+        expect(log.isEnabled(undefined, 'false')).to.equal(true)
+
+        process.env.DD_TRACE_DEBUG = 'false'
+        log = proxyquire('../src/log', {})
+        expect(log.isEnabled(undefined, 'true')).to.equal(false)
+      })
+
+      it('uses OTEL_LOG_LEVEL=debug when DD vars are not set', () => {
+        process.env.OTEL_LOG_LEVEL = 'debug'
+        let log = proxyquire('../src/log', {})
+        expect(log.isEnabled(undefined, undefined)).to.equal(true)
+
+        process.env.OTEL_LOG_LEVEL = 'info'
+        log = proxyquire('../src/log', {})
+        expect(log.isEnabled(undefined, undefined)).to.equal(false)
+      })
+
+      it('falls back to localStableConfigValue', () => {
+        const log = proxyquire('../src/log', {})
+        expect(log.isEnabled(undefined, 'false')).to.equal(false)
+        expect(log.isEnabled(undefined, 'true')).to.equal(true)
+      })
+
+      it('falls back to internal config.enabled when nothing else provided', () => {
+        const log = proxyquire('../src/log', {})
+        log.toggle(true)
+        expect(log.isEnabled()).to.equal(true)
+        log.toggle(false)
+        expect(log.isEnabled()).to.equal(false)
+      })
+    })
   })
 
   describe('general usage', () => {

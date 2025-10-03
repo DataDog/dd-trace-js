@@ -275,8 +275,7 @@ function normalizeConfig (config, serviceIdentifier) {
     specificConfig.batchPropagationEnabled ??
     getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
     config.batchPropagationEnabled ??
-    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED') ??
-    false
+    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
   // Merge the specific config back into the main config

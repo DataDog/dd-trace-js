@@ -8,8 +8,6 @@ stages:
   - macrobenchmarks-notify
 
 validate_supported_configurations_local_file:
-  rules:
-    - when: on_success
   extends: .validate_supported_configurations_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"

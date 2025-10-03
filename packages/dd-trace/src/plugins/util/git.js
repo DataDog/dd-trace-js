@@ -116,7 +116,7 @@ function isShallowRepository () {
 
 function getGitVersion () {
   const gitVersionString = sanitizedExec('git', ['version'])
-  const gitVersionMatches = gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/)
+  const gitVersionMatches = /** @type {RegExpMatchArray} */ (gitVersionString.match(/git version (\d+)\.(\d+)\.(\d+)/))
   try {
     return {
       major: Number.parseInt(gitVersionMatches[1]),

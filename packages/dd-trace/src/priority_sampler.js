@@ -46,8 +46,9 @@ const defaultSampler = new Sampler(AUTO_KEEP)
  * @class PrioritySampler
  * @typedef {import('./opentracing/span')} DatadogSpan
  * @typedef {import('./opentracing/span_context')} DatadogSpanContext
- * @typedef {import('./standalone/product')} PRODUCTS
+ * @typedef {{ id: number, mechanism?: number }} Product
  * @typedef {2|-1|1|0} SamplingPriority Empirically defined sampling priorities.
+ * @typedef {import('./sampling_rule')|Record<string, unknown>} SamplingRuleLike
  */
 class PrioritySampler {
   /**
@@ -55,12 +56,12 @@ class PrioritySampler {
    *
    * @typedef {Object} SamplingConfig
    * @property {number} [sampleRate] - The default sample rate for traces.
-   * @property {string} [provenance] - The provenance of the sampling rule (e.g., "customer", "dynamic").
+   * @property {string} [provenance] - Optional rule provenance ("customer" or "dynamic").
    * @property {number} [rateLimit=100] - The maximum number of traces to sample per second.
-   * @property {Array<SamplingRule>} [rules=[]] - An array of sampling rules to apply.
+   * @property {Array<import('./sampling_rule')>|Array<Record<string, unknown>>} [rules=[]] - Sampling rules or configs.
    *
    * @param {string} env - The environment name (e.g., "production", "staging").
-   * @param {SamplingConfig} config - The configuration object for sampling.
+   * @param {SamplingConfig} [config] - The configuration object for sampling.
    */
   constructor (env, config) {
     this.configure(env, config)
@@ -69,22 +70,22 @@ class PrioritySampler {
 
   /**
    *
-   * @param env {string}
-   * @param opts {SamplingConfig}
+   * @param {string} env
+   * @param {SamplingConfig} config
    */
-  configure (env, opts = {}) {
-    const { sampleRate, provenance, rateLimit = 100, rules } = opts
+  configure (env, config = {}) {
+    const { sampleRate, provenance, rateLimit = 100, rules } = config
     this._env = env
     this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
-    log.trace(env, opts)
+    log.trace(env, config)
     setSamplingRules(this._rules)
   }
 
   /**
-   * @param span {DatadogSpan}
-   * @returns {boolean}
+   * @param {DatadogSpan} span
+   * @returns {boolean} True if the trace should be sampled based on priority.
    */
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
@@ -93,9 +94,10 @@ class PrioritySampler {
   }
 
   /**
+   * Assigns a sampling priority to a span if not already set.
    *
-   * @param span {DatadogSpan}
-   * @param auto {boolean}
+   * @param {DatadogSpan} span
+   * @param {boolean} [auto=true] - Whether to use automatic sampling if no manual tags are present.
    * @returns {void}
    */
   sample (span, auto = true) {
@@ -125,8 +127,9 @@ class PrioritySampler {
   }
 
   /**
+   * Updates agent-provided sampling rates keyed by `service:,env:`.
    *
-   * @param rates {Record<string, number>}
+   * @param {Record<string, number>} rates
    * @returns {void}
    */
   update (rates) {
@@ -145,8 +148,9 @@ class PrioritySampler {
   }
 
   /**
+   * Validates that a sampling priority value is one of the allowed constants.
    *
-   * @param samplingPriority {SamplingPriority}
+   * @param {SamplingPriority|undefined} samplingPriority
    * @returns {boolean}
    */
   validate (samplingPriority) {
@@ -162,10 +166,11 @@ class PrioritySampler {
   }
 
   /**
+   * Explicitly sets the priority and mechanism for the span's trace.
    *
-   * @param span {DatadogSpan}
-   * @param samplingPriority {SamplingPriority}
-   * @param product {import('./standalone/product')}
+   * @param {DatadogSpan} span
+   * @param {SamplingPriority} samplingPriority
+   * @param {Product} [product]
    */
   setPriority (span, samplingPriority, product) {
     if (!span || !this.validate(samplingPriority)) return
@@ -189,17 +194,21 @@ class PrioritySampler {
   }
 
   /**
+   * Returns the span context, accepting either a span or a span context.
    *
-   * @param span {DatadogSpan}
+   * @param {DatadogSpan|DatadogSpanContext} span
    * @returns {DatadogSpanContext}
    */
   _getContext (span) {
-    return typeof span.context === 'function' ? span.context() : span
+    return typeof /** @type {DatadogSpan} */ (span).context === 'function'
+      ? /** @type {DatadogSpan} */ (span).context()
+      : /** @type {DatadogSpanContext} */ (span)
   }
 
   /**
+   * Computes priority using rules and agent rates when no manual tag is present.
    *
-   * @param span {DatadogSpan}
+   * @param {DatadogSpan} span
    * @returns {SamplingPriority}
    */
   _getPriorityFromAuto (span) {
@@ -212,11 +221,12 @@ class PrioritySampler {
   }
 
   /**
-   *
-   * @param tags {Record<string, symbol | unknown>}
+   * Computes priority from manual sampling tags if present.
    * Included for compatibility with {@link import('./standalone/tracesource_priority_sampler')._getPriorityFromTags}
-   * @param _context {DatadogSpanContext}
-   * @returns {SamplingPriority}
+   *
+   * @param {Record<string, unknown>} tags
+   * @param {DatadogSpanContext} _context
+   * @returns {SamplingPriority|undefined}
    */
   _getPriorityFromTags (tags, _context) {
     if (Object.hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
@@ -224,19 +234,23 @@ class PrioritySampler {
     } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
       return USER_REJECT
     }
-    const priority = Number.parseInt(tags[SAMPLING_PRIORITY], 10)
+    const rawPriority = tags[SAMPLING_PRIORITY]
+    if (rawPriority !== undefined) {
+      const priority = Number.parseInt(String(rawPriority), 10)
 
-    if (priority === 1 || priority === 2) {
-      return USER_KEEP
-    } else if (priority === 0 || priority === -1) {
-      return USER_REJECT
+      if (priority === 1 || priority === 2) {
+        return USER_KEEP
+      } else if (priority === 0 || priority === -1) {
+        return USER_REJECT
+      }
     }
   }
 
   /**
+   * Applies a matching rule and rate limit to compute the sampling priority.
    *
-   * @param context {DatadogSpanContext}
-   * @param rule {SamplingRule}
+   * @param {DatadogSpanContext} context
+   * @param {import('./sampling_rule')} rule
    * @returns {SamplingPriority}
    */
   #getPriorityByRule (context, rule) {
@@ -251,12 +265,14 @@ class PrioritySampler {
   }
 
   /**
+   * Checks if the rate limiter allows sampling for the current window and
+   * records the effective rate on the trace.
    *
-   * @param context {DatadogSpanContext}
+   * @param {DatadogSpanContext} context
    * @returns {boolean}
-   * @private
    */
   _isSampledByRateLimit (context) {
+    // TODO: Change underscored properties to private ones.
     const allowed = this._limiter.isAllowed()
 
     context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
@@ -265,12 +281,14 @@ class PrioritySampler {
   }
 
   /**
+   * Computes priority using agent-provided sampling rates.
    *
-   * @param context {DatadogSpanContext}
+   * @param {DatadogSpanContext} context
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
     const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
@@ -281,8 +299,9 @@ class PrioritySampler {
   }
 
   /**
+   * Tags the trace with a decision maker when priority is keep, or removes it otherwise.
    *
-   * @param span {DatadogSpan}
+   * @param {DatadogSpan} span
    * @returns {void}
    */
   #addDecisionMaker (span) {
@@ -301,11 +320,13 @@ class PrioritySampler {
   }
 
   /**
-   * @param {Record<string, unknown>[] | Record<string, unknown>} rules - The sampling rules to normalize.
-   * @param {number} sampleRate
+   * Normalizes rule inputs to SamplingRule instances, applying defaults.
+   *
+   * @param {Array<SamplingRuleLike>|SamplingRuleLike} rules - Rules to normalize.
+   * @param {number|undefined} sampleRate
    * @param {number} rateLimit
-   * @param {string} provenance
-   * @returns {SamplingRule[]}
+   * @param {string|undefined} provenance
+   * @returns {Array<import('./sampling_rule')>}
    */
   #normalizeRules (rules, sampleRate, rateLimit, provenance) {
     rules = Array.isArray(rules) ? rules.flat() : [rules]
@@ -314,7 +335,7 @@ class PrioritySampler {
 
     const result = []
     for (const rule of rules) {
-      const sampleRate = Number.parseFloat(rule.sampleRate)
+      const sampleRate = Number.parseFloat(String(rule.sampleRate))
       // TODO(BridgeAR): Debug logging invalid rules fails our tests.
       // Should we definitely not know about these?
       if (!Number.isNaN(sampleRate)) {
@@ -325,11 +346,13 @@ class PrioritySampler {
   }
 
   /**
+   * Finds the first matching rule for the given span.
    *
-   * @param span {DatadogSpan}
-   * @returns {SamplingRule|undefined}
+   * @param {DatadogSpan} span
+   * @returns {import('./sampling_rule')|undefined}
    */
   #findRule (span) {
+    // TODO: Change underscored properties to private ones.
     for (const rule of this._rules) {
       // Rule is a special object with a .match() property.
       // It has nothing to do with a regular expression.
@@ -339,9 +362,10 @@ class PrioritySampler {
   }
 
   /**
+   * Convenience helper to keep a trace with an optional product mechanism.
    *
-   * @param span {DatadogSpan}
-   * @param product {import('./standalone/product')}
+   * @param {DatadogSpan} span
+   * @param {Product} [product]
    */
   static keepTrace (span, product) {
     span?._prioritySampler?.setPriority(span, USER_KEEP, product)

@@ -48,7 +48,6 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
   if (!isEvpProxyTest) {
     agent.setAvailableEndpoints([])
   }
-  const isHappyDom = moduleName === '@happy-dom/jest-environment'
   return agent.load(
     ['jest', 'http'],
     { service: 'test' },
@@ -58,19 +57,15 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
       global.__libraryVersion__ = version
 
       return {
-        jestExecutable: isHappyDom
-          ? require('../../../versions/jest').get()
-          : require(`../../../versions/jest@${version}`).get(),
+        jestExecutable: require(`../../../versions/jest@${version}`).get(),
         jestCommonOptions: {
           projects: [__dirname],
           testPathIgnorePatterns: ['/node_modules/'],
           coverageReporters: ['none'],
           reporters: [],
           silent: true,
-          testEnvironment: isHappyDom ? '@happy-dom/jest-environment' : path.join(__dirname, 'env.js'),
-          testRunner: isHappyDom
-            ? require('../../../versions/jest-circus').getPath('jest-circus/runner')
-            : require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
+          testEnvironment: path.join(__dirname, 'env.js'),
+          testRunner: require(`../../../versions/jest-circus@${version}`).getPath('jest-circus/runner'),
           cache: false,
           maxWorkers: '50%'
         }
@@ -85,7 +80,7 @@ describe('Plugin', function () {
   this.timeout(testTimeout)
   this.retries(2)
 
-  const versions = ['jest-environment-node', 'jest-environment-jsdom', '@happy-dom/jest-environment']
+  const versions = ['jest-environment-node', 'jest-environment-jsdom']
 
   withVersions('jest', versions, (version, moduleName) => {
     afterEach(() => {

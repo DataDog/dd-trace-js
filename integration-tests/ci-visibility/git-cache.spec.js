@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const rimraf = require('rimraf')
 const { execSync } = require('child_process')
 
 const { createSandbox } = require('../helpers')
@@ -59,8 +58,12 @@ describe('git-cache integration tests', () => {
   })
 
   afterEach(() => {
-    if (cacheDir && fs.existsSync(cacheDir)) {
-      rimraf.sync(cacheDir)
+    if (cacheDir) {
+      try {
+        fs.rmSync(cacheDir, { recursive: true })
+      } catch {
+        // Ignore, if none exists
+      }
     }
     process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED = originalCacheEnabled
     process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR = originalCacheDir

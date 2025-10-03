@@ -137,7 +137,8 @@ class NativeWallProfiler {
     this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
     this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this.#logger = options.logger
-    this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000 // 99hz
+    // TODO: Remove default value. It is only used in testing.
+    this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000
     this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
     this.#timelineEnabled = !!options.timelineEnabled
     this.#v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled

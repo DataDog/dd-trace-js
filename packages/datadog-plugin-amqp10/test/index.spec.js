@@ -97,7 +97,7 @@ describe('Plugin', () => {
                 expect(span.metrics).to.have.property('network.destination.port', 5673)
                 expect(span.metrics).to.have.property('amqp.connection.port', 5673)
                 expect(span.metrics).to.have.property('amqp.link.handle', 1)
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -116,7 +116,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
                 expect(span.meta).to.have.property(ERROR_STACK, error.stack)
                 expect(span.meta).to.have.property('component', 'amqp10')
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -167,7 +167,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('component', 'amqp10')
                 expect(span.metrics).to.have.property('amqp.connection.port', 5673)
                 expect(span.metrics).to.have.property('amqp.link.handle', 0)
-              }, 2)
+              })
               .then(done)
               .catch(done)
 
@@ -222,7 +222,7 @@ describe('Plugin', () => {
               const span = traces[0][0]
 
               expect(span).to.have.property('service', 'test-custom-name')
-            }, 2)
+            })
             .then(done)
             .catch(done)
 

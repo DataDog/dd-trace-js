@@ -118,7 +118,6 @@
     "koa-route": "4.0.1",
     "koa-router": "14.0.0",
     "koa-websocket": "7.0.0",
-    "koalas": "1.0.2",
     "langchain": "0.3.34",
     "ldapjs": "3.0.7",
     "ldapjs-promise": "3.0.7",
