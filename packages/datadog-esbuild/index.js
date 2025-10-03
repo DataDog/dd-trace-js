@@ -180,10 +180,6 @@ ${build.initialOptions.banner.js}`
       // It is local application code, not an instrumented package
       if (DEBUG) console.log(`APP: ${args.path}`, args)
 
-      const ext = path.extname(args.path).toLowerCase()
-      const isJs = /\.[cm]?[jt]sx?$/.test(ext)
-      if (!isJs && ext) return
-
       return {
         path: fullPathToModule,
         pluginData: {
@@ -282,6 +278,10 @@ ${build.initialOptions.banner.js}`
     }
 
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
+      const ext = path.extname(args.path).toLowerCase()
+      const isJs =/^\.(js|mjs|cjs)$/.test(ext)
+      if (!isJs) return
+
       if (DEBUG) console.log(`REWRITE: ${args.path}`)
       const fileCode = fs.readFileSync(args.path, 'utf8')
       const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
