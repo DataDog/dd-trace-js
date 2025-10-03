@@ -199,7 +199,7 @@ jobs:
       - run: |
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
-          azureeventhubsemulator:/Eventhubs_Emulator/ConfigFiles/Config.json
+          eventhubs:/Eventhubs_Emulator/ConfigFiles/Config.json
       - run : |
           docker restart eventhubs
       - run: yarn test:plugins:ci
