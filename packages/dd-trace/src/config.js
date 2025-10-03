@@ -554,6 +554,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOGS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -635,7 +636,17 @@ class Config {
       OTEL_RESOURCE_ATTRIBUTES,
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
-      OTEL_TRACES_SAMPLER_ARG
+      OTEL_TRACES_SAMPLER_ARG,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_PROTOCOL,
+      OTEL_EXPORTER_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_HEADERS,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_BSP_SCHEDULE_DELAY,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -649,6 +660,25 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
+    const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTER_OTLP_ENDPOINT
+    if (customOtelLogsUrl) {
+      // Only set if there's a custom URL, otherwise let calc phase handle the default
+      this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
+    }
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
+    const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
+    if (requestedProtocol === 'grpc') {
+      log.warn('OTLP gRPC protocol is not supported for logs. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      this._setString(env, 'otelLogsProtocol', 'http/protobuf')
+    } else {
+      this._setString(env, 'otelLogsProtocol', requestedProtocol || 'http/protobuf')
+    }
+    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
+    env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
     this._setBoolean(
       env,
       'apmTracingEnabled',
@@ -1154,7 +1184,13 @@ class Config {
       calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
+
     calc['dogstatsd.hostname'] = this._getHostname()
+
+    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    const agentHostname = this._getHostname()
+    calc.otelLogsUrl = `http://${agentHostname}:4318/v1/logs`
+
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
