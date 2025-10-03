@@ -27,7 +27,6 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
 
 module.exports = {
   apmTracingEnabled: true,
-  appKey: undefined,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
   'appsec.apiSecurity.endpointCollectionEnabled': true,
