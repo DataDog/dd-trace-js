@@ -11,6 +11,7 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+const systemPrompt = 'Please respond with one sentence.'
 const prompt = 'What is the capital of France?'
 const temperature = 0.5
 const maxTokens = 512
@@ -48,6 +49,44 @@ bedrockruntime.models = [
       'Notre Dame Cathedral, and the Louvre Museum. Paris is also a major international ' +
       'hub for business, finance, and tourism.'
     }
+  },
+  {
+    provider: PROVIDER.AMAZON,
+    modelId: 'amazon.nova-pro-v1:0',
+    systemPrompt,
+    userPrompt: prompt,
+    requestBody: {
+      system: [{ text: systemPrompt }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              text: prompt,
+            }
+          ],
+        }
+      ],
+      inferenceConfig: {
+        maxTokens,
+        topP: 0.1,
+        topK: 20,
+        temperature
+      }
+    },
+    response: {
+      inputTokens: 13,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      text: 'The capital of France is Paris.'
+    },
+    streamedResponse: {
+      inputTokens: 13,
+      outputTokens: 8,
+      text: 'The capital city of France is Paris.'
+    },
+    outputRole: 'assistant'
   },
   {
     provider: PROVIDER.AI21,
