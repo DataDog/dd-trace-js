@@ -62,6 +62,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../version')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -2286,8 +2287,9 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
-
-    it('works with happy-dom', async () => {
+    // happy-dom>=19 can only be used with CJS from node 20 and above
+    const happyDomTest = NODE_MAJOR < 20 ? it.skip : it
+    happyDomTest('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {

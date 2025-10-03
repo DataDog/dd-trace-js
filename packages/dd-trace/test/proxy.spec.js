@@ -12,11 +12,15 @@ describe('TracerProxy', () => {
   let proxy
   let DatadogTracer
   let NoopTracer
+  let AIGuardSdk
+  let NoopAIGuardSdk
   let AppsecSdk
   let NoopAppsecSdk
   let tracer
   let NoopProxy
   let noop
+  let aiguardSdk
+  let noopAiguardSdk
   let appsecSdk
   let noopAppsecSdk
   let Config
@@ -39,6 +43,10 @@ describe('TracerProxy', () => {
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
+
+    aiguardSdk = {
+      evaluate: sinon.stub(),
+    }
 
     appsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
@@ -70,6 +78,10 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy()
+    }
+
+    noopAiguardSdk = {
+      evaluate: sinon.stub(),
     }
 
     noopAppsecSdk = {
@@ -120,6 +132,8 @@ describe('TracerProxy', () => {
 
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    AIGuardSdk = sinon.stub().returns(aiguardSdk)
+    NoopAIGuardSdk = sinon.stub().returns(noopAiguardSdk)
     AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
     PluginManager = sinon.stub().returns(pluginManager)
@@ -127,7 +141,11 @@ describe('TracerProxy', () => {
 
     config = {
       tracing: true,
-      experimental: {},
+      experimental: {
+        aiguard: {
+          enabled: true
+        }
+      },
       injectionEnabled: [],
       logger: 'logger',
       debug: true,
@@ -193,6 +211,7 @@ describe('TracerProxy', () => {
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
+      '../aiguard/noop': NoopAIGuardSdk,
       '../appsec/sdk/noop': NoopAppsecSdk,
       './dogstatsd': NoopDogStatsDClient
     })
@@ -209,6 +228,7 @@ describe('TracerProxy', () => {
       './appsec/iast': iast,
       './telemetry': telemetry,
       './remote_config': remoteConfig,
+      './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
@@ -745,6 +765,16 @@ describe('TracerProxy', () => {
     })
   })
 
+  describe('aiguard', () => {
+    describe('evaluate', () => {
+      it('should call the underlying NoopAIGuardSdk method', () => {
+        const messages = [{ role: 'user', content: 'What day is today?' }]
+        proxy.aiguard.evaluate(messages)
+        expect(noopAiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
+      })
+    })
+  })
+
   describe('initialized', () => {
     beforeEach(() => {
       proxy.init()
@@ -848,6 +878,16 @@ describe('TracerProxy', () => {
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+        })
+      })
+    })
+
+    describe('aiguard', () => {
+      describe('evaluate', () => {
+        it('should call the underlying NoopAIGuardSdk method', () => {
+          const messages = [{ role: 'user', content: 'What day is today?' }]
+          proxy.aiguard.evaluate(messages)
+          expect(aiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
         })
       })
     })

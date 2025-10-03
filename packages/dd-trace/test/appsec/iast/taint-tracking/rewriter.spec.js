@@ -119,6 +119,16 @@ describe('IAST Rewriter', () => {
       rewriter.disable()
     })
 
+    it('Should not wrap module compile method if applications has been bundled', () => {
+      globalThis.__DD_ESBUILD_IAST_WITH_SM = true
+
+      rewriter.enable(iastEnabledConfig)
+      expect(shimmer.wrap).to.not.have.been.called
+
+      rewriter.disable()
+      delete globalThis.__DD_ESBUILD_IAST_WITH_SM
+    })
+
     // TODO: This cannot be tested with mocking.
     it('Should unwrap module compile method on taint tracking disable')
 

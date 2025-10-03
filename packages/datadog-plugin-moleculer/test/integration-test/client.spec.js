@@ -22,7 +22,7 @@ describe('esm', () => {
     })
 
     after(async () => {
-      await sandbox.remove()
+      await sandbox?.remove()
     })
 
     beforeEach(async () => {

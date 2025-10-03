@@ -1,0 +1,20 @@
+{
+  "name": "esbuild-dd-trace-iast",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Basic application to test IAST support on a bundled app with dd-trace via esbuild",
+  "main": "app.js",
+  "scripts": {
+    "build": "DD_IAST_ENABLED=true node ./esbuild.js && DD_IAST_ENABLED=false node ./esbuild-no-iast.js"
+  },
+  "keywords": [
+    "esbuild",
+    "iast"
+  ],
+  "author": "Carles Capell <carles.capell@datadoghq.com>",
+  "license": "ISC",
+  "dependencies": {
+    "esbuild": "^0.25.9",
+    "express": "^4.21.2"
+  }
+}

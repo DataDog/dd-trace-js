@@ -9,8 +9,14 @@ class MongodbCorePlugin extends DatabasePlugin {
   static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
+  /**
+   * @override
+   */
   static peerServicePrecursors = []
 
+  /**
+   * @override
+   */
   configure (config) {
     super.configure(config)
 
@@ -51,11 +57,18 @@ class MongodbCorePlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
+  /**
+   * @override
+   */
   getPeerService (tags) {
-    const ns = tags['db.name']
+    let ns = tags['db.name']
     if (ns && tags['peer.service'] === undefined) {
+      const dotIndex = ns.indexOf('.')
+      if (dotIndex !== -1) {
+        ns = ns.slice(0, dotIndex)
+      }
       // the mongo ns is either dbName either dbName.collection. So we keep the first part
-      tags['peer.service'] = ns.split('.', 1)[0]
+      tags['peer.service'] = ns
     }
     return super.getPeerService(tags)
   }
@@ -111,13 +124,13 @@ function getQuery (cmd) {
 }
 
 function getResource (plugin, ns, query, operationName) {
-  const parts = [operationName, ns]
+  let resource = `${operationName} ${ns}`
 
   if (plugin.config.queryInResourceName && query) {
-    parts.push(query)
+    resource += ` ${query}`
   }
 
-  return parts.join(' ')
+  return resource
 }
 
 function truncate (input) {
