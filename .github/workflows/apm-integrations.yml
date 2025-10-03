@@ -24,20 +24,6 @@ env:
 # TODO: upstream jobs
 
 jobs:
-  debug-concurrency:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Echo concurrency group values
-        run: |
-          echo "=== APM Integrations Workflow Context ==="
-          echo "github.workflow: ${{ github.workflow }}"
-          echo "github.ref: ${{ github.ref }}"
-          echo "github.run_id: ${{ github.run_id }}"
-          echo "inputs.runNightly: ${{ inputs.runNightly }}"
-          echo "---"
-          echo "Current concurrency group: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}"
-          echo "cancel-in-progress: ${{ inputs.runNightly != 'true' }}"
-
   aerospike:
     strategy:
       matrix:
@@ -780,10 +766,6 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/nightly
-        if: inputs.runNightly == 'true'
-      - run: yarn test:plugins:ci
-        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
