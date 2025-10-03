@@ -5,6 +5,18 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
+const expressRouteAddedChannel = channel('apm:express:route:add')
+const {
+  getRouterMountPath,
+  joinPath,
+  getLayerMatchers,
+  setLayerMatchers,
+  normalizeMethodName,
+  isAppMounted,
+  setRouterMountPath,
+  normalizeRoutePaths
+} = require('./helpers/router-helper')
+
 function isFastStar (layer, matchers) {
   return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
 }
@@ -22,7 +34,6 @@ function createWrapRouterMethod (name) {
   const nextChannel = channel(`apm:${name}:middleware:next`)
   const routeAddedChannel = channel(`apm:${name}:route:added`)
 
-  const layerMatchers = new WeakMap()
   const regexpCache = Object.create(null)
 
   function wrapLayerHandle (layer, original) {
@@ -31,7 +42,7 @@ function createWrapRouterMethod (name) {
     return shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
-      const matchers = layerMatchers.get(layer)
+      const matchers = getLayerMatchers(layer)
       const lastIndex = arguments.length - 1
       const name = original._name || original.name
       const req = arguments[arguments.length > 3 ? 1 : 0]
@@ -78,7 +89,7 @@ function createWrapRouterMethod (name) {
         layer.handle = wrapLayerHandle(layer, layer.handle)
       }
 
-      layerMatchers.set(layer, matchers)
+      setLayerMatchers(layer, matchers)
 
       if (layer.route) {
         METHODS.forEach(method => {
@@ -115,7 +126,7 @@ function createWrapRouterMethod (name) {
     return arg.map(pattern => ({
       path: pattern instanceof RegExp ? `(${pattern})` : pattern,
       test: layer => {
-        const matchers = layerMatchers.get(layer)
+        const matchers = getLayerMatchers(layer)
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
@@ -147,6 +158,52 @@ function createWrapRouterMethod (name) {
 
       if (routeAddedChannel.hasSubscribers) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
+      }
+
+      // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
+      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
+        // Handle nested router mounting for 'use' method
+        if (original.name === 'use' && arguments.length >= 2) {
+          const [mountPathArg, nestedRouter] = arguments
+          const mountPaths = normalizeRoutePaths(mountPathArg)
+          const normalizedMountPath = mountPaths[0]
+
+          if (normalizedMountPath && nestedRouter && typeof nestedRouter === 'function') {
+            const parentPath = getRouterMountPath(this)
+            const fullMountPath = joinPath(parentPath, normalizedMountPath)
+            setRouterMountPath(nestedRouter, fullMountPath)
+          }
+        }
+
+        const mountPath = getRouterMountPath(this)
+
+        if (mountPath) {
+          const layer = this.stack[this.stack.length - 1]
+
+          if (layer?.route) {
+            const route = layer.route
+            const routePaths = normalizeRoutePaths(route.path)
+            const pathsToPublish = routePaths.length ? routePaths : ['']
+
+            METHODS.forEach(method => {
+              if (typeof route[method] === 'function') {
+                shimmer.wrap(route, method, (originalMethod) => function () {
+                  for (const routePath of pathsToPublish) {
+                    const fullPath = joinPath(mountPath, routePath)
+
+                    // Now publish the route with this specific method
+                    expressRouteAddedChannel.publish({
+                      method: normalizeMethodName(method),
+                      path: fullPath
+                    })
+                  }
+
+                  return originalMethod.apply(this, arguments)
+                })
+              }
+            })
+          }
+        }
       }
 
       if (this.stack.length > offset) {
