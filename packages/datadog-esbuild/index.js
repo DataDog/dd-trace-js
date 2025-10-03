@@ -279,7 +279,7 @@ ${build.initialOptions.banner.js}`
 
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
       const ext = path.extname(args.path).toLowerCase()
-      const isJs =/^\.(js|mjs|cjs)$/.test(ext)
+      const isJs = /^\.(js|mjs|cjs)$/.test(ext)
       if (!isJs) return
 
       if (DEBUG) console.log(`REWRITE: ${args.path}`)
