@@ -1,13 +1,8 @@
-name: Plugin Tests
-description: Run plugin tests
+name: Plugin and LLMOBs Tests
+description: Run plugin tests and llmobs test suites
 inputs:
-  skipNightly:
-    description: "Whether to skip nightly testing"
-    required: false
-    default: 'false'
   runNightly:
     description: "Whether to run nightly tests"
-    required: false
     default: 'false'
 
 runs:
@@ -15,23 +10,35 @@ runs:
   steps:
     - uses: ./.github/actions/testagent/start
     - uses: ./.github/actions/install
+
     - uses: ./.github/actions/node/oldest-maintenance-lts
       if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
       if: inputs.runNightly != 'true'
       shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly != 'true'
+      shell: bash
+
     - uses: ./.github/actions/node/latest
       if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
       if: inputs.runNightly != 'true'
       shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly != 'true'
+      shell: bash
+
     - uses: ./.github/actions/node/nightly
-      if: ${{ inputs.skipNightly != 'true' && inputs.runNightly == 'true'}}
+      if: inputs.runNightly == 'true'
     - run: yarn test:plugins:ci
-      if: ${{ inputs.skipNightly != 'true' && inputs.runNightly == 'true'}}
+      if: inputs.runNightly == 'true'
+      shell: bash
+    - run: yarn test:llmobs:plugins:ci
+      if: inputs.runNightly == 'true'
       shell: bash
     - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-        suffix: test-${{ github.job }}
+        suffix: llmobs-${{ github.job }}

@@ -6,10 +6,17 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_call:
+    inputs:
+      runNightly:
+        description: 'Whether to run nightly tests'
+        required: false
+        default: 'false'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -89,6 +96,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   amqplib:
     runs-on: ubuntu-latest
@@ -103,6 +112,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   apollo:
     runs-on: ubuntu-latest
@@ -111,6 +122,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   avsc:
     runs-on: ubuntu-latest
@@ -120,6 +133,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   axios:
     runs-on: ubuntu-latest
@@ -166,6 +181,10 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   confluentinc-kafka-javascript:
@@ -262,6 +281,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   dns:
     runs-on: ubuntu-latest
@@ -279,6 +300,10 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -303,6 +328,10 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -319,6 +348,10 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
 
   fastify:
     runs-on: ubuntu-latest
@@ -327,6 +360,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   fetch:
     runs-on: ubuntu-latest
@@ -335,6 +370,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   fs:
     runs-on: ubuntu-latest
@@ -343,6 +380,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   graphql:
     runs-on: ubuntu-latest
@@ -351,6 +390,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   grpc:
     runs-on: ubuntu-latest
@@ -359,6 +400,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   hapi:
     runs-on: ubuntu-latest
@@ -367,6 +410,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   hono:
     runs-on: ubuntu-latest
@@ -375,11 +420,17 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   http:
     strategy:
       matrix:
-        node-version: [oldest, maintenance, 'latest']
+        node-version: ${{ fromJSON(
+                  (inputs.runNightly == 'true' &&
+                  '["nightly"]') ||
+                  '["oldest","maintenance","latest"]'
+                ) }}
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -413,6 +464,10 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -422,7 +477,11 @@ jobs:
   kafkajs:
     strategy:
       matrix:
-        node-version: ['oldest', 'latest']
+        node-version: ${{ fromJSON(
+                  inputs.runNightly == 'true' &&
+                  '["nightly"]' ||
+                  '["oldest","latest"]'
+                ) }}
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -471,6 +530,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -489,6 +550,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mariadb:
     runs-on: ubuntu-latest
@@ -506,6 +569,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   memcached:
     runs-on: ubuntu-latest
@@ -520,6 +585,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   microgateway-core:
     runs-on: ubuntu-latest
@@ -528,6 +595,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   moleculer:
     runs-on: ubuntu-latest
@@ -536,6 +605,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mongodb:
     runs-on: ubuntu-latest
@@ -551,6 +622,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -566,6 +639,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mongoose:
     runs-on: ubuntu-latest
@@ -580,6 +655,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mysql:
     runs-on: ubuntu-latest
@@ -587,8 +664,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -597,6 +674,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   mysql2:
     runs-on: ubuntu-latest
@@ -614,6 +693,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   net:
     runs-on: ubuntu-latest
@@ -631,6 +712,10 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -703,6 +788,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   # TODO: Install the Oracle client on the host and test Node >=16.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
@@ -765,6 +852,10 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       # - run: yarn test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -788,6 +879,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          skipNightly: 'true'
+
   prisma:
     runs-on: ubuntu-latest
     services:
@@ -803,6 +897,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   protobufjs:
     runs-on: ubuntu-latest
@@ -812,6 +908,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   redis:
     runs-on: ubuntu-latest
@@ -826,6 +924,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   ioredis:
     runs-on: ubuntu-latest
@@ -840,6 +940,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   valkey:
     runs-on: ubuntu-latest
@@ -854,6 +956,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
@@ -887,6 +991,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          runNightly: inputs.runNightly
 
   router:
     runs-on: ubuntu-latest
@@ -895,6 +1001,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   sharedb:
     runs-on: ubuntu-latest
@@ -906,6 +1014,10 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -933,6 +1045,12 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:ci
+        if: inputs.runNightly == 'true'
+      - run: yarn test:plugins:upstream
+        if: inputs.runNightly == 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -946,6 +1064,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   winston:
     runs-on: ubuntu-latest
@@ -954,6 +1074,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   ws:
     runs-on: ubuntu-latest
@@ -962,3 +1084,5 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly

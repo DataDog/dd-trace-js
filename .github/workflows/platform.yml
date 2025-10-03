@@ -6,10 +6,17 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_call:
+    inputs:
+      runNightly:
+        description: 'Whether to run nightly tests'
+        required: false
+        default: 'false'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -26,6 +33,9 @@ jobs:
       - run: yarn test:core:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:core:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   dd-trace-api:
@@ -35,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -43,6 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-body-parser:
     runs-on: ubuntu-latest
@@ -51,6 +65,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-child_process:
     runs-on: ubuntu-latest
@@ -59,6 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-cookie-parser:
     runs-on: ubuntu-latest
@@ -67,6 +85,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -81,6 +101,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-express-session:
     runs-on: ubuntu-latest
@@ -89,6 +111,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-express:
     runs-on: ubuntu-latest
@@ -97,6 +121,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-fs:
     runs-on: ubuntu-latest
@@ -105,6 +131,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-generic-pool:
     runs-on: ubuntu-latest
@@ -113,6 +141,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-http:
     runs-on: ubuntu-latest
@@ -121,6 +151,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-knex:
     runs-on: ubuntu-latest
@@ -129,6 +161,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-mongoose:
     runs-on: ubuntu-latest
@@ -143,6 +177,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -151,6 +187,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-mysql2:
     runs-on: ubuntu-latest
@@ -168,6 +206,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-passport:
     runs-on: ubuntu-latest
@@ -176,6 +216,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-passport-http:
     runs-on: ubuntu-latest
@@ -184,6 +226,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-passport-local:
     runs-on: ubuntu-latest
@@ -192,6 +236,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-pg:
     runs-on: ubuntu-latest
@@ -209,6 +255,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-promise-js:
     runs-on: ubuntu-latest
@@ -217,6 +265,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-promise:
     runs-on: ubuntu-latest
@@ -225,6 +275,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-q:
     runs-on: ubuntu-latest
@@ -233,6 +285,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-url:
     runs-on: ubuntu-latest
@@ -241,6 +295,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
 
   instrumentation-when:
     runs-on: ubuntu-latest
@@ -249,6 +305,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          runNightly: inputs.runNightly
+
 
   instrumentations-misc:
     runs-on: ubuntu-latest
@@ -268,6 +327,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:instrumentations:misc:ci
         shell: bash
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:instrumentations:misc:ci
+        if: inputs.runNightly == 'true'
+        shell: bash
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -281,7 +345,11 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [oldest, maintenance, active, latest]
+        version: ${{ fromJSON(
+                  (inputs.runNightly == 'true' &&
+                  '["nightly"]') ||
+                  '["oldest", "maintenance", "active", "latest", "nightly"]'
+                ) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -301,13 +369,21 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:trace:guardrails:ci
+        if: inputs.runNightly == 'true'
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
     strategy:
       matrix:
-        version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
+        version: ${{ fromJSON(
+                  (inputs.runNightly == 'true' &&
+                  '["nightly"]') ||
+                  '[14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]'
+                ) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -346,4 +422,8 @@ jobs:
       - run: yarn test:shimmer:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:shimmer:ci
+      - uses: ./.github/actions/node/nightly
+        if: inputs.runNightly == 'true'
+      - run: yarn test:shimmer:ci
+        if: inputs.runNightly == 'true'
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
