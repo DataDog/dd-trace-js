@@ -35,7 +35,7 @@
     "test:instrumentations:misc": "mocha -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/*/**/*.spec.js'",
     "test:instrumentations:misc:ci": "nyc --no-clean --include 'packages/datadog-instrumentations/src/**/*.js' -- npm run test:instrumentations:misc",
     "test:core": "tap \"packages/datadog-core/test/**/*.spec.js\"",
-  "test:core:ci": "npm run test:core -- --coverage --nyc-arg=--include=\"packages/datadog-core/src/**/*.js\"",
+    "test:core:ci": "npm run test:core -- --coverage --nyc-arg=--include=\"packages/datadog-core/src/**/*.js\"",
     "test:lambda": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/lambda/**/*.spec.js\"",
     "test:lambda:ci": "nyc --no-clean --include \"packages/dd-trace/src/lambda/**/*.js\" -- npm run test:lambda",
     "test:llmobs:sdk": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/llmobs/plugins/**/*.spec.js\" \"packages/dd-trace/test/llmobs/**/*.spec.js\" ",
