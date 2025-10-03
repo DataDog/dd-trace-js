@@ -12,7 +12,7 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const TEST_DIR = path.join(__dirname, '.')
-process.chdir(TEST_DIR)
+const originalDir = process.cwd()
 
 // This should switch to our withVersion helper. The order here currently matters.
 const esbuildVersions = ['latest', '0.16.12']
@@ -20,6 +20,7 @@ const esbuildVersions = ['latest', '0.16.12']
 esbuildVersions.forEach((version) => {
   describe(`esbuild ${version}`, () => {
     before(() => {
+      process.chdir(TEST_DIR)
       chproc.execSync('npm install', {
         timeout: 1000 * 30
       })
@@ -28,6 +29,10 @@ esbuildVersions.forEach((version) => {
           timeout: 1000 * 30
         })
       }
+    })
+
+    after(() => {
+      process.chdir(originalDir)
     })
 
     it('works', () => {
