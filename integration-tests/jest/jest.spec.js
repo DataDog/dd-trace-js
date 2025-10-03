@@ -3678,21 +3678,271 @@ describe('jest CommonJS', () => {
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
 
-      it('can attempt to fix in parallel mode', (done) => {
+      it('works with snapshot tests', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
-        runAttemptToFixTest(
-          done,
-          {
-            isAttemptToFix: true,
-            isParallel: true,
-            extraEnvVars: {
-              // we need to run more than 1 suite for parallel mode to kick in
-              TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
-              RUN_IN_PARALLEL: true
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-snapshot-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix snapshot is flaky': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
             }
           }
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+            assert.equal(tests.length, 4)
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_IS_RETRY] === 'true'
+            )
+
+            assert.equal(retriedTests.length, 3)
+            const failedTests = tests.filter(
+              test => test.meta[TEST_STATUS] === 'fail'
+            )
+            assert.equal(failedTests.length, 2)
+
+            const passedTests = tests.filter(
+              test => test.meta[TEST_STATUS] === 'pass'
+            )
+            assert.equal(passedTests.length, 2)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1'
+            },
+            stdio: 'inherit'
+          }
         )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+      })
+
+      it('works with snapshot tests when every attempt passes', async () => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-snapshot-attempt-to-fix-1.js': {
+                tests: {
+                  'attempt to fix snapshot is flaky': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+            assert.equal(tests.length, 4)
+
+            const passedTests = tests.filter(
+              test => test.meta[TEST_STATUS] === 'pass'
+            )
+            assert.equal(passedTests.length, 4)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-1',
+              SHOULD_PASS_ALWAYS: '1'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+        assert.equal(exitCode, 0)
+      })
+
+      it('works with image snapshot tests', async () => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-snapshot-image.js': {
+                tests: {
+                  'snapshot can match': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+            assert.equal(tests.length, 4)
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_IS_RETRY] === 'true'
+            )
+
+            assert.equal(retriedTests.length, 3)
+            const failedTests = tests.filter(
+              test => test.meta[TEST_STATUS] === 'fail'
+            )
+            assert.equal(failedTests.length, 2)
+
+            const passedTests = tests.filter(
+              test => test.meta[TEST_STATUS] === 'pass'
+            )
+            assert.equal(passedTests.length, 2)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-snapshot-image'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+      })
+
+      context('parallel mode', () => {
+        it('can attempt to fix in parallel mode', (done) => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          runAttemptToFixTest(
+            done,
+            {
+              isAttemptToFix: true,
+              isParallel: true,
+              extraEnvVars: {
+                // we need to run more than 1 suite for parallel mode to kick in
+                TESTS_TO_RUN: 'test-management/test-attempt-to-fix',
+                RUN_IN_PARALLEL: true
+              }
+            }
+          )
+        })
+
+        it('works with snapshot tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-snapshot-attempt-to-fix-1.js': {
+                  tests: {
+                    'attempt to fix snapshot is flaky': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                },
+                'ci-visibility/test-management/test-snapshot-attempt-to-fix-2.js': {
+                  tests: {
+                    'attempt to fix snapshot 2 is flaky': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+              assert.equal(tests.length, 8)
+              const retriedTests = tests.filter(
+                test => test.meta[TEST_IS_RETRY] === 'true'
+              )
+
+              assert.equal(retriedTests.length, 6)
+              const failedTests = tests.filter(
+                test => test.meta[TEST_STATUS] === 'fail'
+              )
+              assert.equal(failedTests.length, 4)
+
+              const passedTests = tests.filter(
+                test => test.meta[TEST_STATUS] === 'pass'
+              )
+              assert.equal(passedTests.length, 4)
+            })
+
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: 'test-management/test-snapshot-attempt-to-fix-',
+                RUN_IN_PARALLEL: true
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise
+          ])
+        })
       })
     })
 
