@@ -104,7 +104,7 @@ class BatchLogRecordProcessor {
 
     const logRecords = this.#logRecords.slice(0, this.#maxExportBatchSize)
     this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
-    
+
     this.#clearTimer()
     this.exporter.export(logRecords, () => {})
 

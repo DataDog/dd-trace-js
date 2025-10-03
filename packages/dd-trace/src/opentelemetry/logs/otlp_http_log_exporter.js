@@ -78,8 +78,7 @@ class OtlpHttpLogExporter {
    * Shuts down the exporter.
    * @returns {undefined} Promise that resolves when shutdown is complete
    */
-  shutdown () {
-  }
+  shutdown () {}
 
   /**
    * Sends the payload via HTTP request.
