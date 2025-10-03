@@ -175,7 +175,7 @@ describe('Endpoints collection', () => {
     }
   }
 
-  it.only('should send express endpoints via telemetry', async () => {
+  it('should send express endpoints via telemetry', async () => {
     await runEndpointTest('express')
   })
 

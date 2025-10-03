@@ -13,8 +13,9 @@ const {
   setLayerMatchers,
   normalizeMethodName,
   isAppMounted,
-  setRouterMountPath
-} = require('./helpers/router-state')
+  setRouterMountPath,
+  normalizeRoutePaths
+} = require('./helpers/router-helper')
 
 function isFastStar (layer, matchers) {
   return layer.regexp?.fast_star ?? matchers.some(matcher => matcher.path === '*')
@@ -163,11 +164,13 @@ function createWrapRouterMethod (name) {
       if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
         // Handle nested router mounting for 'use' method
         if (original.name === 'use' && arguments.length >= 2) {
-          const [mountPath, nestedRouter] = arguments
+          const [mountPathArg, nestedRouter] = arguments
+          const mountPaths = normalizeRoutePaths(mountPathArg)
+          const normalizedMountPath = mountPaths[0]
 
-          if (typeof mountPath === 'string' && nestedRouter && typeof nestedRouter === 'function') {
+          if (normalizedMountPath && nestedRouter && typeof nestedRouter === 'function') {
             const parentPath = getRouterMountPath(this)
-            const fullMountPath = joinPath(parentPath, mountPath)
+            const fullMountPath = joinPath(parentPath, normalizedMountPath)
             setRouterMountPath(nestedRouter, fullMountPath)
           }
         }
@@ -179,16 +182,21 @@ function createWrapRouterMethod (name) {
 
           if (layer?.route) {
             const route = layer.route
-            const fullPath = joinPath(mountPath, route.path)
+            const routePaths = normalizeRoutePaths(route.path)
+            const pathsToPublish = routePaths.length ? routePaths : ['']
 
             METHODS.forEach(method => {
               if (typeof route[method] === 'function') {
                 shimmer.wrap(route, method, (originalMethod) => function () {
-                  // Now publish the route with this specific method
-                  expressRouteAddedChannel.publish({
-                    method: normalizeMethodName(method),
-                    path: fullPath
-                  })
+                  for (const routePath of pathsToPublish) {
+                    const fullPath = joinPath(mountPath, routePath)
+
+                    // Now publish the route with this specific method
+                    expressRouteAddedChannel.publish({
+                      method: normalizeMethodName(method),
+                      path: fullPath
+                    })
+                  }
 
                   return originalMethod.apply(this, arguments)
                 })

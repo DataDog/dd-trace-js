@@ -10,6 +10,38 @@ function joinPath (base, path) {
   return base + path
 }
 
+// Normalize route definitions coming from Express into a string representation
+function normalizeRoutePath (path) {
+  if (path == null) return null
+  if (path instanceof RegExp) return path.toString()
+  if (typeof path === 'string') return path
+
+  return String(path)
+}
+
+// Flatten any route definition into an array of normalized path strings.
+function normalizeRoutePaths (path) {
+  const queue = Array.isArray(path) ? [...path] : [path]
+  const paths = []
+
+  while (queue.length) {
+    const current = queue.shift()
+
+    if (Array.isArray(current)) {
+      queue.unshift(...current)
+      continue
+    }
+
+    const normalized = normalizeRoutePath(current)
+
+    if (normalized !== null) {
+      paths.push(normalized)
+    }
+  }
+
+  return paths
+}
+
 function setRouterMountPath (router, mountPath) {
   if (!router || typeof mountPath !== 'string') return
   routerMountPaths.set(router, mountPath)
@@ -47,5 +79,7 @@ module.exports = {
   getLayerMatchers,
   normalizeMethodName,
   markAppMounted,
-  isAppMounted
+  isAppMounted,
+  normalizeRoutePath,
+  normalizeRoutePaths
 }
