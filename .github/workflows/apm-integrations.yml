@@ -156,6 +156,13 @@ jobs:
   azure-functions:
     runs-on: ubuntu-latest
     services:
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
         azurite:
           image: "mcr.microsoft.com/azure-storage/azurite:3.35.0"
           ports:
@@ -180,13 +187,6 @@ jobs:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
               SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
       SERVICES: azurite,azureeventhubsemulator,azuresqledge,azureservicebusemulator
