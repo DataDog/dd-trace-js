@@ -1,0 +1,156 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"claude-3-7-sonnet-20250219\",\n  \"messages\": [\n    {\n
+      \     \"role\": \"user\",\n      \"content\": \"Hello, world!\"\n    }\n  ],\n
+      \ \"max_tokens\": 100,\n  \"temperature\": 0.5,\n  \"stream\": true\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '192'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - Anthropic/JS 0.14.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - anthropic-version
+      : - '2023-06-01'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 0.14.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: 'event: message_start
+
+        data: {"type":"message_start","message":{"id":"msg_016fWBPdLcDjoSC2L4xLU3Kp","type":"message","role":"assistant","model":"claude-3-7-sonnet-20250219","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":11,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":2,"service_tier":"standard"}}}
+
+
+        event: content_block_start
+
+        data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}    }
+
+
+        event: content_block_delta
+
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello!"}            }
+
+
+        event: content_block_delta
+
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+        It''s nice to connect with you. I''m"}         }
+
+
+        event: ping
+
+        data: {"type": "ping"}
+
+
+        event: content_block_delta
+
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+        an AI assistant here to help with information, answer"}       }
+
+
+        event: content_block_delta
+
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+        questions, or just chat. How can I assist you today"}     }
+
+
+        event: content_block_delta
+
+        data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"?"}             }
+
+
+        event: content_block_stop
+
+        data: {"type":"content_block_stop","index":0             }
+
+
+        event: message_delta
+
+        data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":11,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":38}    }
+
+
+        event: message_stop
+
+        data: {"type":"message_stop"  }
+
+
+        '
+    headers:
+      CF-RAY:
+      - 97f8e960583a437f-EWR
+      Cache-Control:
+      - no-cache
+      Connection:
+      - keep-alive
+      Content-Type:
+      - text/event-stream; charset=utf-8
+      Date:
+      - Mon, 15 Sep 2025 14:46:08 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-ratelimit-input-tokens-limit:
+      - '8000000'
+      anthropic-ratelimit-input-tokens-remaining:
+      - '8000000'
+      anthropic-ratelimit-input-tokens-reset:
+      - '2025-09-15T14:46:06Z'
+      anthropic-ratelimit-output-tokens-limit:
+      - '1200000'
+      anthropic-ratelimit-output-tokens-remaining:
+      - '1200000'
+      anthropic-ratelimit-output-tokens-reset:
+      - '2025-09-15T14:46:06Z'
+      anthropic-ratelimit-tokens-limit:
+      - '9200000'
+      anthropic-ratelimit-tokens-remaining:
+      - '9200000'
+      anthropic-ratelimit-tokens-reset:
+      - '2025-09-15T14:46:06Z'
+      cf-cache-status:
+      - DYNAMIC
+      request-id:
+      - req_011CTANGMsVNbW82orJR1LEu
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - 1.1 google
+      x-envoy-upstream-service-time:
+      - '1890'
+    status:
+      code: 200
+      message: OK
+version: 1
