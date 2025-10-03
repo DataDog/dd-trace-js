@@ -16,7 +16,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -24,6 +24,17 @@ env:
 # TODO: upstream jobs
 
 jobs:
+  debug-concurrency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo concurrency group values
+        run: |
+          echo "github.workflow: ${{ github.workflow }}"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.run_id: ${{ github.run_id }}"
+          echo "inputs.runNightly: ${{ inputs.runNightly }}"
+          echo "Concurrency group would be: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}"
+
   aerospike:
     strategy:
       matrix:
