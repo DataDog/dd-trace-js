@@ -1,7 +1,7 @@
 [
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -17,14 +17,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -40,14 +40,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -64,14 +64,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "git@github.com:DataDog/dummy-example.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar~",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -87,14 +87,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/bar~",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/~/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -110,14 +110,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/~/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -135,14 +135,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/not-my-home/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -158,14 +158,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "~foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "~",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -183,14 +183,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/not-my-home",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "master",
+      "BITBUCKET_BRANCH": "main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -206,14 +206,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "origin/master",
+      "BITBUCKET_BRANCH": "origin/main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -229,14 +229,14 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
   ],
   [
     {
-      "BITBUCKET_BRANCH": "refs/heads/master",
+      "BITBUCKET_BRANCH": "refs/heads/main",
       "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
       "BITBUCKET_CLONE_DIR": "/foo/bar",
       "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
@@ -252,7 +252,7 @@
       "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
       "ci.provider.name": "bitbucket",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket-repo-url.com/repo.git"
     }
