@@ -17,6 +17,7 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
+const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -990,7 +991,9 @@ class Config {
       opts['iast.requestSampling'] = iastRequestSampling
       this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    if (DD_MAJOR < 6) {
+      opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    }
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
