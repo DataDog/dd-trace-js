@@ -122,6 +122,21 @@ describe('profilers/native/wall', () => {
     sinon.assert.calledOnce(pprof.time.stop)
   })
 
+  it('should provide info', () => {
+    const profiler = new NativeWallProfiler()
+
+    const info = profiler.getInfo()
+
+    expect(info.totalAsyncContextCount).to.not.be.undefined
+    expect(info.usedAsyncContextCount).to.not.be.undefined
+    expect(info.settings.asyncContextFrameEnabled).to.not.be.undefined
+    expect(info.settings.codeHotspotsEnabled).to.not.be.undefined
+    expect(info.settings.cpuProfilingEnabled).to.not.be.undefined
+    expect(info.settings.endpointCollectionEnabled).to.not.be.undefined
+    expect(info.settings.timelineEnabled).to.not.be.undefined
+    expect(info.settings.v8ProfilerBugWorkaroundEnabled).to.not.be.undefined
+  })
+
   it('should collect profiles from the internal time profiler', () => {
     const profiler = new NativeWallProfiler()
 
