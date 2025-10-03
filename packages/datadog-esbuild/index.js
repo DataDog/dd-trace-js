@@ -178,7 +178,7 @@ ${build.initialOptions.banner.js}`
 
     if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
       // It is local application code, not an instrumented package
-      if (DEBUG) console.log(`APP: ${args.path}`, args)
+      if (DEBUG) console.log(`APP: ${args.path}`)
 
       return {
         path: fullPathToModule,
