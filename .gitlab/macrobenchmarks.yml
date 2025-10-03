@@ -16,8 +16,9 @@ include:
   timeout: 1h
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
   script:
-    - git clone --branch js/hapi https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
-    - bp-runner bp-runner.yml --debug -t
+    # TODO: Revert to js/hapi after https://github.com/DataDog/benchmarking-platform/pull/199 is merged
+    - git clone --branch rochdev/parallel-experiments https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
+    - bp-runner bp-runner.$EXPERIMENT.yml --debug -t
   artifacts:
     name: "artifacts"
     when: always
@@ -64,17 +65,34 @@ baseline:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: baseline
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: baseline
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 only-tracing:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: only-tracing
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 only-tracing-with-runtime-metrics-enabled:
   extends: .macrobenchmarks
   variables:
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
-    DD_RUNTIME_METRICS_ENABLED: "true"
+    DD_BENCHMARKS_CONFIGURATION: only-tracing-with-runtime-metrics-enabled
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: only-tracing-with-runtime-metrics-enabled
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 check-slo-breaches:
   extends: .check-slo-breaches
