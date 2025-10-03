@@ -236,11 +236,10 @@ function extractRequestParams (params, provider) {
       })
     }
     case PROVIDER.AMAZON: {
-      let prompt = requestBody.inputText
+      const prompt = requestBody.inputText
       if (modelId.includes('embed')) {
         return new RequestParams({ prompt })
-      }
-      if (requestBody.inputText !== undefined) {
+      } else if (prompt !== undefined) {
         const textGenerationConfig = requestBody.textGenerationConfig || {}
         return new RequestParams({
           prompt,
@@ -249,8 +248,7 @@ function extractRequestParams (params, provider) {
           maxTokens: textGenerationConfig.maxTokenCount,
           stopSequences: textGenerationConfig.stopSequences
         })
-      }
-      if (Array.isArray(requestBody.messages)) {
+      } else if (Array.isArray(requestBody.messages)) {
         const inferenceConfig = requestBody.inferenceConfig || {}
         const messages = []
         if (requestBody.system && Array.isArray(requestBody.system)) {
