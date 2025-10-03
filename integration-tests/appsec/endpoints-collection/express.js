@@ -28,6 +28,12 @@ app.route('/multi-method')
   .patch((_, res) => res.send('ok'))
   .all((_, res) => res.send('ok'))
 
+app.route(/^\/ab(cd)?$/)
+  .patch((_, res) => res.send('ok'))
+
+app.route(['/array-route-one', ['/array-route-two']])
+  .post((_, res) => res.send('ok'))
+
 // All supported methods route
 app.all('/all-methods', async (_, res) => res.send('ok'))
 
@@ -73,9 +79,20 @@ setTimeout(() => {
   subRouter.get('/deep', (_, res) => res.send('ok'))
   subRouter.post('/deep/:id', (_, res) => res.send('ok'))
   deepRouter.use('/sub', subRouter)
+  const arrayRouter = express.Router()
+  arrayRouter.post(['/array-one', '/array-two'], (_, res) => res.send('ok'))
+  deepRouter.use('/array', arrayRouter)
+  const regexRouter = express.Router()
+  regexRouter.put(/^\/item\/(\d+)$/, (_, res) => res.send('ok'))
+  deepRouter.use('/regex', regexRouter)
   app.use('/api', deepRouter)
   app.get('/later', (_, res) => res.send('ok'))
 }, 1_000)
+
+// Cycle routers - should not be collected
+const cycleRouter = express.Router()
+cycleRouter.use('/cycle', cycleRouter)
+app.use('/cycle', cycleRouter)
 
 const server = app.listen(0, '127.0.0.1', () => {
   const port = server.address().port

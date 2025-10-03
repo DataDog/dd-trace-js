@@ -14,7 +14,39 @@ const {
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 
 const handleChannel = channel('apm:express:request:handle')
-const routeAddedChannel = channel('apm:express:add:route')
+const routeAddedChannel = channel('apm:express:route:add')
+
+// Normalize route definitions coming from Express into a string representation
+function normalizeRoutePath (path) {
+  if (path == null) return null
+  if (path instanceof RegExp) return path.toString()
+  if (typeof path === 'string') return path
+
+  return String(path)
+}
+
+// Flatten any route definition into an array of normalized path strings.
+function normalizeRoutePaths (path) {
+  const queue = Array.isArray(path) ? [...path] : [path]
+  const paths = []
+
+  while (queue.length) {
+    const current = queue.shift()
+
+    if (Array.isArray(current)) {
+      queue.unshift(...current)
+      continue
+    }
+
+    const normalized = normalizeRoutePath(current)
+
+    if (normalized !== null) {
+      paths.push(normalized)
+    }
+  }
+
+  return paths
+}
 
 function wrapHandle (handle) {
   return function handleWithTrace (req, res) {
@@ -70,13 +102,10 @@ function wrapAppAll (all) {
   return function wrappedAll (path) {
     if (!routeAddedChannel.hasSubscribers) return all.apply(this, arguments)
 
-    const paths = Array.isArray(path) ? path : [path]
+    const paths = normalizeRoutePaths(path)
 
     for (const p of paths) {
-      routeAddedChannel.publish({
-        method: '*',
-        path: p instanceof RegExp ? p.toString() : p
-      })
+      routeAddedChannel.publish({ method: '*', path: p })
     }
 
     return all.apply(this, arguments)
@@ -88,21 +117,27 @@ function wrapAppRoute (route) {
   return function wrappedRoute (path) {
     const routeObj = route.apply(this, arguments)
 
-    if (routeAddedChannel.hasSubscribers && typeof path === 'string') {
-      // Wrap each HTTP method
-      METHODS.forEach(method => {
-        if (typeof routeObj[method] === 'function') {
-          shimmer.wrap(routeObj, method, (original) => function wrapMethod () {
+    if (!routeAddedChannel.hasSubscribers) return routeObj
+
+    const paths = normalizeRoutePaths(path)
+
+    if (!paths.length) return routeObj
+
+    // Wrap each HTTP method
+    METHODS.forEach(method => {
+      if (typeof routeObj[method] === 'function') {
+        shimmer.wrap(routeObj, method, (original) => function wrapMethod () {
+          for (const normalizedPath of paths) {
             routeAddedChannel.publish({
               method: method === 'all' ? '*' : method,
-              path
+              path: normalizedPath
             })
+          }
 
-            return original.apply(this, arguments)
-          })
-        }
-      })
-    }
+          return original.apply(this, arguments)
+        })
+      }
+    })
 
     return routeObj
   }
@@ -126,8 +161,13 @@ function wrapAppUse (use) {
         setRouterMountPath(router, mountPath)
         markAppMounted(router)
 
-        // Collect existing routes from the router (includes nested routers)
         if (routeAddedChannel.hasSubscribers) {
+          // Skip collecting routes from cycle routers -- the real request will
+          // explode anyway, but we should not OOM during startup.
+          const hasCycle = hasRouterCycle(router)
+          if (hasCycle) continue
+
+          // Collect existing routes from the router (includes nested routers)
           collectRoutesFromRouter(router, mountPath)
         }
       }
@@ -137,21 +177,27 @@ function wrapAppUse (use) {
   }
 }
 
+// Recursively publish every route reachable from the router.
 function collectRoutesFromRouter (router, prefix) {
   if (!router?.stack?.length) return
 
-  router.stack.forEach(layer => {
+  for (const layer of router.stack) {
     if (layer.route) {
       // This layer has a direct route
       const route = layer.route
-      const fullPath = joinPath(prefix, route.path)
+      const routePaths = normalizeRoutePaths(route.path)
+      const pathsToPublish = routePaths.length ? routePaths : []
 
-      for (const [method, enabled] of Object.entries(route.methods || {})) {
-        if (!enabled) continue
-        routeAddedChannel.publish({
-          method: normalizeMethodName(method),
-          path: fullPath
-        })
+      for (const routePath of pathsToPublish) {
+        const fullPath = joinPath(prefix, routePath)
+
+        for (const [method, enabled] of Object.entries(route.methods || {})) {
+          if (!enabled) continue
+          routeAddedChannel.publish({
+            method: normalizeMethodName(method),
+            path: fullPath
+          })
+        }
       }
     } else if (layer.handle?.stack?.length) {
       // This layer contains a nested router
@@ -167,7 +213,30 @@ function collectRoutesFromRouter (router, prefix) {
       // Recursively collect from nested routers
       collectRoutesFromRouter(layer.handle, nestedPrefix)
     }
-  })
+  }
+}
+
+// Detect whether a router graph contains a cycle; we bail out from collecting routes.
+function hasRouterCycle (router, stack = new Set()) {
+  if (!router?.stack?.length) return false
+  if (stack.has(router)) {
+    // TODO: Report cycle router to telemetry
+    return true
+  }
+
+  stack.add(router)
+
+  for (const layer of router.stack) {
+    if (!layer?.route && layer.handle?.stack?.length) {
+      const hasCycle = hasRouterCycle(layer.handle, stack)
+
+      if (hasCycle) return true
+    }
+  }
+
+  stack.delete(router)
+
+  return false
 }
 
 addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {

@@ -5,7 +5,7 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
-const expressRouteAddedChannel = channel('apm:express:add:route')
+const expressRouteAddedChannel = channel('apm:express:route:add')
 const {
   getRouterMountPath,
   joinPath,

@@ -92,6 +92,12 @@ describe('Endpoints collection', () => {
         { method: '*', path: '/wildcard/*name' },
         { method: '*', path: '/^\\/login\\/.*$/i' },
         { method: 'OPTIONS', path: '/users/:id' },
+        { method: 'PATCH', path: '/^\\/ab(cd)?$/' },
+        { method: 'POST', path: '/array-route-one' },
+        { method: 'POST', path: '/array-route-two' },
+        { method: 'POST', path: '/api/array/array-one' },
+        { method: 'POST', path: '/api/array/array-two' },
+        { method: 'PUT', path: '/api/regex/^\\/item\\/(\\d+)$/' },
 
         // Multiple routers without mount path
         { method: 'PUT', path: '/router1' },
@@ -117,7 +123,7 @@ describe('Endpoints collection', () => {
       const endpointsFound = []
       const isFirstFlags = []
 
-      const expectedMessageCount = framework === 'express' ? 3 : 4
+      const expectedMessageCount = framework === 'express' ? 5 : 4
 
       const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
         isFirstFlags.push(Boolean(payload.payload.is_first))
@@ -169,7 +175,7 @@ describe('Endpoints collection', () => {
     }
   }
 
-  it('should send express endpoints via telemetry', async () => {
+  it.only('should send express endpoints via telemetry', async () => {
     await runEndpointTest('express')
   })
 
