@@ -27,8 +27,10 @@ describe('package guardrails', () => {
 
   context('when package is out of range', () => {
     useSandbox(['bluebird@1.0.0'])
+
     context('with DD_INJECTION_ENABLED', () => {
       useEnv({ DD_INJECTION_ENABLED })
+
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
@@ -36,11 +38,14 @@ describe('package guardrails', () => {
           ]
         ))
     })
+
     context('with logging disabled', () => {
       it('should not instrument the package', () => runTest('false\n', []))
     })
+
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG })
+
       it('should not instrument the package', () =>
         runTest(`Application instrumentation bootstrapping complete
 Found incompatible integration version: bluebird@1.0.0
@@ -52,10 +57,13 @@ false
   context('when package is in range', () => {
     context('when bluebird is 2.9.0', () => {
       useSandbox(['bluebird@2.9.0'])
+
       it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
+
     context('when bluebird is 3.7.2', () => {
       useSandbox(['bluebird@3.7.2'])
+
       it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
   })
@@ -63,11 +71,14 @@ false
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
       useSandbox(['fastify'])
+
       it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
+
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
       useEnv({ DD_TRACE_DEBUG })
+
       it('should instrument the package', () =>
         runTest('Application instrumentation bootstrapping complete\ntrue\n', [], 'manual'))
     })
@@ -75,6 +86,7 @@ false
 
   context('when package errors out', () => {
     useSandbox(['bluebird'])
+
     before(() => {
       const file = path.join(sandboxCwd(), 'node_modules/dd-trace/packages/datadog-instrumentations/src/bluebird.js')
       fs.writeFileSync(file, `
@@ -89,6 +101,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
 
     context('with DD_INJECTION_ENABLED', () => {
       useEnv({ DD_INJECTION_ENABLED })
+
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
@@ -102,6 +115,7 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
 
     context('with logging enabled', () => {
       useEnv({ DD_TRACE_DEBUG, DD_LOG_LEVEL })
+
       it('should not instrument the package', () =>
         runTest(
           log => {

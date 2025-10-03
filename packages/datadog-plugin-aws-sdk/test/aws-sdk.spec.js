@@ -42,7 +42,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
-              partition: 'aws',
+              'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
               'aws.operation': 'listBuckets'
@@ -110,7 +110,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
-              partition: 'aws',
+              'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
               'aws.operation': 'listBuckets'
@@ -237,7 +237,7 @@ describe('Plugin', () => {
               expect(span.meta).to.include({
                 'aws.region': region,
                 region,
-                partition
+                'aws.partition': partition
               })
 
               if (++completed === total) {

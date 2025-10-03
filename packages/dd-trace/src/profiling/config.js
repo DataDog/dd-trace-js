@@ -1,6 +1,5 @@
 'use strict'
 
-const coalesce = require('koalas')
 const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
@@ -54,18 +53,15 @@ class Config {
       NODE_OPTIONS
     } = getEnvironmentVariables()
 
-    const env = coalesce(options.env, DD_ENV)
+    const env = options.env ?? DD_ENV
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
-    const version = coalesce(options.version, DD_VERSION)
+    const version = options.version ?? DD_VERSION
     // Must be longer than one minute so pad with five seconds
-    const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
-    const uploadTimeout = coalesce(options.uploadTimeout,
-      Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
-    const sourceMap = coalesce(options.sourceMap,
-      DD_PROFILING_SOURCE_MAP, true)
-    const pprofPrefix = coalesce(options.pprofPrefix,
-      DD_PROFILING_PPROF_PREFIX, '')
+    const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
+    const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
+    const sourceMap = options.sourceMap ?? DD_PROFILING_SOURCE_MAP ?? true
+    const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
 
     this.service = service
     this.env = env
@@ -108,21 +104,21 @@ class Config {
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
-    this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
-    this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
+    this.debugSourceMaps = isTrue(options.debugSourceMaps ?? DD_PROFILING_DEBUG_SOURCE_MAPS)
+    this.endpointCollectionEnabled = isTrue(options.endpointCollection ??
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED ?? samplingContextsAvailable)
     checkOptionWithSamplingContextAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
 
     this.pprofPrefix = pprofPrefix
-    this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND, true))
-    const hostname = coalesce(options.hostname, DD_AGENT_HOST) || defaults.hostname
-    const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || defaults.port
-    this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
+    this.v8ProfilerBugWorkaroundEnabled = isTrue(options.v8ProfilerBugWorkaround ??
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND ?? true)
+    const hostname = (options.hostname ?? DD_AGENT_HOST) || defaults.hostname
+    const port = (options.port ?? DD_TRACE_AGENT_PORT) || defaults.port
+    this.url = new URL(options.url ?? DD_TRACE_AGENT_URL ?? format({
       protocol: 'http:',
       hostname,
       port
-    })))
+    }))
 
     this.libraryInjected = options.libraryInjected
     this.activation = options.activation
@@ -133,17 +129,17 @@ class Config {
     // OOM monitoring does not work well on Windows, so it is disabled by default.
     const oomMonitoringSupported = process.platform !== 'win32'
 
-    const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, oomMonitoringSupported))
+    const oomMonitoringEnabled = isTrue(options.oomMonitoring ??
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED ?? oomMonitoringSupported)
     checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
 
-    const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
-      Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
-    const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
-      Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT), 0)
+    const heapLimitExtensionSize = options.oomHeapLimitExtensionSize ??
+      (Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE) || 0)
+    const maxHeapExtensionCount = options.oomMaxHeapExtensionCount ??
+      (Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT) || 0)
     const exportStrategies = oomMonitoringEnabled
-      ? ensureOOMExportStrategies(coalesce(options.oomExportStrategies, DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
-        [oomExportStrategies.PROCESS]), this)
+      ? ensureOOMExportStrategies(options.oomExportStrategies ?? DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES ??
+        [oomExportStrategies.PROCESS], this)
       : []
     const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : undefined
     this.oomMonitoring = {
@@ -160,26 +156,29 @@ class Config {
       DD_PROFILING_PROFILERS
     })
 
-    this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
-      DD_PROFILING_TIMELINE_ENABLED, samplingContextsAvailable))
+    this.timelineEnabled = isTrue(
+      options.timelineEnabled ?? DD_PROFILING_TIMELINE_ENABLED ?? samplingContextsAvailable
+    )
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
-    this.timelineSamplingEnabled = isTrue(coalesce(options.timelineSamplingEnabled,
-      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, true))
+    this.timelineSamplingEnabled = isTrue(
+      options.timelineSamplingEnabled ?? DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED ?? true
+    )
 
-    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
-      DD_PROFILING_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
+    this.codeHotspotsEnabled = isTrue(
+      options.codeHotspotsEnabled ?? DD_PROFILING_CODEHOTSPOTS_ENABLED ?? samplingContextsAvailable
+    )
     checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
-    this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
-      DD_PROFILING_CPU_ENABLED,
-      samplingContextsAvailable))
+    this.cpuProfilingEnabled = isTrue(
+      options.cpuProfilingEnabled ?? DD_PROFILING_CPU_ENABLED ?? samplingContextsAvailable
+    )
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
-    this.samplingInterval = coalesce(options.samplingInterval, 1e3 / 99) // 99hz in millis
+    this.samplingInterval = options.samplingInterval || 1e3 / 99 // 99hz in millis
 
-    this.heapSamplingInterval = coalesce(options.heapSamplingInterval,
-      Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL))
-    const uploadCompression0 = coalesce(options.uploadCompression, DD_PROFILING_DEBUG_UPLOAD_COMPRESSION, 'on')
+    this.heapSamplingInterval = options.heapSamplingInterval ??
+      (Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL) || 512 * 1024)
+    const uploadCompression0 = options.uploadCompression ?? DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'on'
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
       this.logger.warn(`Invalid profile upload compression method "${uploadCompression0}". Will use "on".`)
@@ -222,8 +221,7 @@ class Config {
 
     const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
 
-    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ??
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false)
+    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ?? DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED)
     if (this.asyncContextFrameEnabled) {
       if (satisfies(process.versions.node, '>=24.0.0')) {
         if (hasExecArg('--no-async-context-frame')) {
@@ -253,7 +251,7 @@ function getProfilers ({
 }) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
   // Use a Set to avoid duplicates
-  const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
+  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'wall,space').split(','))
 
   // Add/remove wall depending on the value of DD_PROFILING_WALLTIME_ENABLED
   if (DD_PROFILING_WALLTIME_ENABLED != null) {
