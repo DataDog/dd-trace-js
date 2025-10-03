@@ -390,7 +390,6 @@ class CypressPlugin {
   getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
-      [TEST_COMMAND]: this.command,
       [TEST_MODULE]: TEST_FRAMEWORK_NAME
     }
     if (this.testSuiteSpan) {

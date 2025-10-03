@@ -89,6 +89,9 @@ class Tracer extends NoopProxy {
     }
   }
 
+  /**
+   * @override
+   */
   init (options) {
     if (this._initialized) return this
 
@@ -246,6 +249,9 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        if (config.experimental?.aiguard?.enabled) {
+          lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
+        }
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -318,6 +324,9 @@ class Tracer extends NoopProxy {
     loggerProvider.register()
   }
 
+  /**
+   * @override
+   */
   profilerStarted () {
     if (!this._profilerStarted) {
       // injection hardening: this is only ever invoked from tests.
@@ -326,11 +335,17 @@ class Tracer extends NoopProxy {
     return this._profilerStarted
   }
 
+  /**
+   * @override
+   */
   use () {
     this._pluginManager.configurePlugin(...arguments)
     return this
   }
 
+  /**
+   * @override
+   */
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }
