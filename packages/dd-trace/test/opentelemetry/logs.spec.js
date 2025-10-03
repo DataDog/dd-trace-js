@@ -8,7 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 require('../setup/core')
-const { protoLogsService } = require('../../src/opentelemetry/logs/protobuf_loader').getProtobufTypes()
+const { protoLogsService } = require('../../src/opentelemetry/protos/protobuf_loader').getProtobufTypes()
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
