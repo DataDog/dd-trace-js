@@ -1,5 +1,7 @@
 'use strict'
 
+let retryCounter = 0
+
 describe('parallel snapshot 2', () => {
   it('can do multiple snapshots', () => {
     expect('hello').toMatchSnapshot()
@@ -26,5 +28,16 @@ describe('parallel snapshot 2', () => {
   it('has snapshot and is known', () => {
     expect('yes').toMatchInlineSnapshot('"yes"')
     expect('no').toMatchInlineSnapshot('"no"')
+  })
+
+  it('is flaky', () => {
+    retryCounter++
+    const sum = retryCounter > 2 ? 3 : 4
+    if (retryCounter > 2) {
+      expect(sum).toMatchSnapshot()
+    } else {
+      expect(sum).toMatchSnapshot()
+    }
+    expect('a').toMatchSnapshot()
   })
 })

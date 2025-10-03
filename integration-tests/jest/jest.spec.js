@@ -89,7 +89,8 @@ describe('jest CommonJS', () => {
       'jest-environment-jsdom',
       '@happy-dom/jest-environment',
       'office-addin-mock',
-      'winston'
+      'winston',
+      'jest-image-snapshot'
     ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
@@ -2141,13 +2142,23 @@ describe('jest CommonJS', () => {
           assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.equal(tests.length, 14)
+          // 6 tests, 4 of which are new: 4*(1 test + 3 retries) + 2*(1 test) = 18
+          assert.equal(tests.length, 18)
 
           const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-          assert.equal(retriedTests.length, 9)
+          // 4*(3 retries)
+          assert.equal(retriedTests.length, 12)
 
           const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-          assert.equal(newTests.length, 12)
+          // 4*(1 test + 3 retries)
+          assert.equal(newTests.length, 16)
+
+          const flakyTests = tests.filter(test => test.meta[TEST_NAME] === 'test is flaky')
+          assert.equal(flakyTests.length, 4)
+          const failedFlakyTests = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedFlakyTests.length, 2)
+          const passedFlakyTests = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedFlakyTests.length, 2)
         })
 
       childProcess = exec(runTestsWithCoverageCommand, {
@@ -2160,10 +2171,70 @@ describe('jest CommonJS', () => {
         stdio: 'inherit'
       })
 
-      await Promise.all([
+      const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         eventsPromise
       ])
+      assert.equal(exitCode, 0)
+    })
+
+    it('works with jest-image-snapshot', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+      receiver.setKnownTests({
+        jest: {}
+      })
+
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          },
+          faulty_session_threshold: 100
+        },
+        known_tests_enabled: true
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // 1 new test
+          assert.equal(tests.length, 4)
+
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedTests.length, 3)
+
+          const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+          assert.equal(newTests.length, 4)
+
+          const failedFlakyTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedFlakyTests.length, 2)
+          const passedFlakyTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedFlakyTests.length, 2)
+        })
+
+      childProcess = exec(runTestsWithCoverageCommand, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-image-snapshot',
+          CI: '1'
+        },
+        stdio: 'inherit'
+      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+      assert.equal(exitCode, 0)
     })
 
     it('bails out of EFD if the percentage of new tests is too high', (done) => {
@@ -2651,18 +2722,25 @@ describe('jest CommonJS', () => {
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
-            // 10 tests: 6 new, 4 known
+            // 12 tests (6 per file): 8 new, 4 known
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // 6*(1 test + 3 retries) + 4*(1 test) = 28
-            assert.equal(tests.length, 28)
+            // 8*(1 test + 3 retries) + 4*(1 test) = 36
+            assert.equal(tests.length, 36)
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            // 6*(3 retries)
-            assert.equal(retriedTests.length, 18)
+            // 8*(3 retries)
+            assert.equal(retriedTests.length, 24)
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            // 6*(1 test + 3 retries)
-            assert.equal(newTests.length, 24)
+            // 8*(1 test + 3 retries)
+            assert.equal(newTests.length, 32)
+
+            const flakyTests = tests.filter(test => test.meta[TEST_NAME].includes('is flaky'))
+            assert.equal(flakyTests.length, 8)
+            const failedFlakyTests = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.equal(failedFlakyTests.length, 4)
+            const passedFlakyTests = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+            assert.equal(passedFlakyTests.length, 4)
           })
 
         childProcess = exec(runTestsWithCoverageCommand, {

@@ -105,8 +105,7 @@ function getIsLastRetry (test) {
 }
 
 function getTestFullName (test) {
-  const testName = test.fullTitle()
-  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${testName}`
+  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
 
 function getTestStatus (test) {
@@ -206,10 +205,8 @@ function getOnTestHandler (isMain) {
       _ddIsModified: isModified
     } = test
 
-    const testName = test.fullTitle()
-
     const testInfo = {
-      testName,
+      testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
       testStartLine

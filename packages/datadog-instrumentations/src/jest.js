@@ -143,6 +143,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
 
+      // TODO: could we grab testPath from `this.getVmContext().expect.getState()` instead?
+      // so we don't rely on context being passed (some custom test environment do not pass it)
       if (repositoryRoot) {
         this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
         this.repositoryRoot = repositoryRoot
@@ -206,12 +208,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    /**
+     * Jest snapshot counter issue during test retries
+     *
+     * Problem:
+     * - Jest tracks snapshot calls using an internal counter per test name
+     * - Each `toMatchSnapshot()` call increments this counter
+     * - When a test is retried, it keeps the same name but the counter continues from where it left off
+     *
+     * Example Issue:
+     * Original test run creates: `exports["test can do multiple snapshots 1"] = "hello"`
+     * Retried test expects:      `exports["test can do multiple snapshots 2"] = "hello"`
+     *
+     * This mismatch causes snapshot tests to fail on retry because Jest is looking
+     * for the wrong snapshot number. The solution is to reset the snapshot state.
+     */
     resetSnapshotState () {
       try {
         const expectGlobal = this.getVmContext().expect
-        const { snapshotState: { _counters } } = expectGlobal.getState()
-        if (_counters) {
-          _counters.clear()
+        const { snapshotState: { _counters: counters } } = expectGlobal.getState()
+        if (counters) {
+          counters.clear()
         }
       } catch (e) {
         log.warn('Error resetting snapshot state', e)
@@ -287,11 +304,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     // Generic function to handle test retries
-    retryTest (testName, retryCount, retryType, event) {
+    retryTest ({
+      jestEvent,
+      retryCount,
+      retryType
+    }) {
+      const { testName, fn, timeout } = jestEvent
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
         if (this.global.test) {
-          testsToBeRetried.add(testName)
-          this.global.test(testName, event.fn, event.timeout)
+          this.global.test(testName, fn, timeout)
         } else {
           log.error('%s could not retry test because global.test is undefined', retryType)
         }
@@ -323,7 +344,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'test_start') {
-        if (testsToBeRetried.has(event.test.name)) {
+        const testName = getJestTestName(event.test)
+        if (testsToBeRetried.has(testName)) {
           // This is needed because we're trying tests with the same name
           this.resetSnapshotState()
         }
@@ -332,9 +354,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let numEfdRetry = null
         let numOfAttemptsToFixRetries = null
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
-        // Async resource for this test is created here
-        // It is used later on by the test_done handler
-        const testName = getJestTestName(event.test)
 
         let isAttemptToFix = false
         let isDisabled = false
@@ -425,18 +444,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           return
         }
 
-        const originalTestName = this.getTestNameFromAddTestEvent(event, state)
+        const testFullName = this.getTestNameFromAddTestEvent(event, state)
         const isSkipped = event.mode === 'todo' || event.mode === 'skip'
         if (this.isTestManagementTestsEnabled) {
-          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(originalTestName)
-          if (isAttemptToFix && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
-            retriedTestsToNumAttempts.set(originalTestName, 0)
-            this.retryTest(
-              event.testName,
-              testManagementAttemptToFixRetries,
-              'Test Management (Attempt to Fix)',
-              event
-            )
+          const isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
+          if (isAttemptToFix && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            retriedTestsToNumAttempts.set(testFullName, 0)
+            testsToBeRetried.add(testFullName)
+            this.retryTest({
+              jestEvent: event,
+              retryCount: testManagementAttemptToFixRetries,
+              retryType: 'Test Management (Attempt to Fix)'
+            })
           }
         }
         if (this.isImpactedTestsEnabled) {
@@ -449,27 +468,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.modifiedTestsForThisSuite,
             'jest'
           )
-          if (isModified && !retriedTestsToNumAttempts.has(originalTestName) && this.isEarlyFlakeDetectionEnabled) {
-            retriedTestsToNumAttempts.set(originalTestName, 0)
-            this.retryTest(
-              event.testName,
-              earlyFlakeDetectionNumRetries,
-              'Impacted tests',
-              event
-            )
+          if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
+            retriedTestsToNumAttempts.set(testFullName, 0)
+            testsToBeRetried.add(testFullName)
+            this.retryTest({
+              jestEvent: event,
+              retryCount: earlyFlakeDetectionNumRetries,
+              retryType: 'Impacted tests'
+            })
           }
         }
         if (this.isKnownTestsEnabled) {
-          const isNew = !this.knownTestsForThisSuite.includes(originalTestName)
-          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(originalTestName)) {
-            retriedTestsToNumAttempts.set(originalTestName, 0)
+          const isNew = !this.knownTestsForThisSuite.includes(testFullName)
+          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
-              this.retryTest(
-                event.testName,
-                earlyFlakeDetectionNumRetries,
-                'Early flake detection',
-                event
-              )
+              testsToBeRetried.add(testFullName)
+              this.retryTest({
+                jestEvent: event,
+                retryCount: earlyFlakeDetectionNumRetries,
+                retryType: 'Early flake detection'
+              })
             }
           }
         }
