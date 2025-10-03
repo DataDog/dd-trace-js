@@ -31,31 +31,31 @@ on:
 
 jobs:
   apm-integrations:
-    if: inputs.runApmIntegrations == 'true'
+    if: inputs.runApmIntegrations
     uses: ./.github/workflows/apm-integrations.yml
     with:
       runNightly: 'true'
   
   apm-capabilities:
-    if: inputs.runApmCapabilities == 'true'
+    if: inputs.runApmCapabilities
     uses: ./.github/workflows/apm-capabilities.yml
     with:
       runNightly: 'true'
   
   llmobs:
-    if: inputs.runLlmobs == 'true'
+    if: inputs.runLlmobs
     uses: ./.github/workflows/llmobs.yml
     with:
       runNightly: 'true'
   
   platform:
-    if: inputs.runPlatform == 'true'
+    if: inputs.runPlatform
     uses: ./.github/workflows/platform.yml
     with:
       runNightly: 'true'
   
   serverless:
-    if: inputs.runServerless == 'true'
+    if: inputs.runServerless
     uses: ./.github/workflows/serverless.yml
     with:
       runNightly: 'true'
