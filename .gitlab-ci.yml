@@ -7,6 +7,7 @@ stages:
   - macrobenchmarks-gate
   - macrobenchmarks-notify
 
+# Config Registry CI jobs
 validate_supported_configurations_local_file:
   extends: .validate_supported_configurations_local_file
   variables:
