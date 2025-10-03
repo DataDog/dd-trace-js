@@ -158,8 +158,7 @@ class RequestParams {
     stream = '',
     n
   } = {}) {
-    // stringify prompt as it could be a single prompt as well as a list of message objects
-    this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
+    this.prompt = prompt === undefined ? undefined : prompt
     this.temperature = temperature === undefined ? undefined : temperature
     this.topP = topP === undefined ? undefined : topP
     this.topK = topK === undefined ? undefined : topK

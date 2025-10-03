@@ -11,6 +11,7 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+const systemPrompt = 'Please respond with one sentence.'
 const prompt = 'What is the capital of France?'
 const temperature = 0.5
 const maxTokens = 512
@@ -52,9 +53,10 @@ bedrockruntime.models = [
   {
     provider: PROVIDER.AMAZON,
     modelId: 'amazon.nova-pro-v1:0',
-    userPrompt: '[{"content":"Please respond with one sentence.","role":"system"},{"content":"What is the capital of France?","role":"user"}]',
+    systemPrompt,
+    userPrompt: prompt,
     requestBody: {
-      system: [{ text: 'Please respond with one sentence.' }],
+      system: [{ text: systemPrompt }],
       messages: [
         {
           role: 'user',
