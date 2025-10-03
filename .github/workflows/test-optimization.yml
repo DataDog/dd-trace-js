@@ -182,6 +182,9 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      - run: node scripts/replace-major.js 5
+      - run: yarn test:plugins:ci
+      - run: git checkout package.json # undo package.json changes
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
