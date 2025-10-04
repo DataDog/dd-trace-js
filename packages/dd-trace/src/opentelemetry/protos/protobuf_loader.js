@@ -21,10 +21,12 @@ const fs = require('fs')
 let _root = null
 let protoLogsService = null
 let protoSeverityNumber = null
+let protoMetricsService = null
+let protoAggregationTemporality = null
 
 function getProtobufTypes () {
   if (_root) {
-    return { protoLogsService, protoSeverityNumber }
+    return { protoLogsService, protoSeverityNumber, protoMetricsService, protoAggregationTemporality }
   }
   // Load the proto files
   const protoDir = __dirname
@@ -32,7 +34,9 @@ function getProtobufTypes () {
     'common.proto',
     'resource.proto',
     'logs.proto',
-    'payload.proto'
+    'payload.proto',
+    'metrics.proto',
+    'metrics_payload.proto'
   ].map(file => path.join(protoDir, file))
 
   if (!protoFiles.every(file => fs.existsSync(file))) {
@@ -44,8 +48,10 @@ function getProtobufTypes () {
   // Get the message types
   protoLogsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')
   protoSeverityNumber = _root.lookupEnum('opentelemetry.proto.logs.v1.SeverityNumber')
+  protoMetricsService = _root.lookupType('opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest')
+  protoAggregationTemporality = _root.lookupEnum('opentelemetry.proto.metrics.v1.AggregationTemporality')
 
-  return { protoLogsService, protoSeverityNumber }
+  return { protoLogsService, protoSeverityNumber, protoMetricsService, protoAggregationTemporality }
 }
 
 module.exports = {

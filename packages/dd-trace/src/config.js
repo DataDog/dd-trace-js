@@ -631,6 +631,7 @@ class Config {
       DD_VERTEXAI_SPAN_CHAR_LIMIT,
       DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED,
       DD_TRACE_NATIVE_SPAN_EVENTS,
+      DD_METRICS_OTEL_ENABLED,
       OTEL_METRICS_EXPORTER,
       OTEL_PROPAGATORS,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -641,12 +642,18 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
-      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_METRIC_EXPORT_INTERVAL,
+      OTEL_METRIC_EXPORT_TIMEOUT
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -679,6 +686,27 @@ class Config {
     env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
     env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
     env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+
+    this._setBoolean(env, 'otelMetricsEnabled', isTrue(DD_METRICS_OTEL_ENABLED))
+    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars taking precedence over generic vars
+    const customOtelMetricsUrl = OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || OTEL_EXPORTER_OTLP_ENDPOINT
+    if (customOtelMetricsUrl) {
+      // Only set if there's a custom URL, otherwise let calc phase handle the default
+      this._setString(env, 'otelMetricsUrl', customOtelMetricsUrl)
+    }
+    this._setString(env, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
+    const requestedMetricsProtocol = OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
+    if (requestedMetricsProtocol === 'grpc') {
+      log.warn('OTLP gRPC protocol is not supported for metrics. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      this._setString(env, 'otelMetricsProtocol', 'http/protobuf')
+    } else {
+      this._setString(env, 'otelMetricsProtocol', requestedMetricsProtocol || 'http/protobuf')
+    }
+    env.otelMetricsTimeout = maybeInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelMetricsExportInterval = maybeInt(OTEL_METRIC_EXPORT_INTERVAL)
+    env.otelMetricsExportTimeout = maybeInt(OTEL_METRIC_EXPORT_TIMEOUT)
+
     this._setBoolean(
       env,
       'apmTracingEnabled',
@@ -1190,6 +1218,9 @@ class Config {
     // Compute OTLP logs URL to send payloads to the active Datadog Agent
     const agentHostname = this._getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:4318/v1/logs`
+
+    // Compute OTLP metrics URL to send payloads to the active Datadog Agent
+    calc.otelMetricsUrl = `http://${agentHostname}:4318/v1/metrics`
 
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))

@@ -12,6 +12,7 @@ const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 let LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter, logs, os
+let MeterProvider, MetricReader, OtlpHttpMetricExporter, metrics
 const {
   setBaggageItem,
   getBaggageItem,
@@ -209,6 +210,10 @@ class Tracer extends NoopProxy {
         this.#initializeOpenTelemetryLogs(config)
       }
 
+      if (config.otelMetricsEnabled) {
+        this.#initializeOpenTelemetryMetrics(config)
+      }
+
       if (config.isTestDynamicInstrumentationEnabled) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
@@ -322,6 +327,57 @@ class Tracer extends NoopProxy {
 
     // Register the logger provider globally with OpenTelemetry API
     loggerProvider.register()
+  }
+
+  #initializeOpenTelemetryMetrics (config) {
+    MeterProvider ??= require('./opentelemetry/metrics').MeterProvider
+    MetricReader ??= require('./opentelemetry/metrics').MetricReader
+    OtlpHttpMetricExporter ??= require('./opentelemetry/metrics').OtlpHttpMetricExporter
+    metrics ??= require('@opentelemetry/api').metrics
+    os ??= require('os')
+
+    // Build resource attributes
+    const resourceAttributes = {
+      'service.name': config.service,
+      'service.version': config.version,
+      'deployment.environment': config.env
+    }
+
+    // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
+    // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
+    if (config.tags) {
+      const filteredTags = { ...config.tags }
+      delete filteredTags.service
+      delete filteredTags.version
+      delete filteredTags.env
+      Object.assign(resourceAttributes, filteredTags)
+    }
+
+    // Add host.name if reportHostname is enabled
+    if (config.reportHostname) {
+      resourceAttributes['host.name'] = os.hostname()
+    }
+
+    // Create OTLP exporter using resolved config values
+    const exporter = new OtlpHttpMetricExporter(
+      config.otelMetricsUrl,
+      config.otelMetricsHeaders,
+      config.otelMetricsTimeout,
+      config.otelMetricsProtocol,
+      resourceAttributes
+    )
+
+    // Create metric reader for periodic export to Datadog Agent
+    const reader = new MetricReader(
+      exporter,
+      config.otelMetricsExportInterval
+    )
+
+    // Create meter provider with reader for Datadog Agent export
+    const meterProvider = new MeterProvider({ reader })
+
+    // Register the meter provider globally with OpenTelemetry API
+    meterProvider.register()
   }
 
   /**

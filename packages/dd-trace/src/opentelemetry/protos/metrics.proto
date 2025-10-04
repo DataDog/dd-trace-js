@@ -1,0 +1,313 @@
+syntax = "proto3";
+
+package opentelemetry.proto.metrics.v1;
+
+import "common.proto";
+import "resource.proto";
+
+option go_package = "go.opentelemetry.io/collector/pdata/pmetric";
+
+// A collection of metrics from a Resource.
+message ResourceMetrics {
+  // The resource for the metrics in this message.
+  // If this field is not set then no resource info is known.
+  opentelemetry.proto.resource.v1.Resource resource = 1;
+
+  // A list of ScopeMetrics that originate from a resource.
+  repeated ScopeMetrics scope_metrics = 2;
+
+  // This schema_url applies to the data in the "resource" field. It does not apply
+  // to the data in the "scope_metrics" field which have their own schema_url field.
+  string schema_url = 3;
+}
+
+// A collection of metrics from a Scope.
+message ScopeMetrics {
+  // The instrumentation scope information for the metrics in this message.
+  // Semantically when InstrumentationScope isn't set, it is equivalent with
+  // an empty instrumentation scope name (unknown).
+  opentelemetry.proto.common.v1.InstrumentationScope scope = 1;
+
+  // A list of metrics that originate from an instrumentation library.
+  repeated Metric metrics = 2;
+
+  // This schema_url applies to all the metrics in the "metrics" field.
+  string schema_url = 3;
+}
+
+// Defines a Metric which has one or more timeseries.
+message Metric {
+  // name of the metric.
+  string name = 1;
+
+  // description of the metric, which can be used in documentation.
+  string description = 2;
+
+  // unit in which the metric value is reported.
+  string unit = 3;
+
+  // Data determines the aggregation type (if any) of the metric, what is the
+  // reported value type for the data points, as well as the relatationship to
+  // the time interval over which they are reported.
+  oneof data {
+    Gauge gauge = 5;
+    Sum sum = 7;
+    Histogram histogram = 9;
+    ExponentialHistogram exponential_histogram = 10;
+    Summary summary = 11;
+  }
+}
+
+// Gauge represents the type of a scalar metric that always exports the
+// "current value" for every data point.
+message Gauge {
+  repeated NumberDataPoint data_points = 1;
+}
+
+// Sum represents the type of a scalar metric that is calculated as a sum of all
+// reported measurements over a time interval.
+message Sum {
+  repeated NumberDataPoint data_points = 1;
+
+  // aggregation_temporality describes if the aggregator reports delta changes
+  // since last report time, or cumulative changes since a fixed start time.
+  AggregationTemporality aggregation_temporality = 2;
+
+  // If "true", sum is monotonic (only goes up or only goes down).
+  bool is_monotonic = 3;
+}
+
+// Histogram represents the type of a metric that is calculated by aggregating
+// as a Histogram of all reported measurements over a time interval.
+message Histogram {
+  repeated HistogramDataPoint data_points = 1;
+
+  // aggregation_temporality describes if the aggregator reports delta changes
+  // since last report time, or cumulative changes since a fixed start time.
+  AggregationTemporality aggregation_temporality = 2;
+}
+
+// ExponentialHistogram represents the type of a metric that is calculated by aggregating
+// as a ExponentialHistogram of all reported double measurements over a time interval.
+message ExponentialHistogram {
+  repeated ExponentialHistogramDataPoint data_points = 1;
+
+  // aggregation_temporality describes if the aggregator reports delta changes
+  // since last report time, or cumulative changes since a fixed start time.
+  AggregationTemporality aggregation_temporality = 2;
+}
+
+// Summary metric data are used to convey quantile summaries.
+message Summary {
+  repeated SummaryDataPoint data_points = 1;
+}
+
+// AggregationTemporality defines how a metric aggregator reports aggregated
+// values. It describes how those values relate to the time interval over
+// which they are aggregated.
+enum AggregationTemporality {
+  AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+  AGGREGATION_TEMPORALITY_DELTA = 1;
+  AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+}
+
+// NumberDataPoint is a single data point in a timeseries that describes the
+// time-varying scalar value of a metric.
+message NumberDataPoint {
+  reserved 1;
+
+  // The set of key/value pairs that uniquely identify the timeseries from
+  // where this point belongs.
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
+
+  // StartTimeUnixNano is optional but strongly encouraged, see the
+  // the detailed comments above Metric.
+  fixed64 start_time_unix_nano = 2;
+
+  // TimeUnixNano is required, see the detailed comments above Metric.
+  fixed64 time_unix_nano = 3;
+
+  // The value itself. Either as_double or as_int.
+  oneof value {
+    double as_double = 4;
+    sfixed64 as_int = 6;
+  }
+
+  // (Optional) List of exemplars collected from
+  // measurements that were used to form the data point
+  repeated Exemplar exemplars = 5;
+
+  // Flags that apply to this specific data point.
+  uint32 flags = 8;
+}
+
+// HistogramDataPoint is a single data point in a timeseries that describes the
+// time-varying values of a Histogram.
+message HistogramDataPoint {
+  reserved 1;
+
+  // The set of key/value pairs that uniquely identify the timeseries from
+  // where this point belongs.
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 9;
+
+  // StartTimeUnixNano is optional but strongly encouraged, see the
+  // the detailed comments above Metric.
+  fixed64 start_time_unix_nano = 2;
+
+  // TimeUnixNano is required, see the detailed comments above Metric.
+  fixed64 time_unix_nano = 3;
+
+  // count is the number of values in the population.
+  fixed64 count = 4;
+
+  // sum of the values in the population. If count is zero then this field
+  // must be zero.
+  optional double sum = 5;
+
+  // bucket_counts is an optional field contains the count values of histogram
+  // for each bucket.
+  repeated fixed64 bucket_counts = 6;
+
+  // explicit_bounds specifies buckets with explicitly defined bounds for values.
+  repeated double explicit_bounds = 7;
+
+  // (Optional) List of exemplars collected from
+  // measurements that were used to form the data point
+  repeated Exemplar exemplars = 8;
+
+  // Flags that apply to this specific data point.
+  uint32 flags = 10;
+
+  // min is the minimum value over (start_time, end_time].
+  optional double min = 11;
+
+  // max is the maximum value over (start_time, end_time].
+  optional double max = 12;
+}
+
+// ExponentialHistogramDataPoint is a single data point in a timeseries that describes the
+// time-varying values of a ExponentialHistogram of double values.
+message ExponentialHistogramDataPoint {
+  // The set of key/value pairs that uniquely identify the timeseries from
+  // where this point belongs.
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 1;
+
+  // StartTimeUnixNano is optional but strongly encouraged, see the
+  // the detailed comments above Metric.
+  fixed64 start_time_unix_nano = 2;
+
+  // TimeUnixNano is required, see the detailed comments above Metric.
+  fixed64 time_unix_nano = 3;
+
+  // count is the number of values in the population.
+  fixed64 count = 4;
+
+  // sum of the values in the population. If count is zero then this field
+  // must be zero.
+  optional double sum = 5;
+
+  // scale describes the resolution of the histogram.
+  sint32 scale = 6;
+
+  // zero_count is the count of values that are either exactly zero or within
+  // the region considered zero by the instrumentation at the tolerated
+  // degree of precision.
+  fixed64 zero_count = 7;
+
+  // positive carries the positive value buckets.
+  Buckets positive = 8;
+
+  // negative carries the negative value buckets.
+  Buckets negative = 9;
+
+  // Flags that apply to this specific data point.
+  uint32 flags = 10;
+
+  // (Optional) List of exemplars collected from
+  // measurements that were used to form the data point
+  repeated Exemplar exemplars = 11;
+
+  // min is the minimum value over (start_time, end_time].
+  optional double min = 12;
+
+  // max is the maximum value over (start_time, end_time].
+  optional double max = 13;
+
+  // zero_threshold may be optionally set to convey the width of the zero
+  // region.
+  double zero_threshold = 14;
+
+  message Buckets {
+    // Offset is the bucket index of the first entry in the bucket_counts array.
+    sint32 offset = 1;
+
+    // Count is an array of counts, where count[i] carries the count of the bucket at
+    // index (offset+i).
+    repeated uint64 bucket_counts = 2;
+  }
+}
+
+// SummaryDataPoint is a single data point in a timeseries that describes the
+// time-varying values of a Summary metric.
+message SummaryDataPoint {
+  reserved 1;
+
+  // The set of key/value pairs that uniquely identify the timeseries from
+  // where this point belongs.
+  repeated opentelemetry.proto.common.v1.KeyValue attributes = 7;
+
+  // StartTimeUnixNano is optional but strongly encouraged, see the
+  // the detailed comments above Metric.
+  fixed64 start_time_unix_nano = 2;
+
+  // TimeUnixNano is required, see the detailed comments above Metric.
+  fixed64 time_unix_nano = 3;
+
+  // count is the number of values in the population.
+  fixed64 count = 4;
+
+  // sum of the values in the population. If count is zero then this field
+  // must be zero.
+  double sum = 5;
+
+  // Represents the value at a given quantile of a distribution.
+  message ValueAtQuantile {
+    // The quantile of a distribution. Must be in the interval [0.0, 1.0].
+    double quantile = 1;
+
+    // The value at the given quantile of a distribution.
+    double value = 2;
+  }
+
+  // (Optional) list of values at different quantiles of the distribution calculated
+  // from the current snapshot. The quantiles must be strictly increasing.
+  repeated ValueAtQuantile quantile_values = 6;
+
+  // Flags that apply to this specific data point.
+  uint32 flags = 8;
+}
+
+// A representation of an exemplar, which is a sample input measurement.
+message Exemplar {
+  reserved 1;
+
+  // The set of key/value pairs that were filtered out by the aggregator, but
+  // recorded alongside the original measurement.
+  repeated opentelemetry.proto.common.v1.KeyValue filtered_attributes = 7;
+
+  // time_unix_nano is the exact time when this exemplar was recorded
+  fixed64 time_unix_nano = 2;
+
+  // The value of the measurement that was recorded.
+  oneof value {
+    double as_double = 3;
+    sfixed64 as_int = 6;
+  }
+
+  // (Optional) Span ID of the exemplar trace.
+  bytes span_id = 4;
+
+  // (Optional) Trace ID of the exemplar trace.
+  bytes trace_id = 5;
+}
+

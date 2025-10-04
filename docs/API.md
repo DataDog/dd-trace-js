@@ -417,6 +417,57 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 
 Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
+<h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry SDK. This support is intended for applications that need to emit custom metrics using the OpenTelemetry API. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html#metrics) to create and record metrics:
+
+```javascript
+require('dd-trace').init()
+const { metrics } = require('@opentelemetry/api')
+const express = require('express')
+
+const app = express()
+const meter = metrics.getMeter('my-service', '1.0.0')
+
+// Create instruments
+const requestCounter = meter.createCounter('http.requests', {
+  description: 'Total HTTP requests',
+  unit: 'requests'
+})
+
+const requestDuration = meter.createHistogram('http.request.duration', {
+  description: 'HTTP request duration',
+  unit: 'ms'
+})
+
+app.get('/api/users/:id', (req, res) => {
+  const start = Date.now()
+  
+  requestCounter.add(1, { method: req.method, path: req.path })
+  
+  res.json({ id: req.params.id, name: 'John Doe' })
+  
+  const duration = Date.now() - start
+  requestDuration.record(duration, { method: req.method, path: req.path })
+})
+
+app.listen(3000)
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics (default: `http://localhost:4318/v1/metrics`)
+- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers in JSON format for metrics (default: `{}`)
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics (default: `10000`)
+- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `60000`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - Metric export timeout in milliseconds (default: `30000`)
+
+Metrics are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>
