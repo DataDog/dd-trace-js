@@ -12,7 +12,7 @@ include:
   tags: ["runner:apm-k8s-same-cpu"]
   needs: []
   interruptible: true
-  timeout: 10m
+  timeout: 15m # TODO: Fix worker queueing and reduce this.
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
   script:
     # TODO: Revert to js/hapi after https://github.com/DataDog/benchmarking-platform/pull/199 is merged
