@@ -5,16 +5,19 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
-const expressRouteAddedChannel = channel('apm:express:route:add')
+// Routes registered on routers before they are mounted must emit on the
+// express channel so telemetry treats them like top-level express routes.
+const expressRouteAddedChannel = channel('apm:express:route:added')
 const {
-  getRouterMountPath,
+  getRouterMountPaths,
   joinPath,
   getLayerMatchers,
   setLayerMatchers,
-  normalizeMethodName,
   isAppMounted,
   setRouterMountPath,
-  normalizeRoutePaths
+  extractMountPaths,
+  getRouteFullPaths,
+  wrapRouteMethodsAndPublish
 } = require('./helpers/router-helper')
 
 function isFastStar (layer, matchers) {
@@ -164,43 +167,38 @@ function createWrapRouterMethod (name) {
       if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
         // Handle nested router mounting for 'use' method
         if (original.name === 'use' && arguments.length >= 2) {
-          const [mountPathArg, nestedRouter] = arguments
-          const mountPaths = normalizeRoutePaths(mountPathArg)
-          const normalizedMountPath = mountPaths[0]
+          const { mountPaths, startIdx } = extractMountPaths(arguments)
 
-          if (normalizedMountPath && nestedRouter && typeof nestedRouter === 'function') {
-            const parentPath = getRouterMountPath(this)
-            const fullMountPath = joinPath(parentPath, normalizedMountPath)
-            setRouterMountPath(nestedRouter, fullMountPath)
+          if (mountPaths.length) {
+            const parentPaths = getRouterMountPaths(this)
+
+            for (let i = startIdx; i < arguments.length; i++) {
+              const nestedRouter = arguments[i]
+
+              if (!nestedRouter || typeof nestedRouter !== 'function') continue
+
+              parentPaths.forEach(parentPath => {
+                mountPaths.forEach(normalizedMountPath => {
+                  const fullMountPath = joinPath(parentPath, normalizedMountPath)
+                  setRouterMountPath(nestedRouter, fullMountPath)
+                })
+              })
+            }
           }
         }
 
-        const mountPath = getRouterMountPath(this)
+        const mountPaths = getRouterMountPaths(this)
 
-        if (mountPath) {
+        if (mountPaths.length) {
           const layer = this.stack[this.stack.length - 1]
 
           if (layer?.route) {
             const route = layer.route
-            const routePaths = normalizeRoutePaths(route.path)
-            const pathsToPublish = routePaths.length ? routePaths : ['']
 
-            METHODS.forEach(method => {
-              if (typeof route[method] === 'function') {
-                shimmer.wrap(route, method, (originalMethod) => function () {
-                  for (const routePath of pathsToPublish) {
-                    const fullPath = joinPath(mountPath, routePath)
+            const fullPaths = mountPaths.flatMap(mountPath => getRouteFullPaths(route, mountPath))
 
-                    // Now publish the route with this specific method
-                    expressRouteAddedChannel.publish({
-                      method: normalizeMethodName(method),
-                      path: fullPath
-                    })
-                  }
-
-                  return originalMethod.apply(this, arguments)
-                })
-              }
+            wrapRouteMethodsAndPublish(route, fullPaths, (payload) => {
+              expressRouteAddedChannel.publish(payload)
             })
           }
         }

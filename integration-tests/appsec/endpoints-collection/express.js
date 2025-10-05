@@ -68,6 +68,19 @@ router2.use('/path2', router3)
 router3.get('/endpoint', (_, res) => res.send('ok'))
 router1.use('/path', router2)
 
+// Array mount path
+const arrayMountRouter = express.Router()
+arrayMountRouter.get('/', (_, res) => res.send('ok'))
+arrayMountRouter.get('/mounted', (_, res) => res.send('ok'))
+
+app.use(['/multi-array', '/multi-array-alt'], arrayMountRouter)
+
+// Regex mount path
+const regexMountRouter = express.Router()
+regexMountRouter.get('/mounted', (_, res) => res.send('ok'))
+
+app.use(/^\/regex-mount(?:\/|$)/, regexMountRouter)
+
 // Add endpoint during runtime
 setTimeout(() => {
   app.use('/root', router1)
@@ -88,6 +101,13 @@ setTimeout(() => {
   app.use('/api', deepRouter)
   app.get('/later', (_, res) => res.send('ok'))
 }, 1_000)
+
+// Same router mounted at multiple paths - should report both
+const sharedRouter = express.Router()
+sharedRouter.get('/info', (_, res) => res.send('ok'))
+
+app.use('/api/v1', sharedRouter)
+app.use('/api/v2', sharedRouter)
 
 // Cycle routers - should not be collected
 const cycleRouter = express.Router()

@@ -58,8 +58,6 @@ describe('Endpoints collection', () => {
 
     if (framework === 'fastify') {
       expectedEndpoints.push(
-        { method: 'OPTIONS', path: '/users/:id?' },
-
         // Route with regex - not supported in express5
         { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
 
@@ -75,10 +73,11 @@ describe('Endpoints collection', () => {
         { method: 'PATCH', path: '/all-methods' },
         { method: 'PUT', path: '/all-methods' },
         { method: 'POST', path: '/all-methods' },
-        { method: 'GET', path: '/wildcard/*' },
-        { method: 'HEAD', path: '/wildcard/*' },
+        { method: 'MKCOL', path: '/all-methods' }, // Added with addHttpMethod
 
         // Wildcard routes
+        { method: 'GET', path: '/wildcard/*' },
+        { method: 'HEAD', path: '/wildcard/*' },
         { method: 'GET', path: '*' },
         { method: 'HEAD', path: '*' }
       )
@@ -98,6 +97,16 @@ describe('Endpoints collection', () => {
         { method: 'POST', path: '/api/array/array-one' },
         { method: 'POST', path: '/api/array/array-two' },
         { method: 'PUT', path: '/api/regex/^\\/item\\/(\\d+)$/' },
+        { method: 'GET', path: '/multi-array' },
+        { method: 'HEAD', path: '/multi-array' },
+        { method: 'GET', path: '/multi-array/mounted' },
+        { method: 'HEAD', path: '/multi-array/mounted' },
+        { method: 'GET', path: '/multi-array-alt' },
+        { method: 'HEAD', path: '/multi-array-alt' },
+        { method: 'GET', path: '/multi-array-alt/mounted' },
+        { method: 'HEAD', path: '/multi-array-alt/mounted' },
+        { method: 'GET', path: '/^\\/regex-mount(?:\\/|$)/mounted' },
+        { method: 'HEAD', path: '/^\\/regex-mount(?:\\/|$)/mounted' },
 
         // Multiple routers without mount path
         { method: 'PUT', path: '/router1' },
@@ -105,7 +114,13 @@ describe('Endpoints collection', () => {
 
         // Nested routers mounted after definitions
         { method: 'GET', path: '/root/path/path2/endpoint' },
-        { method: 'HEAD', path: '/root/path/path2/endpoint' }
+        { method: 'HEAD', path: '/root/path/path2/endpoint' },
+
+        // Same router mounted at multiple paths
+        { method: 'GET', path: '/api/v1/info' },
+        { method: 'HEAD', path: '/api/v1/info' },
+        { method: 'GET', path: '/api/v2/info' },
+        { method: 'HEAD', path: '/api/v2/info' }
       )
     }
 
@@ -123,7 +138,7 @@ describe('Endpoints collection', () => {
       const endpointsFound = []
       const isFirstFlags = []
 
-      const expectedMessageCount = framework === 'express' ? 5 : 4
+      const expectedMessageCount = framework === 'express' ? 6 : 4
 
       const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
         isFirstFlags.push(Boolean(payload.payload.is_first))
