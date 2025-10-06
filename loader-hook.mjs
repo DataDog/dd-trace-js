@@ -5,15 +5,37 @@ import { getEnvironmentVariables } from './packages/dd-trace/src/config-helper.j
 const { DD_IAST_SECURITY_CONTROLS_CONFIGURATION } = getEnvironmentVariables()
 
 function initialize (data = {}) {
+  data.include ??= []
+  data.exclude ??= []
+
+  addInstrumentations(data)
+  addSecurityControls(data)
+  addExclusions(data)
+
+  return iitm.initialize(data)
+}
+
+function addInstrumentations (data) {
   const instrumentations = Object.keys(hooks)
+
+  for (const moduleName of instrumentations) {
+    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+  }
+}
+
+function addSecurityControls (data) {
   const securityControls = (DD_IAST_SECURITY_CONTROLS_CONFIGURATION || '')
     .split(';')
     .map(sc => sc.trim().split(':')[2])
     .filter(Boolean)
     .map(sc => sc.trim())
 
-  data.include ??= []
-  data.exclude ??= []
+  for (const subpath of securityControls) {
+    data.include.push(new RegExp(subpath))
+  }
+}
+
+function addExclusions (data) {
   data.exclude.push(
     /middle/,
     /langsmith/,
@@ -22,16 +44,6 @@ function initialize (data = {}) {
     /openai\/agents-core\/dist\/shims/,
     /@anthropic-ai\/sdk\/_shims/
   )
-
-  for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
-  }
-
-  for (const subpath of securityControls) {
-    data.include.push(new RegExp(subpath))
-  }
-
-  return iitm.initialize(data)
 }
 
 export { initialize }
