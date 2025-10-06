@@ -741,7 +741,7 @@ jobs:
           wget https://download.oracle.com/otn_software/linux/instantclient/1928000/instantclient-basic-linux.x64-19.28.0.0.0dbru.zip
           unzip instantclient-basic-linux.x64-19.28.0.0.0dbru.zip
           sudo apt-get update -y && sudo apt-get install -y libaio1t64
-          sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /opt/oracle/instantclient_19_28/libaio.so.1
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1
           sudo sh -c "echo /opt/oracle/instantclient_19_28 > /etc/ld.so.conf.d/oracle-instantclient.conf"
           sudo ldconfig
       - run: yarn config set ignore-engines true
