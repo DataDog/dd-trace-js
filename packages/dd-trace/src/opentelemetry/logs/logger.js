@@ -46,14 +46,6 @@ class Logger {
   }
 
   /**
-   * Gets the resource associated with this logger.
-   * @returns {Resource} The resource attributes
-   */
-  get resource () {
-    return this.loggerProvider.resource
-  }
-
-  /**
    * Emits a log record.
    *
    * @param {LogRecord} logRecord - The log record to emit

@@ -278,13 +278,8 @@ class OtlpTransformer {
    * @private
    */
   #hexToBytes (hexString) {
-    if (!hexString || hexString.length === 0) {
-      return Buffer.alloc(0)
-    }
-
-    const cleanHex = hexString.startsWith('0x') ? hexString.slice(2) : hexString
+    const cleanHex = hexString ? (hexString.startsWith('0x') ? hexString.slice(2) : hexString) : ''
     const paddedHex = cleanHex.length % 2 === 0 ? cleanHex : '0' + cleanHex
-
     return Buffer.from(paddedHex, 'hex')
   }
 

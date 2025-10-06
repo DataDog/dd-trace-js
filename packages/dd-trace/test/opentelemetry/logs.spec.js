@@ -4,6 +4,7 @@
 process.setMaxListeners(50)
 
 const assert = require('assert')
+const os = require('os')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -67,7 +68,12 @@ describe('OpenTelemetry Logs', () => {
 
   afterEach(() => {
     process.env = originalEnv
-    require('@opentelemetry/api-logs').logs.disable()
+
+    const { logs } = require('@opentelemetry/api-logs')
+
+    const provider = logs.getLoggerProvider()
+    provider.shutdown()
+    logs.disable()
     sinon.restore()
   })
 
@@ -292,6 +298,103 @@ describe('OpenTelemetry Logs', () => {
         })
       })
     })
+
+    it('handles invalid severity number by defaulting to INFO', (done) => {
+      mockOtlpExport((decoded) => {
+        const logRecord = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        // Invalid severity number should default to INFO (9)
+        assert.strictEqual(logRecord.severityNumber, 9)
+        done()
+      })
+
+      const { logs } = setupTracer()
+      const logger = logs.getLogger('test-logger')
+
+      // Emit with an invalid severity number (999)
+      logger.emit({
+        severityNumber: 999,
+        body: 'Test message with invalid severity'
+      })
+    })
+
+    it('transforms different body types correctly', (done) => {
+      mockOtlpExport((decoded) => {
+        const logRecords = decoded.resourceLogs[0].scopeLogs[0].logRecords
+
+        // String body
+        assert.strictEqual(logRecords[0].body.stringValue, 'string message')
+
+        // Number body (protobuf returns Long objects for int64)
+        const intValue = logRecords[1].body.intValue
+        assert.strictEqual(typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
+
+        // Boolean body
+        assert.strictEqual(logRecords[2].body.boolValue, true)
+
+        // Object body
+        assert(logRecords[3].body.kvlistValue)
+        assert.strictEqual(logRecords[3].body.kvlistValue.values.length, 2)
+        assert.strictEqual(logRecords[3].body.kvlistValue.values[0].key, 'foo')
+        assert.strictEqual(logRecords[3].body.kvlistValue.values[0].value.stringValue, 'bar')
+
+        // Default case (symbol) - should convert to string
+        assert.strictEqual(logRecords[4].body.stringValue, 'Symbol(test)')
+
+        done()
+      })
+
+      const { logs } = setupTracer(true, '5')
+      const logger = logs.getLogger('test-logger')
+
+      // Emit logs with different body types
+      logger.emit({ body: 'string message' })
+      logger.emit({ body: 42 })
+      logger.emit({ body: true })
+      logger.emit({ body: { foo: 'bar', baz: 123 } })
+      logger.emit({ body: Symbol('test') })
+    })
+
+    it('sends logs after batch timeout expires', (done) => {
+      mockOtlpExport((decoded) => {
+        const logRecord = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(logRecord.body.stringValue, 'timeout test')
+        done()
+      })
+
+      process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = '10'
+      process.env.OTEL_BSP_SCHEDULE_DELAY = '100' // 100ms timeout
+
+      const { logs } = setupTracer()
+      const logger = logs.getLogger('test-logger')
+
+      logger.emit({ body: 'timeout test' })
+
+      // Wait 100ms to ensure timer fires
+      setTimeout(() => {}, 100)
+    })
+
+    it('exports resource with service, version, env, and hostname', (done) => {
+      mockOtlpExport((decoded) => {
+        const resource = decoded.resourceLogs[0].resource
+        const resourceAttrs = {}
+        resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
+
+        assert.strictEqual(resourceAttrs['service.name'], 'my-service')
+        assert.strictEqual(resourceAttrs['service.version'], 'v1.2.3')
+        assert.strictEqual(resourceAttrs['deployment.environment'], 'production')
+        assert.strictEqual(resourceAttrs['host.name'], os.hostname())
+        done()
+      })
+
+      process.env.DD_SERVICE = 'my-service'
+      process.env.DD_VERSION = 'v1.2.3'
+      process.env.DD_ENV = 'production'
+      process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
+
+      const { logs } = setupTracer()
+      const logger = logs.getLogger('test-logger')
+      logger.emit({ body: 'test' })
+    })
   })
 
   describe('Configurations', () => {
@@ -392,6 +495,7 @@ describe('OpenTelemetry Logs', () => {
 
   describe('Telemetry Metrics', () => {
     it('tracks telemetry metrics for exported logs', () => {
+      setupTracer(true)
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
       }
