@@ -7,6 +7,7 @@ const log = require('../../log')
 const ContextManager = require('../context_manager')
 
 /**
+ * @typedef {import('@opentelemetry/api').Meter} OtelMeter
  * @typedef {import('./metric_reader')} MetricReader
  */
 
@@ -47,7 +48,7 @@ class MeterProvider {
    * @param {string|Object} nameOrOptions - Meter name or options object
    * @param {string} [version] - Meter version (when nameOrOptions is a string)
    * @param {Object} [options] - Additional options (when nameOrOptions is a string)
-   * @returns {Meter} Meter instance
+   * @returns {OtelMeter} Meter instance
    */
   getMeter (nameOrOptions, version, options = {}) {
     if (this.isShutdown) {
@@ -125,7 +126,7 @@ class MeterProvider {
 
   /**
    * Creates a no-op meter for use when the provider is shutdown.
-   * @returns {Object} A no-op meter instance
+   * @returns {OtelMeter} A no-op meter instance
    * @private
    */
   _createNoOpMeter () {

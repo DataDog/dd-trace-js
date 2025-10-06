@@ -141,7 +141,7 @@ class OtlpHttpMetricExporter {
   /**
    * Parses additional headers from a comma-separated string.
    * @param {string} headersString - Headers string in format "key1=value1,key2=value2"
-   * @returns {Object} Parsed headers object
+   * @returns {Record<string, string>} Parsed headers object
    * @private
    */
   #parseAdditionalHeaders (headersString) {

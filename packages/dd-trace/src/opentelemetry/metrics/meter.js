@@ -1,6 +1,17 @@
 'use strict'
 
 /**
+ * @typedef {import('@opentelemetry/api').Counter} Counter
+ * @typedef {import('@opentelemetry/api').UpDownCounter} UpDownCounter
+ * @typedef {import('@opentelemetry/api').Histogram} Histogram
+ * @typedef {import('@opentelemetry/api').ObservableGauge} ObservableGauge
+ * @typedef {import('@opentelemetry/api').ObservableCounter} ObservableCounter
+ * @typedef {import('@opentelemetry/api').ObservableUpDownCounter} ObservableUpDownCounter
+ * @typedef {import('@opentelemetry/api').MetricOptions} MetricOptions
+ * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
+ */
+
+/**
  * Meter provides methods to create metric instruments.
  *
  * This implementation follows the OpenTelemetry JavaScript API Meter interface:
@@ -14,10 +25,7 @@ class Meter {
   /**
    * Creates a new Meter instance.
    *
-   * @param {Object} scope - Instrumentation scope
-   * @param {string} scope.name - Instrumentation scope name
-   * @param {string} [scope.version] - Instrumentation scope version
-   * @param {string} [scope.schemaUrl] - Instrumentation scope schema URL
+   * @param {InstrumentationScope} scope - Instrumentation scope
    */
   constructor (scope) {
     this.instrumentationScope = scope
@@ -27,8 +35,8 @@ class Meter {
   /**
    * Creates a Counter instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} Counter instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {Counter} Counter instrument
    */
   createCounter (name, options = {}) {
     const key = `counter:${name}`
@@ -41,8 +49,8 @@ class Meter {
   /**
    * Creates an UpDownCounter instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} UpDownCounter instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {UpDownCounter} UpDownCounter instrument
    */
   createUpDownCounter (name, options = {}) {
     const key = `updowncounter:${name}`
@@ -55,8 +63,8 @@ class Meter {
   /**
    * Creates a Histogram instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} Histogram instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {Histogram} Histogram instrument
    */
   createHistogram (name, options = {}) {
     const key = `histogram:${name}`
@@ -69,8 +77,8 @@ class Meter {
   /**
    * Creates an ObservableGauge instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} ObservableGauge instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {ObservableGauge} ObservableGauge instrument
    */
   createObservableGauge (name, options = {}) {
     const key = `observablegauge:${name}`
@@ -83,8 +91,8 @@ class Meter {
   /**
    * Creates an ObservableCounter instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} ObservableCounter instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {ObservableCounter} ObservableCounter instrument
    */
   createObservableCounter (name, options = {}) {
     const key = `observablecounter:${name}`
@@ -97,8 +105,8 @@ class Meter {
   /**
    * Creates an ObservableUpDownCounter instrument.
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @returns {Object} ObservableUpDownCounter instrument
+   * @param {MetricOptions} [options] - Instrument options
+   * @returns {ObservableUpDownCounter} ObservableUpDownCounter instrument
    */
   createObservableUpDownCounter (name, options = {}) {
     const key = `observableupdowncounter:${name}`

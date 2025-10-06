@@ -2,6 +2,7 @@
 
 /**
  * @typedef {import('./meter_provider')} MeterProvider
+ * @typedef {import('./otlp_http_metric_exporter')} OtlpHttpMetricExporter
  */
 
 /**
@@ -20,7 +21,7 @@ class MetricReader {
   /**
    * Creates a new MetricReader instance.
    *
-   * @param {Object} exporter - Metric exporter for exporting to Datadog Agent
+   * @param {OtlpHttpMetricExporter} exporter - Metric exporter for exporting to Datadog Agent
    * @param {number} exportInterval - Interval in milliseconds for periodic export
    */
   constructor (exporter, exportInterval) {
