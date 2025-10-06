@@ -31,7 +31,7 @@ function getProtobufTypes () {
     'common.proto',
     'resource.proto',
     'logs.proto',
-    'payload.proto'
+    'logs_service.proto'
   ].map(file => path.join(protoDir, file))
 
   _root = protobuf.loadSync(protoFiles)
