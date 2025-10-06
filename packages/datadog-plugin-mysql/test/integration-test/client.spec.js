@@ -21,7 +21,7 @@ describe('esm', () => {
       this.timeout(20000)
       sandbox = await createSandbox([`'mysql@${version}'`], false, [
         './packages/datadog-plugin-mysql/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', null, 'mysql', 'createConnection')
+      variants = varySandbox(sandbox, 'server.mjs', 'mysql', 'createConnection')
     })
 
     after(async () => {
@@ -37,8 +37,8 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of ['star', 'default', 'destructure']) {
-      it('is instrumented', async () => {
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
           assert.isArray(payload)

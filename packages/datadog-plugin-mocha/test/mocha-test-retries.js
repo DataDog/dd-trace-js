@@ -3,6 +3,7 @@
 const { expect } = require('chai')
 
 let attempt = 0
+
 describe('mocha-test-retries', function () {
   this.retries(4)
 

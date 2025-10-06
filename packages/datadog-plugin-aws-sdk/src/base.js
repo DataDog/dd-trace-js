@@ -4,7 +4,6 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
-const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
@@ -273,13 +272,10 @@ function normalizeConfig (config, serviceIdentifier) {
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
   const batchPropagationEnabled = isTrue(
-    coalesce(
-      specificConfig.batchPropagationEnabled,
-      getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`),
-      config.batchPropagationEnabled,
-      getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED'),
-      false
-    )
+    specificConfig.batchPropagationEnabled ??
+    getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
+    config.batchPropagationEnabled ??
+    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
   // Merge the specific config back into the main config

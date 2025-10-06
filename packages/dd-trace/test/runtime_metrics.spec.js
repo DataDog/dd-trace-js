@@ -204,7 +204,9 @@ function createGarbage (count = 50) {
           }
         }
 
-        clock = sinon.useFakeTimers()
+        clock = sinon.useFakeTimers({
+          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+        })
 
         runtimeMetrics.start(config)
       })
@@ -425,10 +427,6 @@ function createGarbage (count = 50) {
       })
 
       describe('Event Loop Utilization', () => {
-        afterEach(() => {
-          performance.eventLoopUtilization.restore?.()
-        })
-
         it('should calculate utilization correctly with delta values', () => {
           const firstElu = { idle: 80000000, active: 20000000, utilization: 0.2 }
           const secondElu = { idle: 100000000, active: 80000000, utilization: 0.4444444444444444 }
@@ -438,7 +436,7 @@ function createGarbage (count = 50) {
           diff = performance.eventLoopUtilization(secondElu, thirdElu)
           assert.strictEqual(diff.utilization, -0)
 
-          sinon.stub(performance, 'eventLoopUtilization')
+          const eventLoopUtilizationStub = sinon.stub(performance, 'eventLoopUtilization')
             .onFirstCall().returns(firstElu)
             .onSecondCall().returns(secondElu)
             .onThirdCall().returns(thirdElu)
@@ -447,7 +445,7 @@ function createGarbage (count = 50) {
           clock.tick(10000) // Second collection with delta
           clock.tick(10000) // Second collection with delta
 
-          performance.eventLoopUtilization.restore()
+          eventLoopUtilizationStub.restore()
 
           const eluCalls = client.gauge.getCalls().filter(call =>
             call.args[0] === 'runtime.node.event_loop.utilization'
@@ -475,11 +473,11 @@ function createGarbage (count = 50) {
             }
           }
           const cpuUsage = process.cpuUsage()
-          sinon.stub(process, 'cpuUsage').returns(cpuUsage)
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
+          const cpuUsageStub = sinon.stub(process, 'cpuUsage').returns(cpuUsage)
+          const performanceNowStub = sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
           clock.tick(10000 - ticks)
-          performance.now.restore()
-          process.cpuUsage.restore()
+          performanceNowStub.restore()
+          cpuUsageStub.restore()
 
           const timeDivisor = 100_000 // Microseconds * 100 for percent
 
@@ -560,17 +558,17 @@ function createGarbage (count = 50) {
           // On linux performance.now() would return a negative value due to the mocked time.
           // This is a workaround to ensure the test is deterministic.
           const startPerformanceNow = Math.max(performance.now(), Math.random() * 1_000_000)
-          sinon.stub(performance, 'now').returns(startPerformanceNow)
+          const nowStub = sinon.stub(performance, 'now').returns(startPerformanceNow)
           clock.tick(10000)
-          performance.now.restore()
+          nowStub.restore()
           const firstUptimeCalls = client.gauge.getCalls()
             .filter(call => call.args[0] === 'runtime.node.process.uptime')
           const firstUptime = firstUptimeCalls[0].args[1]
 
           client.gauge.resetHistory()
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 10_000)
+          const nowStub2 = sinon.stub(performance, 'now').returns(startPerformanceNow + 10_000)
           clock.tick(10000) // Advance another 10 seconds
-          performance.now.restore()
+          nowStub2.restore()
 
           let nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
           assert.strictEqual(nextUptimeCall.length, 1)
@@ -584,9 +582,9 @@ function createGarbage (count = 50) {
           )
           client.gauge.resetHistory()
 
-          sinon.stub(performance, 'now').returns(startPerformanceNow + 20_001)
+          const nowStub3 = sinon.stub(performance, 'now').returns(startPerformanceNow + 20_001)
           clock.tick(10000) // Advance another 10 seconds
-          performance.now.restore()
+          nowStub3.restore()
 
           nextUptimeCall = client.gauge.getCalls().filter(call => call.args[0] === 'runtime.node.process.uptime')
           assert.strictEqual(nextUptimeCall.length, 1)
@@ -637,9 +635,7 @@ function createGarbage (count = 50) {
 
           clock.tick(10000)
 
-          process.memoryUsage.restore()
-          os.totalmem.restore()
-          os.freemem.restore()
+          sinon.restore()
 
           const metrics = client.gauge.getCalls().reduce((acc, call) => {
             acc[call.args[0]] = call.args[1]

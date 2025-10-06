@@ -13,7 +13,7 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
 
   const [res] = await Promise.all([
     messageReceiver,
-    new Promise((resolve, reject) => {
+    /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error('Process timed out'))
       }, timeout)
@@ -29,7 +29,7 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
             resolve()
           }
         })
-    })
+    }))
   ])
 
   return res

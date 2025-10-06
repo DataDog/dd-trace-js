@@ -644,6 +644,7 @@ describe('mocha CommonJS', function () {
         })
       })
     })
+
     it('can report code coverage', (done) => {
       let testOutput
       const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -3504,6 +3505,7 @@ describe('mocha CommonJS', function () {
           }
         )
       })
+
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
           receiver.setKnownTests({

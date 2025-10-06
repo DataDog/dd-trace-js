@@ -62,6 +62,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../version')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -88,7 +89,8 @@ describe('jest CommonJS', () => {
       'jest-jasmine2',
       'jest-environment-jsdom',
       '@happy-dom/jest-environment',
-      'office-addin-mock'
+      'office-addin-mock',
+      'winston'
     ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
@@ -950,6 +952,7 @@ describe('jest CommonJS', () => {
         })
       })
     })
+
     it('can report code coverage', (done) => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
@@ -2284,8 +2287,9 @@ describe('jest CommonJS', () => {
         }).catch(done)
       })
     })
-
-    it('works with happy-dom', (done) => {
+    // happy-dom>=19 can only be used with CJS from node 20 and above
+    const happyDomTest = NODE_MAJOR < 20 ? it.skip : it
+    happyDomTest('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
         jest: {
@@ -2346,17 +2350,15 @@ describe('jest CommonJS', () => {
             ...getCiVisAgentlessConfig(receiver.port), // use agentless for this test, just for variety
             TESTS_TO_RUN: 'test/ci-visibility-test',
             ENABLE_HAPPY_DOM: 'true',
-            DD_TRACE_DEBUG: '1',
-            DD_TRACE_LOG_LEVEL: 'warn'
           },
           stdio: 'inherit'
         }
       )
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
 
     it('disables early flake detection if known tests should not be requested', (done) => {
@@ -4087,6 +4089,25 @@ describe('jest CommonJS', () => {
         })
         runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
       })
+    })
+  })
+
+  describe('winston mocking', () => {
+    it('should allow winston to be mocked and verify createLogger is called', async () => {
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
+            SHOULD_CHECK_RESULTS: '1'
+          }
+        }
+      )
+
+      const [code] = await once(childProcess, 'exit')
+      assert.equal(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 })
