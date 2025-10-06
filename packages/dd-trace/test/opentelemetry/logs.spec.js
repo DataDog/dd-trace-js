@@ -3,12 +3,15 @@
 // Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
+require('../setup/core')
 const assert = require('assert')
 const os = require('os')
+const http = require('http')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-require('../setup/core')
+const { logs } = require('@opentelemetry/api-logs')
+const { trace, context } = require('@opentelemetry/api')
 const { protoLogsService } = require('../../src/opentelemetry/protos/protobuf_loader').getProtobufTypes()
 
 describe('OpenTelemetry Logs', () => {
@@ -20,12 +23,10 @@ describe('OpenTelemetry Logs', () => {
     const tracer = require('../../')
     tracer._initialized = false
     tracer.init()
-    const { logs } = require('@opentelemetry/api-logs')
-    return { logs, loggerProvider: logs.getLoggerProvider() }
+    return { tracer, logs, loggerProvider: logs.getLoggerProvider() }
   }
 
   function mockOtlpExport (validator, protocol = 'protobuf') {
-    const http = require('http')
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
@@ -85,8 +86,6 @@ describe('OpenTelemetry Logs', () => {
   afterEach(() => {
     process.env = originalEnv
 
-    const { logs } = require('@opentelemetry/api-logs')
-
     const provider = logs.getLoggerProvider()
     provider.shutdown()
     logs.disable()
@@ -124,8 +123,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
         assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
-      const { logs } = setupTracer(true, '2')
-      const { trace, context } = require('@opentelemetry/api')
+      setupTracer(true, '2')
 
       const spanContext = {
         traceId: '1234567890abcdef1234567890abcdef',
@@ -176,21 +174,24 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('returns no-op logger after shutdown', (done) => {
-      let exportCalled = false
-      const validator = mockOtlpExport(() => {
-        exportCalled = true
+      const validator = mockOtlpExport((decoded) => {
+        // Should only export the log emitted before shutdown
+        assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords.length, 1)
+        assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'before shutdown')
       })
 
-      const { logs, loggerProvider } = setupTracer()
+      const { logs, loggerProvider } = setupTracer(true, '2')
       const logger1 = logs.getLogger('test-logger')
 
       // Emit before shutdown - should work
       logger1.emit({ body: 'before shutdown' })
 
       // Shutdown the provider
+      loggerProvider.forceFlush()
       loggerProvider.shutdown()
 
       // Get a new logger after shutdown - should be no-op
+      loggerProvider.register()
       const logger2 = logs.getLogger('test-logger-2')
       logger2.emit({ body: 'after shutdown' })
       loggerProvider.forceFlush()
@@ -198,7 +199,6 @@ describe('OpenTelemetry Logs', () => {
       // Wait a bit and verify only the first log was exported
       setTimeout(() => {
         validator()
-        assert.strictEqual(exportCalled, true, 'First log should be exported')
         done()
       }, 50)
     })
@@ -274,8 +274,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(capturedHeaders['x-api-key'], 'test123')
       })
 
-      const { logs } = setupTracer()
-      const { trace, context } = require('@opentelemetry/api')
+      setupTracer()
 
       const spanContext = {
         traceId: '00000000000000000000000000000001',
@@ -317,8 +316,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(scope2.logRecords[0].body.stringValue, 'Message from logger2')
       })
 
-      const { logs } = setupTracer(true, '2')
-      const { trace, context } = require('@opentelemetry/api')
+      setupTracer(true, '2')
 
       const spanContext = {
         traceId: '1234567890abcdef1234567890abcdef',
@@ -519,8 +517,7 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('disables log injection when OTEL logs are enabled', () => {
-      const { loggerProvider } = setupTracer(true)
-      const tracer = require('../../')
+      const { tracer, loggerProvider } = setupTracer(true)
 
       assert(loggerProvider)
       assert.strictEqual(tracer._tracer._config.logInjection, false)
@@ -529,8 +526,7 @@ describe('OpenTelemetry Logs', () => {
     it('disables log injection even when DD_LOGS_INJECTION is explicitly set to true', () => {
       // OTEL logs and DD log injection are mutually exclusive
       process.env.DD_LOGS_INJECTION = 'true'
-      const { loggerProvider } = setupTracer(true)
-      const tracer = require('../../')
+      const { tracer, loggerProvider } = setupTracer(true)
 
       assert(loggerProvider)
       assert.strictEqual(tracer._tracer._config.logInjection, false)

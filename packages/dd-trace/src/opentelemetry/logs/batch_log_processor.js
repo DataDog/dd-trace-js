@@ -71,7 +71,7 @@ class BatchLogRecordProcessor {
    * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
-    if (this.isShutdown) {
+    if (!this.isShutdown) {
       this.isShutdown = true
       this.#clearTimer()
       this.#export()
