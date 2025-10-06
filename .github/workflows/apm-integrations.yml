@@ -727,7 +727,6 @@ jobs:
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
-      DD_TEST_AGENT_URL: http://testagent:9126
       DD_INJECT_FORCE: 'true'
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
