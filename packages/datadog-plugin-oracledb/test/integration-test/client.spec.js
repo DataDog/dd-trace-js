@@ -41,9 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
-        LD_LIBRARY_PATH: '/usr/lib/oracle/18.5/client64/lib:'
-      })
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)
