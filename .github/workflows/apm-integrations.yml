@@ -169,7 +169,7 @@ jobs:
             - "127.0.0.1:10000:10000"
             - "127.0.0.1:10001:10001"
             - "127.0.0.1:10002:10002"
-        eventhubs:
+        azureeventhubsemulator:
           image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
 
           ports:
@@ -190,18 +190,18 @@ jobs:
               SQL_SERVER: azuresqledge
     env:
       PLUGINS: azure-functions
-      SERVICES: azurite,eventhubs,azuresqledge,azureservicebusemulator
+      SERVICES: azurite,azureeventhubsemulator,azuresqledge,azureservicebusemulator
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
       - run: |
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
-          eventhubs:/Eventhubs_Emulator/ConfigFiles/Config.json
+          azureeventhubsemulator:/Eventhubs_Emulator/ConfigFiles/Config.json
       - run : |
-          docker restart eventhubs
+          docker restart azureeventhubsemulator
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
         shell: bash
       - uses: ./.github/actions/node/latest
