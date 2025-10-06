@@ -1,3 +1,4 @@
+import regexpEscape from 'escape-string-regexp'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import { getEnvironmentVariable as env } from './packages/dd-trace/src/config-helper.js'
@@ -29,7 +30,7 @@ function addSecurityControls (data) {
     .map(sc => sc.trim())
 
   for (const subpath of securityControls) {
-    data.include.push(new RegExp(subpath))
+    data.include.push(new RegExp(regexpEscape(subpath)))
   }
 }
 

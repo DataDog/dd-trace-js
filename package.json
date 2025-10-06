@@ -134,6 +134,7 @@
     "@opentelemetry/resources": ">=1.0.0 <1.10.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.10",
+    "escape-string-regexp": "^5.0.0",
     "ignore": "^7.0.5",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
