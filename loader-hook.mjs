@@ -1,8 +1,6 @@
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
-import { getEnvironmentVariables } from './packages/dd-trace/src/config-helper.js'
-
-const { DD_IAST_SECURITY_CONTROLS_CONFIGURATION } = getEnvironmentVariables()
+import { getEnvironmentVariable as env } from './packages/dd-trace/src/config-helper.js'
 
 function initialize (data = {}) {
   data.include ??= []
@@ -24,7 +22,7 @@ function addInstrumentations (data) {
 }
 
 function addSecurityControls (data) {
-  const securityControls = (DD_IAST_SECURITY_CONTROLS_CONFIGURATION || '')
+  const securityControls = (env('DD_IAST_SECURITY_CONTROLS_CONFIGURATION') || '')
     .split(';')
     .map(sc => sc.trim().split(':')[2])
     .filter(Boolean)
