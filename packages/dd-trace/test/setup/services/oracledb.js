@@ -3,7 +3,7 @@
 const RetryOperation = require('../operation')
 const oracledb = require('../../../../../versions/oracledb').get()
 
-const hostname = process.env.CI ? 'oracledb' : 'localhost'
+const hostname = 'localhost'
 
 function waitForOracledb () {
   return new Promise((resolve, reject) => {
