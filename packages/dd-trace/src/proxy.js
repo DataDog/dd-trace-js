@@ -11,7 +11,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
-let LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter, logs, os
+let LoggerProvider, BatchLogRecordProcessor, OtlpHttpLogExporter, os
 const {
   setBaggageItem,
   getBaggageItem,
@@ -276,7 +276,6 @@ class Tracer extends NoopProxy {
     LoggerProvider ??= require('./opentelemetry/logs').LoggerProvider
     BatchLogRecordProcessor ??= require('./opentelemetry/logs').BatchLogRecordProcessor
     OtlpHttpLogExporter ??= require('./opentelemetry/logs').OtlpHttpLogExporter
-    logs ??= require('@opentelemetry/api-logs').logs
     os ??= require('os')
 
     // Build resource attributes
