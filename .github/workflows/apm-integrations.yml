@@ -196,9 +196,9 @@ jobs:
       - run: |
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
-          azureeventhubsemulator:/Eventhubs_Emulator/ConfigFiles/Config.json
+          ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
       - run : |
-          docker restart azureeventhubsemulator
+          docker restart ${{ job.services.azureeventhubsemulator.id }}
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
