@@ -167,12 +167,6 @@ describe('OpenTelemetry Logs', () => {
       logs.getLogger('test').emit({ severityText: 'DEBUG', body: 'JSON format' })
     })
 
-    it('handles shutdown gracefully', () => {
-      const { loggerProvider } = setupTracer()
-      loggerProvider.shutdown()
-      assert.strictEqual(loggerProvider.isShutdown, true)
-    })
-
     it('returns no-op logger after shutdown', (done) => {
       const validator = mockOtlpExport((decoded) => {
         // Should only export the log emitted before shutdown
@@ -189,11 +183,14 @@ describe('OpenTelemetry Logs', () => {
       // Shutdown the provider
       loggerProvider.forceFlush()
       loggerProvider.shutdown()
+      assert.strictEqual(loggerProvider.isShutdown, true)
+      // Existing loggers should not send logs after shutdown
+      logger1.emit({ body: 'after shutdown same logger' })
 
       // Get a new logger after shutdown - should be no-op
       loggerProvider.register()
       const logger2 = logs.getLogger('test-logger-2')
-      logger2.emit({ body: 'after shutdown' })
+      logger2.emit({ body: 'after shutdown new logger' })
       loggerProvider.forceFlush()
 
       // Wait a bit and verify only the first log was exported
@@ -444,6 +441,17 @@ describe('OpenTelemetry Logs', () => {
       const { logs } = setupTracer()
       const logger = logs.getLogger('test-logger')
       logger.emit({ body: 'test' })
+    })
+
+    it('handles multiple register() calls', () => {
+      const { logs, loggerProvider } = setupTracer()
+
+      // Calling register again should not throw
+      loggerProvider.register()
+
+      // Provider should still work
+      assert.strictEqual(logs.getLoggerProvider(), loggerProvider)
+      logs.getLogger('test').emit({ body: 'test' })
     })
   })
 

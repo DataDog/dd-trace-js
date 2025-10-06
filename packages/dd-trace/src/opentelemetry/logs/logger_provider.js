@@ -79,9 +79,7 @@ class LoggerProvider {
     }
     // Set context manager, this is required to correlate logs to spans
     context.setGlobalContextManager(this.#contextManager)
-    if (!logs.setGlobalLoggerProvider(this)) {
-      logs.getLoggerProvider().setDelegate(this)
-    }
+    logs.setGlobalLoggerProvider(this)
   }
 
   /**

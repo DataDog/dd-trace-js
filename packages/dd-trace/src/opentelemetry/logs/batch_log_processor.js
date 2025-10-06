@@ -78,19 +78,11 @@ class BatchLogRecordProcessor {
    * @private
    */
   #export () {
-    if (this.#logRecords.length === 0) {
-      return
-    }
-
     const logRecords = this.#logRecords.slice(0, this.#maxExportBatchSize)
     this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
 
     this.#clearTimer()
     this.exporter.export(logRecords, () => {})
-
-    if (this.#logRecords.length > 0) {
-      this.#startTimer()
-    }
   }
 
   /**
