@@ -9,9 +9,9 @@ require('../setup/core')
 
 const { channel } = require('dc-polyfill')
 
-describe('FlaggingProvider Module', () => {
+describe('OpenFeature Module', () => {
   let config
-  let flaggingProviderModule
+  let openfeatureModule
   let mockWriter
   let ExposuresWriterStub
   let setAgentStrategyStub
@@ -32,39 +32,39 @@ describe('FlaggingProvider Module', () => {
     ExposuresWriterStub = sinon.stub().returns(mockWriter)
     setAgentStrategyStub = sinon.stub()
 
-    flaggingProviderModule = proxyquire('../../src/ffe', {
+    openfeatureModule = proxyquire('../../src/openfeature', {
       './writers/exposures': ExposuresWriterStub,
       './writers/util': { setAgentStrategy: setAgentStrategyStub }
     })
   })
 
   afterEach(() => {
-    flaggingProviderModule.disable()
+    openfeatureModule.disable()
   })
 
   describe('enable/disable', () => {
     it('should export enable and disable functions', () => {
-      expect(flaggingProviderModule.enable).to.be.a('function')
-      expect(flaggingProviderModule.disable).to.be.a('function')
+      expect(openfeatureModule.enable).to.be.a('function')
+      expect(openfeatureModule.disable).to.be.a('function')
     })
 
     it('should setup writer when enabled', () => {
-      flaggingProviderModule.enable(config)
+      openfeatureModule.enable(config)
 
       expect(ExposuresWriterStub).to.have.been.calledOnceWith(config)
       expect(setAgentStrategyStub).to.have.been.calledOnce
     })
 
     it('should handle multiple enable calls gracefully', () => {
-      flaggingProviderModule.enable(config)
-      flaggingProviderModule.enable(config)
+      openfeatureModule.enable(config)
+      openfeatureModule.enable(config)
 
       expect(ExposuresWriterStub).to.have.been.calledOnce
     })
 
     it('should destroy writer when disabled', () => {
-      flaggingProviderModule.enable(config)
-      flaggingProviderModule.disable()
+      openfeatureModule.enable(config)
+      openfeatureModule.disable()
 
       expect(mockWriter.destroy).to.have.been.calledOnce
     })
@@ -72,7 +72,7 @@ describe('FlaggingProvider Module', () => {
 
   describe('exposure event handling', () => {
     beforeEach(() => {
-      flaggingProviderModule.enable(config)
+      openfeatureModule.enable(config)
     })
 
     it('appends to the exposures writer', () => {
@@ -132,7 +132,7 @@ describe('FlaggingProvider Module', () => {
       const exposureSubmitCh = channel('ffe:exposure:submit')
       const flushCh = channel('ffe:writers:flush')
 
-      flaggingProviderModule.disable()
+      openfeatureModule.disable()
 
       expect(exposureSubmitCh.hasSubscribers).to.be.false
       expect(flushCh.hasSubscribers).to.be.false

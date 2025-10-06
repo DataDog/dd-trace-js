@@ -53,7 +53,7 @@
     "test:integration:cypress": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/debugger/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/esbuild/*.spec.js\"",
-    "test:integration:ffe": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/ffe/*.spec.js\"",
+    "test:integration:openfeature": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/openfeature/*.spec.js\"",
     "test:integration:jest": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/jest/*.spec.js\"",
     "test:integration:mocha": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/mocha/*.spec.js\"",
     "test:integration:playwright": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",

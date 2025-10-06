@@ -26,7 +26,7 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
   assert.isTrue(Date.now() - event.timestamp < 10000) // Within last 10 seconds
 }
 
-describe('FFE Remote Config and Exposure Events Integration', () => {
+describe('OpenFeature Remote Config and Exposure Events Integration', () => {
   let axios, sandbox, cwd, appFile
 
   before(async function () {

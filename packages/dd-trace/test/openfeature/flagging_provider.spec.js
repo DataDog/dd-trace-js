@@ -38,7 +38,7 @@ describe('FlaggingProvider', () => {
       warn: sinon.spy()
     }
 
-    FlaggingProvider = proxyquire('../../src/ffe/sdk', {
+    FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub
       },

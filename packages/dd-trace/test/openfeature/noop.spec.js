@@ -5,7 +5,7 @@ const { describe, it, beforeEach } = require('tap').mocha
 
 require('../setup/core')
 
-const NoopFlaggingProvider = require('../../src/ffe/noop')
+const NoopFlaggingProvider = require('../../src/openfeature/noop')
 
 describe('NoopFlaggingProvider', () => {
   let noopProvider

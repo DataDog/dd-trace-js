@@ -2,6 +2,7 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
+import type { ResolutionDetails, EvaluationContext, Logger, ProviderMetadata } from "@openfeature/core";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -140,14 +141,14 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
-   * Feature Flagging Provider (OpenFeature-compatible)
+   * OpenFeature Provider with Remote Config integration.
    *
-   * Extends DatadogNodeServerProvider with Remote Config integration.
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
    * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
    *
    * @beta This feature is in preview and not ready for production use
    */
-  flaggingProvider: tracer.FlaggingProvider;
+  openfeature: tracer.OpenFeatureProvider;
 
   /**
    * @experimental
@@ -1085,18 +1086,18 @@ declare namespace tracer {
   }
 
   /**
-   * Feature Flagging Provider (OpenFeature-compatible).
+   * Flagging Provider (OpenFeature-compatible).
    *
    * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
    */
-  export interface FlaggingProvider {
+  export interface OpenFeatureProvider {
     /**
      * Metadata about this provider.
      */
-    metadata: { name: string };
+    metadata: ProviderMetadata;
 
     /**
      * Resolves a boolean flag value.
@@ -1107,7 +1108,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context?: any, logger?: any): Promise<{ value: boolean; reason: string }>;
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<boolean>>;
 
     /**
      * Resolves a string flag value.
@@ -1118,7 +1119,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveStringEvaluation(flagKey: string, defaultValue: string, context?: any, logger?: any): Promise<{ value: string; reason: string }>;
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<string>>;
 
     /**
      * Resolves a number flag value.
@@ -1129,7 +1130,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveNumberEvaluation(flagKey: string, defaultValue: number, context?: any, logger?: any): Promise<{ value: number; reason: string }>;
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<number>>;
 
     /**
      * Resolves an object flag value.
@@ -1140,7 +1141,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveObjectEvaluation(flagKey: string, defaultValue: any, context?: any, logger?: any): Promise<{ value: any; reason: string }>;
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
 
     /**
      * Gets the current flag configuration.

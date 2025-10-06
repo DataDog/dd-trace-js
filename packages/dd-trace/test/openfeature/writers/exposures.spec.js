@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-describe('FFE Exposures Writer', () => {
+describe('OpenFeature Exposures Writer', () => {
   let ExposuresWriter
   let writer
   let exposureEvent
@@ -52,8 +52,8 @@ describe('FFE Exposures Writer', () => {
 
     clock = sinon.useFakeTimers()
 
-    ExposuresWriter = proxyquire('../../../src/ffe/writers/exposures', {
-      './base': proxyquire('../../../src/ffe/writers/base', {
+    ExposuresWriter = proxyquire('../../../src/openfeature/writers/exposures', {
+      './base': proxyquire('../../../src/openfeature/writers/base', {
         '../../exporters/common/request': request,
         '../../log': log
       })

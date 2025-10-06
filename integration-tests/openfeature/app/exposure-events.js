@@ -9,13 +9,13 @@ tracer.init({
 })
 const express = require('express')
 const { channel } = require('dc-polyfill')
-const { flaggingProvider } = tracer
+const { openfeature } = tracer
 const { OpenFeature } = require('@openfeature/server-sdk')
 
 // Used to test manual flushing capabilities
 const flushCh = channel('ffe:writers:flush')
 
-OpenFeature.setProvider(flaggingProvider)
+OpenFeature.setProvider(openfeature)
 const client = OpenFeature.getClient()
 
 const app = express()
