@@ -704,16 +704,9 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
 
-  # TODO: Install the Oracle client on the host and test Node >=16.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
-    container:
-      image: bengl/node-12-with-oracle-client
-      volumes:
-        - /node20217:/node20217:rw,rshared
-        - /node20217:/__e/node20:ro,rshared
-        - /node20217:/__e/node24:ro,rshared
     services:
       oracledb:
         image: gvenzl/oracle-xe:18-slim
@@ -737,12 +730,8 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
       DD_INJECT_FORCE: 'true'
     steps:
-      # https://github.com/actions/runner/issues/2906#issuecomment-2109514798
-      - name: Install Node for runner (with glibc 2.17 compatibility)
-        run: |
-          curl -LO https://unofficial-builds.nodejs.org/download/release/v20.19.3/node-v20.19.3-linux-x64-glibc-217.tar.xz
-          tar -xf node-v20.19.3-linux-x64-glibc-217.tar.xz --strip-components 1 -C /node20217
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: iamazeem/setup-oracle-instant-client-action@v2
       - uses: ./.github/actions/node
         with:
           version: eol
