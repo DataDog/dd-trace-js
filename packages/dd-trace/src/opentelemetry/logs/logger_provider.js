@@ -89,10 +89,9 @@ class LoggerProvider {
    * @returns {undefined} Promise that resolves when flush is n ssue cncomplete
    */
   forceFlush () {
-    if (this.isShutdown) {
-      throw new Error('LoggerProvider is shutdown')
+    if (!this.isShutdown) {
+      return this.processor?.forceFlush()
     }
-    return this.processor?.forceFlush()
   }
 
   /**

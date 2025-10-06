@@ -16,7 +16,6 @@
 
 const protobuf = require('protobufjs')
 const path = require('path')
-const fs = require('fs')
 
 let _root = null
 let protoLogsService = null
@@ -34,10 +33,6 @@ function getProtobufTypes () {
     'logs.proto',
     'payload.proto'
   ].map(file => path.join(protoDir, file))
-
-  if (!protoFiles.every(file => fs.existsSync(file))) {
-    throw new Error('Proto files not found')
-  }
 
   _root = protobuf.loadSync(protoFiles)
 
