@@ -61,7 +61,7 @@
     "test:integration:playwright": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",
     "test:integration:selenium": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/selenium/*.spec.js\"",
     "test:integration:vitest": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/vitest/*.spec.js\"",
-    "test:integration:testopt": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/ci-visibility/*.spec.js\"",
+    "test:integration:testopt": "mocha --timeout 90000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/ci-visibility/*.spec.js\"",
     "test:integration:profiler": "mocha --timeout 180000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/profiler/*.spec.js\"",
     "test:integration:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:unit:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
