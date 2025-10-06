@@ -104,10 +104,12 @@ setTimeout(() => {
 
 // Same router mounted at multiple paths - should report both
 const sharedRouter = express.Router()
-sharedRouter.get('/info', (_, res) => res.send('ok'))
+sharedRouter.get('/shared-before', (_, res) => res.send('ok'))
 
 app.use('/api/v1', sharedRouter)
 app.use('/api/v2', sharedRouter)
+
+sharedRouter.get('/shared-after', (_, res) => res.send('ok'))
 
 // Cycle routers - should not be collected
 const cycleRouter = express.Router()

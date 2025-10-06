@@ -117,10 +117,15 @@ describe('Endpoints collection', () => {
         { method: 'HEAD', path: '/root/path/path2/endpoint' },
 
         // Same router mounted at multiple paths
-        { method: 'GET', path: '/api/v1/info' },
-        { method: 'HEAD', path: '/api/v1/info' },
-        { method: 'GET', path: '/api/v2/info' },
-        { method: 'HEAD', path: '/api/v2/info' }
+        { method: 'GET', path: '/api/v1/shared-before' },
+        { method: 'HEAD', path: '/api/v1/shared-before' },
+        { method: 'GET', path: '/api/v2/shared-before' },
+        { method: 'HEAD', path: '/api/v2/shared-before' },
+
+        { method: 'GET', path: '/api/v1/shared-after' },
+        { method: 'HEAD', path: '/api/v1/shared-after' },
+        { method: 'GET', path: '/api/v2/shared-after' },
+        { method: 'HEAD', path: '/api/v2/shared-after' }
       )
     }
 
@@ -138,7 +143,7 @@ describe('Endpoints collection', () => {
       const endpointsFound = []
       const isFirstFlags = []
 
-      const expectedMessageCount = framework === 'express' ? 6 : 4
+      const expectedMessageCount = framework === 'express' ? 7 : 4
 
       const telemetryPromise = agent.assertTelemetryReceived(({ payload }) => {
         isFirstFlags.push(Boolean(payload.payload.is_first))
