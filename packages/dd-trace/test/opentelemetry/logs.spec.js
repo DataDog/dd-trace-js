@@ -154,7 +154,7 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const { logs } = setupTracer()
-      logs.getLogger('test').emit({ severityText: 'INFO', body: 'Protobuf format' })
+      logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
     })
 
     it('exports logs using JSON protocol', () => {
@@ -184,7 +184,7 @@ describe('OpenTelemetry Logs', () => {
       const logger1 = logs.getLogger('test-logger')
 
       // Emit before shutdown - should work
-      logger1.emit({ body: 'before shutdown' })
+      logger1.emit({ body: 'before shutdown', attributes: {} })
 
       // Shutdown the provider
       loggerProvider.forceFlush()
@@ -324,7 +324,7 @@ describe('OpenTelemetry Logs', () => {
         traceFlags: 1,
       }
       context.with(trace.setSpan(context.active(), trace.wrapSpanContext(spanContext)), () => {
-        const logger1 = logs.getLogger('logger1', '1.0.0')
+        const logger1 = logs.getLogger({ name: 'logger1', version: '1.0.0' })
         const logger2 = logs.getLogger('logger2', '2.0.0')
 
         logger1.emit({
@@ -366,31 +366,39 @@ describe('OpenTelemetry Logs', () => {
         // String body
         assert.strictEqual(logRecords[0].body.stringValue, 'string message')
 
-        // Number body (protobuf returns Long objects for int64)
+        // Integer body (protobuf returns Long objects for int64)
         const intValue = logRecords[1].body.intValue
         assert.strictEqual(typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
-        // Boolean body
-        assert.strictEqual(logRecords[2].body.boolValue, true)
+        // Double/float body
+        assert(logRecords[2].body.doubleValue !== undefined)
+        assert(Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001)
 
-        // Object body
-        assert(logRecords[3].body.kvlistValue)
-        assert.strictEqual(logRecords[3].body.kvlistValue.values.length, 2)
-        assert.strictEqual(logRecords[3].body.kvlistValue.values[0].key, 'foo')
-        assert.strictEqual(logRecords[3].body.kvlistValue.values[0].value.stringValue, 'bar')
+        // Boolean body
+        assert.strictEqual(logRecords[3].body.boolValue, true)
+
+        // Object body - tests Object.entries().map() transformation
+        assert(logRecords[4].body.kvlistValue)
+        assert.strictEqual(logRecords[4].body.kvlistValue.values.length, 2)
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].key, 'foo')
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
+        const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
+        assert.strictEqual(typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 
         // Default case (symbol) - should convert to string
-        assert.strictEqual(logRecords[4].body.stringValue, 'Symbol(test)')
+        assert.strictEqual(logRecords[5].body.stringValue, 'Symbol(test)')
 
         done()
       })
 
-      const { logs } = setupTracer(true, '5')
+      const { logs } = setupTracer(true, '6')
       const logger = logs.getLogger('test-logger')
 
       // Emit logs with different body types
       logger.emit({ body: 'string message' })
       logger.emit({ body: 42 })
+      logger.emit({ body: 3.14159 })
       logger.emit({ body: true })
       logger.emit({ body: { foo: 'bar', baz: 123 } })
       logger.emit({ body: Symbol('test') })

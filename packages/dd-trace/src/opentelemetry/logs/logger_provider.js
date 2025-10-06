@@ -101,7 +101,6 @@ class LoggerProvider {
   shutdown () {
     if (!this.isShutdown) {
       this.isShutdown = true
-      this.processor.shutdown()
     }
   }
 

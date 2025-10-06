@@ -261,12 +261,6 @@ class OtlpTransformer {
    */
   #mapSeverityNumber (severityNumber) {
     const { protoSeverityNumber } = getProtobufTypes()
-
-    if (!protoSeverityNumber) {
-      log.error('protoSeverityNumber is undefined')
-      return 9 // Default to INFO
-    }
-
     const severityName = SEVERITY_MAP[severityNumber] || 'SEVERITY_NUMBER_INFO'
     return protoSeverityNumber.values[severityName]
   }
@@ -295,9 +289,10 @@ class OtlpTransformer {
         stringValue: body
       }
     } else if (typeof body === 'number') {
-      return {
-        intValue: body
+      if (Number.isInteger(body)) {
+        return { intValue: body }
       }
+      return { doubleValue: body }
     } else if (typeof body === 'boolean') {
       return {
         boolValue: body

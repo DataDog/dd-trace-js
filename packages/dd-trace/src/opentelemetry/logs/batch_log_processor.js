@@ -30,7 +30,6 @@ class BatchLogRecordProcessor {
     this.exporter = exporter
     this.#batchTimeout = batchTimeout
     this.#maxExportBatchSize = maxExportBatchSize
-    this.isShutdown = false
     this.#logRecords = []
     this.#timer = null
   }
@@ -42,10 +41,6 @@ class BatchLogRecordProcessor {
    * @param {InstrumentationScope} instrumentationScope - The instrumentation library
    */
   onEmit (logRecord, instrumentationScope) {
-    if (this.isShutdown) {
-      return
-    }
-
     // Store the log record (already enriched by Logger.emit)
     this.#logRecords.push({ ...logRecord, instrumentationScope })
 
@@ -61,22 +56,7 @@ class BatchLogRecordProcessor {
    * @returns {undefined} Promise that resolves when flush is complete
    */
   forceFlush () {
-    if (!this.isShutdown) {
-      this.#export()
-    }
-  }
-
-  /**
-   * Shuts down the processor and exports any remaining log records.
-   * @returns {undefined} Promise that resolves when shutdown is complete
-   */
-  shutdown () {
-    if (!this.isShutdown) {
-      this.isShutdown = true
-      this.#clearTimer()
-      this.#export()
-      this.exporter.shutdown()
-    }
+    this.#export()
   }
 
   /**
