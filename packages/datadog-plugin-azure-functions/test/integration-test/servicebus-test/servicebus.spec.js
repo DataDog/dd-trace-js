@@ -24,7 +24,7 @@ describe('esm', () => {
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
         'azure-functions-core-tools@4',
-        '@azure/service-bus@7.9.2',
+        '@azure/service-bus@7.9.5',
       ],
       false,
       ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
