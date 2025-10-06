@@ -101,7 +101,7 @@ describe('esm', () => {
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh1-batch', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-batch', ({ headers, payload }) => {
         assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
         assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
         assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
@@ -161,7 +161,7 @@ describe('esm', () => {
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://localhost:7071/api/eh2-batch', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
         assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
         assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest2')
