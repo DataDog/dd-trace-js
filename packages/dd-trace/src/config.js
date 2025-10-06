@@ -666,8 +666,8 @@ class Config {
       // Only set if there's a custom URL, otherwise let calc phase handle the default
       this._setString(env, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
     }
-    if (OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
-      this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT)
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || env.otelUrl)
     }
     this._setString(env, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
     this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || env.otelHeaders)
@@ -1194,6 +1194,7 @@ class Config {
     // Compute OTLP logs URL to send payloads to the active Datadog Agent
     const agentHostname = this._getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:4318/v1/logs`
+    calc.otelUrl = `http://${agentHostname}:4318/v1/traces`
 
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
