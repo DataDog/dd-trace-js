@@ -19,8 +19,9 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     super(...arguments)
 
     this.addSub('apm:anthropic:request:chunk', ({ ctx, chunk, done }) => {
-      const chunks = ctx.chunks ?? (ctx.chunks = [])
-      if (chunk) ctx.chunks.push(chunk)
+      ctx.chunks ??= []
+      const chunks = ctx.chunks
+      if (chunk) chunks.push(chunk)
 
       if (!done) return
 
