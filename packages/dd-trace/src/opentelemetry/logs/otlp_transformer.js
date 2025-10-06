@@ -58,6 +58,11 @@ class OtlpTransformer {
    */
   constructor (resourceAttributes, protocol) {
     this.#resourceAttributes = this.#transformAttributes(resourceAttributes)
+    if (protocol === 'grpc') {
+      log.warn('OTLP gRPC protocol is not supported for logs. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      protocol = 'http/protobuf'
+    }
     this.protocol = protocol
   }
 

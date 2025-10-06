@@ -662,21 +662,19 @@ class Config {
 
     this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
-    const customOtelLogsUrl = OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || OTEL_EXPORTER_OTLP_ENDPOINT
-    if (customOtelLogsUrl) {
+    if (OTEL_EXPORTER_OTLP_ENDPOINT) {
       // Only set if there's a custom URL, otherwise let calc phase handle the default
-      this._setString(env, 'otelLogsUrl', customOtelLogsUrl)
+      this._setString(env, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
     }
-    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
-    const requestedProtocol = OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || OTEL_EXPORTER_OTLP_PROTOCOL
-    if (requestedProtocol === 'grpc') {
-      log.warn('OTLP gRPC protocol is not supported for logs. ' +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
-      this._setString(env, 'otelLogsProtocol', 'http/protobuf')
-    } else {
-      this._setString(env, 'otelLogsProtocol', requestedProtocol || 'http/protobuf')
+    if (OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT)
     }
-    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT || OTEL_EXPORTER_OTLP_TIMEOUT)
+    this._setString(env, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || env.otelHeaders)
+    this._setString(env, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
+    this._setString(env, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || env.otelProtocol)
+    env.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || env.otelTimeout
     env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
     env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
     this._setBoolean(
