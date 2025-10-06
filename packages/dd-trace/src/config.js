@@ -1185,6 +1185,12 @@ class Config {
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
 
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this._env.otelLogsEnabled) {
+      this._setBoolean(calc, 'logInjection', false)
+    }
+
     calc['dogstatsd.hostname'] = this._getHostname()
 
     // Compute OTLP logs URL to send payloads to the active Datadog Agent

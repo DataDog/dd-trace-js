@@ -370,6 +370,24 @@ describe('OpenTelemetry Logs', () => {
       const { loggerProvider } = setupTracer()
       assert.strictEqual(loggerProvider.processor.exporter.timeout, 1000)
     })
+
+    it('disables log injection when OTEL logs are enabled', () => {
+      const { loggerProvider } = setupTracer(true)
+      const tracer = require('../../')
+
+      assert(loggerProvider)
+      assert.strictEqual(tracer._tracer._config.logInjection, false)
+    })
+
+    it('disables log injection even when DD_LOGS_INJECTION is explicitly set to true', () => {
+      // OTEL logs and DD log injection are mutually exclusive
+      process.env.DD_LOGS_INJECTION = 'true'
+      const { loggerProvider } = setupTracer(true)
+      const tracer = require('../../')
+
+      assert(loggerProvider)
+      assert.strictEqual(tracer._tracer._config.logInjection, false)
+    })
   })
 
   describe('Telemetry Metrics', () => {
