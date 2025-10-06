@@ -30,19 +30,35 @@ describe('OpenTelemetry Logs', () => {
     let validatorCalled = false
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
-      capturedHeaders = options.headers
-      const mockReq = {
-        write: (data) => { capturedPayload = data },
-        end: () => {
-          const decoded = protocol === 'json'
-            ? JSON.parse(capturedPayload.toString())
-            : protoLogsService.decode(capturedPayload)
-          validator(decoded, capturedHeaders)
-          validatorCalled = true
-        },
-        on: () => {}
+      // Only intercept OTLP logs requests
+      if (options.path && options.path.includes('/v1/logs')) {
+        capturedHeaders = options.headers
+        const mockReq = {
+          write: (data) => { capturedPayload = data },
+          end: () => {
+            const decoded = protocol === 'json'
+              ? JSON.parse(capturedPayload.toString())
+              : protoLogsService.decode(capturedPayload)
+            validator(decoded, capturedHeaders)
+            validatorCalled = true
+          },
+          on: () => {},
+          once: () => {},
+          setTimeout: () => {}
+        }
+        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+        return mockReq
       }
-      callback({ statusCode: 200, on: () => {} })
+
+      // For other requests (remote config, etc), return a basic mock
+      const mockReq = {
+        write: () => {},
+        end: () => {},
+        on: () => {},
+        once: () => {},
+        setTimeout: () => {}
+      }
+      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
@@ -157,6 +173,34 @@ describe('OpenTelemetry Logs', () => {
       const { loggerProvider } = setupTracer()
       loggerProvider.shutdown()
       assert.strictEqual(loggerProvider.isShutdown, true)
+    })
+
+    it('returns no-op logger after shutdown', (done) => {
+      let exportCalled = false
+      const validator = mockOtlpExport(() => {
+        exportCalled = true
+      })
+
+      const { logs, loggerProvider } = setupTracer()
+      const logger1 = logs.getLogger('test-logger')
+
+      // Emit before shutdown - should work
+      logger1.emit({ body: 'before shutdown' })
+
+      // Shutdown the provider
+      loggerProvider.shutdown()
+
+      // Get a new logger after shutdown - should be no-op
+      const logger2 = logs.getLogger('test-logger-2')
+      logger2.emit({ body: 'after shutdown' })
+      loggerProvider.forceFlush()
+
+      // Wait a bit and verify only the first log was exported
+      setTimeout(() => {
+        validator()
+        assert.strictEqual(exportCalled, true, 'First log should be exported')
+        done()
+      }, 50)
     })
 
     it('supports instrumentationScope for compatibility', () => {
