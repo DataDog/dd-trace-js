@@ -1,9 +1,11 @@
 'use strict'
 
-const path = require('path')
-const { execSync } = require('child_process')
-const axios = require('axios')
+const path = require('node:path')
 const assert = require('node:assert')
+const { execSync } = require('node:child_process')
+
+const axios = require('axios')
+
 const { FakeAgent, spawnProc, createSandbox } = require('../helpers')
 
 const esbuildVersions = ['latest', '0.16.12']

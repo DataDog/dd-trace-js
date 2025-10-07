@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import fs from 'fs/promises'
-import * as esbuild from 'esbuild'
 import assert from 'assert'
+
+import * as esbuild from 'esbuild'
+
 import versions from '../../version.js'
 import ddPlugin from '../../esbuild.js'
 

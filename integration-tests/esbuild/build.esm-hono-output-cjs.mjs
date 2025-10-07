@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
-import ddPlugin from 'dd-trace/esbuild.js'
-import esbuild from 'esbuild'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import esbuild from 'esbuild'
+
+import ddPlugin from 'dd-trace/esbuild.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SCRIPT = path.join(__dirname, 'hono-out.cjs')
