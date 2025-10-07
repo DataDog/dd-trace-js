@@ -1,7 +1,10 @@
 import regexpEscape from 'escape-string-regexp'
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
-import { getEnvironmentVariable as env } from './packages/dd-trace/src/config-helper.js'
+import configHelper from './packages/dd-trace/src/config-helper.js'
+
+// For some reason `getEnvironmentVariable` is not otherwise available to ESM.
+const env = configHelper.getEnvironmentVariable
 
 function initialize (data = {}) {
   data.include ??= []
