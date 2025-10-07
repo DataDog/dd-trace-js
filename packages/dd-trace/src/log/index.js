@@ -111,11 +111,11 @@ const log = {
 
   isEnabled (fleetStableConfigValue, localStableConfigValue) {
     return isTrue(
-      (fleetStableConfigValue ??
+      fleetStableConfigValue ??
       getEnvironmentVariable('DD_TRACE_DEBUG') ??
-      getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug') ||
-      (localStableConfigValue ??
-      config.enabled)
+      (getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
+      localStableConfigValue ??
+      config.enabled
     )
   },
 

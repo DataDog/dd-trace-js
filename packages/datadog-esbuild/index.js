@@ -7,11 +7,14 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
+
 const { pathToFileURL, fileURLToPath } = require('url')
 const { processModule, isESMFile } = require('./src/utils.js')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+
+let rewriter
 
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
@@ -47,6 +50,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
+const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 module.exports.name = 'datadog-esbuild'
 
@@ -92,11 +96,24 @@ function getGitMetadata () {
 }
 
 module.exports.setup = function (build) {
+  if (DD_IAST_ENABLED) {
+    const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
+    rewriter = iastRewriter.getRewriter()
+  }
+
+  const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
+    ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
+  build.initialOptions.banner ??= {}
+  build.initialOptions.banner.js ??= ''
+  if (DD_IAST_ENABLED) {
+    build.initialOptions.banner.js =
+      `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
+      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
+${build.initialOptions.banner.js}`
+  }
   const esmBuild = isESMBuild(build)
   if (esmBuild) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
       build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
@@ -141,13 +158,6 @@ ${build.initialOptions.banner.js}`
     }
 
     // TODO: Should this also check for namespace === 'file'?
-    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
-      // This is local application code, not an instrumented package
-      if (DEBUG) console.log(`LOCAL: ${args.path}`)
-      return
-    }
-
-    // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
         args.path.startsWith('@') &&
         !args.importer.includes('node_modules/')) {
@@ -165,6 +175,20 @@ ${build.initialOptions.banner.js}`
           "Unless it's dead code this could cause a problem at runtime.")
       }
       return
+    }
+
+    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
+      // It is local application code, not an instrumented package
+      if (DEBUG) console.log(`APP: ${args.path}`)
+
+      return {
+        path: fullPathToModule,
+        pluginData: {
+          path: args.path,
+          full: fullPathToModule,
+          applicationFile: true
+        }
+      }
     }
 
     const extracted = extractPackageAndModulePath(fullPathToModule)
@@ -240,40 +264,37 @@ ${build.initialOptions.banner.js}`
   })
 
   build.onLoad({ filter: /.*/ }, async args => {
-    if (!args.pluginData?.pkgOfInterest) {
-      return
-    }
+    if (args.pluginData?.pkgOfInterest) {
+      const data = args.pluginData
 
-    const data = args.pluginData
+      if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
 
-    if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
+      const pkgPath = data.raw !== data.pkg
+        ? `${data.pkg}/${data.path}`
+        : data.pkg
 
-    const pkgPath = data.raw !== data.pkg
-      ? `${data.pkg}/${data.path}`
-      : data.pkg
+      // Read the content of the module file of interest
+      let contents
 
-    // Read the content of the module file of interest
-    let contents
+      if (data.isESM) {
+        if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
 
-    if (data.isESM) {
-      if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
-        args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+          if (data.internal) {
+            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
+          }
 
-        if (data.internal) {
-          args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
-        }
+          interceptedESMModules.add(args.path)
 
-        interceptedESMModules.add(args.path)
+          const setters = await processModule({
+            path: args.path,
+            internal: data.internal,
+            context: { format: 'module' }
+          })
 
-        const setters = await processModule({
-          path: args.path,
-          internal: data.internal,
-          context: { format: 'module' }
-        })
-
-        const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
-        const toRegister = data.internal ? args.path : pathToFileURL(args.path)
-        contents = `
+          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          contents = `
 import { register } from ${JSON.stringify(iitmPath)}
 import * as namespace from ${JSON.stringify(args.path)}
 // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
@@ -285,12 +306,12 @@ ${Array.from(setters.values()).join('\n')}
 
 register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)})
 `
+        } else {
+          contents = fs.readFileSync(args.path, 'utf8')
+        }
       } else {
-        contents = fs.readFileSync(args.path, 'utf8')
-      }
-    } else {
-      const fileCode = fs.readFileSync(args.path, 'utf8')
-      contents = `
+        const fileCode = fs.readFileSync(args.path, 'utf8')
+        contents = `
         (function() {
           ${fileCode}
         })(...arguments);
@@ -308,13 +329,28 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
           module.exports = payload.module;
       }
       `
-    }
+      }
 
-    // https://esbuild.github.io/plugins/#on-load-results
-    return {
-      contents,
-      loader: 'js',
-      resolveDir: path.dirname(args.path)
+      // https://esbuild.github.io/plugins/#on-load-results
+      return {
+        contents,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
+      }
+    }
+    if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
+      const ext = path.extname(args.path).toLowerCase()
+      const isJs = /^\.(js|mjs|cjs)$/.test(ext)
+      if (!isJs) return
+
+      if (DEBUG) console.log(`REWRITE: ${args.path}`)
+      const fileCode = fs.readFileSync(args.path, 'utf8')
+      const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
+      return {
+        contents: rewritten.content,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
+      }
     }
   })
 }
