@@ -209,7 +209,7 @@ interface Plugins {
   "ioredis": tracer.plugins.ioredis;
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
-  "kafkajs": tracer.plugins.kafkajs
+  "kafkajs": tracer.plugins.kafkajs;
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
