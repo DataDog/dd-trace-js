@@ -2,7 +2,6 @@ import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from 
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
-import type { ResolutionDetails, EvaluationContext, Logger, ProviderMetadata } from "@openfeature/core";
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -1125,7 +1124,7 @@ declare namespace tracer {
     /**
      * Metadata about this provider.
      */
-    metadata: ProviderMetadata;
+    metadata: import('@openfeature/core').ProviderMetadata;
 
     /**
      * Resolves a boolean flag value.
@@ -1136,7 +1135,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<boolean>>;
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<boolean>>;
 
     /**
      * Resolves a string flag value.
@@ -1147,7 +1146,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveStringEvaluation(flagKey: string, defaultValue: string, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<string>>;
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<string>>;
 
     /**
      * Resolves a number flag value.
@@ -1158,7 +1157,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<number>>;
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<number>>;
 
     /**
      * Resolves an object flag value.
@@ -1169,7 +1168,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: EvaluationContext, logger: Logger): Promise<ResolutionDetails<T>>;
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<T>>;
 
     /**
      * Gets the current flag configuration.
