@@ -1156,15 +1156,6 @@ declare namespace tracer {
      * @param config The configuration object to set
      */
     setConfiguration(config: any): void;
-
-    /**
-     * Internal method to update flag configuration from Remote Config.
-     * This method is called automatically when Remote Config delivers UFC updates.
-     *
-     * @internal
-     * @param ufc Universal Flag Configuration object
-     */
-    _setConfiguration(ufc: any): void;
   }
 
   /** @hidden */

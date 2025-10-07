@@ -10,7 +10,41 @@ const {
   EVP_EVENT_SIZE_LIMIT
 } = require('../constants/constants')
 
+/**
+ * @typedef {Object} ExposureEvent
+ * @property {number} timestamp - Unix timestamp in milliseconds
+ * @property {Object} allocation - Allocation information
+ * @property {string} allocation.key - Allocation key
+ * @property {Object} flag - Flag information
+ * @property {string} flag.key - Flag key
+ * @property {Object} variant - Variant information
+ * @property {string} variant.key - Variant key
+ * @property {Object} subject - Subject (user/entity) information
+ * @property {string} subject.id - Subject identifier
+ * @property {string} [subject.type] - Subject type
+ * @property {Object} [subject.attributes] - Additional subject attributes
+ */
+
+/**
+ * @typedef {Object} ExposureContext
+ * @property {string} service_name - Service name
+ * @property {string} [version] - Service version
+ * @property {string} [env] - Service environment
+ */
+
+/**
+ * @typedef {Object} ExposureEventPayload
+ * @property {ExposureContext} context - Service context metadata
+ * @property {ExposureEvent[]} exposures - Formatted exposure events
+ */
+
+/**
+ * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
+ */
 class ExposuresWriter extends BaseFFEWriter {
+  /**
+   * @param {import('../../config')} config - Tracer configuration object
+   */
   constructor (config) {
     // Build full EVP endpoint path
     const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
@@ -20,8 +54,6 @@ class ExposuresWriter extends BaseFFEWriter {
     super({
       config,
       endpoint: fullEndpoint,
-      interval: config.ffeFlushInterval,
-      timeout: config.ffeTimeout,
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
       headers: {
@@ -32,27 +64,39 @@ class ExposuresWriter extends BaseFFEWriter {
     this._pendingEvents = [] // Buffer events until enabled
   }
 
+  /**
+   * @param {boolean} enabled - Whether to enable the writer
+   */
   setEnabled (enabled) {
     this._enabled = enabled
 
     if (enabled && this._pendingEvents.length > 0) {
-      // Flush pending events when enabled
-      for (const { event, byteLength } of this._pendingEvents) {
-        super.append(event, byteLength)
-      }
+      // Flush all pending events as a batch
+      super.append(this._pendingEvents)
       this._pendingEvents = []
     }
   }
 
-  append (event, byteLength) {
+  /**
+   * Appends exposure event(s) to the buffer
+   * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
+   */
+  append (events) {
     if (!this._enabled) {
-      // Buffer events when disabled until writer is ready
-      this._pendingEvents.push({ event, byteLength })
+      // Buffer events until writer is ready
+      if (Array.isArray(events)) {
+        this._pendingEvents.push(...events)
+      } else {
+        this._pendingEvents.push(events)
+      }
       return
     }
-    super.append(event, byteLength)
+    super.append(events)
   }
 
+  /**
+   * Flushes buffered exposure events to the agent
+   */
   flush () {
     if (!this._enabled) {
       // Don't flush when disabled
@@ -61,8 +105,12 @@ class ExposuresWriter extends BaseFFEWriter {
     super.flush()
   }
 
+  /**
+   * Formats exposure events with service context metadata
+   * @param {Array<ExposureEvent>} events - Array of exposure events
+   * @returns {ExposureEventPayload} Formatted payload with service context
+   */
   makePayload (events) {
-    // Wrap exposure events with service context metadata
     const formattedEvents = events.map(event => this._formatExposureEvent(event))
 
     const context = {
@@ -84,23 +132,11 @@ class ExposuresWriter extends BaseFFEWriter {
     }
   }
 
-  // export interface ExposureEvent {
-  //   /** Unix timestamp in milliseconds */
-  //   timestamp: number
-  //   allocation: {
-  //     key: string
-  //   }
-  //   flag: {
-  //     key: string
-  //   }
-  //   variant: {
-  //     key: string
-  //   }
-  //   subject: {
-  //     id: string
-  //     attributes: EvaluationContext
-  //   }
-  // }
+  /**
+   * @private
+   * @param {ExposureEvent} event - Raw exposure event
+   * @returns {ExposureEvent} Formatted exposure event
+   */
   _formatExposureEvent (event) {
     // Ensure the event matches the expected schema
     const formattedEvent = {

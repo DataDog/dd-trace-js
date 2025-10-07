@@ -35,7 +35,7 @@ describe('OpenFeature Exposures Writer', () => {
       site: 'datadoghq.com',
       hostname: 'localhost',
       port: 8126,
-      url: new (require('url').URL)('http://localhost:8126'),
+      url: new URL('http://localhost:8126'),
       apiKey: 'test-api-key',
       ffeFlushInterval: 1000,
       ffeTimeout: 5000,

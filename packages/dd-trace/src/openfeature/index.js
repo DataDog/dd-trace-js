@@ -10,23 +10,34 @@ const flushCh = channel('ffe:writers:flush')
 
 let exposuresWriter = null
 
+/**
+ * @private
+ * @param {Object|Array<Object>} exposureEvents - Exposure events channel subscriber
+ * @returns {void}
+ */
 function _handleExposureSubmit (exposureEvents) {
   if (!exposuresWriter) return
-
-  const events = Array.isArray(exposureEvents) ? exposureEvents : [exposureEvents]
-  for (const event of events) {
-    exposuresWriter.append(event)
-  }
+  exposuresWriter.append(exposureEvents)
 }
 
+/**
+ * Channel subscriber for manually flushing the exposures writer
+ * @private
+ * @returns {void}
+ */
 function _handleFlush () {
   exposuresWriter?.flush()
 }
 
 module.exports = {
+  /**
+   * Enables the OpenFeature module and sets up FF&E writer and channel subscribers
+   * @param {import('../config')} config - Tracer configuration object
+   * @returns {void}
+   */
   enable (config) {
     if (exposuresWriter) {
-      log.warn('[FlaggingProvider] Already enabled')
+      log.warn(exposuresWriter.constructor.name + ' already enabled')
       return
     }
 
@@ -38,9 +49,13 @@ module.exports = {
       exposuresWriter?.setEnabled(hasAgent)
     })
 
-    log.debug('[FlaggingProvider] Enabled')
+    log.debug('OpenFeature module enabled')
   },
 
+  /**
+   * Disables the OpenFeature module and cleans up resources
+   * @returns {void}
+   */
   disable () {
     if (!exposuresWriter) return
 
@@ -54,6 +69,6 @@ module.exports = {
     exposuresWriter.destroy?.()
     exposuresWriter = null
 
-    log.debug('[FlaggingProvider] Disabled')
+    log.debug('OpenFeature module disabled')
   }
 }

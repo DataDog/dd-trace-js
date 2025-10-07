@@ -9,6 +9,7 @@ tracer.init({
 })
 const express = require('express')
 const { channel } = require('dc-polyfill')
+// Note: We'll eventually need to figure out how this works for dd-trace-api users (SSI compatibility)
 const { openfeature } = tracer
 const { OpenFeature } = require('@openfeature/server-sdk')
 

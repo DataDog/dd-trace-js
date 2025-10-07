@@ -24,7 +24,7 @@
     "@azure/service-bus": "7.9.5",
     "@confluentinc/kafka-javascript": "1.5.0",
     "@cucumber/cucumber": "12.2.0",
-    "@datadog/openfeature-node-server": "0.1.0-preview.9",
+    "@datadog/openfeature-node-server": "0.1.0-preview.10",
     "@elastic/elasticsearch": "9.1.1",
     "@elastic/transport": "9.1.2",
     "@fastify/cookie": "11.0.2",

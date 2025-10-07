@@ -629,7 +629,7 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
-      DD_FLAGGING_PROVIDER_ENABLED
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -713,7 +713,7 @@ class Config {
     env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
-    this._setBoolean(env, 'flaggingProvider.enabled', DD_FLAGGING_PROVIDER_ENABLED)
+    this._setBoolean(env, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
@@ -947,7 +947,7 @@ class Config {
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
-    this._setBoolean(opts, 'flaggingProvider.enabled', options.flaggingProvider?.enabled)
+    this._setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)
     opts.flushInterval = maybeInt(options.flushInterval)
     this._optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)

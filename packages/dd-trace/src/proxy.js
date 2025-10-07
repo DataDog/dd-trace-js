@@ -160,7 +160,7 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        if (config.flaggingProvider.enabled) {
+        if (config.experimental.flaggingProvider.enabled) {
           rc.setProductHandler('FFE_FLAGS', (action, conf) => {
             // Feed UFC config directly to OpenFeature provider
             if (action === 'apply' || action === 'modify') {
@@ -256,7 +256,7 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
-      if (config.flaggingProvider.enabled) {
+      if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)
         lazyProxy(this, 'openfeature', config, () =>
           require('./openfeature/flagging_provider'), this._tracer, config)

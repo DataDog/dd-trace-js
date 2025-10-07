@@ -6,6 +6,11 @@ const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/constants')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 let agentInfoExporter
 
+/**
+ * Determines if the agent supports EVP proxy and sets the writer enabled state accordingly
+ * @param {import('../../config')} config - Tracer configuration object
+ * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
+ */
 function setAgentStrategy (config, setWriterEnabledValue) {
   if (!agentInfoExporter) {
     agentInfoExporter = new AgentInfoExporter(config)

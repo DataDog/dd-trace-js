@@ -130,7 +130,9 @@ describe('TracerProxy', () => {
 
     config = {
       tracing: true,
-      experimental: {},
+      experimental: {
+        flaggingProvider: {}
+      },
       injectionEnabled: [],
       logger: 'logger',
       debug: true,
@@ -148,8 +150,7 @@ describe('TracerProxy', () => {
       },
       configure: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
-      flaggingProvider: {}
+      heapSnapshot: {}
     }
     Config = sinon.stub().returns(config)
 
@@ -346,7 +347,7 @@ describe('TracerProxy', () => {
       })
 
       it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {
-        config.flaggingProvider.enabled = true
+        config.experimental.flaggingProvider.enabled = true
 
         proxy.init()
         proxy.openfeature // Trigger lazy loading
@@ -358,7 +359,7 @@ describe('TracerProxy', () => {
       })
 
       it('should handle FFE_FLAGS modify action', () => {
-        config.flaggingProvider.enabled = true
+        config.experimental.flaggingProvider.enabled = true
 
         proxy.init()
         proxy.openfeature // Trigger lazy loading

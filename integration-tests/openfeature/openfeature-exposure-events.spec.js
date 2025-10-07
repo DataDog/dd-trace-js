@@ -2,7 +2,6 @@
 
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
-const Axios = require('axios')
 const { assert } = require('chai')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
@@ -27,7 +26,7 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
-  let axios, sandbox, cwd, appFile
+  let sandbox, cwd, appFile
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
@@ -65,10 +64,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-            DD_FLAGGING_PROVIDER_ENABLED: true
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
           }
         })
-        axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {
@@ -127,12 +125,13 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         // Wait for RC delivery then evaluate flags
         setTimeout(async () => {
           try {
-            const response = await axios.get('/evaluate-flags')
+            const response = await fetch(`${proc.url}/evaluate-flags`)
             assert.equal(response.status, 200)
-            assert.equal(response.data.evaluationsCompleted, 2)
+            const data = await response.json()
+            assert.equal(data.evaluationsCompleted, 2)
 
             // Trigger manual flush to send exposure events
-            await axios.get('/flush')
+            await fetch(`${proc.url}/flush`)
           } catch (error) {
             done(error)
           }
@@ -150,11 +149,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-            DD_FLAGGING_PROVIDER_ENABLED: true,
-            _DD_FFE_FLUSH_INTERVAL: 100 // 100ms for fast testing
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
           }
         })
-        axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {
@@ -207,15 +204,16 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
         setTimeout(async () => {
           try {
-            const response = await axios.get('/evaluate-multiple-flags')
+            const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
             assert.equal(response.status, 200)
-            assert.equal(response.data.evaluationsCompleted, 6)
+            const data = await response.json()
+            assert.equal(data.evaluationsCompleted, 6)
 
-          // No manual flush - let automatic flush handle it (100ms interval)
+          // No manual flush - let automatic flush handle it (default 1s interval)
           } catch (error) {
             done(error)
           }
-        }, 300)
+        }, 1500)
       })
     })
   })
@@ -230,11 +228,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-          DD_FLAGGING_PROVIDER_ENABLED: true,
-          _DD_FFE_FLUSH_INTERVAL: 100 // 100ms for fast testing
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
         }
       })
-      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -272,7 +268,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       // Trigger request to start remote config polling
-      axios.get('/').then(() => {
+      fetch(`${proc.url}/`).then(() => {
         // Wait for remote config processing
         setTimeout(endIfDone, 200)
       }).catch(done)
@@ -296,10 +292,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_FLAGGING_PROVIDER_ENABLED: false
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false
         }
       })
-      axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
@@ -308,18 +303,13 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
     })
 
     it('should handle disabled flagging provider gracefully', async () => {
-      try {
-        await axios.get('/evaluate-flags')
-        throw new Error('Expected request to fail')
-      } catch (error) {
-        if (error.response) {
-          assert.equal(error.response.status, 500)
-          assert.equal(error.response.data.error, 'OpenFeature client not available')
-        } else {
-          // Handle cases where there's no response (connection errors, etc.)
-          assert.include(error.message, 'Expected request to fail')
-        }
-      }
+      const response = await fetch(`${proc.url}/evaluate-flags`)
+      assert.equal(response.status, 200)
+      const data = await response.json()
+      // When provider is disabled, it uses noop provider which returns default values
+      assert.equal(data.results.boolean, false)
+      assert.equal(data.results.string, 'default')
+      assert.equal(data.evaluationsCompleted, 2)
     })
   })
 })
