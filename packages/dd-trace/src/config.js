@@ -233,22 +233,36 @@ function reformatSpanSamplingRules (rules) {
   })
 }
 
-const sourcesOrder = [
-  { containerProperty: '_remote', origin: 'remote_config', unprocessedProperty: '_remoteUnprocessed' },
-  { containerProperty: '_options', origin: 'code', unprocessedProperty: '_optsUnprocessed' },
-  { containerProperty: '_fleetStableConfig', origin: 'fleet_stable_config' },
-  { containerProperty: '_env', origin: 'env_var', unprocessedProperty: '_envUnprocessed' },
-  { containerProperty: '_localStableConfig', origin: 'local_stable_config' },
-  { containerProperty: '_calculated', origin: 'calculated' },
-  { containerProperty: '_defaults', origin: 'default' }
-]
-
 class Config {
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
    * @type {Record<string, string> | undefined}
    */
   #parsedDdTags = {}
+
+  #envUnprocessed = {}
+  #optsUnprocessed = {}
+  #remoteUnprocessed = {}
+  #env = {}
+  #options = {}
+  #remote = {}
+  #defaults = {}
+  #optionsArg = {}
+  #localStableConfig = {}
+  #fleetStableConfig = {}
+  #calculated = {}
+
+  #getSourcesOrder () {
+    return [
+      { container: this.#remote, origin: 'remote_config', unprocessed: this.#remoteUnprocessed },
+      { container: this.#options, origin: 'code', unprocessed: this.#optsUnprocessed },
+      { container: this.#fleetStableConfig, origin: 'fleet_stable_config' },
+      { container: this.#env, origin: 'env_var', unprocessed: this.#envUnprocessed },
+      { container: this.#localStableConfig, origin: 'local_stable_config' },
+      { container: this.#calculated, origin: 'calculated' },
+      { container: this.#defaults, origin: 'default' }
+    ]
+  }
 
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
@@ -357,7 +371,7 @@ class Config {
       )
     }
 
-    this._applyDefaults()
+    this.#defaults = defaults
     this._applyLocalStableConfig()
     this._applyEnvironment()
     this._applyFleetStableConfig()
@@ -439,18 +453,13 @@ class Config {
     return isInServerlessEnvironment()
   }
 
-  // for _merge to work, every config value must have a default value
-  _applyDefaults () {
-    setHiddenProperty(this, '_defaults', defaults)
-  }
-
   _applyLocalStableConfig () {
-    const obj = setHiddenProperty(this, '_localStableConfig', {})
+    const obj = this.#localStableConfig
     this._applyStableConfig(this.stableConfig?.localEntries ?? {}, obj)
   }
 
   _applyFleetStableConfig () {
-    const obj = setHiddenProperty(this, '_fleetStableConfig', {})
+    const obj = this.#fleetStableConfig
     this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, obj)
   }
 
@@ -639,8 +648,7 @@ class Config {
     } = getEnvironmentVariables()
 
     const tags = {}
-    const env = setHiddenProperty(this, '_env', {})
-    setHiddenProperty(this, '_envUnprocessed', {})
+    const env = this.#env
 
     tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
 
@@ -663,9 +671,9 @@ class Config {
       maybeInt(DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT)
     env['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     env['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
-    this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
+    this.#envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
     env['appsec.blockedTemplateJson'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
-    this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+    this.#envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
     this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
@@ -675,23 +683,23 @@ class Config {
       DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
     )
     env['appsec.extendedHeadersCollection.maxHeaders'] = maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS)
-    this._envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
+    this.#envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     this._setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
     env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
-    this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
+    this.#envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
     env['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
-    this._envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
+    this.#envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
     env['appsec.stackTrace.maxStackTraces'] = maybeInt(DD_APPSEC_MAX_STACK_TRACES)
-    this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
+    this.#envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     env['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
-    this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    this.#envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     env.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
     env.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
     env.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
@@ -717,22 +725,22 @@ class Config {
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
     env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
-    this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
+    this.#envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
-    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    this.#envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
     env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
-    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    this.#envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
     env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
-    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
+    this.#envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
     env.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
-    this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    this.#envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
     this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
@@ -745,9 +753,9 @@ class Config {
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     env['iast.maxConcurrentRequests'] = maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS)
-    this._envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
+    this.#envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
     env['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
-    this._envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
+    this.#envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
     this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setString(env, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
     this._setString(env, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
@@ -755,7 +763,7 @@ class Config {
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       env['iast.requestSampling'] = iastRequestSampling
     }
-    this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
+    this.#envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
@@ -776,12 +784,12 @@ class Config {
     this._setBoolean(env, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     env['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
-    this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+    this.#envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       env.peerServiceMapping = Object.fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       )
-      this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+      this.#envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
@@ -800,7 +808,7 @@ class Config {
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
     env['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
-    this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+    this.#envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
@@ -819,7 +827,7 @@ class Config {
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
     env['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
-    this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
+    this.#envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
@@ -830,7 +838,7 @@ class Config {
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
-      this._envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      this.#envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
     // 0: disabled, 1: logging, 2: garbage collection + logging
     env.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
@@ -844,7 +852,7 @@ class Config {
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     env['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
-    this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
+    this.#envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
     this._setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
@@ -876,11 +884,10 @@ class Config {
   }
 
   _applyOptions (options) {
-    const opts = setHiddenProperty(this, '_options', this._options || {})
+    const opts = this.#options
     const tags = {}
-    setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = setHiddenProperty(this, '_optionsArg', { ingestion: {}, ...options, ...opts })
+    options = this.#optionsArg = { ingestion: {}, ...options, ...opts }
 
     tagger.add(tags, options.tags)
 
@@ -894,9 +901,9 @@ class Config {
       maybeInt(options.appsec?.apiSecurity?.endpointCollectionMessageLimit)
     opts['appsec.blockedTemplateGraphql'] = maybeFile(options.appsec?.blockedTemplateGraphql)
     opts['appsec.blockedTemplateHtml'] = maybeFile(options.appsec?.blockedTemplateHtml)
-    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
+    this.#optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec?.blockedTemplateHtml
     opts['appsec.blockedTemplateJson'] = maybeFile(options.appsec?.blockedTemplateJson)
-    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
+    this.#optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec?.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec?.enabled)
     this._setString(opts, 'appsec.eventTracking.mode', options.appsec?.eventTracking?.mode)
     this._setBoolean(
@@ -915,15 +922,15 @@ class Config {
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec?.rasp?.enabled)
     this._setBoolean(opts, 'appsec.rasp.bodyCollection', options.appsec?.rasp?.bodyCollection)
     opts['appsec.rateLimit'] = maybeInt(options.appsec?.rateLimit)
-    this._optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
+    this.#optsUnprocessed['appsec.rateLimit'] = options.appsec?.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec?.rules)
     this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec?.stackTrace?.enabled)
     opts['appsec.stackTrace.maxDepth'] = maybeInt(options.appsec?.stackTrace?.maxDepth)
-    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec?.stackTrace?.maxDepth
+    this.#optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec?.stackTrace?.maxDepth
     opts['appsec.stackTrace.maxStackTraces'] = maybeInt(options.appsec?.stackTrace?.maxStackTraces)
-    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec?.stackTrace?.maxStackTraces
+    this.#optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec?.stackTrace?.maxStackTraces
     opts['appsec.wafTimeout'] = maybeInt(options.appsec?.wafTimeout)
-    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
+    this.#optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     opts.baggageMaxBytes = options.baggageMaxBytes
@@ -955,23 +962,23 @@ class Config {
     )
     opts['dynamicInstrumentation.uploadIntervalSeconds'] =
       maybeFloat(options.dynamicInstrumentation?.uploadIntervalSeconds)
-    this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
+    this.#optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
     this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
     this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
     opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
-    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    this.#optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
     opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
-    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
+    this.#optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
     opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
-    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
+    this.#optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
     opts.flushInterval = maybeInt(options.flushInterval)
-    this._optsUnprocessed.flushInterval = options.flushInterval
+    this.#optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
-    this._optsUnprocessed.flushMinSpans = options.flushMinSpans
+    this.#optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     opts['iast.dbRowsToTaint'] = maybeInt(options.iast?.dbRowsToTaint)
@@ -979,16 +986,16 @@ class Config {
     this._setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
     opts['iast.maxConcurrentRequests'] = maybeInt(options.iast?.maxConcurrentRequests)
-    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iast?.maxConcurrentRequests
+    this.#optsUnprocessed['iast.maxConcurrentRequests'] = options.iast?.maxConcurrentRequests
     opts['iast.maxContextOperations'] = maybeInt(options.iast?.maxContextOperations)
-    this._optsUnprocessed['iast.maxContextOperations'] = options.iast?.maxContextOperations
+    this.#optsUnprocessed['iast.maxContextOperations'] = options.iast?.maxContextOperations
     this._setBoolean(opts, 'iast.redactionEnabled', options.iast?.redactionEnabled)
     this._setString(opts, 'iast.redactionNamePattern', options.iast?.redactionNamePattern)
     this._setString(opts, 'iast.redactionValuePattern', options.iast?.redactionValuePattern)
     const iastRequestSampling = maybeInt(options.iast?.requestSampling)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       opts['iast.requestSampling'] = iastRequestSampling
-      this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
+      this.#optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
     opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     this._setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
@@ -1011,7 +1018,7 @@ class Config {
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       opts['remoteConfig.pollInterval'] = maybeFloat(options.remoteConfig.pollInterval)
-      this._optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
+      this.#optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
@@ -1027,7 +1034,7 @@ class Config {
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
       this._setString(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
-      this._optsUnprocessed.spanAttributeSchema = options.spanAttributeSchema
+      this.#optsUnprocessed.spanAttributeSchema = options.spanAttributeSchema
     }
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
@@ -1046,14 +1053,14 @@ class Config {
     // This is reliant on environment config being set before options.
     // This is to make sure the origins of each value are tracked appropriately for telemetry.
     // We'll only set `llmobs.enabled` on the opts when it's not set on the environment, and options.llmobs is provided.
-    const llmobsEnabledEnv = this._env['llmobs.enabled']
+    const llmobsEnabledEnv = this.#env['llmobs.enabled']
     if (llmobsEnabledEnv == null && options.llmobs) {
       this._setBoolean(opts, 'llmobs.enabled', !!options.llmobs)
     }
   }
 
   _isCiVisibility () {
-    return this._optionsArg.isCiVisibility ?? this._defaults.isCiVisibility
+    return this.#optionsArg.isCiVisibility ?? this.#defaults.isCiVisibility
   }
 
   _isCiVisibilityItrEnabled () {
@@ -1064,8 +1071,8 @@ class Config {
     const DD_CIVISIBILITY_AGENTLESS_URL = getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_URL')
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
-    const DD_AGENT_HOST = this._optionsArg.hostname ??
+      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
+    const DD_AGENT_HOST = this.#optionsArg.hostname ??
       getEnvironmentVariable('DD_AGENT_HOST') ??
       defaults.hostname
     return DD_AGENT_HOST || url?.hostname
@@ -1073,15 +1080,15 @@ class Config {
 
   _getSpanComputePeerService () {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      this._optionsArg.spanAttributeSchema ??
+      this.#optionsArg.spanAttributeSchema ??
       getEnvironmentVariable('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA')
     )
 
     const peerServiceSet = (
-      this._optionsArg.hasOwnProperty('spanComputePeerService') ||
+      this.#optionsArg.hasOwnProperty('spanComputePeerService') ||
       getEnvironmentVariables().hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
-    const peerServiceValue = this._optionsArg.spanComputePeerService ??
+    const peerServiceValue = this.#optionsArg.spanComputePeerService ??
       getEnvironmentVariable('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
 
     const spanComputePeerService = (
@@ -1104,25 +1111,25 @@ class Config {
   }
 
   _isTraceStatsComputationEnabled () {
-    const apmTracingEnabled = this._options.apmTracingEnabled !== false &&
-      this._env.apmTracingEnabled !== false
+    const apmTracingEnabled = this.#options.apmTracingEnabled !== false &&
+      this.#env.apmTracingEnabled !== false
 
     return apmTracingEnabled && (
-      this._optionsArg.stats ??
+      this.#optionsArg.stats ??
       getEnvironmentVariable('DD_TRACE_STATS_COMPUTATION_ENABLED') ??
       (getIsGCPFunction() || getIsAzureFunction())
     )
   }
 
   _getTraceAgentUrl () {
-    return this._optionsArg.url ??
+    return this.#optionsArg.url ??
       getEnvironmentVariable('DD_TRACE_AGENT_URL') ??
       null
   }
 
   // handles values calculated from a mixture of options and env vars
   _applyCalculated () {
-    const calc = setHiddenProperty(this, '_calculated', {})
+    const calc = this.#calculated
 
     const {
       DD_CIVISIBILITY_AGENTLESS_URL,
@@ -1139,7 +1146,7 @@ class Config {
 
     calc.url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
+      : getAgentUrl(this._getTraceAgentUrl(), this.#optionsArg)
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled', DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED ?? true)
       this._setBoolean(calc, 'isFlakyTestRetriesEnabled', DD_CIVISIBILITY_FLAKY_RETRY_ENABLED ?? true)
@@ -1149,7 +1156,7 @@ class Config {
       this._setString(calc, 'ciVisibilityTestSessionName', DD_TEST_SESSION_NAME)
       this._setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled', isTrue(DD_AGENTLESS_LOG_SUBMISSION_ENABLED))
       this._setBoolean(calc, 'isTestDynamicInstrumentationEnabled', !isFalse(DD_TEST_FAILED_TEST_REPLAY_ENABLED))
-      this._setBoolean(calc, 'isServiceUserProvided', !!this._env.service)
+      this._setBoolean(calc, 'isServiceUserProvided', !!this.#env.service)
       this._setBoolean(calc, 'isTestManagementEnabled', !isFalse(DD_TEST_MANAGEMENT_ENABLED))
       calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
@@ -1159,14 +1166,14 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
-    const defaultPropagationStyle = this._getDefaultPropagationStyle(this._optionsArg)
+    const defaultPropagationStyle = this._getDefaultPropagationStyle(this.#optionsArg)
     calc['tracePropagationStyle.inject'] = propagationStyle(
       'inject',
-      this._optionsArg.tracePropagationStyle
+      this.#optionsArg.tracePropagationStyle
     )
     calc['tracePropagationStyle.extract'] = propagationStyle(
       'extract',
-      this._optionsArg.tracePropagationStyle
+      this.#optionsArg.tracePropagationStyle
     )
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
@@ -1175,8 +1182,7 @@ class Config {
   }
 
   _applyRemote (options) {
-    const opts = setHiddenProperty(this, '_remote', this._remote || {})
-    setHiddenProperty(this, '_remoteUnprocessed', {})
+    const opts = this.#remote
     const tags = {}
     const headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
@@ -1192,7 +1198,7 @@ class Config {
     opts.headerTags = headerTags
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
-    this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+    this.#remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
     this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
   }
 
@@ -1333,19 +1339,19 @@ class Config {
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const changes = []
+    const sourcesOrder = this.#getSourcesOrder()
 
-    for (const name in this._defaults) {
+    for (const name of Object.keys(this.#defaults)) {
       // Use reverse order for merge (lowest priority first)
       for (let i = sourcesOrder.length - 1; i >= 0; i--) {
-        const { containerProperty, origin, unprocessedProperty } = sourcesOrder[i]
-        const container = this[containerProperty]
+        const { container, origin, unprocessed } = sourcesOrder[i]
         const value = container[name]
-        if (value != null || container === this._defaults) {
+        if (value != null || container === this.#defaults) {
           this._setAndTrackChange({
             name,
             value,
             origin,
-            unprocessedValue: unprocessedProperty === undefined ? undefined : this[unprocessedProperty][name],
+            unprocessedValue: unprocessed?.[name],
             changes
           })
         }
@@ -1356,10 +1362,9 @@ class Config {
   }
 
   getOrigin (name) {
-    for (const { containerProperty, origin } of sourcesOrder) {
-      const container = this[containerProperty]
+    for (const { container, origin } of this.#getSourcesOrder()) {
       const value = container[name]
-      if (value != null || container === this._defaults) {
+      if (value != null || container === this.#defaults) {
         return origin
       }
     }
@@ -1405,15 +1410,6 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
-}
-
-function setHiddenProperty (obj, name, value) {
-  Object.defineProperty(obj, name, {
-    value,
-    enumerable: false,
-    writable: true
-  })
-  return obj[name]
 }
 
 module.exports = Config
