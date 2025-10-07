@@ -60,7 +60,7 @@ class Logger {
       logRecord.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    // Set default timestamp if not provided
+    // Note: timestamp is in nanoseconds (as defined by OpenTelemetry LogRecord API)
     if (!logRecord.timestamp) {
       logRecord.timestamp = Number(process.hrtime.bigint())
     }
