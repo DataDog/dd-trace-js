@@ -1124,7 +1124,7 @@ declare namespace tracer {
     /**
      * Metadata about this provider.
      */
-    metadata: import('@openfeature/core').ProviderMetadata;
+    metadata: { name: string; [key: string]: any };
 
     /**
      * Resolves a boolean flag value.
@@ -1135,7 +1135,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<boolean>>;
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves a string flag value.
@@ -1146,7 +1146,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveStringEvaluation(flagKey: string, defaultValue: string, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<string>>;
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves a number flag value.
@@ -1157,7 +1157,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<number>>;
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
 
     /**
      * Resolves an object flag value.
@@ -1168,7 +1168,7 @@ declare namespace tracer {
      * @param logger Optional logger instance
      * @returns Promise resolving to evaluation result with value and reason
      */
-    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: import('@openfeature/core').EvaluationContext, logger: import('@openfeature/core').Logger): Promise<import('@openfeature/core').ResolutionDetails<T>>;
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
 
     /**
      * Gets the current flag configuration.
