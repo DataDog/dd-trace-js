@@ -11,7 +11,6 @@ const {
   getGitHeadRef,
   getRemoteOriginURL,
   resolveGitHeadSHA,
-  isValidCommitSHA,
 } = require('../src/git_properties')
 
 describe('git_properties', () => {
@@ -194,37 +193,6 @@ push = +refs/heads/*:refs/heads/*`)
       expect(headRef).to.equal(undefined)
       const undefinedResult = getGitHeadRef(undefined)
       expect(undefinedResult).to.equal(undefined)
-    })
-  })
-
-  describe('isValidCommitSHA', () => {
-    it('validate correct 40-character sha', () => {
-      const validSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7d'
-      expect(isValidCommitSHA(validSHA)).to.equal(true)
-    })
-
-    it('rejects sha that is too short', () => {
-      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7'
-      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
-    })
-
-    it('rejects sha that is too long', () => {
-      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7da'
-      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
-    })
-
-    it('rejects sha with invalid characters', () => {
-      const invalidSHA = '4e7da8069bcf5ffc8023603b95653e2dc99d1c7g'
-      expect(isValidCommitSHA(invalidSHA)).to.equal(false)
-    })
-
-    it('rejects empty string', () => {
-      expect(isValidCommitSHA('')).to.equal(false)
-    })
-
-    it('rejects null and undefined', () => {
-      expect(isValidCommitSHA(null)).to.equal(false)
-      expect(isValidCommitSHA(undefined)).to.equal(false)
     })
   })
 

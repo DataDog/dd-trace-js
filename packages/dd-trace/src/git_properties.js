@@ -76,21 +76,7 @@ function getGitHeadRef (gitHeadContent) {
 
   // Extract the ref after 'ref: '
   const gitRefMatch = gitHeadContent.match(gitHeadRefRegex)
-
-  if (gitRefMatch?.length > 1) {
-    return gitRefMatch[1]
-  }
-}
-
-function isValidCommitSHA (sha) {
-  if (!sha) {
-    return false
-  }
-  const shaMatch = sha.match(commitSHARegex)
-  if (shaMatch) {
-    return true
-  }
-  return false
+  return gitRefMatch?.[1]
 }
 
 function resolveGitHeadSHA (DD_GIT_FOLDER_PATH) {
@@ -105,7 +91,7 @@ function resolveGitHeadSHA (DD_GIT_FOLDER_PATH) {
     const headContent = gitHeadContent.trim()
 
     // Handle detached head case
-    if (isValidCommitSHA(headContent)) {
+    if (commitSHARegex.test(headContent)) {
       return headContent
     }
 
@@ -118,7 +104,7 @@ function resolveGitHeadSHA (DD_GIT_FOLDER_PATH) {
     const gitHeadRefContent = fs.readFileSync(gitHeadRefPath, 'utf8')
     if (gitHeadRefContent) {
       const headRefContent = gitHeadRefContent.trim()
-      if (isValidCommitSHA(headRefContent)) {
+      if (commitSHARegex.test(headRefContent)) {
         return headRefContent
       }
     }
@@ -131,5 +117,4 @@ module.exports = {
   getGitHeadRef,
   getRemoteOriginURL,
   resolveGitHeadSHA,
-  isValidCommitSHA
 }
