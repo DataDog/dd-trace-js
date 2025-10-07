@@ -1,28 +1,34 @@
 #!/usr/bin/env bash
 
 # Previously, URLs to plugin pages looked like this:
-# interfaces/plugins.amqp10.html
+# interfaces/export_.plugins.connect.html
 #
 # Now, with an updated typedoc and updated types, they look like this:
-# interfaces/export_.plugins.connect.html
-# 
+# interfaces/plugins.amqp10.html
+#
 # This script automatically generates basic HTML files to redirect users who
 # visit the old URLs to the new URL.
 
 echo "writing redirects..."
 
 declare -a plugins=(
+  "aerospike"
   "amqp10"
   "amqplib"
+  "apollo"
   "avsc"
   "aws_sdk"
-  "bluebird"
-  "couchbase"
-  "cucumber"
+  "axios"
+  "azure_functions"
+  "azure_service_bus"
   "bunyan"
   "cassandra_driver"
+  "child_process"
   "confluentinc_kafka_javascript"
   "connect"
+  "couchbase"
+  "cucumber"
+  "cypress"
   "dns"
   "elasticsearch"
   "express"
@@ -30,9 +36,11 @@ declare -a plugins=(
   "fetch"
   "generic_pool"
   "google_cloud_pubsub"
+  "google_cloud_vertexai"
   "graphql"
   "grpc"
   "hapi"
+  "hono"
   "http"
   "http2"
   "ioredis"
@@ -41,38 +49,41 @@ declare -a plugins=(
   "kafkajs"
   "knex"
   "koa"
+  "langchain"
   "ldapjs"
   "mariadb"
+  "memcached"
   "microgateway_core"
   "mocha"
   "mongodb_core"
+  "mongoose"
   "mysql"
   "mysql2"
   "net"
   "next"
-  "opensearch"
   "openai"
+  "opensearch"
   "oracledb"
-  "pino"
   "pg"
+  "pino"
+  "playwright"
   "prisma"
-  "promise"
-  "promise_js"
   "protobufjs"
-  "q"
   "redis"
   "restify"
+  "rhea"
   "router"
+  "selenium"
+  "sharedb"
   "tedious"
   "undici"
-  "when"
+  "vitest"
   "winston"
-  "ws"
 )
 
 for i in "${plugins[@]}"
 do
-   echo "<meta http-equiv=\"refresh\" content=\"0; URL=./export_.plugins.$i.html\" />" > out/interfaces/plugins.$i.html
+  echo "<meta http-equiv=\"refresh\" content=\"0; URL=./plugins.$i.html\" />" > out/interfaces/export_.plugins.$i.html
 done
 
 echo "done."
