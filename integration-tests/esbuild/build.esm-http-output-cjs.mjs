@@ -37,6 +37,4 @@ esbuild.build({
   plugins: [ddPlugin],
   format: 'cjs',
   external
-}).catch((err) => {
-  process.exit(1)
 })

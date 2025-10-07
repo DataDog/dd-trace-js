@@ -24,7 +24,13 @@ esbuildVersions.forEach((version) => {
       chproc.execSync('npm install', {
         timeout: 1000 * 30
       })
-      if (version !== 'latest') {
+      if (version === 'latest') {
+        const versionsPackageJson = require('../../packages/dd-trace/test/plugins/versions/package.json')
+        const version = versionsPackageJson.dependencies.esbuild
+        chproc.execSync(`npm install esbuild@${version}`, {
+          timeout: 1000 * 30
+        })
+      } else {
         chproc.execSync(`npm install esbuild@${version}`, {
           timeout: 1000 * 30
         })
