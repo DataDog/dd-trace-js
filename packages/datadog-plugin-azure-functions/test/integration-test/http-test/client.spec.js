@@ -50,7 +50,7 @@ describe('esm', () => {
     // to figure out a way of automating this.
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: process.env.PATH
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -66,7 +66,7 @@ describe('esm', () => {
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: process.env.PATH
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
