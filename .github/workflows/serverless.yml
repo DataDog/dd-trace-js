@@ -120,6 +120,15 @@ jobs:
               - "127.0.0.1:10000:10000"
               - "127.0.0.1:10001:10001"
               - "127.0.0.1:10002:10002"
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          ports:
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
+          env:
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
+            ACCEPT_EULA: "Y"
         azureservicebusemulator:
           image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
           ports:
@@ -147,7 +156,7 @@ jobs:
           ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
       - run : |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
-      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.1.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
