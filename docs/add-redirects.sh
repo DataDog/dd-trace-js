@@ -10,6 +10,8 @@
 # visit the old URLs to the new URL.
 
 echo "writing redirects..."
+# TODO(2026-10-07): Delete this file and remove from docs/package.json
+# NOTE: Do not add any new entries to this list
 
 declare -a plugins=(
   "aerospike"
