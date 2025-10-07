@@ -151,6 +151,11 @@ interface Tracer extends opentracing.Tracer {
   openfeature: tracer.OpenFeatureProvider;
 
   /**
+   * AI Guard SDK
+   */
+  aiguard: tracer.aiguard.AIGuard;
+
+  /**
    * @experimental
    * Provide same functionality as OpenTelemetry Baggage:
    * https://opentelemetry.io/docs/concepts/signals/baggage/
@@ -604,6 +609,29 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
+      },
+
+      aiguard?: {
+        /**
+         * Set to `true` to enable the SDK.
+         */
+        enabled?: boolean,
+        /**
+         * URL of the AI Guard REST API.
+         */
+        endpoint?: string,
+        /**
+         * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
+         */
+        timeout?: number,
+        /**
+         * Maximum number of conversational messages allowed to be set in the meta-struct
+         */
+        maxMessagesLength?: number,
+        /**
+         * Max size of the content property set in the meta-struct
+         */
+        maxContentSize?: number
       }
 
       /**
@@ -933,7 +961,7 @@ declare namespace tracer {
     scope?: string,
 
     /**
-     * Custom fields to attach to the user (RBAC, Oauth, etc…).
+     * Custom fields to attach to the user (RBAC, Oauth, etc...).
      */
     [key: string]: string | undefined
   }
@@ -1156,6 +1184,170 @@ declare namespace tracer {
      * @param config The configuration object to set
      */
     setConfiguration(config: any): void;
+  }
+
+  export namespace aiguard {
+
+    /**
+     * Represents a tool call made by an AI assistant in an agentic workflow.
+     */
+    export interface ToolCall {
+      /**
+       * Unique identifier for this specific tool call instance used to correlate the call with its response.
+       */
+      id: string;
+      /**
+       * Details about the function being invoked.
+       */
+      function: {
+        /**
+         * The name of the tool/function to be called.
+         */
+        name: string;
+        /**
+         * String containing the arguments to pass to the tool.
+         */
+        arguments: string;
+      };
+    }
+
+    /**
+     * A standard conversational message exchanged with a Large Language Model (LLM).
+     */
+    export interface TextMessage {
+      /**
+       * The role of the message sender in the conversation (e.g.: 'system', 'user', 'assistant').
+       */
+      role: string;
+      /**
+       * The textual content of the message.
+       */
+      content: string;
+    }
+
+    /**
+     * A message from an AI assistant containing only textual content.
+     */
+    export interface AssistantTextMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
+      role: "assistant";
+      /**
+       * The textual response content from the assistant.
+       */
+      content: string;
+      /**
+       * Explicitly excluded when content is present to maintain type safety.
+       */
+      tool_calls?: never;
+    }
+
+    /**
+     * A message from an AI assistant that initiates one or more tool calls.
+     */
+    export interface AssistantToolCallMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
+      role: "assistant";
+      /**
+       * Array of tool calls that the assistant wants to execute.
+       */
+      tool_calls: ToolCall[];
+      /**
+       * Explicitly excluded when tool calls are present to maintain type safety.
+       */
+      content?: never;
+    }
+
+    /**
+     * A message containing the result of a tool invocation.
+     */
+    export interface ToolMessage {
+      /**
+       * The role identifier, always set to 'tool' for tool execution results.
+       */
+      role: "tool";
+      /**
+       * The unique identifier linking this result to the original tool call.
+       * Must correspond to a ToolCall.id from a previous AssistantToolCallMessage.
+       */
+      tool_call_id: string;
+      /**
+       * The output returned by the tool execution.
+       */
+      content: string;
+    }
+
+    export type Message =
+      | TextMessage
+      | AssistantTextMessage
+      | AssistantToolCallMessage
+      | ToolMessage;
+
+    /**
+     * The result returned by AI Guard after evaluating a conversation.
+     */
+    export interface Evaluation {
+      /**
+       * The security action determined by AI Guard:
+       * - 'ALLOW': The conversation is safe to proceed
+       * - 'DENY': The current conversation exchange should be blocked
+       * - 'ABORT': The full workflow should be terminated immediately
+       */
+      action: 'ALLOW' | 'DENY' | 'ABORT';
+      /**
+       * Human-readable explanation for why this action was chosen.
+       */
+      reason: string;
+    }
+
+    /**
+     * Error thrown when AI Guard evaluation determines that a conversation should be blocked
+     * and the client is configured to enforce blocking mode.
+     */
+    export interface AIGuardAbortError extends Error {
+      /**
+       * Human-readable explanation from AI Guard describing why the conversation was blocked.
+       */
+      reason: string;
+    }
+
+    /**
+     * Error thrown when the AI Guard SDK encounters communication failures or API errors while attempting to
+     * evaluate conversations.
+     */
+    export interface AIGuardClientError extends Error {
+      /**
+       * Detailed error information returned by the AI Guard API, formatted according to the JSON:API error
+       * specification.
+       */
+      errors?: unknown[];
+      /**
+       * The underlying error that caused the communication failure, such as network timeouts, connection refused,
+       * or JSON parsing errors.
+       */
+      cause?: Error;
+    }
+
+    /**
+     * AI Guard security client for evaluating AI conversations.
+     */
+    export interface AIGuard {
+      /**
+       * Evaluates a conversation thread.
+       *
+       * @param messages - Array of conversation messages
+       * @param opts - Optional configuration object:
+       *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
+       *              and the AI Guard service has blocking mode enabled (default: false).
+       * @returns Promise resolving to an Evaluation with the security decision and reasoning.
+       *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
+       *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
+       */
+      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+    }
   }
 
   /** @hidden */

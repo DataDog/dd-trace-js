@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('node:fs')
-const path = require('node:path')
+const fs = require('fs')
+const path = require('path')
 
 function findRoot () {
   return require.main && require.main.filename

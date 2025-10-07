@@ -286,6 +286,7 @@ class Config {
     checkIfBothOtelAndDdEnvVarSet()
 
     const DD_API_KEY = getEnvironmentVariable('DD_API_KEY')
+    const DD_APP_KEY = getEnvironmentVariable('DD_APP_KEY')
 
     if (getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') && (
       getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
@@ -338,6 +339,7 @@ class Config {
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
+    this.appKey = DD_APP_KEY
 
     // sent in telemetry event app-started
     this.installSignature = {
@@ -485,6 +487,11 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_ENABLED,
+      DD_AI_GUARD_ENDPOINT,
+      DD_AI_GUARD_MAX_CONTENT_SIZE,
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH,
+      DD_AI_GUARD_TIMEOUT,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
@@ -715,6 +722,14 @@ class Config {
     this._setString(env, 'env', DD_ENV || tags.env)
     this._setBoolean(env, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
+    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
@@ -945,6 +960,14 @@ class Config {
     this._optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     this._setString(opts, 'env', options.env || tags.env)
+    this._setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
+    this._setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
+    opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
+    this._optsUnprocessed['experimental.aiguard.maxMessagesLength'] = options.experimental?.aiguard?.maxMessagesLength
+    opts['experimental.aiguard.maxContentSize'] = maybeInt(options.experimental?.aiguard?.maxContentSize)
+    this._optsUnprocessed['experimental.aiguard.maxContentSize'] = options.experimental?.aiguard?.maxContentSize
+    opts['experimental.aiguard.timeout'] = maybeInt(options.experimental?.aiguard?.timeout)
+    this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
     this._setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)

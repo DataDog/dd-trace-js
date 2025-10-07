@@ -68,6 +68,11 @@ module.exports = {
   'dynamicInstrumentation.redactionExcludedIdentifiers': [],
   'dynamicInstrumentation.uploadIntervalSeconds': 1,
   env: undefined,
+  'experimental.aiguard.enabled': false,
+  'experimental.aiguard.endpoint': undefined,
+  'experimental.aiguard.maxMessagesLength': 16,
+  'experimental.aiguard.maxContentSize': 512 * 1024,
+  'experimental.aiguard.timeout': 10_000, // ms
   'experimental.enableGetRumData': false,
   'experimental.exporter': undefined,
   'experimental.flaggingProvider.enabled': false,

@@ -5,12 +5,14 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
+const NoopAIGuardSDK = require('../aiguard/noop')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
 const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 const noopOpenFeatureProvider = new NoopFlaggingProvider()
+const noopAIGuard = new NoopAIGuardSDK()
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
@@ -20,6 +22,7 @@ class NoopProxy {
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
     this.openfeature = noopOpenFeatureProvider
+    this.aiguard = noopAIGuard
     this.setBaggageItem = () => {}
     this.getBaggageItem = () => {}
     this.getAllBaggageItems = () => {}
