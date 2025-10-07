@@ -25,6 +25,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 class OtlpHttpLogExporter {
   #telemetryTags
 
+  DEFAULT_LOGS_PATH = '/v1/logs'
+
   /**
    * Creates a new OtlpHttpLogExporter instance.
    *
@@ -35,25 +37,27 @@ class OtlpHttpLogExporter {
    * @param {Resource} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
-    this.url = url
+    const parsedUrl = new URL(url)
+
     this.protocol = protocol
-
-    // Set Content-Type based on protocol
-    const contentType = this.protocol === 'http/json'
-      ? 'application/json'
-      : 'application/x-protobuf'
-
-    this.headers = {
-      'Content-Type': contentType,
-      ...this.#parseAdditionalHeaders(headers)
-    }
-    this.timeout = timeout
     this.transformer = new OtlpTransformer(resource, protocol)
-
-    // Pre-compute telemetry tags for efficiency
+    // If no path is provided, use default path
+    const path = parsedUrl.pathname === '/' ? this.DEFAULT_LOGS_PATH : parsedUrl.pathname
+    const isJson = protocol === 'http/json'
+    this.options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: path + parsedUrl.search,
+      method: 'POST',
+      timeout,
+      headers: {
+        'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
+        ...this.#parseAdditionalHeaders(headers)
+      }
+    }
     this.#telemetryTags = [
       'protocol:http',
-      `encoding:${this.protocol === 'http/json' ? 'json' : 'protobuf'}`
+      `encoding:${isJson ? 'json' : 'protobuf'}`
     ]
   }
 
@@ -75,30 +79,18 @@ class OtlpHttpLogExporter {
   }
 
   /**
-   * Shuts down the exporter.
-   * @returns {undefined} Promise that resolves when shutdown is complete
-   */
-  shutdown () {}
-
-  /**
    * Sends the payload via HTTP request.
    * @param {Buffer|string} payload - The payload to send
    * @param {Function} resultCallback - Callback for the result
    * @private
    */
   #sendPayload (payload, resultCallback) {
-    const url = new URL(this.url)
-
     const options = {
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
-      method: 'POST',
+      ...this.options,
       headers: {
-        ...this.headers,
+        ...this.options.headers,
         'Content-Length': payload.length
-      },
-      timeout: this.timeout
+      }
     }
 
     const req = http.request(options, (res) => {

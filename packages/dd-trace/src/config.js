@@ -1193,8 +1193,8 @@ class Config {
 
     // Compute OTLP logs URL to send payloads to the active Datadog Agent
     const agentHostname = this._getHostname()
-    calc.otelLogsUrl = `http://${agentHostname}:4318/v1/logs`
-    calc.otelUrl = `http://${agentHostname}:4318/v1/traces`
+    calc.otelLogsUrl = `http://${agentHostname}:4318`
+    calc.otelUrl = `http://${agentHostname}:4318`
 
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
