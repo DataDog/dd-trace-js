@@ -1,6 +1,6 @@
 'use strict'
 
-// Based in import-in-the-middle
+// The content of this file is copied from the `import-in-the-middle` package with minor modifications (https://www.npmjs.com/package/import-in-the-middle)
 const { pathToFileURL, fileURLToPath } = require('node:url')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -65,8 +65,8 @@ function getSource (url, { format }) {
 /**
  * Generates the pieces of code for the proxy module before the path
  *
- * @param {Object} { path, internal, context, excludeDefault }
- * @returns {Map}
+ * @param {Object} moduleData { path, internal, context, excludeDefault }
+ * @returns {Promise<Map>}
  */
 async function processModule ({ path, internal, context, excludeDefault }) {
   let exportNames, srcUrl
@@ -163,8 +163,8 @@ async function processModule ({ path, internal, context, excludeDefault }) {
  * Determines if a file is a ESM module or CommonJS
  *
  * @param {string} fullPathToModule File to analize
- * @param {string} modulePackageJsonPath Path of the package.json
- * @param {string} packageJson The content of the module package.json
+ * @param {string} [modulePackageJsonPath] Path of the package.json
+ * @param {Object} [packageJson] The content of the module package.json
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
