@@ -1,4 +1,6 @@
 name: Nightly Testing
+env:
+  GLOBAL_VAR: "This is a global variable"
 
 on:
   workflow_dispatch:
@@ -30,26 +32,37 @@ on:
         type: boolean
 
 jobs:
-  nightly:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: ./.github/workflows/apm-integrations
-        if: inputs.runApmIntegrations
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/apm-capabilities
-        if: inputs.runApmCapabilities
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/llmobs
-        if: inputs.runLlmobs
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/platform
-        if: inputs.runPlatform
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/serverless
-        if: inputs.runServerless
-        with:
-          runNightly: 'true'
+  apm-integrations:
+    if: inputs.runApmIntegrations
+    uses: ./.github/workflows/apm-integrations.yml
+    with:
+      runNightly: ${{ 'true' }}
+      workflowName: apm-integrations
+
+  apm-capabilities:
+    if: inputs.runApmCapabilities
+    uses: ./.github/workflows/apm-capabilities.yml
+    with:
+      runNightly: ${{ 'true' }}
+      workflowName: apm-capabilities
+
+  llmobs:
+    if: inputs.runLlmobs
+    uses: ./.github/workflows/llmobs.yml
+    with:
+      runNightly: ${{ 'true' }}
+      workflowName: llmobs
+
+  platform:
+    if: inputs.runPlatform
+    uses: ./.github/workflows/platform.yml
+    with:
+      runNightly: ${{ 'true' }}
+      workflowName: platform
+
+  serverless:
+    if: inputs.runServerless
+    uses: ./.github/workflows/serverless.yml
+    with:
+      runNightly: ${{ 'true' }}
+      workflowName: serverless
