@@ -158,16 +158,16 @@ class RequestParams {
     stream = '',
     n
   } = {}) {
-    this.prompt = prompt === undefined ? undefined : prompt
-    this.temperature = temperature === undefined ? undefined : temperature
-    this.topP = topP === undefined ? undefined : topP
-    this.topK = topK === undefined ? undefined : topK
-    this.maxTokens = maxTokens === undefined ? undefined : maxTokens
+    this.prompt = prompt
+    this.temperature = temperature
+    this.topP = topP
+    this.topK = topK
+    this.maxTokens = maxTokens
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n === undefined ? undefined : n
+    this.n = n
   }
 }
 
@@ -380,7 +380,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
         if (modelName.includes('embed')) {
           return new Generation({ message: body.embedding })
         }
-        if (body.results !== undefined) {
+        if (body.results) {
           const results = body.results || []
           if (results.length > 0) {
             const result = results[0]
@@ -391,7 +391,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
               outputTokens: result.tokenCount
             })
           }
-        } else if (body.output !== undefined) {
+        } else if (body.output) {
           const output = body.output || {}
           return new Generation({
             message: output.message?.content[0]?.text,
