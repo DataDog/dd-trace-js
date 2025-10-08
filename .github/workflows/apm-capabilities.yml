@@ -42,6 +42,7 @@ jobs:
           echo "---"
           echo "Current concurrency group: ${{ github.workflow }}-${{ inputs.runNightly == 'true' && github.run_id || github.ref || github.run_id }}"
           echo "cancel-in-progress: ${{ inputs.runNightly != 'true' }}"
+          echo "This is the global var $GLOBAL_VAR"
   tracing-macos:
     runs-on: macos-latest
     steps:

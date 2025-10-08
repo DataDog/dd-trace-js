@@ -1,4 +1,6 @@
 name: Nightly Testing
+env:
+  GLOBAL_VAR: "This is a global variable"
 
 on:
   workflow_dispatch:
