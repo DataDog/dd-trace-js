@@ -122,6 +122,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
+    strategy:
+      fail-fast: false
+      matrix:
+        iteration: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts

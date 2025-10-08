@@ -11,7 +11,8 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 function noop () {}
 
-describe('RASP - ssrf', () => {
+for (let i = 0; i < 100; i++)
+describe('RASP - ssrf' + i, () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
 
@@ -20,6 +21,7 @@ describe('RASP - ssrf', () => {
     })
 
     before((done) => {
+      console.log('before2')
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
@@ -37,9 +39,11 @@ describe('RASP - ssrf', () => {
 
       server = expressApp.listen(0, () => {
         const port = server.address().port
+        console.log(`Listening on port ${port}`)
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
+        console.log('before2 done')
         done()
       })
     })
