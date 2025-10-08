@@ -25,6 +25,7 @@ concurrency:
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  RUN_NIGHTLY: ${{ inputs.runNightly }}
 
 jobs:
   sdk:
