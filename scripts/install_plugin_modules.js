@@ -43,6 +43,7 @@ async function run () {
   install()
   await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
+  trust()
 }
 
 async function assertPrerequisites () {
@@ -275,11 +276,15 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('bun install --trust --ignore-engines', { cwd: folder(), env: withBun() })
+    exec('bun install --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
   }
+}
+
+function trust () {
+  exec('bun pm trust --all', { cwd: folder(), env: withBun() })
 }
 
 /**
