@@ -9,6 +9,7 @@ const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const { withBun } = require('./bun')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -252,7 +253,7 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    exec('bun install --trust --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
