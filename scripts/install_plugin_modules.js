@@ -13,6 +13,8 @@ const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
+const { withBun } = require('./bun')
+
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
@@ -273,7 +275,7 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    exec('bun install --trust --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
