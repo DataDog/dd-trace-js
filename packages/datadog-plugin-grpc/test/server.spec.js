@@ -6,6 +6,8 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
+const semver = require('semver')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -66,6 +68,9 @@ describe('Plugin', () => {
     })
 
     withVersions('grpc', pkgs, (version, pkg) => {
+      if (!semver.satisfies(version, '>=1.3.0') && nodeMajor >= 25) {
+        return
+      }
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })

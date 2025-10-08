@@ -26,6 +26,7 @@ const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
 
 const BASIC_USER_SCHEMA_ID = '1605040621379664412'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
 
 function compareJson (expected, span) {
   const actual = JSON.parse(span.context()._tags[SCHEMA_DEFINITION])
@@ -41,6 +42,10 @@ describe('Plugin', () => {
     let mockTime = 0
 
     withVersions('avsc', ['avsc'], (version) => {
+      // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
+      if (version === '5.0.0' && nodeMajor >= 25) {
+        return
+      }
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas
