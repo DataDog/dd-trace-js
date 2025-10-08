@@ -26,6 +26,8 @@ module.exports = {
   'appsec.apiSecurity.sampleDelay': 30,
   'appsec.apiSecurity.endpointCollectionEnabled': true,
   'appsec.apiSecurity.endpointCollectionMessageLimit': 300,
+  'appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate': 0.5,
+  'appsec.apiSecurity.maxDownstreamRequestBodyAnalysis': 1,
   'appsec.blockedTemplateGraphql': undefined,
   'appsec.blockedTemplateHtml': undefined,
   'appsec.blockedTemplateJson': undefined,
