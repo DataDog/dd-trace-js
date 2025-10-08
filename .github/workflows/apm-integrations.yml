@@ -1,6 +1,4 @@
 name: APM Integrations
-env:
-  GLOBAL_VAR: "This is a global variable"
 on:
   pull_request:
   push:
@@ -26,6 +24,7 @@ concurrency:
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  GLOBAL_VAR: "This is a global variable"
 
 # TODO: upstream jobs
 
