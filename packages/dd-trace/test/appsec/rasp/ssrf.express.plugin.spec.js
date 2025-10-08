@@ -21,7 +21,6 @@ describe('RASP - ssrf' + i, () => {
     })
 
     before((done) => {
-      console.log('before2')
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
@@ -39,11 +38,9 @@ describe('RASP - ssrf' + i, () => {
 
       server = expressApp.listen(0, () => {
         const port = server.address().port
-        console.log(`Listening on port ${port}`)
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
-        console.log('before2 done')
         done()
       })
     })
