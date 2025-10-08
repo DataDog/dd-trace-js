@@ -254,7 +254,7 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('bun install --ignore-engines', { cwd: folder(), env: withBun() })
+    exec('bun install --linker isolated --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
