@@ -8,7 +8,9 @@ inputs:
 runs:
   using: composite
   steps:
-    - run: echo "GLOBAL_VAR: ${{ env.GLOBAL_VAR }}"
+    - run: |
+        echo "GLOBAL_VAR: ${{ env.GLOBAL_VAR }}"
+      shell: bash
     - uses: ./.github/actions/testagent/start
     - uses: ./.github/actions/install
 
