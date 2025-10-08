@@ -5,18 +5,12 @@ const { getWebSpan } = require('../utils')
 
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.assertSomeTraces((traces) => {
-    try {
-      const span = getWebSpan(traces)
-      assert.notProperty(span.meta, '_dd.appsec.json')
-      assert.notProperty(span.meta_struct || {}, '_dd.stack')
-      if (checkRuleEval) {
-        assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-      }
-    } catch (error) {
-      console.log('Error', traces)
-      throw error
+    const span = getWebSpan(traces)
+    assert.notProperty(span.meta, '_dd.appsec.json')
+    assert.notProperty(span.meta_struct || {}, '_dd.stack')
+    if (checkRuleEval) {
+      assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }
-
   })
 }
 
