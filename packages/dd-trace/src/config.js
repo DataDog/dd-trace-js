@@ -67,6 +67,8 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
+const DEFAULT_OTLP_PORT = 4318
+
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   const OTEL_TRACES_SAMPLER_MAPPING = {
     always_on: '1.0',
@@ -1193,8 +1195,8 @@ class Config {
 
     // Compute OTLP logs URL to send payloads to the active Datadog Agent
     const agentHostname = this._getHostname()
-    calc.otelLogsUrl = `http://${agentHostname}:4318`
-    calc.otelUrl = `http://${agentHostname}:4318`
+    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
 
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))

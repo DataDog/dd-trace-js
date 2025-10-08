@@ -87,7 +87,9 @@ describe('OpenTelemetry Logs', () => {
     process.env = originalEnv
 
     const provider = logs.getLoggerProvider()
-    provider.shutdown()
+    if (provider.shutdown) {
+      provider.shutdown()
+    }
     logs.disable()
     sinon.restore()
   })
@@ -542,8 +544,16 @@ describe('OpenTelemetry Logs', () => {
       assert.strictEqual(loggerProvider.processor.exporter.options.timeout, 1000)
     })
 
+    it('does not initialize when OTEL logs are disabled', () => {
+      const { loggerProvider } = setupTracer(false)
+      const { LoggerProvider } = require('../../src/opentelemetry/logs')
+
+      // Should return no-op provider when disabled, not our custom LoggerProvider
+      assert.strictEqual(loggerProvider instanceof LoggerProvider, false)
+    })
+
     it('disables log injection when OTEL logs are enabled', () => {
-      const { tracer, loggerProvider } = setupTracer(true)
+      const { tracer, loggerProvider } = setupTracer()
 
       assert(loggerProvider)
       assert.strictEqual(tracer._tracer._config.logInjection, false)
@@ -552,7 +562,7 @@ describe('OpenTelemetry Logs', () => {
     it('disables log injection even when DD_LOGS_INJECTION is explicitly set to true', () => {
       // OTEL logs and DD log injection are mutually exclusive
       process.env.DD_LOGS_INJECTION = 'true'
-      const { tracer, loggerProvider } = setupTracer(true)
+      const { tracer, loggerProvider } = setupTracer()
 
       assert(loggerProvider)
       assert.strictEqual(tracer._tracer._config.logInjection, false)
@@ -561,7 +571,7 @@ describe('OpenTelemetry Logs', () => {
 
   describe('Telemetry Metrics', () => {
     it('tracks telemetry metrics for exported logs', () => {
-      setupTracer(true)
+      setupTracer()
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
       }
