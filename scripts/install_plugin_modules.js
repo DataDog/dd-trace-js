@@ -33,7 +33,6 @@ async function run () {
   install()
   await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
-  trust()
 }
 
 async function assertPrerequisites () {
@@ -122,7 +121,8 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    dependencies
+    dependencies,
+    trustedDependencies: [name]
   }
 
   if (!external) {
@@ -259,10 +259,6 @@ function install (retry = true) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
   }
-}
-
-function trust () {
-  exec('bun pm trust --all || exit 0', { cwd: folder(), env: withBun() })
 }
 
 /**
