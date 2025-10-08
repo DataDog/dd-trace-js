@@ -1,0 +1,14 @@
+{
+    "name": "amqplib-test-app",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Test app for amqplib integration",
+    "main": "test-setup.js",
+    "scripts": {
+        "start": "node test-setup.js"
+    },
+    "dependencies": {
+        "amqplib": "*",
+        "dd-trace": "file:../../../../"
+    }
+}
