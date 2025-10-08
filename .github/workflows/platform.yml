@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-body-parser:
     runs-on: ubuntu-latest
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-child_process:
     runs-on: ubuntu-latest
@@ -81,7 +81,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-cookie-parser:
     runs-on: ubuntu-latest
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-express-session:
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-express:
     runs-on: ubuntu-latest
@@ -127,7 +127,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-fs:
     runs-on: ubuntu-latest
@@ -137,7 +137,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-generic-pool:
     runs-on: ubuntu-latest
@@ -147,7 +147,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-http:
     runs-on: ubuntu-latest
@@ -157,7 +157,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-knex:
     runs-on: ubuntu-latest
@@ -167,7 +167,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-mongoose:
     runs-on: ubuntu-latest
@@ -183,7 +183,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -193,7 +193,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-mysql2:
     runs-on: ubuntu-latest
@@ -212,7 +212,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-passport:
     runs-on: ubuntu-latest
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-passport-http:
     runs-on: ubuntu-latest
@@ -232,7 +232,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-passport-local:
     runs-on: ubuntu-latest
@@ -242,7 +242,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-pg:
     runs-on: ubuntu-latest
@@ -261,7 +261,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-promise-js:
     runs-on: ubuntu-latest
@@ -271,7 +271,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-promise:
     runs-on: ubuntu-latest
@@ -281,7 +281,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-q:
     runs-on: ubuntu-latest
@@ -291,7 +291,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-url:
     runs-on: ubuntu-latest
@@ -301,7 +301,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   instrumentation-when:
     runs-on: ubuntu-latest
@@ -311,7 +311,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
 
   instrumentations-misc:

@@ -104,7 +104,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   amqplib:
     runs-on: ubuntu-latest
@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   apollo:
     runs-on: ubuntu-latest
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   avsc:
     runs-on: ubuntu-latest
@@ -141,7 +141,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   axios:
     runs-on: ubuntu-latest
@@ -289,7 +289,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   dns:
     runs-on: ubuntu-latest
@@ -368,7 +368,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   fetch:
     runs-on: ubuntu-latest
@@ -378,7 +378,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   fs:
     runs-on: ubuntu-latest
@@ -388,7 +388,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   graphql:
     runs-on: ubuntu-latest
@@ -398,7 +398,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   grpc:
     runs-on: ubuntu-latest
@@ -408,7 +408,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   hapi:
     runs-on: ubuntu-latest
@@ -418,7 +418,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   hono:
     runs-on: ubuntu-latest
@@ -428,7 +428,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   http:
     strategy:
@@ -538,7 +538,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -558,7 +558,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mariadb:
     runs-on: ubuntu-latest
@@ -577,7 +577,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   memcached:
     runs-on: ubuntu-latest
@@ -593,7 +593,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   microgateway-core:
     runs-on: ubuntu-latest
@@ -603,7 +603,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   moleculer:
     runs-on: ubuntu-latest
@@ -613,7 +613,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mongodb:
     runs-on: ubuntu-latest
@@ -630,7 +630,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -647,7 +647,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mongoose:
     runs-on: ubuntu-latest
@@ -663,7 +663,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mysql:
     runs-on: ubuntu-latest
@@ -682,7 +682,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   mysql2:
     runs-on: ubuntu-latest
@@ -701,7 +701,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   net:
     runs-on: ubuntu-latest
@@ -800,7 +800,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   # TODO: Install the Oracle client on the host and test Node >=16.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
@@ -909,7 +909,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   protobufjs:
     runs-on: ubuntu-latest
@@ -920,7 +920,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   redis:
     runs-on: ubuntu-latest
@@ -936,7 +936,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   ioredis:
     runs-on: ubuntu-latest
@@ -952,7 +952,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   valkey:
     runs-on: ubuntu-latest
@@ -968,7 +968,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
@@ -1003,7 +1003,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   router:
     runs-on: ubuntu-latest
@@ -1013,7 +1013,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   sharedb:
     runs-on: ubuntu-latest
@@ -1076,7 +1076,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   winston:
     runs-on: ubuntu-latest
@@ -1086,7 +1086,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   ws:
     runs-on: ubuntu-latest
@@ -1096,4 +1096,4 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}

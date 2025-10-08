@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-llmobs
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   langchain:
     runs-on: ubuntu-latest
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-llmobs
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   bedrock:
     runs-on: ubuntu-latest
@@ -104,7 +104,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-llmobs
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
 
   ai:
     runs-on: ubuntu-latest
@@ -114,4 +114,4 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-llmobs
         with:
-          runNightly: inputs.runNightly
+          runNightly: ${{ inputs.runNightly }}
