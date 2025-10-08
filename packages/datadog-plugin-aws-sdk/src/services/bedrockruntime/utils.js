@@ -397,7 +397,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
         } else if (body.output) {
           const output = body.output || {}
           return new Generation({
-            message: output.message?.content[0]?.text,
+            message: output.message?.content[0]?.text ?? 'Unsupported content type',
             finishReason: body.stopReason,
             role: output.message?.role,
             inputTokens: body.usage?.inputTokens,
