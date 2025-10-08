@@ -125,15 +125,10 @@ describe('RASP - ssrf' + i, () => {
 
             // we preload axios because it's lazyloading a debug dependency
             // that in turns trigger LFI
-            console.log('preload axios call')
-            axiosToTest.get('http://preloadaxios')
-              .catch(() => {
-                console.log('preload axios error')
-              })
-              .then(() => {
-                console.log('preload axios then')
-                done()
-              })
+
+            axiosToTest.get('http://preloadaxios', { timeout: 10 })
+              .catch(noop)
+              .then(done)
           })
 
           it('Should not detect threat', async () => {
