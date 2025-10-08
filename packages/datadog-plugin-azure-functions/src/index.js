@@ -99,7 +99,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       ...meta,
       'messaging.destination.name': partitionContext.eventHubName,
       'messaging.operation': 'receive',
-      'messaging.system': 'eventhub',
+      'messaging.system': 'eventhubs',
       'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer'
     }
