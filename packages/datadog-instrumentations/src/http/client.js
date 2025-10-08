@@ -14,6 +14,8 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseDataChannel = channel('apm:http:client:response:data')
+const responseFinishChannel = channel('apm:http:client:response:finish')
 
 const names = ['http', 'https', 'node:http', 'node:https']
 
@@ -103,6 +105,47 @@ function patch (http, methodName) {
                 ctx.res = res
                 res.on('end', finish)
                 res.on(errorMonitor, finish)
+
+                // Set up instrumentation for response body collection
+                if (responseDataChannel.hasSubscribers || responseFinishChannel.hasSubscribers) {
+                  let dataHandler = null
+
+                  if (responseDataChannel.hasSubscribers) {
+                    // Only collect response body if the customer actually consumes it.
+                    // We track when the customer attaches a 'data' listener to determine this.
+                    let shouldCollect = false
+
+                    const onDataEvent = (eventName) => {
+                      if (eventName === 'data') {
+                        shouldCollect = true
+                        res.removeListener('newListener', onDataEvent)
+                      }
+                    }
+
+                    res.on('newListener', onDataEvent)
+
+                    // Attach our data handler early to ensure the stream starts flowing.
+                    dataHandler = chunk => {
+                      if (shouldCollect && chunk !== undefined && chunk !== null) {
+                        responseDataChannel.publish({ ctx, res, chunk })
+                      }
+                    }
+
+                    res.on('data', dataHandler)
+                  }
+
+                  if (responseFinishChannel.hasSubscribers) {
+                    // Notify subscribers when the response is complete
+                    const onFinish = () => {
+                      responseFinishChannel.publish({ ctx, res })
+                      if (dataHandler) res.removeListener('data', dataHandler)
+                    }
+
+                    res.once('end', onFinish)
+                    res.once('close', onFinish)
+                  }
+                }
+
                 break
               }
               case 'connect':
