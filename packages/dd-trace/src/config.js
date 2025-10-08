@@ -635,7 +635,8 @@ class Config {
       OTEL_RESOURCE_ATTRIBUTES,
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
-      OTEL_TRACES_SAMPLER_ARG
+      OTEL_TRACES_SAMPLER_ARG,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -719,6 +720,7 @@ class Config {
     env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
+    this._setBoolean(env, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
@@ -968,6 +970,7 @@ class Config {
     this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
+    this._setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)
     opts.flushInterval = maybeInt(options.flushInterval)
     this._optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
