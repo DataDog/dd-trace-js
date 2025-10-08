@@ -8,6 +8,7 @@ inputs:
 runs:
   using: composite
   steps:
+    - run: echo "GLOBAL_VAR: ${{ env.GLOBAL_VAR }}"
     - uses: ./.github/actions/testagent/start
     - uses: ./.github/actions/install
 
@@ -23,9 +24,6 @@ runs:
     - uses: ./.github/actions/node/latest
       if: inputs.runNightly != 'true'
     - run: yarn test:plugins:ci
-      if: inputs.runNightly != 'true'
-      shell: bash
-    - run: yarn test:plugins:upstream
       if: inputs.runNightly != 'true'
       shell: bash
     - run: yarn test:plugins:upstream

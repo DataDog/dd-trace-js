@@ -1,5 +1,6 @@
 name: APM Integrations
-
+env:
+  GLOBAL_VAR: "This is a global variable"
 on:
   pull_request:
   push:
@@ -71,7 +72,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
-        if: inputs.runNightly == 'true'
+        if: inputs.runNightly != 'true'
         with:
           version: ${{ matrix.node-version }}
       - run: yarn config set ignore-engines true
@@ -79,7 +80,7 @@ jobs:
         uses: ./.github/actions/install
       - name: Run tests
         run: yarn test:plugins:ci
-        if: inputs.runNightly == 'true'
+        if: inputs.runNightly != 'true'
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
