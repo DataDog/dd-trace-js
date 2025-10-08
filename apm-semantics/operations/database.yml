@@ -1,0 +1,143 @@
+operations:
+  connect:
+    description: Establish connection to database
+    span_operation: db.connect
+    span_kind: client
+    test_action:
+      name: connect
+      args:
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+    optional_tags:
+      - out.host
+      - out.port
+
+  query:
+    description: Execute a database query
+    span_operation: db.query
+    span_kind: client
+    test_action:
+      name: query
+      args:
+        query:
+          type: string
+          description: The query to execute
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+      - db.statement
+    optional_tags:
+      - db.name
+      - out.host
+      - out.port
+      - db.user
+
+  read:
+    description: Read data from database
+    span_operation: db.read
+    span_kind: client
+    test_action:
+      name: read
+      args:
+        key:
+          type: string
+          description: The key/id to read
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+    optional_tags:
+      - db.name
+      - out.host
+      - out.port
+
+  write:
+    description: Write data to database
+    span_operation: db.write
+    span_kind: client
+    test_action:
+      name: write
+      args:
+        key:
+          type: string
+          description: The key/id to write
+          required: false
+        value:
+          type: string
+          description: The value to write
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+    optional_tags:
+      - db.name
+      - out.host
+      - out.port
+
+  transaction:
+    description: Execute a database transaction
+    span_operation: db.transaction
+    span_kind: client
+    test_action:
+      name: transaction
+      args:
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+    optional_tags:
+      - db.name
+
+  disconnect:
+    description: Close database connection
+    span_operation: db.disconnect
+    span_kind: client
+    test_action:
+      name: disconnect
+      args:
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - db.system
+      - span.kind
+    optional_tags: []
+
+roles:
+  client:
+    required_operations:
+      - connect
+      - query
+    optional_operations:
+      - read
+      - write
+      - transaction
+      - disconnect

@@ -1,0 +1,160 @@
+operations:
+  handle_request:
+    description: Handle an incoming HTTP request
+    span_operation: http.server.request
+    span_kind: server
+    test_action:
+      name: handle_request
+      args:
+        method:
+          type: string
+          description: HTTP method (GET, POST, etc.)
+          required: false
+          default: GET
+        path:
+          type: string
+          description: Request path
+          required: false
+          default: /
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - http.method
+      - http.status_code
+      - span.kind
+    optional_tags:
+      - http.url
+      - http.route
+      - component
+
+  middleware:
+    description: Execute middleware in the request pipeline
+    span_operation: http.server.middleware
+    span_kind: internal
+    test_action:
+      name: middleware
+      args:
+        path:
+          type: string
+          description: Request path to trigger middleware
+          required: false
+          default: /
+        expectError:
+          type: boolean
+          description: Whether middleware should throw an error
+          required: false
+          default: false
+    required_tags:
+      - component
+    optional_tags:
+      - middleware.name
+      - http.route
+
+  render_template:
+    description: Render a server-side template
+    span_operation: http.server.render
+    span_kind: internal
+    test_action:
+      name: render_template
+      args:
+        template:
+          type: string
+          description: Template name
+          required: false
+          default: index
+        expectError:
+          type: boolean
+          description: Whether rendering should fail
+          required: false
+          default: false
+    required_tags:
+      - component
+    optional_tags:
+      - template.name
+      - template.engine
+
+  serve_static:
+    description: Serve static files
+    span_operation: http.server.static
+    span_kind: server
+    test_action:
+      name: serve_static
+      args:
+        path:
+          type: string
+          description: Static file path
+          required: false
+          default: /static/test.js
+        expectError:
+          type: boolean
+          description: Whether to trigger 404 or other error
+          required: false
+          default: false
+    required_tags:
+      - http.method
+      - http.status_code
+      - span.kind
+    optional_tags:
+      - http.url
+      - resource.name
+
+  websocket_connect:
+    description: Establish WebSocket connection
+    span_operation: websocket.connect
+    span_kind: server
+    test_action:
+      name: websocket_connect
+      args:
+        path:
+          type: string
+          description: WebSocket endpoint path
+          required: false
+          default: /ws
+        expectError:
+          type: boolean
+          description: Whether connection should fail
+          required: false
+          default: false
+    required_tags:
+      - span.kind
+      - component
+    optional_tags:
+      - websocket.path
+      - http.url
+
+  websocket_message:
+    description: Handle WebSocket message
+    span_operation: websocket.message
+    span_kind: server
+    test_action:
+      name: websocket_message
+      args:
+        message:
+          type: string
+          description: Message to send/receive
+          required: false
+          default: test message
+        expectError:
+          type: boolean
+          description: Whether message handling should fail
+          required: false
+          default: false
+    required_tags:
+      - component
+    optional_tags:
+      - websocket.message_type
+      - messaging.operation
+
+roles:
+  server:
+    required_operations:
+      - handle_request
+    optional_operations:
+      - middleware
+      - render_template
+      - serve_static
+      - websocket_connect
+      - websocket_message

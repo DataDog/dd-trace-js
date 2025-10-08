@@ -10,7 +10,7 @@ const path = require('path')
 class OperationDefinitionLoader {
     constructor () {
         this.cache = new Map()
-        this.semanticsDir = path.join(__dirname, '../../../../../../apm-data-semantics/operations')
+        this.semanticsDir = path.join(__dirname, '../../../../../../apm-semantics/operations')
     }
 
     load (category) {

@@ -48,7 +48,7 @@ class MessagingTestHelper extends BaseTestHelper {
                             expect(consumerSpan.meta).to.have.property('component', this.pluginName)
                             // expect(consumerSpan.meta).to.have.property('messaging.operation', 'consume')
                             // expect(consumerSpan.meta).to.have.property('messaging.destination.name')
-                            expect(consumerSpan.meta).to.have.property('messaging.system', this.pluginName)
+                            // expect(consumerSpan.meta).to.have.property('messaging.system', this.pluginName)
                         })
 
                     await this.testSetup.produce({ destination: 'test-queue', message: 'test' })

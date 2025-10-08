@@ -2,9 +2,19 @@
 
 class AmqplibTestSetup {
     async setup (module) {
-        this.queueName = 'test-queue-amqplib'
-        this.consumerTags = [] // Track consumer tags for cleanup
-        this.messages = []
+        this.amqplib = module
+
+        // Only initialize once
+        if (!this.queueName) {
+            this.queueName = 'test-queue-amqplib'
+            this.consumerTags = []
+            this.messages = []
+        }
+
+        // Reuse existing connection if available
+        if (this.connection && this.channel) {
+            return Promise.resolve()
+        }
 
         // Establish connection and create channel
         return new Promise((resolve, reject) => {
@@ -27,50 +37,61 @@ class AmqplibTestSetup {
     }
 
     async teardown () {
-        if (!this.channel) return
+        // Wait a bit for any pending message deliveries to complete
+        await new Promise(resolve => setTimeout(resolve, 100))
 
+        // Close everything - channel close will auto-cancel consumers
         return new Promise((resolve) => {
-            // Cancel all consumers first
-            const cancelConsumers = () => {
-                if (this.consumerTags.length === 0) {
-                    cleanupQueue()
-                    return
-                }
+            // Add timeout to prevent hanging
+            const timeout = setTimeout(() => {
+                this.channel = null
+                this.connection = null
+                this.consumerTags = []
+                resolve()
+            }, 2000)
 
-                let pending = this.consumerTags.length
-                this.consumerTags.forEach(tag => {
-                    this.channel.cancel(tag, (err) => {
-                        // Ignore errors
-                        pending--
-                        if (pending === 0) {
-                            cleanupQueue()
-                        }
-                    })
-                })
+            const cleanup = () => {
+                clearTimeout(timeout)
+                this.channel = null
+                this.connection = null
+                this.consumerTags = []
+                resolve()
             }
 
-            const cleanupQueue = () => {
-                this.channel.deleteQueue(this.queueName, (err) => {
-                    // Ignore delete errors
+            if (this.channel) {
+                // Purge queue to remove unacked messages
+                this.channel.purgeQueue(this.queueName, (err) => {
+                    // Ignore errors, continue cleanup
+                    // Close channel (this auto-cancels all consumers)
                     this.channel.close((err) => {
-                        // Ignore close errors
+                        // Ignore errors
                         if (this.connection) {
                             this.connection.close((err) => {
-                                // Ignore close errors
-                                resolve()
+                                // Ignore errors
+                                cleanup()
                             })
                         } else {
-                            resolve()
+                            cleanup()
                         }
                     })
                 })
+            } else if (this.connection) {
+                this.connection.close((err) => {
+                    // Ignore errors
+                    cleanup()
+                })
+            } else {
+                cleanup()
             }
-
-            cancelConsumers()
         })
     }
 
-    async connect ({ expectError }) {
+    async connect ({ expectError } = {}) {
+        // If amqplib module not loaded, can't connect
+        if (!this.amqplib) {
+            throw new Error('amqplib module not loaded - setup() must be called first')
+        }
+
         if (expectError) {
             // Trigger real connection error with invalid host
             return new Promise((resolve, reject) => {
@@ -167,7 +188,7 @@ class AmqplibTestSetup {
 
         return new Promise((resolve, reject) => {
             this.channel.consume(this.queueName, (msg) => {
-                if (msg === null) {
+                if (msg === null || !this.channel) {
                     return
                 }
 
@@ -186,12 +207,17 @@ class AmqplibTestSetup {
                         properties: msg.properties
                     })
                 } catch (err) {
-                    this.channel.nack(msg)
+                    if (this.channel) {
+                        this.channel.nack(msg)
+                    }
                     reject(err)
                 }
             }, { noAck: false }, (err, result) => {
                 if (err) return reject(err)
-                this.consumerTag = result.consumerTag
+                // Track consumer tag for cleanup
+                if (result.consumerTag) {
+                    this.consumerTags.push(result.consumerTag)
+                }
             })
         })
     }
@@ -206,25 +232,39 @@ class AmqplibTestSetup {
             return this.channel.consume(null, () => {}, { noAck: false })
         }
 
+        // Default trigger message if not provided
+        if (trigger_message === undefined) {
+            trigger_message = { data: 'trigger-message' }
+        }
+
         // Set up consumer
         return new Promise((resolve, reject) => {
             this.channel.consume(this.queueName, (msg) => {
-                if (msg === null) return
+                if (msg === null || !this.channel) return
 
                 const content = JSON.parse(msg.content.toString())
-                this.channel.ack(msg)
+                if (this.channel) {
+                    this.channel.ack(msg)
+                }
 
                 resolve({
                     processed: true,
                     message: content,
                     fields: msg.fields
                 })
-            }, { noAck: false }, (err) => {
+            }, { noAck: false }, (err, result) => {
                 if (err) return reject(err)
+
+                // Track consumer tag for cleanup
+                if (result.consumerTag) {
+                    this.consumerTags.push(result.consumerTag)
+                }
 
                 // Produce the trigger message
                 const content = Buffer.from(JSON.stringify(trigger_message))
-                this.channel.sendToQueue(this.queueName, content)
+                if (this.channel) {
+                    this.channel.sendToQueue(this.queueName, content)
+                }
             })
         })
     }

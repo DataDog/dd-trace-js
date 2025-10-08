@@ -43,13 +43,18 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
             if (!testSetup.channel) {
                 await testSetup.connect({})
             }
-            await testSetup.channel.checkQueue(testSetup.queueName)
+            await new Promise((resolve, reject) => {
+                testSetup.channel.checkQueue(testSetup.queueName, (err) => {
+                    if (err) return reject(err)
+                    resolve()
+                })
+            })
             return assertTraces
         })
 
         it('should propagate context from producer to consumer', async function () {
-            let producerTraceId
-            let consumerTraceId
+            // Purge queue first to remove old messages
+            await new Promise(resolve => testSetup.channel.purgeQueue(testSetup.queueName, () => resolve()))
 
             // Produce a message
             await testSetup.produce({
@@ -76,6 +81,9 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
         })
 
         it('should handle message acknowledgment', async function () {
+            // Purge queue first to remove old messages
+            await new Promise(resolve => testSetup.channel.purgeQueue(testSetup.queueName, () => resolve()))
+
             // Produce a message first
             await testSetup.produce({
                 message: { id: 'ack-test', data: 'acknowledge me' }
@@ -92,8 +100,8 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
                 message_id: 'ack-test'
             })
 
-            await assertTraces
             expect(result.message).to.deep.include({ id: 'ack-test' })
+            return assertTraces
         })
 
         it('should support bulk message production', async function () {
@@ -112,10 +120,13 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
             expect(result.count).to.equal(3)
             expect(result.results).to.have.lengthOf(3)
 
-            await assertTraces
+            return assertTraces
         })
 
         it('should handle consumer message processing', async function () {
+            // Purge queue first to remove old messages
+            await new Promise(resolve => testSetup.channel.purgeQueue(testSetup.queueName, () => resolve()))
+
             const assertTraces = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span.meta).to.have.property('span.kind', 'consumer')
@@ -129,7 +140,7 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
             expect(result.processed).to.be.true
             expect(result.message).to.deep.include({ id: 'process-test', data: 'process this' })
 
-            await assertTraces
+            return assertTraces
         })
 
         it('should trace connection establishment', async function () {
@@ -148,7 +159,7 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
             expect(testSetup.connection).to.exist
             expect(testSetup.channel).to.exist
 
-            await assertTraces
+            return assertTraces
         })
 
         it('should handle message with custom properties', async function () {
@@ -175,7 +186,7 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
 
             await new Promise(resolve => setTimeout(resolve, 100))
 
-            await assertTraces
+            return assertTraces
         })
 
         it('should handle queue deletion', async function () {
@@ -185,16 +196,24 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
                 await testSetup.connect({})
             }
 
-            await agent.assertSomeTraces(traces => {
+            const assertTraces = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('component', 'amqplib')
             })
 
             // Create and delete queue
-            await testSetup.channel.assertQueue(tempQueueName, { durable: false })
-            await testSetup.channel.deleteQueue(tempQueueName)
-            await assertTraces
+            await new Promise((resolve, reject) => {
+                testSetup.channel.assertQueue(tempQueueName, { durable: false }, (err) => {
+                    if (err) return reject(err)
+                    testSetup.channel.deleteQueue(tempQueueName, (err) => {
+                        if (err) return reject(err)
+                        resolve()
+                    })
+                })
+            })
+
+            return assertTraces
         })
 
         it('should trace message redelivery on nack', async function () {
@@ -215,6 +234,7 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
             // Set up consumer that nacks the message
             await new Promise((resolve) => {
                 let nacked = false
+                let consumerTag
                 testSetup.channel.consume(testSetup.queueName, (msg) => {
                     if (msg === null || nacked) return
 
@@ -222,12 +242,23 @@ createIntegrationTestSuite('amqplib', 'amqplib', TestSetup, {
                     if (content.id === 'nack-test') {
                         testSetup.channel.nack(msg, false, true) // Requeue
                         nacked = true
-                        resolve()
+                        // Cancel consumer to prevent infinite requeuing
+                        if (consumerTag) {
+                            testSetup.channel.cancel(consumerTag, () => {
+                                resolve()
+                            })
+                        } else {
+                            resolve()
+                        }
                     }
-                }, { noAck: false })
+                }, { noAck: false }, (err, result) => {
+                    if (!err && result) {
+                        consumerTag = result.consumerTag
+                    }
+                })
             })
 
-            await assertTraces
+            return assertTraces
         })
     })
 })

@@ -42,11 +42,11 @@ function createVersionedTests (pluginName, packageName, TestSetupClass, options 
             await testSetup.setup(mod)
         })
 
-        // afterEach(async () => {
-        //     if (testSetup?.teardown) {
-        //         await testSetup.teardown()
-        //     }
-        // })
+        after(async () => {
+            if (testSetup?.teardown) {
+                await testSetup.teardown()
+            }
+        })
 
         // Wrap test setup with validation proxy if category/role specified
         const validatedTestSetup = (options.category && options.role)
