@@ -3,6 +3,9 @@ description: Install the latest version of Node.js
 runs:
   using: composite
   steps:
+    - run: |
+        echo "GLOBAL_VAR: ${{ env.GLOBAL_VAR }}"
+      shell: bash
     - uses: ./.github/actions/node
       with:
         version: nightly
