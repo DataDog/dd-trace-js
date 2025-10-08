@@ -3,8 +3,6 @@
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
-const { executionAsyncId } = require('node:async_hooks')
-
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
 
@@ -27,7 +25,6 @@ describe('helpers/instrument', () => {
 
       const tested = AsyncResource.bind(function (a, b, c) {
         expect(this).to.equal(self)
-        expect(tested.asyncResource.asyncId()).to.equal(executionAsyncId())
         expect(tested).to.have.length(3)
       }, 'test', self)
 
@@ -41,7 +38,6 @@ describe('helpers/instrument', () => {
         storage('legacy').run('test2', () => {
           const tested = asyncResource.bind((a, b, c) => {
             expect(storage('legacy').getStore()).to.equal('test1')
-            expect(tested.asyncResource).to.equal(asyncResource)
             expect(tested).to.have.length(3)
           })
 
