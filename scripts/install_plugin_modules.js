@@ -262,7 +262,7 @@ function install (retry = true) {
 }
 
 function trust () {
-  exec('bun pm trust --all', { cwd: folder(), env: withBun() })
+  exec('bun pm trust --all || exit 0', { cwd: folder(), env: withBun() })
 }
 
 /**
