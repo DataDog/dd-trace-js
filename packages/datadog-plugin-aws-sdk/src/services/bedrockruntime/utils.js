@@ -259,12 +259,15 @@ function extractRequestParams (params, provider) {
             })
           }
         }
-        messages.push(
-          ...requestBody.messages.map(message => ({
-            content: message.content?.[0]?.text,
-            role: message.role
-          }))
-        )
+        for (const message of requestBody.messages) {
+          const textBlocks = message.content?.filter(block => block.text) || []
+          if (textBlocks.length > 0) {
+            messages.push({
+              content: textBlocks.map(block => block.text).join(''),
+              role: message.role
+            })
+          }
+        }
         return new RequestParams({
           prompt: messages,
           temperature: inferenceConfig.temperature,
