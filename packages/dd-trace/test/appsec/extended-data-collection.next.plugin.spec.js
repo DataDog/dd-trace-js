@@ -97,11 +97,8 @@ describe.only('extended data collection', () => {
           // copy public and static files to the `standalone` folder
           // const publicOrigin = `${appDir}/public`
           const publicDestination = path.join(appDir, '.next/standalone/public')
-          const rulesFileOrigin = path.join(__dirname, 'extended-data-collection.rules.json')
-          const rulesFileDestination = path.join(appDir, '.next/standalone/extended-data-collection.rules.json')
 
           mkdirSync(publicDestination)
-          cpSync(rulesFileOrigin, rulesFileDestination)
         }
       })
 
