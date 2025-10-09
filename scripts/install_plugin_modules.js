@@ -32,7 +32,7 @@ run()
 
 async function run () {
   await assertPrerequisites()
-  install()
+  install(process.env.BUN_FORCE_INSTALL === 'true')
   await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
 }
@@ -239,14 +239,15 @@ async function assertWorkspaces () {
 }
 
 /**
+ * @param {boolean} [force=false]
  * @param {boolean} [retry=true]
  */
-function install (retry = true) {
+function install (force = false, retry = true) {
   try {
     exec('bun install --linker=isolated --omit=peer --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
-    install(false) // retry in case of server error from registry
+    install(force, false) // retry in case of server error from registry
   }
 }
 

@@ -255,6 +255,7 @@ jobs:
         ports:
           - 5432:5432
     env:
+      BUN_FORCE_INSTALL: 'true'
       PG_TEST_NATIVE: 'true'
       PLUGINS: pg
       SERVICES: postgres
