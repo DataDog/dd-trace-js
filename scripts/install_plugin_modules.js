@@ -79,24 +79,24 @@ async function assertInstrumentation (instrumentation, external) {
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
-      await assertModules(instrumentation.name, result.version, external)
+      await assertModules(instrumentation.name, result.version)
     }
 
-    await assertModules(instrumentation.name, version, external)
+    await assertModules(instrumentation.name, version)
   }
 }
 
 /**
  * @param {string} name
  * @param {string} version
- * @param {boolean} external
+ * @param {string?} parent
  */
-async function assertModules (name, version, external) {
+async function assertModules (name, version) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
   await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
+    assertPackage(name, null, version),
+    assertPackage(name, version, version)
   ])
 }
 
@@ -112,9 +112,8 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange) {
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange)
   }
@@ -125,18 +124,6 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     private: true,
     dependencies,
     trustedDependencies: [name, ...trustedList]
-  }
-
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces'
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**']
-      }
-    }
   }
 
   addFolderToWorkspaces(name, version)
@@ -256,7 +243,7 @@ async function assertWorkspaces () {
  */
 function install (retry = true) {
   try {
-    exec('bun install --linker isolated --ignore-engines', { cwd: folder(), env: withBun() })
+    exec('bun install --linker=isolated --omit=peer --ignore-engines', { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(false) // retry in case of server error from registry
