@@ -786,6 +786,8 @@ declare namespace tracer {
 
         /** Whether to enable request body collection on RASP event
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         bodyCollection?: boolean
       },
@@ -810,20 +812,28 @@ declare namespace tracer {
       },
       /**
        * Configuration for extended headers collection tied to security events
+       *
+       * @deprecated Use UI and Remote Configuration to enable extended data collection
        */
       extendedHeadersCollection?: {
         /** Whether to enable extended headers collection
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         enabled: boolean,
 
         /** Whether to redact collected headers
          * @default true
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         redaction: boolean,
 
         /** Specifies the maximum number of headers collected.
          * @default 50
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         maxHeaders: number,
       }
