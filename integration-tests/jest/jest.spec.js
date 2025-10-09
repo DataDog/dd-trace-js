@@ -91,7 +91,8 @@ describe('jest CommonJS', () => {
       '@happy-dom/jest-environment',
       'office-addin-mock',
       'winston',
-      'jest-image-snapshot'
+      'jest-image-snapshot',
+      '@fast-check/jest'
     ], true)
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
@@ -4487,7 +4488,7 @@ describe('jest CommonJS', () => {
     })
   })
 
-  describe('winston mocking', () => {
+  context('winston mocking', () => {
     it('should allow winston to be mocked and verify createLogger is called', async () => {
       childProcess = exec(
         runTestsWithCoverageCommand,
@@ -4503,6 +4504,35 @@ describe('jest CommonJS', () => {
 
       const [code] = await once(childProcess, 'exit')
       assert.equal(code, 0, `Jest should pass but failed with code ${code}`)
+    })
+  })
+
+  context('fast-check', () => {
+    it('should filter seed from the test name', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // 3 properties
+          assert.equal(tests.length, 1)
+          assert.equal(tests[0].meta[TEST_NAME], 'fast check will not include seed')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-fast-check/jest-fast-check',
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
   })
 })

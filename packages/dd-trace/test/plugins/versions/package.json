@@ -29,6 +29,7 @@
     "@elastic/transport": "9.1.2",
     "@fastify/cookie": "11.0.2",
     "@fastify/multipart": "9.2.1",
+    "@fast-check/jest": "2.1.1",
     "@google-cloud/pubsub": "5.2.0",
     "@google-cloud/vertexai": "1.10.0",
     "@graphql-tools/executor": "1.4.9",
