@@ -19,6 +19,7 @@ const {
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
+const { getRequestBody } = require('./bodies')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -543,8 +544,11 @@ function finishRequest (req, res, storedResponseHeaders) {
   )
 
   if (extendedDataCollection) {
-    // TODO add support for fastify, req.body is not available in fastify
-    reportRequestBody(rootSpan, req.body)
+    let body = req.body
+    if (!body) {
+      body = getRequestBody(req)
+    }
+    reportRequestBody(rootSpan, body)
   }
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {

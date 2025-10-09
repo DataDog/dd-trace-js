@@ -40,6 +40,7 @@ const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
 const { isInServerlessEnvironment } = require('../serverless')
+const { setRequestBody, deleteRequestBody } = require('./bodies')
 
 const responseAnalyzedSet = new WeakSet()
 const storedResponseHeaders = new WeakMap()
@@ -113,6 +114,11 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  if (!req.body) {
+    // do not store body if it is in req.body
+    setRequestBody(req, body)
+  }
 
   const results = waf.run({
     persistent: {
@@ -205,6 +211,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (storedHeaders) {
     storedResponseHeaders.delete(req)
   }
+  deleteRequestBody(req)
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
