@@ -16,6 +16,8 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
+// List of trusted transitive dependencies to execute scripts for.
+const trustedList = ['libpq']
 const workspaces = new Set()
 const externalDeps = new Map()
 
@@ -122,7 +124,7 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     license: 'BSD-3-Clause',
     private: true,
     dependencies,
-    trustedDependencies: [name]
+    trustedDependencies: [name, ...trustedList]
   }
 
   if (!external) {
