@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-  RUN_NIGHTLY: ${{ inputs.runNightly }}
+  RUN_NIGHTLY: true
 
 # TODO: upstream jobs
 
