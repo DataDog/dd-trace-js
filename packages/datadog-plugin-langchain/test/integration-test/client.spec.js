@@ -16,7 +16,7 @@ describe('esm', () => {
 
   withVersions('langchain', ['@langchain/core'], '>=0.1', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([
         `@langchain/core@${version}`,
         `@langchain/openai@${version}`,
