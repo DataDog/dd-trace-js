@@ -16,7 +16,7 @@ describe('esm', () => {
 
   withVersions('opensearch', '@opensearch-project/opensearch', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
         './packages/datadog-plugin-opensearch/test/integration-test/*'])
     })
