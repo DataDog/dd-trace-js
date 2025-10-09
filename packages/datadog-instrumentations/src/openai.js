@@ -23,6 +23,21 @@ const V4_PACKAGE_SHIMS = [
     streamedResponse: true
   },
   {
+    file: 'resources/responses',
+    targetClass: 'Responses',
+    baseResource: 'responses',
+    methods: ['create'],
+    streamedResponse: false
+  },
+  {
+    file: 'resources/responses/responses',
+    targetClass: 'Responses',
+    baseResource: 'responses',
+    methods: ['create'],
+    streamedResponse: false,
+    versions: ['>=4.85.0']
+  },
+  {
     file: 'resources/embeddings',
     targetClass: 'Embeddings',
     baseResource: 'embeddings',
@@ -137,6 +152,24 @@ const V4_PACKAGE_SHIMS = [
   }
 ]
 
+// define and return function to patch over the original function
+function wrapCreate (create) {
+  return function (request) {
+    if (!vertexaiTracingChannel.start.hasSubscribers) {
+      // calls the original function
+      return create.apply(this, arguments)
+    }
+
+    const ctx = {
+      request,
+      instance: this,
+      resource: [this.constructor.name, create.name].join('.')
+    }
+    // am I using the right channel? tracingChannel vs diagnostics channel
+    return ch.tracePromise(create, ctx, this, ...arguments)
+  }
+}
+
 addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
   const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
   methodNames.shift() // remove leading 'constructor' method
@@ -159,6 +192,16 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
   return exports
 })
+
+//register patching hooks via addHook
+addHook({ name: 'openai', file: 'resources/responses.js', versions: ['>=4.87.0'] }, exports => {
+  const Responses = exports.OpenAIApi.responses
+  // wrap functions on module exports with shimmer.wrap
+  shimmer.wrap(responses.prototype, 'responses.createResponse', wrapCreate)
+  return exports
+})
+
+
 
 /**
  * For streamed responses, we need to accumulate all of the content in
