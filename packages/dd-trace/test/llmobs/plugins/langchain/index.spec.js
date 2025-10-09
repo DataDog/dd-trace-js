@@ -517,7 +517,9 @@ describe('integrations', () => {
               secondChain
             ])
 
-            const result = await completeChain.invoke({ person: 'Abraham Lincoln', language: 'Spanish' })
+            const result = await llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
+              return completeChain.invoke({ person: 'Abraham Lincoln', language: 'Spanish' })
+            })
             expect(result).to.exist
 
             const { apmSpans, llmobsSpans } = await getEvents()
@@ -543,7 +545,7 @@ describe('integrations', () => {
               name: 'langchain_core.runnables.RunnableSequence',
               inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputValue: expectedOutput,
-              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain', foo: 'bar' }
             })
 
             const expectedFirstSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -554,7 +556,7 @@ describe('integrations', () => {
               inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputValue: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
-              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain', foo: 'bar' }
             })
 
             const expectedFirstLLM = expectedLLMObsLLMSpanEvent({
@@ -574,7 +576,7 @@ describe('integrations', () => {
               }],
               metadata: MOCK_ANY,
               tokenMetrics: { input_tokens: 16, output_tokens: 30, total_tokens: 46 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain', foo: 'bar' }
             })
 
             const expectedSecondSubWorkflow = expectedLLMObsNonLLMSpanEvent({
@@ -588,7 +590,7 @@ describe('integrations', () => {
                 'Springfield, Illinois, which is often associated with him as his home city.'
               }),
               outputValue: expectedOutput,
-              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain', foo: 'bar' }
             })
 
             const expectedSecondLLM = expectedLLMObsLLMSpanEvent({
@@ -609,7 +611,7 @@ describe('integrations', () => {
               outputMessages: [{ content: expectedOutput, role: 'assistant' }],
               metadata: MOCK_ANY,
               tokenMetrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain' }
+              tags: { ml_app: 'test', language: 'javascript', integration: 'langchain', foo: 'bar' }
             })
 
             expect(topLevelWorkflowSpanEvent).to.deepEqualWithMockValues(expectedTopLevelWorkflow)
