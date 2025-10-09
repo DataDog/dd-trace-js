@@ -243,8 +243,18 @@ async function assertWorkspaces () {
  * @param {boolean} [retry=true]
  */
 function install (force = false, retry = true) {
+  const flags = [
+    '--linker=isolated',
+    '--omit=peer',
+    '--ignore-engines'
+  ]
+
+  if (force) {
+    flags.push('--force')
+  }
+
   try {
-    exec('bun install --linker=isolated --omit=peer --ignore-engines', { cwd: folder(), env: withBun() })
+    exec(`bun install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(force, false) // retry in case of server error from registry
