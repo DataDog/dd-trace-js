@@ -19,7 +19,6 @@ const {
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
-const { getRequestBody } = require('./bodies')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
 const RESPONSE_HEADER_TAG_PREFIX = 'http.response.headers.'
@@ -484,7 +483,7 @@ function reportAttributes (attributes) {
   rootSpan.addTags(tags)
 }
 
-function finishRequest (req, res, storedResponseHeaders) {
+function finishRequest (req, res, storedResponseHeaders, requestBody) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -544,11 +543,7 @@ function finishRequest (req, res, storedResponseHeaders) {
   )
 
   if (extendedDataCollection) {
-    let body = req.body
-    if (!body) {
-      body = getRequestBody(req)
-    }
-    reportRequestBody(rootSpan, body)
+    reportRequestBody(rootSpan, requestBody)
   }
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
