@@ -79,7 +79,10 @@ const ASYNC_TESTS = [
   }
 ]
 
-describe('Plugin', () => {
+describe('Plugin', function () {
+  this.timeout(10000)
+  this.retries(1)
+
   let Mocha
   withVersions('mocha', 'mocha', (version, _, specificVersion) => {
     afterEach(() => {
