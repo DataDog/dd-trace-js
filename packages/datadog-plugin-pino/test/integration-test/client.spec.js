@@ -2,30 +2,21 @@
 
 const {
   FakeAgent,
-  createSandbox,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { expect } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  let variants
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   withVersions('pino', 'pino', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'pino@${version}'`],
-        false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'pino')
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'pino', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -36,16 +27,17 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of ['default', 'star', 'destructure']) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
-          variants[variant],
+          __dirname,
+          `server-${variant}.mjs`,
           agent.port,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
             expect(jsonObject).to.have.property('dd')
-          }
+          },
+          env
         )
       }).timeout(20000)
     }

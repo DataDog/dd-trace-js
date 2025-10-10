@@ -2,29 +2,22 @@
 
 const {
   FakeAgent,
-  createSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { expect } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('winston', 'winston', '>=3', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'winston@${version}'`]
-        , false, ['./packages/datadog-plugin-winston/test/integration-test/*'])
-    })
-
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'winston', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -37,13 +30,14 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(
-        sandbox.folder,
+        __dirname,
         'server.mjs',
         agent.port,
         (data) => {
           const jsonObject = JSON.parse(data.toString())
           expect(jsonObject).to.have.property('dd')
-        }
+        },
+        env
       )
     }).timeout(50000)
   })

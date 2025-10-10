@@ -2,33 +2,22 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   withVersions('langchain', ['@langchain/core'], '>=0.1', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([
-        `@langchain/core@${version}`,
-        `@langchain/openai@${version}`,
-        'nock'
-      ], false, [
-        './packages/datadog-plugin-langchain/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, '@langchain/core', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -46,9 +35,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/initialize.mjs'
-      })
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, null, env)
 
       await res
     }).timeout(20000)

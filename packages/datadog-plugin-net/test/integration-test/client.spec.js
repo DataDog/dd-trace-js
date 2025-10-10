@@ -2,29 +2,18 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  let variants
-
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox(['net'], false, [
-      './packages/datadog-plugin-net/test/integration-test/*'])
-    variants = varySandbox(sandbox, 'server.mjs', 'net', 'createConnection')
-  })
-
-  after(async () => {
-    await sandbox.remove()
-  })
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -36,7 +25,7 @@ describe('esm', () => {
   })
 
   context('net', () => {
-    for (const variant of varySandbox.VARIANTS) {
+    for (const variant of ['default', 'star', 'destructure']) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -46,7 +35,7 @@ describe('esm', () => {
           assert.strictEqual(metaContainsNet, true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(__dirname, `server-${variant}.mjs`, agent.port, undefined, env)
 
         await res
       }).timeout(20000)

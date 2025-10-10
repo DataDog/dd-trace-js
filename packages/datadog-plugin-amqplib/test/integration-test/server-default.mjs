@@ -12,3 +12,4 @@ if (channel) {
 if (connection) {
   await connection.close()
 }
+

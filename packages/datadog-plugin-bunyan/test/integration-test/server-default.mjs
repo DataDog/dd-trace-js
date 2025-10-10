@@ -8,3 +8,4 @@ ddtrace.init({
 const logger = bunyan.createLogger({ name: 'test-logger' })
 
 logger.info('test xyz')
+

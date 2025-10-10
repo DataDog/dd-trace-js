@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
-import express from 'express'
+import { default as connect } from 'connect'
 
-const app = express()
+const app = connect()
 
 app.use((req, res) => {
   res.end('hello, world\n')
@@ -11,3 +11,4 @@ const server = app.listen(0, () => {
   const port = server.address().port
   process.send({ port })
 })
+

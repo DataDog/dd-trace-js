@@ -2,28 +2,23 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
+
   // test against later versions because server.mjs uses newer package syntax
   withVersions('redis', 'redis', '>=4', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'redis@${version}'`], false, [
-        './packages/datadog-plugin-redis/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'redis', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +36,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, undefined, env)
 
       await res
     }).timeout(20000)

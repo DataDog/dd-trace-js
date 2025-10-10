@@ -2,28 +2,22 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   withVersions('graphql', 'graphql', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'graphql@${version}'`], false, [
-        './packages/datadog-plugin-graphql/test/integration-test/*'])
-    })
-
-    after(async function () {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'graphql', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +35,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'graphql.parse'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, undefined, env)
 
       await res
     }).timeout(50000)

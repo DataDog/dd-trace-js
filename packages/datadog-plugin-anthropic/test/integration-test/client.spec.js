@@ -2,32 +2,24 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`,
+    ANTHROPIC_API_KEY: '<not-a-real-key>'
+  }
 
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([
-        `@anthropic-ai/sdk@${version}`,
-      ], false, [
-        './packages/datadog-plugin-anthropic/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, '@anthropic-ai/sdk', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -45,10 +37,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-        ANTHROPIC_API_KEY: '<not-a-real-key>'
-      })
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, null, env)
 
       await res
     }).timeout(20000)

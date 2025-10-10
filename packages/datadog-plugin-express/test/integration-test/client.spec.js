@@ -2,33 +2,23 @@
 
 const {
   FakeAgent,
-  createSandbox,
   curlAndAssertMessage,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const { join } = require('path')
 const semver = require('semver')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  let variants
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   withVersions('express', 'express', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'express@${version}'`], false,
-        ['./packages/datadog-plugin-express/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'express')
-    })
-
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'express', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -38,10 +28,11 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+
+    for (const variant of ['default', 'star', 'destructure']) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
         it(`is instrumented loaded with ${variant}`, async () => {
-          proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+          proc = await spawnPluginIntegrationTestProc(__dirname, `server-${variant}.mjs`, agent.port, undefined, env)
           const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2
           const whichMiddleware = semver.intersects(version, '<5.0.0')
             ? 'express'
@@ -69,7 +60,7 @@ describe('esm', () => {
         })
 
         it('disables middleware spans when config.middlewareTracingEnabled is false via env var', async () => {
-          proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+          proc = await spawnPluginIntegrationTestProc(__dirname, `server-${variant}.mjs`, agent.port, undefined, env)
           const numberOfSpans = 1
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {

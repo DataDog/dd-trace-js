@@ -2,13 +2,13 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const version = require('../../../../version.js')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
+const { join } = require('path')
 
 // tedious does not support node 20
 const describe = version.NODE_MAJOR >= 20
@@ -18,19 +18,13 @@ const describe = version.NODE_MAJOR >= 20
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'tedious@${version}'`], false, [
-        './packages/datadog-plugin-tedious/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'tedious', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -48,7 +42,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'tedious.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, undefined, env)
 
       await res
     }).timeout(20000)

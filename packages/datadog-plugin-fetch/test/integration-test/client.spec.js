@@ -2,28 +2,19 @@
 
 const {
   FakeAgent,
-  createSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { join } = require('path')
 
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-
-  before(async function () {
-    this.timeout(50000)
-    sandbox = await createSandbox([], false, [
-      './packages/datadog-plugin-fetch/test/integration-test/*'])
-  })
-
-  after(async function () {
-    this.timeout(50000)
-    await sandbox.remove()
-  })
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -43,7 +34,7 @@ describe('esm', () => {
         assert.strictEqual(isFetch, true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, undefined, env)
 
       await res
     }).timeout(50000)

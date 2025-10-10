@@ -2,26 +2,18 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox(['axios'], false, [
-      './packages/datadog-plugin-axios/test/integration-test/*'])
-  })
-
-  after(async () => {
-    await sandbox.remove()
-  })
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -40,7 +32,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'http.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, undefined, env)
 
       await res
     }).timeout(20000)

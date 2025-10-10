@@ -3,36 +3,22 @@
 const {
   FakeAgent,
   hookFile,
-  createSandbox,
   curlAndAssertMessage
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
   // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
-    before(async function () {
-      this.timeout(120_000)
-      sandbox = await createSandbox([
-        `@azure/functions@${version}`,
-        '@azure/service-bus@7.9.2'
-      ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/integration-test/fixtures/*'])
-    })
-
-    after(async function () {
-      this.timeout(60_000)
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, '@azure/functions', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -51,7 +37,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: process.env.PATH
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(join(__dirname, 'fixtures'), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -67,7 +53,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: process.env.PATH
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(join(__dirname, 'fixtures'), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)
@@ -79,7 +65,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: process.env.PATH
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(join(__dirname, 'fixtures'), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
@@ -97,7 +83,7 @@ describe('esm', () => {
       const envArgs = {
         PATH: process.env.PATH
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(join(__dirname, 'fixtures'), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)

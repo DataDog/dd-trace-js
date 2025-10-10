@@ -2,31 +2,22 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  let variants
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   withVersions('limitd-client', 'limitd-client', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'limitd-client@${version}'`], false, [
-        './packages/datadog-plugin-limitd-client/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'limitd-client')
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'limitd-client', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -36,7 +27,8 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    for (const variant of varySandbox.VARIANTS) {
+
+    for (const variant of ['default', 'star', 'destructure']) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -46,7 +38,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(__dirname, `server-${variant}.mjs`, agent.port, undefined, env)
 
         await res
       }).timeout(20000)

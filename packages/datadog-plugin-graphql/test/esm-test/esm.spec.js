@@ -2,12 +2,12 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
+const { join } = require('path')
 const axios = require('axios')
 const semver = require('semver')
 
@@ -15,18 +15,12 @@ describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {
     let agent
     let proc
-    let sandbox
+    const env = {
+      NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+    }
 
     withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
-      before(async function () {
-        this.timeout(50000)
-        sandbox = await createSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
-          './packages/datadog-plugin-graphql/test/esm-test/*'])
-      })
-
-      after(async function () {
-        await sandbox.remove()
-      })
+      insertVersionDep(__dirname, 'graphql', version)
 
       beforeEach(async () => {
         agent = await new FakeAgent().start()
@@ -45,11 +39,11 @@ describe('Plugin (ESM)', () => {
         })
 
         proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
+          __dirname,
           'esm-graphql-server.mjs',
           agent.port,
           undefined,
-          { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+          env
         )
 
         // Make a GraphQL request
@@ -84,11 +78,11 @@ describe('Plugin (ESM)', () => {
           })
 
           proc = await spawnPluginIntegrationTestProc(
-            sandbox.folder,
+            __dirname,
             'esm-graphql-yoga-server.mjs',
             agent.port,
             undefined,
-            { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
+            env
           )
 
           // Make a GraphQL request to Yoga server

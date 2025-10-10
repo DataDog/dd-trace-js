@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import MongoDBCore from 'mongodb-core'
+import { default as MongoDBCore } from 'mongodb-core'
 
 const server = new MongoDBCore.Server({
   host: 'localhost',
@@ -21,3 +21,4 @@ server.insert('test.your_collection_name', [{ a: 1 }], {}, (err) => {
   }
   server.destroy(() => {})
 })
+

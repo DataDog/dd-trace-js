@@ -1,5 +1,5 @@
 import 'dd-trace/init.js'
-import mysql from 'mysql'
+import * as mysql from 'mysql'
 
 const conn = {
   host: 'localhost',
@@ -14,3 +14,4 @@ connection.connect()
 connection.query('SELECT NOW() AS now', function (error, results, fields) {})
 
 connection.end()
+
