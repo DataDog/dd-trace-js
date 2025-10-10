@@ -655,7 +655,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, latest]
         range:
           - '>=10.2.0 <11'
           - '>=11.0.0 <13'
@@ -688,17 +687,9 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+          alternativeSuffix: plugins-${{ github.job }}-${{ matrix.range_clean }}
 
   opensearch:
     runs-on: ubuntu-latest

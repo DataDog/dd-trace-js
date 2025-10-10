@@ -1,5 +1,10 @@
 name: Plugin Tests
 description: Run plugin tests
+inputs:
+  alternativeSuffix:
+    description: "Alternative suffix"
+    required: false
+
 runs:
   using: composite
   steps:
@@ -15,4 +20,4 @@ runs:
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-        suffix: test-${{ github.job }}
+        suffix: ${{ inputs.suffix || format('test-{0}', github.job) }}
