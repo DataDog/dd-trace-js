@@ -67,6 +67,8 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 
+const DEFAULT_OTLP_PORT = 4318
+
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   const OTEL_TRACES_SAMPLER_MAPPING = {
     always_on: '1.0',
@@ -554,6 +556,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOGS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -635,7 +638,17 @@ class Config {
       OTEL_RESOURCE_ATTRIBUTES,
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
-      OTEL_TRACES_SAMPLER_ARG
+      OTEL_TRACES_SAMPLER_ARG,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_PROTOCOL,
+      OTEL_EXPORTER_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_HEADERS,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_BSP_SCHEDULE_DELAY,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -649,6 +662,23 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT) {
+      // Only set if there's a custom URL, otherwise let calc phase handle the default
+      this._setString(env, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
+    }
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || env.otelUrl)
+    }
+    this._setString(env, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || env.otelHeaders)
+    this._setString(env, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
+    this._setString(env, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || env.otelProtocol)
+    env.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || env.otelTimeout
+    env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
+    env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
     this._setBoolean(
       env,
       'apmTracingEnabled',
@@ -1156,7 +1186,20 @@ class Config {
       calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
+
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this._env.otelLogsEnabled) {
+      this._setBoolean(calc, 'logInjection', false)
+    }
+
     calc['dogstatsd.hostname'] = this._getHostname()
+
+    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    const agentHostname = this._getHostname()
+    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())

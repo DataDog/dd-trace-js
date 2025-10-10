@@ -180,6 +180,7 @@ services:
     image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
       - "127.0.0.1:9126:9126"
+      - "127.0.0.1:4318:4318"
     environment:
       - LOG_LEVEL=DEBUG
       - TRACE_LANGUAGE=javascript
