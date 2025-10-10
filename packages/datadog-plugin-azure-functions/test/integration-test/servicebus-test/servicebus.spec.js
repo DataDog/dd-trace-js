@@ -5,11 +5,11 @@ const {
   hookFile,
   createSandbox,
   curlAndAssertMessage
-} = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+} = require('../../../../../integration-tests/helpers')
+const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
@@ -20,17 +20,19 @@ describe('esm', () => {
   // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
     before(async function () {
-      this.timeout(120_000)
+      this.timeout(60000)
       sandbox = await createSandbox([
         `@azure/functions@${version}`,
-        '@azure/service-bus@7.9.2'
+        'azure-functions-core-tools@4',
+        '@azure/service-bus@7.9.5',
       ],
       false,
-      ['./packages/datadog-plugin-azure-functions/test/integration-test/fixtures/*'])
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/servicebus-test/*'])
     })
 
     after(async function () {
-      this.timeout(60_000)
+      this.timeout(50000)
       await sandbox.remove()
     })
 
@@ -43,45 +45,13 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    // TODO(bengl): The `varySandbox` helper function isn't well set-up for dealing
-    // with Azure Functions and the way the `func` command expects to find files. I
-    // have manually tested that all the usual import variants work, but really we ought
-    // to figure out a way of automating this.
-    it('is instrumented', async () => {
-      const envArgs = {
-        PATH: process.env.PATH
-      }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
-
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'azure.functions.invoke')
-      })
-    }).timeout(60_000)
-
-    it('propagates context to child http requests', async () => {
-      const envArgs = {
-        PATH: process.env.PATH
-      }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
-
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
-      })
-    }).timeout(60_000)
-
     it('propagates context through a service bus queue', async () => {
       const envArgs = {
-        PATH: process.env.PATH
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest3', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/servicebus-test1', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
         assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
         assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
@@ -91,15 +61,15 @@ describe('esm', () => {
         assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
         assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
-    }).timeout(60_000)
+    }).timeout(60000)
 
     it('propagates context through a service bus topic', async () => {
       const envArgs = {
-        PATH: process.env.PATH
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest4', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/servicebus-test2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 3)
         assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
         assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
@@ -109,7 +79,7 @@ describe('esm', () => {
         assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
         assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
       })
-    }).timeout(60_000)
+    }).timeout(60000)
   })
 })
 
@@ -144,7 +114,7 @@ function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
       // eslint-disable-next-line no-console
       if (!options.silent) console.log(data.toString())
 
-      if (data.toString().includes('http://localhost:7071/api/httptest')) {
+      if (data.toString().includes('Host lock lease acquired by instance')) {
         resolve(proc)
       }
     })

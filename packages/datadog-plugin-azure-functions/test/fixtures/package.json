@@ -1,8 +1,8 @@
 {
-  "name": "azure-function-node-integration-test",
+  "name": "azure-function-tests",
   "version": "1.0.0",
   "description": "",
-  "main": "src/functions/server.mjs",
+  "main": "./server.mjs",
   "scripts": {
     "start": "func start"
   }
