@@ -166,7 +166,8 @@ class LLMObsSpanProcessor {
           continue
         }
         if (value !== null && typeof value === 'object') {
-          add(value, carrier[key] = {})
+          carrier[key] = Array.isArray(value) ? [] : {}
+          add(value, carrier[key])
         } else {
           carrier[key] = value
         }

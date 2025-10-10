@@ -79,14 +79,20 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const tokenUsage = response.usage
 
     if (tokenUsage) {
-      const inputTokens = tokenUsage.prompt_tokens
-      if (inputTokens) metrics.inputTokens = inputTokens
+      // Responses API uses input_tokens, Chat/Completions use prompt_tokens
+      const inputTokens = tokenUsage.input_tokens ?? tokenUsage.prompt_tokens
+      if (inputTokens !== undefined) metrics.inputTokens = inputTokens
 
-      const outputTokens = tokenUsage.completion_tokens
-      if (outputTokens) metrics.outputTokens = outputTokens
+      // Responses API uses output_tokens, Chat/Completions use completion_tokens
+      const outputTokens = tokenUsage.output_tokens ?? tokenUsage.completion_tokens
+      if (outputTokens !== undefined) metrics.outputTokens = outputTokens
 
-      const totalTokens = tokenUsage.total_toksn || (inputTokens + outputTokens)
-      if (totalTokens) metrics.totalTokens = totalTokens
+      const totalTokens = tokenUsage.total_tokens || (inputTokens + outputTokens)
+      if (totalTokens !== undefined) metrics.totalTokens = totalTokens
+
+      // Cache read tokens for responses API
+      const cachedTokens = tokenUsage.input_tokens_details?.cached_tokens
+      if (cachedTokens !== undefined) metrics.cache_read_input_tokens = cachedTokens
     }
 
     return metrics
@@ -193,28 +199,175 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _tagResponse (span, inputs, response, error) {
     const { input, model, reasoning, background, ...parameters } = inputs
 
-    // Create input message format
-    const responseInput = [{ content: input }]
-
+    // Create input messages
+    const inputMessages = []
+    
+    // Add system message if instructions exist
+    if (inputs.instructions) {
+      inputMessages.push({ role: 'system', content: inputs.instructions })
+    }
+    
+    // Handle input - can be string or array of mixed messages
+    if (Array.isArray(input)) {
+      for (const item of input) {
+        if (item.type === 'function_call') {
+          // Function call: convert to message with tool_calls
+          // Parse arguments if it's a JSON string
+          let parsedArgs = item.arguments
+          if (typeof parsedArgs === 'string') {
+            try {
+              parsedArgs = JSON.parse(parsedArgs)
+            } catch (e) {
+              parsedArgs = {}
+            }
+          }
+          inputMessages.push({
+            role: '',
+            toolCalls: [{
+              toolId: item.call_id,
+              name: item.name,
+              arguments: parsedArgs,
+              type: 'function'
+            }]
+          })
+        } else if (item.type === 'function_call_output') {
+          // Function output: convert to tool message
+          inputMessages.push({
+            role: 'tool',
+            content: item.output
+          })
+        } else if (item.role && item.content) {
+          // Regular message
+          inputMessages.push({ role: item.role, content: item.content })
+        }
+      }
+    } else {
+      // Simple string input
+      inputMessages.push({ role: 'user', content: input })
+    }
+    
     if (error) {
-      this._tagger.tagLLMIO(span, responseInput, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
-    // Create output message format
-    const responseOutput = [{ content: response.output || '' }]
+    // Create output messages
+    const outputMessages = []
+    
+    // Handle output - can be string (streaming) or array of message objects (non-streaming)
+    if (typeof response.output === 'string') {
+      // Simple text output (streaming)
+      outputMessages.push({ role: 'assistant', content: response.output })
+    } else if (Array.isArray(response.output)) {
+      // Array output - process all items to extract reasoning, messages, and tool calls
+      // Non-streaming: array of items (messages, function_calls, or reasoning)
+      for (const item of response.output) {
+        // Handle reasoning type (reasoning responses)
+        if (item.type === 'reasoning') {
+          // Extract reasoning text from summary
+          let reasoningText = ''
+          if (item.summary && Array.isArray(item.summary) && item.summary.length > 0) {
+            const summaryItem = item.summary[0]
+            if (summaryItem.type === 'summary_text' && summaryItem.text) {
+              reasoningText = summaryItem.text
+            }
+          }
+          outputMessages.push({
+            role: 'reasoning',
+            content: reasoningText
+          })
+        } else if (item.type === 'function_call') {
+          // Handle function_call type (responses API tool calls)
+          let args = item.arguments
+          // Parse arguments if it's a JSON string
+          if (typeof args === 'string') {
+            try {
+              args = JSON.parse(args)
+            } catch (e) {
+              args = {}
+            }
+          }
+          outputMessages.push({
+            role: '',  // Tool calls have empty role in LLMObs
+            toolCalls: [{
+              toolId: item.call_id,
+              name: item.name,
+              arguments: args,
+              type: 'function'
+            }]
+          })
+        } else {
+          // Handle regular message objects
+          const outputMsg = { role: item.role || 'assistant', content: '' }
+          
+          // Extract content from message
+          if (item.content && Array.isArray(item.content)) {
+            // Content is array of content parts
+            // For responses API, text content has type 'output_text', not 'text'
+            const textParts = item.content
+              .filter(c => c.type === 'text' || c.type === 'output_text')
+              .map(c => c.text)
+            outputMsg.content = textParts.join('')
+          } else if (typeof item.content === 'string') {
+            outputMsg.content = item.content
+          }
+          
+          // Extract tool calls if present in message.tool_calls
+          if (item.tool_calls && Array.isArray(item.tool_calls)) {
+            outputMsg.toolCalls = item.tool_calls.map(tc => {
+              let args = tc.function?.arguments || tc.arguments
+              // Parse arguments if it's a JSON string
+              if (typeof args === 'string') {
+                try {
+                  args = JSON.parse(args)
+                } catch (e) {
+                  args = {}
+                }
+              }
+              return {
+                toolId: tc.id,
+                name: tc.function?.name || tc.name,
+                arguments: args,
+                type: tc.type || 'function'
+              }
+            })
+          }
+          
+          outputMessages.push(outputMsg)
+        }
+      }
+    } else if (response.output_text) {
+      // Fallback: use output_text if available (for simple non-streaming responses without reasoning/tools)
+      outputMessages.push({ role: 'assistant', content: response.output_text })
+    } else {
+      // No output
+      outputMessages.push({ role: 'assistant', content: '' })
+    }
 
-    this._tagger.tagLLMIO(span, responseInput, responseOutput)
-    console.log('hello params', parameters)
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     
     // Tag metadata
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions'].includes(key)) {
+      if (!['tools', 'functions', 'instructions'].includes(key)) {
         obj[key] = value
       }
       return obj
     }, {})
     
+    // Add fields from response
+    if (response.temperature !== undefined) metadata.temperature = Number(response.temperature)
+    if (response.top_p !== undefined) metadata.top_p = Number(response.top_p)
+    if (response.tools !== undefined) {
+      metadata.tools = Array.isArray(response.tools) ? [...response.tools] : response.tools
+    }
+    if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
+    if (response.truncation !== undefined) metadata.truncation = response.truncation
+    if (response.text !== undefined) metadata.text = response.text
+    if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
+      metadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
+    }
+    
+    // Add reasoning metadata from input parameters
     if (reasoning) {
       metadata.reasoning = reasoning
     }
