@@ -63,7 +63,7 @@ describe('esm', () => {
         assert.fail('No ai spans found')
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs'
       })
 

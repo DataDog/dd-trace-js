@@ -113,6 +113,7 @@ describe('esm', () => {
   })
 })
 
+// TODO(BridgeAR): Unify with other helper of the same name.
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
