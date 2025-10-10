@@ -21,8 +21,10 @@ class WSServerPlugin extends TracingPlugin {
 
     const protocol = `${getRequestProtocol(req)}:`
     const host = options.headers.host
-    const path = req.url
-    const uri = `${protocol}//${host}${path}`
+    const url = req.url
+    const indexOfParam = url.indexOf('?')
+    const route = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
+    const uri = `${protocol}//${host}${route}`
 
     ctx.args = { options }
 
@@ -34,7 +36,7 @@ class WSServerPlugin extends TracingPlugin {
         'http.upgraded': 'websocket',
         'http.method': options.method,
         'http.url': uri,
-        'resource.name': `${options.method} ${path}`,
+        'resource.name': `${options.method} ${route}`,
         'span.kind': 'server'
 
       }
