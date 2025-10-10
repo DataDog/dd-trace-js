@@ -45,7 +45,7 @@ function getFormattedJestTestParameters (testParameters) {
 // A test name that keeps changing breaks some Test Optimization's features.
 const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
 // https://github.com/facebook/jest/blob/3e38157ad5f23fb7d24669d24fae8ded06a7ab75/packages/jest-circus/src/utils.ts#L396
-function getJestTestName (test) {
+function getJestTestName (test, shouldStripSeed = false) {
   const titles = []
   let parent = test
   do {
@@ -53,7 +53,12 @@ function getJestTestName (test) {
   } while ((parent = parent.parent))
 
   titles.shift() // remove TOP_DESCRIBE_BLOCK_NAME
-  return titles.join(' ').replace(SEED_SUFFIX_RE, '')
+
+  const testName = titles.join(' ')
+  if (shouldStripSeed) {
+    return testName.replace(SEED_SUFFIX_RE, '')
+  }
+  return testName
 }
 
 function isMarkedAsUnskippable (test) {

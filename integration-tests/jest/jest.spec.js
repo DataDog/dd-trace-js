@@ -4508,12 +4508,11 @@ describe('jest CommonJS', () => {
   })
 
   context('fast-check', () => {
-    it('should filter seed from the test name', async () => {
+    it('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          // 3 properties
           assert.equal(tests.length, 1)
           assert.equal(tests[0].meta[TEST_NAME], 'fast check will not include seed')
         })
@@ -4525,6 +4524,32 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'jest-fast-check/jest-fast-check',
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
+
+    it('should not remove seed if @fast-check/jest is not used', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.equal(tests.length, 1)
+          assert.equal(tests[0].meta[TEST_NAME], 'fast check with seed should include seed (with seed=12)')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-fast-check/jest-no-fast-check',
           }
         }
       )

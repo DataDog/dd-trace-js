@@ -89,6 +89,7 @@ const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
+const testSuiteAbsolutePathsWithFastCheck = new Set()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -319,9 +320,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    getShouldStripSeedFromTestName () {
+      return testSuiteAbsolutePathsWithFastCheck.has(this.testSuiteAbsolutePath)
+    }
+
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
-      const describeSuffix = getJestTestName(state.currentDescribeBlock)
+      const describeSuffix = getJestTestName(state.currentDescribeBlock, this.getShouldStripSeedFromTestName())
       return describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
     }
 
@@ -344,7 +349,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'test_start') {
-        const testName = getJestTestName(event.test)
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're trying tests with the same name
           this.resetSnapshotState()
@@ -506,7 +511,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let failedAllTests = false
         let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
-          const testName = getJestTestName(event.test)
+          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
             if (attemptToFixRetriedTestsStatuses.has(testName)) {
@@ -534,7 +539,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
-          const testName = getJestTestName(event.test)
+          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
@@ -594,16 +599,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         testSkippedCh.publish({
           test: {
-            name: getJestTestName(event.test),
+            name: testName,
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           },
-          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
+          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName)
         })
       }
     }
@@ -1314,6 +1320,9 @@ addHook({
     if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
+    }
+    if (moduleName === '@fast-check/jest') {
+      testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
     }
     return requireModuleOrMock.apply(this, arguments)
   })
