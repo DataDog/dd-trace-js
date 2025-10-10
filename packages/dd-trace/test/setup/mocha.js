@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const util = require('node:util')
 const { platform } = require('node:os')
 const path = require('node:path')
+const fs = require('node:fs')
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -25,6 +26,7 @@ exports.withVersions = withVersions
 exports.withExports = withExports
 exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
+exports.insertVersionDep = insertVersionDep
 
 const testedPlugins = agent.testedPlugins
 
@@ -319,6 +321,30 @@ function withExports (moduleName, version, exportNames, versionRange, cb) {
 
 function getModulePath (moduleName, version) {
   return `../../../../versions/${moduleName}@${version}`
+}
+
+/**
+ * Sets up a symlink to the tested version of a package in the given directory,
+ * and tears it down once tests are done.
+ *
+ * @param {string} dir - The directory to operate in. Typically __dirname.
+ * @param {string} pkgName - The name of the package being tested.
+ * @param {string} version - The "version" string, as used with `withVersions`
+ */
+function insertVersionDep (dir, pkgName, version) {
+  const nmDir = path.join(dir, 'node_modules')
+  const pkgDir = path.join(nmDir, pkgName)
+
+  before(() => {
+    const pkgPath = path.dirname(require(getModulePath(pkgName, version)).pkgJsonPath())
+    fs.mkdirSync(nmDir)
+    fs.symlinkSync(pkgPath, pkgDir)
+  })
+
+  after(() => {
+    fs.unlinkSync(pkgDir)
+    fs.rmdirSync(nmDir)
+  })
 }
 
 exports.mochaHooks = {
