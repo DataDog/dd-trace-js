@@ -14,12 +14,17 @@ const { writeFileSync, readdirSync } = require('node:fs')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { rawExpectedSchema } = require('./naming')
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
 
 describe('Plugin', function () {
   let server
   let port
 
   describe('next', () => {
+    // These next versions have a dependency which uses a depricated node buffer
+    if (process.env.PACKAGE_VERSION_RANGE === '>=11.0.0 <13' && nodeMajor >= 25) {
+      return
+    }
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.

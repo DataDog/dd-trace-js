@@ -8,6 +8,8 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
+const semver = require('semver')
+const nodeMajor = parseInt(process.versions.node.split('.')[0])
 
 describe('esm', () => {
   let agent
@@ -15,6 +17,9 @@ describe('esm', () => {
   let sandbox
 
   withVersions('grpc', '@grpc/grpc-js', version => {
+    if (!semver.satisfies(version, '>=1.3.0') && nodeMajor >= 25) {
+      return
+    }
     before(async function () {
       this.timeout(60000)
       sandbox = await createSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [

@@ -205,9 +205,9 @@ describe('Plugin', () => {
         describe('promises.open', () => {
           let fd
 
-          afterEach(() => {
-            if (typeof fd === 'number') {
-              realFS.closeSync(fd)
+          afterEach(async () => {
+            if (fd && typeof fd.close === 'function') {
+              await fd.close()
               fd = undefined
             }
           })
@@ -1634,7 +1634,6 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
-              realFS.closeSync(filehandle.fd)
             } catch (e) { /* */ }
             await fs.promises.unlink(filename)
           })
