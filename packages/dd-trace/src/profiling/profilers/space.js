@@ -7,6 +7,8 @@ function strategiesToCallbackMode (strategies, callbackMode) {
   return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
 }
 
+const STACK_DEPTH = 64
+
 class NativeSpaceProfiler {
   type = 'space'
   _pprof
@@ -15,7 +17,6 @@ class NativeSpaceProfiler {
   constructor (options = {}) {
     // TODO: Remove default value. It is only used in testing.
     this._samplingInterval = options.heapSamplingInterval || 512 * 1024
-    this._stackDepth = options.stackDepth || 64
     this._oomMonitoring = options.oomMonitoring || {}
   }
 
@@ -24,7 +25,7 @@ class NativeSpaceProfiler {
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
-    this._pprof.heap.start(this._samplingInterval, this._stackDepth)
+    this._pprof.heap.start(this._samplingInterval, STACK_DEPTH)
     if (this._oomMonitoring.enabled) {
       const strategies = this._oomMonitoring.exportStrategies
       this._pprof.heap.monitorOutOfMemory(
