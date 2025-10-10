@@ -50,6 +50,7 @@ function processInfo (infos, info, type) {
 class Profiler extends EventEmitter {
   #compressionFn
   #compressionOptions
+  #config
   #enabled = false
   #endpointCounts = new Map()
   #lastStart
@@ -60,8 +61,11 @@ class Profiler extends EventEmitter {
 
   constructor () {
     super()
-    this._config = undefined
     this._timeoutInterval = undefined
+  }
+
+  get flushInterval () {
+    return this.#config?.flushInterval
   }
 
   start (options) {
@@ -83,7 +87,7 @@ class Profiler extends EventEmitter {
   async _start (options) {
     if (this.enabled) return true
 
-    const config = this._config = new Config(options)
+    const config = this.#config = new Config(options)
 
     this.#logger = config.logger
     this.#enabled = true
@@ -175,7 +179,7 @@ class Profiler extends EventEmitter {
   }
 
   _setInterval () {
-    this._timeoutInterval = this._config.flushInterval
+    this._timeoutInterval = this.#config.flushInterval
   }
 
   stop () {
@@ -197,7 +201,7 @@ class Profiler extends EventEmitter {
       this.#spanFinishListener = undefined
     }
 
-    for (const profiler of this._config.profilers) {
+    for (const profiler of this.#config.profilers) {
       profiler.stop()
       this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
     }
@@ -239,7 +243,7 @@ class Profiler extends EventEmitter {
 
   #createInitialInfos () {
     return {
-      settings: this._config.systemInfoReport
+      settings: this.#config.systemInfoReport
     }
   }
 
@@ -257,7 +261,7 @@ class Profiler extends EventEmitter {
 
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
-        for (const profiler of this._config.profilers) {
+        for (const profiler of this.#config.profilers) {
           const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
@@ -287,7 +291,7 @@ class Profiler extends EventEmitter {
           encodedProfiles[profiler.type] = compressed
           processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
-            const profileJson = JSON.stringify(profile, (key, value) => {
+            const profileJson = JSON.stringify(profile, (_, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
             return `Collected ${profiler.type} profile: ` + profileJson
@@ -312,7 +316,7 @@ class Profiler extends EventEmitter {
   }
 
   #submit (profiles, infos, start, end, snapshotKind) {
-    const { tags } = this._config
+    const { tags } = this.#config
 
     // Flatten endpoint counts
     const endpointCounts = {}
@@ -324,7 +328,7 @@ class Profiler extends EventEmitter {
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
     const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
-    const tasks = this._config.exporters.map(exporter =>
+    const tasks = this.#config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
         if (this.#logger) {
           this.#logger.warn(err)
@@ -354,7 +358,7 @@ class ServerlessProfiler extends Profiler {
 
   _setInterval () {
     this._timeoutInterval = this.#interval * 1000
-    this.#flushAfterIntervals = this._config.flushInterval / 1000
+    this.#flushAfterIntervals = this.flushInterval / 1000
   }
 
   async _collect (snapshotKind, restart = true) {
