@@ -95,8 +95,7 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/langchain@${version}`)
-          .get('@langchain/openai')
+        langchainOpenai = require('../../../versions/@langchain/openai@0.1.0').get()
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
           // version mismatching otherwise
