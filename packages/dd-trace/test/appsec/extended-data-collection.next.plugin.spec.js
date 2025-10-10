@@ -1,17 +1,15 @@
 'use strict'
 
-const { spawn, execSync } = require('child_process')
-const { mkdirSync, rmSync, unlinkSync } = require('fs')
-const axios = require('axios')
-const { writeFileSync } = require('fs')
-const { satisfies } = require('semver')
-const path = require('path')
 const assert = require('assert')
+
+const axios = require('axios')
+const { satisfies } = require('semver')
 const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
+const { initApp, startServer } = require('./next.utils')
 
 function findWebSpan (traces) {
   for (const trace of traces) {
@@ -39,11 +37,6 @@ function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
 }
 
 describe('extended data collection', () => {
-  let server
-  let port
-
-  const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
-
   withVersions('next', 'next', '>=11.1', version => {
     if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
       NODE_MINOR === 0 && NODE_PATCH === 0) {
@@ -51,132 +44,6 @@ describe('extended data collection', () => {
     }
 
     const realVersion = require(`../../../../versions/next@${version}`).version()
-
-    function initApp (appName) {
-      const appDir = path.join(__dirname, 'next', appName)
-
-      before(async function () {
-        this.timeout(300 * 1000) // Webpack is very slow and builds on every test run
-
-        const cwd = appDir
-
-        const pkg = require(`../../../../versions/next@${version}/package.json`)
-
-        if (realVersion.startsWith('10')) {
-          return this.skip() // TODO: Figure out why 10.x tests fail.
-        }
-        delete pkg.workspaces
-
-        // builds fail for next.js 9.5 using node 14 due to webpack issues
-        // note that webpack version cannot be set in v9.5 in next.config.js so we do it here instead
-        // the link below highlights the initial support for webpack 5 (used to fix this issue) in next.js 9.5
-        // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
-        if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
-
-        writeFileSync(`${appDir}/package.json`, JSON.stringify(pkg, null, 2))
-
-        // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
-        // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
-        try {
-          execSync('yarn install', { cwd })
-        } catch (e) { // retry in case of error from registry
-          execSync('yarn install', { cwd })
-        }
-
-        // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
-          cwd,
-          env: {
-            ...process.env,
-            version
-          },
-          stdio: ['pipe', 'ignore', 'pipe']
-        })
-
-        if (satisfiesStandalone(realVersion)) {
-          // copy public and static files to the `standalone` folder
-          // const publicOrigin = `${appDir}/public`
-          const publicDestination = path.join(appDir, '.next/standalone/public')
-
-          mkdirSync(publicDestination)
-        }
-      })
-
-      after(function () {
-        this.timeout(5000)
-
-        const files = [
-          'package.json',
-          'yarn.lock'
-        ]
-        const filePaths = files.map(file => `${appDir}/${file}`)
-        filePaths.forEach(path => {
-          unlinkSync(path)
-        })
-
-        const dirs = [
-          'node_modules',
-          '.next'
-        ]
-        const dirPaths = dirs.map(file => `${appDir}/${file}`)
-        dirPaths.forEach(path => {
-          rmSync(path, { recursive: true, force: true })
-        })
-      })
-    }
-
-    const startServer = ({ appName, serverPath }, schemaVersion = 'v0', defaultToGlobalService = false) => {
-      const appDir = path.join(__dirname, 'next', appName)
-
-      before(async () => {
-        return agent.load('next')
-      })
-
-      before(function (done) {
-        this.timeout(300 * 1000)
-        const cwd = appDir
-
-        server = spawn('node', [serverPath], {
-          cwd,
-          env: {
-            ...process.env,
-            VERSION: version,
-            PORT: 0,
-            DD_TRACE_AGENT_PORT: agent.server.address().port,
-            DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
-            DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-            NODE_OPTIONS: `--require ${appDir}/datadog-extended-data-collection.js`,
-            HOSTNAME: '127.0.0.1'
-          }
-        })
-
-        server.once('error', done)
-
-        function waitUntilServerStarted (chunk) {
-          const chunkStr = chunk.toString()
-          const match = chunkStr.match(/port:? (\d+)/) ||
-              chunkStr.match(/http:\/\/127\.0\.0\.1:(\d+)/)
-
-          if (match) {
-            port = Number(match[1])
-            server.stdout.off('data', waitUntilServerStarted)
-            done()
-          }
-        }
-        server.stdout.on('data', waitUntilServerStarted)
-
-        server.stderr.on('data', chunk => process.stderr.write(chunk))
-        server.stdout.on('data', chunk => process.stdout.write(chunk))
-      })
-
-      after(async function () {
-        this.timeout(5000)
-
-        server.kill()
-
-        await agent.close({ ritmReset: false })
-      })
-    }
 
     const tests = [
       {
@@ -194,9 +61,9 @@ describe('extended data collection', () => {
 
     tests.forEach(({ appName, serverPath }) => {
       describe(`extended data collection in ${appName}`, () => {
-        initApp(appName)
+        initApp(appName, version, realVersion)
 
-        startServer({ appName, serverPath })
+        const serverData = startServer(appName, serverPath, version, 'datadog-extended-data-collection.js')
 
         it('Should collect nothing when no extended_data_collection is triggered', async () => {
           const requestBody = {
@@ -208,7 +75,7 @@ describe('extended data collection', () => {
           }
 
           await axios.post(
-            `http://127.0.0.1:${port}/api/extended-data-collection`,
+            `http://127.0.0.1:${serverData.port}/api/extended-data-collection`,
             requestBody,
             {
               headers: {
@@ -240,7 +107,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard'
           }
           await axios.post(
-            `http://127.0.0.1:${port}/api/extended-data-collection/redacted-headers`,
+            `http://127.0.0.1:${serverData.port}/api/extended-data-collection/redacted-headers`,
             requestBody,
             {
               headers: {
@@ -289,7 +156,7 @@ describe('extended data collection', () => {
             }
           }
           await axios.post(
-            `http://127.0.0.1:${port}/api/extended-data-collection`,
+            `http://127.0.0.1:${serverData.port}/api/extended-data-collection`,
             requestBody,
             {
               headers: {
@@ -338,7 +205,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             deepObject: expectedDeepTruncatedObject
           }
-          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
@@ -358,7 +225,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             longValue: Array(4096).fill('A').join('')
           }
-          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
@@ -379,7 +246,7 @@ describe('extended data collection', () => {
             bodyParam: 'collect-standard',
             children: children.slice(0, 256)
           }
-          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
