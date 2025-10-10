@@ -20,4 +20,4 @@ runs:
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-        suffix: ${{ inputs.suffix || format('test-{0}', github.job) }}
+        suffix: ${{ inputs.alternativeSuffix || format('test-{0}', github.job) }}
