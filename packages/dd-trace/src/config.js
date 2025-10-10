@@ -252,7 +252,7 @@ class Config {
   #fleetStableConfig = {}
   #calculated = {}
 
-  #getSourcesOrder () {
+  #getSourcesInOrder () {
     return [
       { container: this.#remote, origin: 'remote_config', unprocessed: this.#remoteUnprocessed },
       { container: this.#options, origin: 'code', unprocessed: this.#optsUnprocessed },
@@ -372,9 +372,9 @@ class Config {
     }
 
     this.#defaults = defaults
-    this._applyLocalStableConfig()
+    this._applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
     this._applyEnvironment()
-    this._applyFleetStableConfig()
+    this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
     this._applyOptions(options)
     this._applyCalculated()
     this._applyRemote({})
@@ -451,16 +451,6 @@ class Config {
 
   _isInServerlessEnvironment () {
     return isInServerlessEnvironment()
-  }
-
-  _applyLocalStableConfig () {
-    const obj = this.#localStableConfig
-    this._applyStableConfig(this.stableConfig?.localEntries ?? {}, obj)
-  }
-
-  _applyFleetStableConfig () {
-    const obj = this.#fleetStableConfig
-    this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, obj)
   }
 
   _applyStableConfig (config, obj) {
@@ -1339,12 +1329,12 @@ class Config {
   // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const changes = []
-    const sourcesOrder = this.#getSourcesOrder()
+    const sources = this.#getSourcesInOrder()
 
     for (const name of Object.keys(this.#defaults)) {
       // Use reverse order for merge (lowest priority first)
-      for (let i = sourcesOrder.length - 1; i >= 0; i--) {
-        const { container, origin, unprocessed } = sourcesOrder[i]
+      for (let i = sources.length - 1; i >= 0; i--) {
+        const { container, origin, unprocessed } = sources[i]
         const value = container[name]
         if (value != null || container === this.#defaults) {
           this._setAndTrackChange({
@@ -1362,7 +1352,7 @@ class Config {
   }
 
   getOrigin (name) {
-    for (const { container, origin } of this.#getSourcesOrder()) {
+    for (const { container, origin } of this.#getSourcesInOrder()) {
       const value = container[name]
       if (value != null || container === this.#defaults) {
         return origin
