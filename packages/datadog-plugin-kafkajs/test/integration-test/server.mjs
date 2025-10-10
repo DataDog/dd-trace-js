@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import { Kafka } from 'kafkajs'
 
 const kafka = new Kafka({
