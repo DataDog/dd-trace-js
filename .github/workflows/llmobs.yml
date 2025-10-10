@@ -53,21 +53,7 @@ jobs:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/plugins/test-llmobs
 
   langchain:
     runs-on: ubuntu-latest
@@ -75,21 +61,7 @@ jobs:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/plugins/test-llmobs
 
   bedrock:
     runs-on: ubuntu-latest
@@ -117,21 +89,7 @@ jobs:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/plugins/test-llmobs
 
   ai:
     runs-on: ubuntu-latest
@@ -139,21 +97,7 @@ jobs:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/plugins/test-llmobs
 
   anthropic:
     runs-on: ubuntu-latest
@@ -161,18 +105,4 @@ jobs:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/plugins/test-llmobs
