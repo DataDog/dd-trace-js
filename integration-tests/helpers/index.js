@@ -523,13 +523,25 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
+ * @overload
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ */
+/**
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {function} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+  if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
+    additionalEnvArgs = stdioHandler
+    stdioHandler = undefined
+  }
+  additionalEnvArgs = additionalEnvArgs || {}
   let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: String(agentPort)
