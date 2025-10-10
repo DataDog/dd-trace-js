@@ -11,7 +11,8 @@ const { MEASURED } = require('../../../ext/tags')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
-  constructChatCompletionResponseFromStreamedChunks
+  constructChatCompletionResponseFromStreamedChunks,
+  constructResponseResponseFromStreamedChunks
 } = require('./stream-helpers')
 
 const { DD_MAJOR } = require('../../../version')
@@ -61,6 +62,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         response = constructCompletionResponseFromStreamedChunks(chunks, n)
       } else if (methodName === 'createChatCompletion') {
         response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
+      } else if (methodName === 'createResponse') {
+        response = constructResponseResponseFromStreamedChunks(chunks, n)
       }
 
       ctx.result = { data: response }

@@ -282,14 +282,12 @@ class LLMObsTagger {
       const { content = '', role } = message
       const toolCalls = message.toolCalls
       const toolId = message.toolId
-      const messageObj = { content }
+      const messageObj = {}
 
       const valid = typeof content === 'string'
       if (!valid) {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
-
-      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
@@ -297,6 +295,23 @@ class LLMObsTagger {
         if (filteredToolCalls.length) {
           messageObj.tool_calls = filteredToolCalls
         }
+      }
+
+      // Only include content if it's not empty OR if there are no tool calls
+      // (For responses API, tool call messages should not have content field)
+      if (content !== '' || !messageObj.tool_calls) {
+        messageObj.content = content
+      }
+
+      // For role, always include it (even if empty string) when there are tool calls
+      // Otherwise use conditional tagging which skips empty values
+      let condition
+      if (messageObj.tool_calls && messageObj.tool_calls.length > 0) {
+        // For tool call messages, always include role even if empty
+        messageObj.role = role || ''
+        condition = true
+      } else {
+        condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
       }
 
       if (toolId) {
