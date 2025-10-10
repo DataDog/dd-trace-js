@@ -20,7 +20,7 @@ addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Cli
   return Client
 })
 
-addHook({ name: 'pg', versions: ['>=8.0.3 <8.15.0', '>=8.15.0 <9'], file: 'lib/client.js' }, Client => {
+addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
 })
