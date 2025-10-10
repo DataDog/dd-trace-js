@@ -41,7 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'pubsub.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port,
         { PUBSUB_EMULATOR_HOST: 'localhost:8081' })
 
       await res
