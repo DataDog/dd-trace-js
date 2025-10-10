@@ -41,8 +41,8 @@ describe('Plugin', () => {
           const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
           AWS = require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
-            require(`../../../../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
-              .get('@smithy/node-http-handler')
+            require('../../../../../../versions/@aws-sdk/node-http-handler@>=3')
+              .get()
               .NodeHttpHandler
 
           bedrockRuntimeClient = new AWS.BedrockRuntimeClient(
