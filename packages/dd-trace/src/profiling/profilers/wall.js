@@ -25,7 +25,6 @@ const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
-let kCPEDContextCount
 
 function getActiveSpan () {
   const store = storage('legacy').getStore()
@@ -167,7 +166,6 @@ class NativeWallProfiler {
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
     kSampleCount = this.#pprof.time.constants.kSampleCount
-    kCPEDContextCount = this.#pprof.time.constants.kCPEDContextCount
 
     // pprof otherwise crashes in worker threads
     if (!process._startProfilerIdleNotifier) {
@@ -213,12 +211,14 @@ class NativeWallProfiler {
   }
 
   #setupTelemetryMetrics () {
-    const contextCountGauge = profilerTelemetryMetrics.gauge('wall.sample_contexts')
+    const asyncContextsLiveGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_live')
+    const asyncContextsUsedGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_used')
 
-    const that = this
     this._contextCountGaugeUpdater = setInterval(() => {
-      contextCountGauge.mark(that._profilerState[kCPEDContextCount])
-    }, that.#telemetryHeartbeatIntervalMillis)
+      const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
+      asyncContextsLiveGauge.mark(totalAsyncContextCount)
+      asyncContextsUsedGauge.mark(usedAsyncContextCount)
+    }, this.#telemetryHeartbeatIntervalMillis)
     this._contextCountGaugeUpdater.unref()
   }
 
@@ -408,6 +408,14 @@ class NativeWallProfiler {
 
   profile (restart) {
     return this.#stop(restart)
+  }
+
+  getInfo () {
+    const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
+    return {
+      totalAsyncContextCount,
+      usedAsyncContextCount
+    }
   }
 
   encode (profile) {

@@ -406,6 +406,45 @@ describe('config', () => {
     }
   })
 
+  it('should allow configuring exporters by string or string array', async () => {
+    const checks = [
+      'agent',
+      ['agent']
+    ]
+
+    for (const exporters of checks) {
+      const config = new Config({
+        sourceMap: false,
+        exporters
+      })
+
+      expect(config.exporters[0].export).to.be.a('function')
+    }
+  })
+
+  it('should allow configuring profilers by string or string arrays', async () => {
+    const checks = [
+      ['space', SpaceProfiler],
+      ['wall', WallProfiler, EventsProfiler],
+      ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
+      ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
+      [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
+      [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
+    ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
+
+    for (const [profilers, ...expected] of checks) {
+      const config = new Config({
+        sourceMap: false,
+        profilers
+      })
+
+      expect(config.profilers.length).to.equal(expected.length)
+      for (let i = 0; i < expected.length; i++) {
+        expect(config.profilers[i]).to.be.instanceOf(expected[i])
+      }
+    }
+  })
+
   if (oomMonitoringSupported) {
     it('should support OOM heap profiler configuration', function () {
       process.env = {

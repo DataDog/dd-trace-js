@@ -25,7 +25,11 @@ describe('profilers/native/wall', () => {
         constants: {
           kSampleCount: 0,
           NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
-        }
+        },
+        getMetrics: sinon.stub().returns({
+          totalAsyncContextCount: 0,
+          usedAsyncContextCount: 0
+        })
       }
     }
 
@@ -120,6 +124,16 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledOnce(pprof.time.stop)
+  })
+
+  it('should provide info', () => {
+    const profiler = new NativeWallProfiler()
+    profiler.start()
+    const info = profiler.getInfo()
+    profiler.stop()
+
+    expect(info.totalAsyncContextCount).to.not.be.undefined
+    expect(info.usedAsyncContextCount).to.not.be.undefined
   })
 
   it('should collect profiles from the internal time profiler', () => {

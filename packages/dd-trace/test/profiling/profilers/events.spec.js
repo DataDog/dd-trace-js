@@ -14,6 +14,11 @@ const startCh = dc.channel('apm:dns:lookup:start')
 const finishCh = dc.channel('apm:dns:lookup:finish')
 
 describe('profilers/events', () => {
+  it('should provide info', () => {
+    const info = new EventsProfiler({ samplingInterval: 1 }).getInfo()
+    assert(info.maxSamples > 0)
+  })
+
   it('should limit the number of events', async () => {
     const samplingInterval = 1
     const flushInterval = 2
