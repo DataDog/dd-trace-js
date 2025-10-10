@@ -64,9 +64,7 @@ describe('profilers/native/space', () => {
     const profiler = new NativeSpaceProfiler()
 
     const info = profiler.getInfo()
-    expect(info.settings.oomMonitoring).to.not.be.undefined
-    expect(info.settings.samplingInterval).to.not.be.undefined
-    expect(info.settings.stackDepth).to.not.be.undefined
+    expect(Object.keys(info)).to.be.empty
   })
 
   it('should collect profiles from the pprof space profiler', () => {

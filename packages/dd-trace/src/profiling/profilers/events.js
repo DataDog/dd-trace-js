@@ -437,10 +437,7 @@ class EventsProfiler {
 
   getInfo () {
     return {
-      settings: {
-        maxSamples: this.#maxSamples,
-        timelineSamplingEnabled: this.#timelineSamplingEnabled
-      }
+      maxSamples: this.#maxSamples
     }
   }
 

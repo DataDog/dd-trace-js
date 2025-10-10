@@ -49,15 +49,7 @@ class NativeSpaceProfiler {
   }
 
   getInfo () {
-    const oomMonitoring = { ...this._oomMonitoring }
-    delete oomMonitoring.exportCommand
-    return {
-      settings: {
-        oomMonitoring,
-        samplingInterval: this._samplingInterval,
-        stackDepth: this._stackDepth,
-      }
-    }
+    return {}
   }
 
   encode (profile) {

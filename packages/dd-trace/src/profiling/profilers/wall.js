@@ -414,15 +414,7 @@ class NativeWallProfiler {
     const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
     return {
       totalAsyncContextCount,
-      usedAsyncContextCount,
-      settings: {
-        asyncContextFrameEnabled: this.#asyncContextFrameEnabled,
-        codeHotspotsEnabled: this.#codeHotspotsEnabled,
-        cpuProfilingEnabled: this.#cpuProfilingEnabled,
-        endpointCollectionEnabled: this.#endpointCollectionEnabled,
-        timelineEnabled: this.#timelineEnabled,
-        v8ProfilerBugWorkaroundEnabled: this.#v8ProfilerBugWorkaroundEnabled
-      }
+      usedAsyncContextCount
     }
   }
 

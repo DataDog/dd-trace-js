@@ -42,15 +42,11 @@ function findWebSpan (startedSpans, spanId) {
 }
 
 function processInfo (infos, info, type) {
-  // transpose e.g. info.wall.settings to info.settings.wall. That way
-  // we have functional groupings first, then profiler type.
-  infos.settings[type] = info.settings
-  delete info.settings
-  // take over rest of info without transposition
   if (Object.keys(info).length > 0) {
     infos[type] = info
   }
 }
+
 class Profiler extends EventEmitter {
   #compressionFn
   #compressionOptions
@@ -171,9 +167,7 @@ class Profiler extends EventEmitter {
   #nearOOMExport (profileType, encodedProfile, info) {
     const start = this.#lastStart
     const end = new Date()
-    const infos = {
-      settings: {}
-    }
+    const infos = this.#createInitialInfos()
     processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile
@@ -243,11 +237,17 @@ class Profiler extends EventEmitter {
     }
   }
 
+  #createInitialInfos () {
+    return {
+      settings: this._config.systemInfoReport
+    }
+  }
+
   async _collect (snapshotKind, restart = true) {
     if (!this.enabled) return
 
     try {
-      if (this._config.profilers.length === 0) {
+      if (this.#config.profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
@@ -275,9 +275,7 @@ class Profiler extends EventEmitter {
       let hasEncoded = false
 
       const encodedProfiles = {}
-      const infos = {
-        settings: {}
-      }
+      const infos = this.#createInitialInfos()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {

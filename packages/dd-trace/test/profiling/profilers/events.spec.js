@@ -16,8 +16,7 @@ const finishCh = dc.channel('apm:dns:lookup:finish')
 describe('profilers/events', () => {
   it('should provide info', () => {
     const info = new EventsProfiler({ samplingInterval: 1 }).getInfo()
-    assert(info.settings.maxSamples > 0)
-    assert(info.settings.timelineSamplingEnabled === false)
+    assert(info.maxSamples > 0)
   })
 
   it('should limit the number of events', async () => {

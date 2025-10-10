@@ -242,6 +242,26 @@ class Config {
 
     this.profilers = ensureProfilers(profilers, this)
   }
+
+  get systemInfoReport () {
+    const report = {
+      asyncContextFrameEnabled: this.asyncContextFrameEnabled,
+      codeHotspotsEnabled: this.codeHotspotsEnabled,
+      cpuProfilingEnabled: this.cpuProfilingEnabled,
+      debugSourceMaps: this.debugSourceMaps,
+      endpointCollectionEnabled: this.endpointCollectionEnabled,
+      heapSamplingInterval: this.heapSamplingInterval,
+      oomMonitoring: { ...this.oomMonitoring },
+      profilerTypes: this.profilers.map(p => p.type),
+      sourceMap: this.sourceMap,
+      timelineEnabled: this.timelineEnabled,
+      timelineSamplingEnabled: this.timelineSamplingEnabled,
+      uploadCompression: { ...this.uploadCompression },
+      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled
+    }
+    delete report.oomMonitoring.exportCommand
+    return report
+  }
 }
 
 module.exports = { Config }
