@@ -314,7 +314,7 @@ describe('esm', () => {
       })
     }).timeout(60000)
 
-    it('should not contain tryAdd spans or add span links to batches when batch links are disabled', async () => {
+    it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
         DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
