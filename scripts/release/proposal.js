@@ -66,26 +66,41 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  // Semver-major changes are behind version conditionals so we can include them
+  // in minors.
+  const diffCmd = `branch-diff --user DataDog --repo dd-trace-js --exclude-label=dont-land-on-v${releaseLine}.x`
 
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
+  const lineDiffWithMajor = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
 
-  if (!lineDiff) {
+  if (!lineDiffWithMajor) {
     pass('none (already up to date)')
     process.exit(0)
   }
 
+  // For release notes we want to exclude major changes as they will be go in
+  // the release notes of the next major instead.
+  const lineDiff = capture(
+    `${diffCmd} --exclude-label=semver-major,dont-land-on-v${releaseLine}.x --markdown=true v${releaseLine}.x ${main}`
+  )
+
   const isMinor = lineDiff.includes('SEMVER-MINOR')
+  const bump = isMinor ? 'minor' : 'patch'
+
+  if (!lineDiff) {
+    pass(`none (major changes cannot be released alone in a ${bump})`)
+    process.exit(0)
+  }
+
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
   const notesDir = path.join(tmpdir, 'release_notes')
   const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
+  pass(`${bump} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
