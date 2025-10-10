@@ -25,7 +25,7 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
-const modifiedFilesCh = channel('ci:cucumber:modified-tests')
+const modifiedFilesCh = channel('ci:cucumber:modified-files')
 const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
