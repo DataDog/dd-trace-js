@@ -345,6 +345,10 @@
       "versions": [">=0.1"]
     },
     {
+      "name": "@langchain/openai",
+      "versions": [">=0.1"]
+    },
+    {
       "name": "langchain",
       "versions": [">=0.1"]
     }
