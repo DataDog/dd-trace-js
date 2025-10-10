@@ -9,6 +9,11 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   static get prefix () { return 'tracing:apm:azure-event-hubs:send' }
 
   bindStart (ctx) {
+    // we do not want to make these spans when batch linking is disabled.
+    if (!batchLinksAreEnabled() && ctx.functionName === 'tryAdd') {
+      return ctx.currentStore
+    }
+
     const qualifiedNamespace = ctx.config.endpoint.replace('sb://', '').replace('/', '')
     const entityPath = ctx.config.entityPath
     const span = this.startSpan({
@@ -54,7 +59,6 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         }
       }
     }
-
     return ctx.currentStore
   }
 

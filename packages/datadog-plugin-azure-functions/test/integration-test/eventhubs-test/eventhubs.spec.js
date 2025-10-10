@@ -303,14 +303,27 @@ describe('esm', () => {
       })
     }).timeout(60000)
 
-    it('should not add span links when they are disabled', async () => {
+    it('should add span links to non-batched messages when batch links are disabled', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
         DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
-        expect(payload[1][0]).to.not.have.property('_dd.span_links')
+        expect(payload[1][0].meta).to.have.property('_dd.span_links')
+      })
+    }).timeout(60000)
+
+    it('should not contain tryAdd spans or add span links to batches when batch links are disabled', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
+        const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
+        assert.strictEqual(hasCreateSpan, false)
+        expect(payload[1][0].meta).to.not.have.property('_dd.span_links')
       })
     }).timeout(60000)
   })

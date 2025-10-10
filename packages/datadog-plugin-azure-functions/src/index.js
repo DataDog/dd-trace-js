@@ -128,7 +128,10 @@ function setSpanLinks (tracer, span, ctx) {
   const triggerMetadata = ctx.invocationContext.triggerMetadata
   if (cardinality === 'many' && triggerMetadata.propertiesArray.length > 0) {
     triggerMetadata.propertiesArray.forEach(event => {
-      span.addLink(tracer.extract('text_map', event))
+      // Check for possible empty event when span links are disabled
+      if (Object.keys(event).length > 0) {
+        span.addLink(tracer.extract('text_map', event))
+      }
     })
   } else if (cardinality === 'one') {
     const spanContext = tracer.extract('text_map', triggerMetadata.properties)
