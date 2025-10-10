@@ -1321,6 +1321,7 @@ addHook({
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
+    // This means that `@fast-check/jest` is used in the test file.
     if (moduleName === '@fast-check/jest') {
       testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
     }
