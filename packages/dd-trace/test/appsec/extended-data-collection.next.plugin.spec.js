@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawn, execSync } = require('child_process')
-const { cpSync, mkdirSync, rmSync, unlinkSync } = require('fs')
+const { mkdirSync, rmSync, unlinkSync } = require('fs')
 const axios = require('axios')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
@@ -38,7 +38,7 @@ function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
   }
 }
 
-describe.only('extended data collection', () => {
+describe('extended data collection', () => {
   let server
   let port
 
@@ -206,8 +206,9 @@ describe.only('extended data collection', () => {
               child2: 2
             }
           }
+
           await axios.post(
-            `http://localhost:${port}/api/extended-data-collection`,
+            `http://127.0.0.1:${port}/api/extended-data-collection`,
             requestBody,
             {
               headers: {
@@ -239,7 +240,7 @@ describe.only('extended data collection', () => {
             bodyParam: 'collect-standard'
           }
           await axios.post(
-            `http://localhost:${port}/api/extended-data-collection/redacted-headers`,
+            `http://127.0.0.1:${port}/api/extended-data-collection/redacted-headers`,
             requestBody,
             {
               headers: {
@@ -288,7 +289,7 @@ describe.only('extended data collection', () => {
             }
           }
           await axios.post(
-            `http://localhost:${port}/api/extended-data-collection`,
+            `http://127.0.0.1:${port}/api/extended-data-collection`,
             requestBody,
             {
               headers: {
@@ -337,7 +338,7 @@ describe.only('extended data collection', () => {
             bodyParam: 'collect-standard',
             deepObject: expectedDeepTruncatedObject
           }
-          await axios.post(`http://localhost:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
@@ -357,7 +358,7 @@ describe.only('extended data collection', () => {
             bodyParam: 'collect-standard',
             longValue: Array(4096).fill('A').join('')
           }
-          await axios.post(`http://localhost:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
@@ -378,7 +379,7 @@ describe.only('extended data collection', () => {
             bodyParam: 'collect-standard',
             children: children.slice(0, 256)
           }
-          await axios.post(`http://localhost:${port}/api/extended-data-collection`, requestBody)
+          await axios.post(`http://127.0.0.1:${port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
             const span = findWebSpan(traces)
