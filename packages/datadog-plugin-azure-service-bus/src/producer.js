@@ -1,36 +1,59 @@
 'use strict'
 
+const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class AzureServiceBusProducerPlugin extends ProducerPlugin {
-  static id = 'azure-service-bus'
-  static operation = 'send'
+  static get id () { return 'azure-service-bus' }
+  static get operation () { return 'send' }
+  static get prefix () { return 'tracing:apm:azure-service-bus:send' }
 
   bindStart (ctx) {
-    const { sender, msg } = ctx
-    const qualifiedSenderNamespace = sender._sender.audience.replace('sb://', '')
+    const { config, entityPath, functionName, msg } = ctx
+    const qualifiedSenderNamespace = config.host
     const span = this.startSpan({
-      resource: sender.entityPath,
+      resource: entityPath,
       type: 'messaging',
       meta: {
         component: 'azure-service-bus',
-        'messaging.destination.name': sender.entityPath,
+        'messaging.destination.name': entityPath,
         'messaging.operation': 'send',
         'messaging.system': 'servicebus',
         'network.destination.name': qualifiedSenderNamespace,
       }
     }, ctx)
 
-    // This is the correct key for injecting trace context into Azure Service Bus messages
-    // It may not be present in the message properties, so we ensure it exists
-    if (!msg.applicationProperties) {
-      msg.applicationProperties = {}
-    }
+    injectTraceContext(this.tracer, span, msg)
 
-    this.tracer.inject(span, 'text_map', msg.applicationProperties)
+    if (functionName === 'tryAddMessage') {
+      span._spanContext._name === 'azure.servicebus.create'
+      span.setTag('messaging.operation', 'create')
+
+      if (msg.messageID !== undefined) {
+        span.setTag('message.id', msg)
+      }
+
+      if (batchLinksAreEnabled()) {
+        ctx.batch._spanContexts.push(span.context())
+        injectTraceContext(this.tracer, span, msg)
+      }
+    }
 
     return ctx.currentStore
   }
+}
+
+function injectTraceContext (tracer, span, msg) {
+  if (!msg.applicationProperties) {
+    msg.applicationProperties = {}
+  }
+
+  tracer.inject(span, 'text_map', msg.applicationProperties)
+}
+
+function batchLinksAreEnabled () {
+  const sb = getEnvironmentVariable('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
+  return sb !== 'false'
 }
 
 module.exports = AzureServiceBusProducerPlugin

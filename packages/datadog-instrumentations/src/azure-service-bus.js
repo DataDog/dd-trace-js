@@ -1,38 +1,40 @@
+/* eslint-disable n/no-unpublished-require */
 'use strict'
 
 const {
-  channel,
   addHook
 } = require('./helpers/instrument')
 
 const shimmer = require('../../datadog-shimmer')
+const dc = require('dc-polyfill')
 
-const producerStartCh = channel('apm:azure-service-bus:send:start')
-const producerErrorCh = channel('apm:azure-service-bus:send:error')
-const producerFinishCh = channel('apm:azure-service-bus:send:finish')
+const producerCh = dc.tracingChannel('apm:azure-service-bus:send')
 
 addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false }, (obj) => {
   const ServiceBusClient = obj.ServiceBusClient
-  shimmer.wrap(ServiceBusClient.prototype, 'createSender', createSender => function (queueOrTopicName) {
-    const sender = createSender.apply(this, arguments)
-    shimmer.wrap(sender._sender, 'send', send => function (msg) {
-      const ctx = { sender, msg }
-      return producerStartCh.runStores(ctx, () => {
-        return send.apply(this, arguments)
-          .then(
-            response => {
-              producerFinishCh.publish(ctx)
-            },
-            error => {
-              ctx.error = error
-              producerErrorCh.publish(ctx)
-              producerFinishCh.publish(ctx)
-              throw error
-            }
-          )
+  shimmer.wrap(ServiceBusClient.prototype, 'createSender',
+    createSender => function (queueOrTopicName) {
+      const sender = createSender.apply(this, arguments)
+      const config = sender._context.config
+      const entityPath = sender._entityPath
+
+      shimmer.wrap(sender, 'sendMessages', sendMessages => function (msg) {
+        const functionName = sendMessages.name
+        return producerCh.tracePromise(
+          sendMessages, { config, entityPath, functionName, msg }, this, ...arguments
+        )
       })
+
+      shimmer.wrap(sender, 'createMessageBatch', createMessageBatch => async function () {
+        const batch = await createMessageBatch.apply(this, arguments)
+        shimmer.wrap(batch, 'tryAddMessage', tryAddMessage => function (msg) {
+          const functionName = tryAddMessage.name
+          return producerCh.tracePromise(
+            tryAddMessage, { config, entityPath, functionName, batch: this, msg }, this, ...arguments)
+        })
+        return batch
+      })
+      return sender
     })
-    return sender
-  })
   return obj
 })
