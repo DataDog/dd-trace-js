@@ -225,6 +225,45 @@ describe('mocha CommonJS', function () {
         testOutput += chunk.toString()
       })
     })
+
+    it.only('can run and report passing tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(event => event.type === 'test').content
+
+          expect(testSpan.parent_id.toString()).to.equal('0')
+          expect(testSpan.meta[TEST_STATUS]).to.equal('pass')
+          expect(testSpan.meta[TEST_NAME]).to.equal(testName)
+          expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
+          expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+          // reads from dd-trace-js' CODEOWNERS
+          expect(testSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
+          expect(testSpan.meta[LIBRARY_VERSION]).to.equal(ddTraceVersion)
+          expect(testSpan.meta[COMPONENT]).to.equal('mocha')
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-plugin-tests/passing.js'
+            ]),
+          },
+          stdio: 'inherit'
+        }
+      )
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
+      await Promise.all([
+        once(childProcess, 'end'),
+        eventsPromise
+      ])
+    })
   })
 
   const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
@@ -3437,8 +3476,7 @@ describe('mocha CommonJS', function () {
           }
         })
 
-    const runImpactedTest = (
-      done,
+    const runImpactedTest = async (
       { isModified, isEfd = false, isParallel = false, isNew = false },
       extraEnvVars = {}
     ) => {
@@ -3462,38 +3500,39 @@ describe('mocha CommonJS', function () {
         }
       )
 
-      childProcess.on('exit', () => {
-        testAssertionsPromise.then(done).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        testAssertionsPromise
+      ])
     }
 
     context('test is not new', () => {
-      it('should be detected as impacted', (done) => {
+      it('should be detected as impacted', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(done, { isModified: true })
+        await runImpactedTest({ isModified: true })
       })
 
-      it('should not be detected as impacted if disabled', (done) => {
+      it('should not be detected as impacted if disabled', async () => {
         receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done, { isModified: false })
+        await runImpactedTest({ isModified: false })
       })
 
-      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
+      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+        async () => {
+          receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done,
-          { isModified: false },
-          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
-        )
-      })
+          await runImpactedTest(
+            { isModified: false },
+            { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+          )
+        })
 
-      it('should be detected as impacted in parallel mode', (done) => {
+      it('should be detected as impacted in parallel mode', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(
-          done,
+        await runImpactedTest(
           { isModified: true, isParallel: true },
           {
             // we need to run more than 1 suite for parallel mode to kick in
@@ -3507,7 +3546,7 @@ describe('mocha CommonJS', function () {
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
+        it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
             mocha: {}
           })
@@ -3521,7 +3560,7 @@ describe('mocha CommonJS', function () {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(done,
+          await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
           )
         })
