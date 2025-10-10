@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import restify from 'restify'
 
 const server = restify.createServer()

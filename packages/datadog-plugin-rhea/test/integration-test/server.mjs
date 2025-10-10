@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import container from 'rhea'
 
 container.on('connection_open', function (context) {

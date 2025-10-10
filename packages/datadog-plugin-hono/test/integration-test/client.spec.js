@@ -36,7 +36,7 @@ describe('esm integration test', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
         VERSION: version
       })
       proc.url += '/hello'
@@ -48,7 +48,7 @@ describe('esm integration test', () => {
     }).timeout(50000)
 
     it('receives missing route trace', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
         VERSION: version
       })
       proc.url += '/missing'

@@ -1,30 +1,26 @@
 'use strict'
 
+const { join } = require('node:path')
+
+const { assert } = require('chai')
+
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
+const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('sharedb', 'sharedb', '>=3', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'sharedb@${version}'`], false, [
-        './packages/datadog-plugin-sharedb/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    insertVersionDep(__dirname, 'sharedb', version)
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -42,7 +38,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'sharedb.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
 
       await res
     }).timeout(20000)

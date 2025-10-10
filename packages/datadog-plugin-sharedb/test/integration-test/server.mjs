@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import ShareDB from 'sharedb'
 
 const backend = new ShareDB({ presence: true })

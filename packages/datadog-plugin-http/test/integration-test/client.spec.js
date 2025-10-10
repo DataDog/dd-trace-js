@@ -1,27 +1,21 @@
 'use strict'
 
+const { join } = require('node:path')
+
+const { assert } = require('chai')
+
 const {
   FakeAgent,
-  createSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox([], false, [
-      './packages/datadog-plugin-http/test/integration-test/*'])
-  })
-
-  after(async () => {
-    await sandbox.remove()
-  })
+  const env = {
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+  }
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -34,7 +28,7 @@ describe('esm', () => {
 
   context('http', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

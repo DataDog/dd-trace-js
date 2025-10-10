@@ -45,7 +45,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         ANTHROPIC_API_KEY: '<not-a-real-key>'
       })

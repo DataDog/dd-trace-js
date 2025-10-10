@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import http from 'http'
 
 const server = http.createServer(async (req, res) => {

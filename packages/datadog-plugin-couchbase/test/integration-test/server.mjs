@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import { connect } from 'couchbase'
 
 const cluster = await connect(
