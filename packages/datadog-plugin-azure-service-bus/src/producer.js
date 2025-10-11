@@ -9,37 +9,69 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
   static get prefix () { return 'tracing:apm:azure-service-bus:send' }
 
   bindStart (ctx) {
-    const { config, entityPath, functionName, msg } = ctx
-    const qualifiedSenderNamespace = config.host
+    // we do not want to make these spans when batch linking is disabled.
+    if (!batchLinksAreEnabled() && ctx.functionName === 'tryAddMessage') {
+      return ctx.currentStore
+    }
+
+    const qualifiedSenderNamespace = ctx.config.host
     const span = this.startSpan({
-      resource: entityPath,
+      resource: ctx.entityPath,
       type: 'messaging',
       meta: {
         component: 'azure-service-bus',
-        'messaging.destination.name': entityPath,
+        'messaging.destination.name': ctx.entityPath,
         'messaging.operation': 'send',
         'messaging.system': 'servicebus',
         'network.destination.name': qualifiedSenderNamespace,
       }
     }, ctx)
 
-    injectTraceContext(this.tracer, span, msg)
-
-    if (functionName === 'tryAddMessage') {
+    if (ctx.functionName === 'tryAddMessage') {
       span._spanContext._name === 'azure.servicebus.create'
       span.setTag('messaging.operation', 'create')
 
-      if (msg.messageID !== undefined) {
-        span.setTag('message.id', msg)
+      if (ctx.msg.messageID !== undefined) {
+        span.setTag('message.id', ctx.msg)
       }
 
       if (batchLinksAreEnabled()) {
         ctx.batch._spanContexts.push(span.context())
-        injectTraceContext(this.tracer, span, msg)
+        injectTraceContext(this.tracer, span, ctx.msg)
       }
     }
 
+    if (ctx.functionName === 'sendMessages') {
+      span.setTag('messaging.operation', 'send')
+
+      const messages = ctx.msg
+      const isBatch = messages.constructor.name === 'ServiceBusMessageBatchImpl'
+
+      if (isBatch) {
+        const messagesLength = messages.length || messages._context?.connection?._eventsCount
+        span.setTag('messaging.batch.message_count', messagesLength)
+
+        if (batchLinksAreEnabled()) {
+          messages._spanContexts.forEach(spanContext => {
+            span.addLink(spanContext)
+          })
+        }
+      } else if (Array.isArray(messages)) {
+        const messagesLength = messages.length || messages._context?.connection?._eventsCount
+        span.setTag('messaging.batch.message_count', messagesLength)
+
+        messages.forEach(event => {
+          injectTraceContext(this.tracer, span, event)
+        })
+      } else {
+        injectTraceContext(this.tracer, span, messages)
+      }
+    }
     return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    super.finish()
   }
 }
 
