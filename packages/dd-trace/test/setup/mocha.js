@@ -337,13 +337,13 @@ function insertVersionDep (dir, pkgName, version) {
 
   before(() => {
     const pkgPath = path.dirname(require(getModulePath(pkgName, version)).pkgJsonPath())
-    fs.mkdirSync(nmDir)
+    fs.mkdirSync(nmDir, { recursive: true })
     fs.symlinkSync(pkgPath, pkgDir)
   })
 
   after(() => {
     fs.unlinkSync(pkgDir)
-    fs.rmdirSync(nmDir)
+    fs.rmSync(nmDir, { recursive: true, force: true })
   })
 }
 
