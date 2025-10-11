@@ -73,6 +73,7 @@
     "avsc": "5.7.9",
     "aws-sdk": "2.1692.0",
     "axios": "1.12.2",
+    "azure-functions-core-tools": "4.3.0",
     "bluebird": "3.7.2",
     "body-parser": "2.2.0",
     "bson": "6.10.4",
