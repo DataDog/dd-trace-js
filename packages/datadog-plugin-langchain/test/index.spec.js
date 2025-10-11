@@ -113,7 +113,7 @@ describe('Plugin', () => {
         langchainTools = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/tools')
 
-        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
+        MemoryVectorStore = require(`../../../versions/langchain@${version}`)
           .get('langchain/vectorstores/memory')
           .MemoryVectorStore
       })
