@@ -117,7 +117,7 @@ describe('integrations', () => {
             .get('@langchain/core/tools')
             .tool
 
-          MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
+          MemoryVectorStore = require(`../../../../../../versions/langchain@${version}`)
             .get('langchain/vectorstores/memory')
             .MemoryVectorStore
         })

@@ -9,12 +9,15 @@ const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const { withBun } = require('./bun')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
+// List of trusted transitive dependencies to execute scripts for.
+const trustedList = ['libpq']
 const workspaces = new Set()
 const externalDeps = new Map()
 
@@ -29,7 +32,7 @@ run()
 
 async function run () {
   await assertPrerequisites()
-  install()
+  install(process.env.BUN_FORCE_INSTALL === 'true')
   await assertPeerDependencies(join(__dirname, '..', 'versions'))
   install()
 }
@@ -76,24 +79,24 @@ async function assertInstrumentation (instrumentation, external) {
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
-      await assertModules(instrumentation.name, result.version, external)
+      await assertModules(instrumentation.name, result.version)
     }
 
-    await assertModules(instrumentation.name, version, external)
+    await assertModules(instrumentation.name, version)
   }
 }
 
 /**
  * @param {string} name
  * @param {string} version
- * @param {boolean} external
+ * @param {string?} parent
  */
-async function assertModules (name, version, external) {
+async function assertModules (name, version) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
   await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
+    assertPackage(name, null, version),
+    assertPackage(name, version, version)
   ])
 }
 
@@ -109,9 +112,8 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange) {
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange)
   }
@@ -120,19 +122,8 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    dependencies
-  }
-
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces'
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**']
-      }
-    }
+    dependencies,
+    trustedDependencies: [name, ...trustedList]
   }
 
   addFolderToWorkspaces(name, version)
@@ -248,14 +239,25 @@ async function assertWorkspaces () {
 }
 
 /**
+ * @param {boolean} [force=false]
  * @param {boolean} [retry=true]
  */
-function install (retry = true) {
+function install (force = false, retry = true) {
+  const flags = [
+    '--linker=isolated',
+    '--omit=peer',
+    '--ignore-engines'
+  ]
+
+  if (force) {
+    flags.push('--force')
+  }
+
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    exec(`bun install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
-    install(false) // retry in case of server error from registry
+    install(force, false) // retry in case of server error from registry
   }
 }
 
