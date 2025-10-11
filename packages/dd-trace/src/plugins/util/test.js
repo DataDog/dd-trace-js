@@ -301,7 +301,7 @@ module.exports = {
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
-  getModifiedTestsFromDiff,
+  getModifiedFilesFromDiff,
   isModifiedTest,
   POSSIBLE_BASE_BRANCHES
 }
@@ -1069,7 +1069,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
   return getGitDiff(baseCommit, targetCommit)
 }
 
-function getModifiedTestsFromDiff (diff) {
+function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
 
@@ -1110,12 +1110,13 @@ function getModifiedTestsFromDiff (diff) {
   return result
 }
 
-function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests, testFramework) {
-  if (modifiedTests === undefined) {
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {
+  if (modifiedFiles === undefined) {
     return false
   }
 
-  const lines = modifiedTests[testPath]
+  const lines = modifiedFiles[testPath]
+
   if (!lines) {
     return false
   }

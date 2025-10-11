@@ -90,9 +90,9 @@ class VitestPlugin extends CiPlugin {
       onDone(isQuarantined)
     })
 
-    this.addSub('ci:vitest:test:is-modified', ({ modifiedTests, testSuiteAbsolutePath, onDone }) => {
+    this.addSub('ci:vitest:test:is-modified', ({ modifiedFiles, testSuiteAbsolutePath, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
 
       onDone(isModified)
     })

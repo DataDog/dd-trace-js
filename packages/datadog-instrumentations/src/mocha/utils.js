@@ -446,7 +446,7 @@ function getRunTestsWrapper (runTests, config) {
     if (config.isImpactedTestsEnabled) {
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
-          modifiedTests: config.modifiedTests,
+          modifiedFiles: config.modifiedFiles,
           file: suite.file,
           onDone: (isModified) => {
             if (isModified) {
