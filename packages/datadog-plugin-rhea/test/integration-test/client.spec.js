@@ -16,7 +16,7 @@ describe('esm', () => {
 
   withVersions('rhea', 'rhea', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'rhea@${version}'`], false, [
         './packages/datadog-plugin-rhea/test/integration-test/*'])
     })

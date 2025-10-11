@@ -18,7 +18,7 @@ describe('esm', () => {
 
   withVersions('mongoose', ['mongoose'], '>=4', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [
         './packages/datadog-plugin-mongoose/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'mongoose')

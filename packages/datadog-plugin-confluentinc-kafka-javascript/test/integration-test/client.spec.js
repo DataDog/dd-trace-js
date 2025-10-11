@@ -15,7 +15,7 @@ describe('esm', () => {
   let sandbox
   withVersions('confluentinc-kafka-javascript', '@confluentinc/kafka-javascript', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@confluentinc/kafka-javascript@${version}'`], false, [
         './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*'])
     })

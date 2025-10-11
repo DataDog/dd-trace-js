@@ -23,7 +23,7 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'tedious@${version}'`], false, [
         './packages/datadog-plugin-tedious/test/integration-test/*'])
     })

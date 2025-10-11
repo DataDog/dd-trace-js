@@ -17,7 +17,7 @@ describe('esm', () => {
 
   withVersions('bunyan', 'bunyan', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'bunyan')

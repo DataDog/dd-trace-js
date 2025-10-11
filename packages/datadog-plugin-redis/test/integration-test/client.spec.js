@@ -16,7 +16,7 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('redis', 'redis', '>=4', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'redis@${version}'`], false, [
         './packages/datadog-plugin-redis/test/integration-test/*'])
     })
