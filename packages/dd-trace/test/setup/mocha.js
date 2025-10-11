@@ -335,7 +335,7 @@ function insertVersionDep (dir, pkgName, version) {
   const moduleNameParts = pkgName.split(/[/\\]/)
   let pathToCreate = 'node_modules'
   if (moduleNameParts.length > 1) {
-    pathToCreate += moduleNameParts[1]
+    pathToCreate += '/' + moduleNameParts[0]
   }
   const nmDir = path.join(dir, pathToCreate)
   const pkgDir = path.join(nmDir, pkgName)
