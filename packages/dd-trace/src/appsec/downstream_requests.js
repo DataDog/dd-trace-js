@@ -163,6 +163,7 @@ function parseBody (body, contentType) {
           result[key] = value
         }
       }
+
       return result
     }
 

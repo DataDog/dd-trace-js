@@ -135,10 +135,22 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
+      it('collects response body for form-urlencoded content-type', async () => {
+        await axios.post('/with-body-form')
+
+        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+      })
+
       it('should not set headers and response body when it is not consumed', async () => {
         await axios.post('/without-body-and-headers')
 
         await Promise.all([assertMessage(agent, false, false), assertTelemetry(agent)])
+      })
+
+      it('does not collect response body for unsupported content-type', async () => {
+        await axios.post('/with-body-text')
+
+        await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
       })
     })
 

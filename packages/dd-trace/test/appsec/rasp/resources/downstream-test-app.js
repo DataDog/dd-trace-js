@@ -16,6 +16,18 @@ downstreamApp.get('/api/data', (_, res) => {
   res.json({ payload_out: 'kqehf09123r4lnksef' })
 })
 
+downstreamApp.get('/api/form', (_, res) => {
+  res.setHeader('echo-headers', 'qwoierj12l3')
+  res.type('application/x-www-form-urlencoded')
+  res.send('payload_out=kqehf09123r4lnksef')
+})
+
+downstreamApp.get('/api/text', (_, res) => {
+  res.setHeader('echo-headers', 'qwoierj12l3')
+  res.type('text/plain')
+  res.send('plain-text-body')
+})
+
 let downstreamServer
 let downstreamPort
 
@@ -37,6 +49,48 @@ app.post('/with-body', (_, res) => {
 
       downstreamRes.on('end', () => {
         res.json({ consumed: true, downstream: body })
+      })
+    })
+})
+
+app.post('/with-body-form', (_, res) => {
+  http.get(`http://localhost:${downstreamPort}/api/form`,
+    {
+      headers: {
+        'Witness': 'pwq3ojtropiw3hjtowir'
+      }
+    },
+    downstreamRes => {
+      downstreamRes.setEncoding('utf8')
+      let body = ''
+
+      downstreamRes.on('data', chunk => {
+        body += chunk
+      })
+
+      downstreamRes.on('end', () => {
+        res.json({ consumed: true, downstream: body, via: 'form' })
+      })
+    })
+})
+
+app.post('/with-body-text', (_, res) => {
+  http.get(`http://localhost:${downstreamPort}/api/text`,
+    {
+      headers: {
+        'Witness': 'pwq3ojtropiw3hjtowir'
+      }
+    },
+    downstreamRes => {
+      downstreamRes.setEncoding('utf8')
+      let body = ''
+
+      downstreamRes.on('data', chunk => {
+        body += chunk
+      })
+
+      downstreamRes.on('end', () => {
+        res.json({ consumed: true, downstream: body, via: 'text' })
       })
     })
 })
