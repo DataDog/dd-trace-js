@@ -260,7 +260,7 @@ describe('appsec downstream_requests', () => {
     })
   })
 
-  describe('addDownstreamRequestMetric', () => {
+  describe('incrementDownstreamAnalysisCount', () => {
     let web
     let span
 
@@ -275,19 +275,48 @@ describe('appsec downstream_requests', () => {
       require('sinon').restore()
     })
 
-    it('sets metric on span when span exists', () => {
+    it('increments count and sets metric on span', () => {
       const webRootStub = require('sinon').stub(web, 'root').returns(span)
 
-      downstream.addDownstreamRequestMetric(req)
+      downstream.incrementDownstreamAnalysisCount(req)
 
-      require('sinon').assert.calledOnceWithExactly(span.setTag, '_dd.appsec.downstream_request', 1.0)
+      require('sinon').assert.calledOnceWithExactly(span.setTag, '_dd.appsec.downstream_request', 1)
+      webRootStub.restore()
+    })
+
+    it('increments count on multiple calls', () => {
+      const webRootStub = require('sinon').stub(web, 'root').returns(span)
+
+      downstream.incrementDownstreamAnalysisCount(req)
+      downstream.incrementDownstreamAnalysisCount(req)
+      downstream.incrementDownstreamAnalysisCount(req)
+
+      require('sinon').assert.calledThrice(span.setTag)
+      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 1)
+      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 2)
+      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 3)
       webRootStub.restore()
     })
 
     it('does not error when span is null', () => {
       const webRootStub = require('sinon').stub(web, 'root').returns(null)
 
-      expect(() => downstream.addDownstreamRequestMetric(req)).to.not.throw()
+      expect(() => downstream.incrementDownstreamAnalysisCount(req)).to.not.throw()
+      webRootStub.restore()
+    })
+
+    it('tracks count per request independently', () => {
+      const webRootStub = require('sinon').stub(web, 'root').returns(span)
+      const req1 = {}
+      const req2 = {}
+
+      downstream.incrementDownstreamAnalysisCount(req1)
+      downstream.incrementDownstreamAnalysisCount(req2)
+      downstream.incrementDownstreamAnalysisCount(req1)
+
+      expect(span.setTag.getCall(0).args).to.deep.equal(['_dd.appsec.downstream_request', 1])
+      expect(span.setTag.getCall(1).args).to.deep.equal(['_dd.appsec.downstream_request', 1])
+      expect(span.setTag.getCall(2).args).to.deep.equal(['_dd.appsec.downstream_request', 2])
       webRootStub.restore()
     })
   })
