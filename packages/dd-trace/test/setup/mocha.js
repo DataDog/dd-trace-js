@@ -333,15 +333,17 @@ function getModulePath (moduleName, version) {
  */
 function insertVersionDep (dir, pkgName, version) {
   const moduleNameParts = pkgName.split(/[/\\]/)
+  const modulePath = getModulePath(pkgName, version)
   let pathToCreate = 'node_modules'
   if (moduleNameParts.length > 1) {
     pathToCreate += '/' + moduleNameParts[0]
+    pkgName = '/' + moduleNameParts[1]
   }
   const nmDir = path.join(dir, pathToCreate)
   const pkgDir = path.join(nmDir, pkgName)
 
   before(() => {
-    const pkgPath = path.dirname(require(getModulePath(pkgName, version)).pkgJsonPath())
+    const pkgPath = path.dirname(require(modulePath).pkgJsonPath())
     fs.mkdirSync(nmDir, { recursive: true })
     fs.symlinkSync(pkgPath, pkgDir)
   })
