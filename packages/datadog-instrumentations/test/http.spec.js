@@ -271,6 +271,18 @@ describe('client', () => {
           })
         })
 
+        it('publishes data chunks when customer iterates with for-await', (done) => {
+          http.get(url, (res) => {
+            (async () => {
+              for await (const _ of res) {
+                // consume without capturing
+              }
+              assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
+              assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+            })().then(() => done(), done)
+          })
+        })
+
         it('does not publish data chunks when customer does not consume response', (done) => {
           http.get(url, (res) => {
             // Don't attach data listener
