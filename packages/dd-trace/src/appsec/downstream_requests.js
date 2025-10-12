@@ -16,17 +16,20 @@ const UINT64_MAX = (1n << 64n) - 1n
 let config
 let globalRequestCounter
 let perRequestBodyAnalysisCount
+let perRequestDownstreamAnalysisCount
 
 function enable (_config) {
   config = _config
   globalRequestCounter = 0n
   perRequestBodyAnalysisCount = new WeakMap()
+  perRequestDownstreamAnalysisCount = new WeakMap()
 }
 
 function disable () {
   config = null
   globalRequestCounter = 0n
   perRequestBodyAnalysisCount = new WeakMap()
+  perRequestDownstreamAnalysisCount = new WeakMap()
 }
 
 function shouldSampleBody (req) {
@@ -95,11 +98,14 @@ function extractResponseData (res, includeBody, responseBody) {
   return addresses
 }
 
-function addDownstreamRequestMetric (req) {
+function incrementDownstreamAnalysisCount (req) {
+  const currentCount = perRequestDownstreamAnalysisCount.get(req) || 0
+  perRequestDownstreamAnalysisCount.set(req, currentCount + 1)
+
   const span = web.root(req)
 
   if (span) {
-    span.setTag('_dd.appsec.downstream_request', 1.0) // eslint-disable-line unicorn/no-zero-fractions
+    span.setTag('_dd.appsec.downstream_request', currentCount + 1)
   }
 }
 
@@ -183,9 +189,9 @@ module.exports = {
   disable,
   shouldSampleBody,
   incrementBodyAnalysisCount,
+  incrementDownstreamAnalysisCount,
   extractRequestData,
   extractResponseData,
-  addDownstreamRequestMetric,
   handleResponseTracing,
   // exports for tests
   parseBody,

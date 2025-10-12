@@ -5,6 +5,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const assert = require('node:assert')
+const { EventEmitter } = require('events')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -15,6 +16,8 @@ describe('client', () => {
   const endChannel = dc.channel('apm:http:client:request:end')
   const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
   const errorChannel = dc.channel('apm:http:client:request:error')
+  const responseDataChannel = dc.channel('apm:http:client:response:data')
+  const responseFinishChannel = dc.channel('apm:http:client:response:finish')
 
   before(async () => {
     await agent.load('http')
@@ -55,6 +58,14 @@ describe('client', () => {
       }
     }
     return null
+  }
+
+  function stubHasResponseForUrl (url, stub) {
+    return stub.args.some(([payload]) => {
+      const ctx = payload?.ctx
+      const originalUrl = ctx?.args?.originalUrl || ctx?.args?.uri
+      return originalUrl === url
+    })
   }
 
   ['http', 'https'].forEach((httpSchema) => {
@@ -180,6 +191,125 @@ describe('client', () => {
             } catch (e) {
               done(e)
             }
+          })
+        })
+      })
+
+      describe('response data and finish channels', () => {
+        let responseDataChannelCb, responseFinishChannelCb
+        const readableMethods = ['on', 'addListener']
+
+        if (httpSchema === 'http') {
+          readableMethods.push('once', 'prependListener')
+        }
+
+        before(() => {
+          http = require(httpSchema)
+          url = `${httpSchema}://www.datadoghq.com`
+        })
+
+        beforeEach(() => {
+          responseDataChannelCb = sinon.stub()
+          responseFinishChannelCb = sinon.stub()
+          responseDataChannel.subscribe(responseDataChannelCb)
+          responseFinishChannel.subscribe(responseFinishChannelCb)
+        })
+
+        afterEach(() => {
+          responseDataChannel.unsubscribe(responseDataChannelCb)
+          responseFinishChannel.unsubscribe(responseFinishChannelCb)
+        })
+
+          ;['on', 'addListener', 'once', 'prependListener'].forEach(method => {
+            if (typeof EventEmitter.prototype[method] !== 'function') {
+              return
+            }
+
+            it(`publishes data chunks when customer uses ${method} for data`, (done) => {
+              http.get(url, (res) => {
+                res[method]('data', () => {})
+                res.on('end', () => {
+                  try {
+                    assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
+                    assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                    done()
+                  } catch (e) {
+                    done(e)
+                  }
+                })
+              })
+            })
+          })
+
+        // Limit readable variants to ones that continue draining so TLS never stalls
+        readableMethods.forEach(method => {
+          if (typeof EventEmitter.prototype[method] !== 'function') {
+            return
+          }
+
+          it(`publishes data chunks when customer uses ${method} for readable`, (done) => {
+            http.get(url, (res) => {
+              res.setEncoding('utf8')
+              const consume = () => {
+                let chunk
+                while ((chunk = res.read()) !== null) {
+                  // wrapping res.read() lets instrumentation capture each chunk
+                }
+              }
+
+              res[method]('readable', consume)
+              res.on('end', () => {
+                try {
+                  assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
+                  assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                  done()
+                } catch (e) {
+                  done(e)
+                }
+              })
+            })
+          })
+        })
+
+        it('does not publish data chunks when customer does not consume response', (done) => {
+          http.get(url, (res) => {
+            // Don't attach data listener
+            setTimeout(() => {
+              try {
+                assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), false)
+                assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }, 100)
+          })
+        })
+
+        it('publishes finish when customer attaches end listener', (done) => {
+          http.get(url, (res) => {
+            res.on('end', () => {
+              try {
+                assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        it('handles response close event', (done) => {
+          http.get(url, (res) => {
+            res.destroy()
+            setTimeout(() => {
+              try {
+                assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }, 50)
           })
         })
       })

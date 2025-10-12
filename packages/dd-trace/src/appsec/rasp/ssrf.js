@@ -65,6 +65,8 @@ function analyzeSsrf (ctx) {
 
   handleResult(result, req, store?.res, ctx.abortController, config, raspRule)
 
+  downstream.incrementDownstreamAnalysisCount(req)
+
   // Track body analysis count if we're sampling the response body
   if (includeBodies) {
     downstream.incrementBodyAnalysisCount(req)
@@ -97,9 +99,6 @@ function handleResponseFinish ({ ctx, res }) {
 
   state.done = true
 
-  // If we were collecting bodies and have no chunks, skip evaluation
-  if (state.includeBodies && !state.chunks?.length) return
-
   // Combine collected chunks into a single body (or null if no chunks)
   let body = null
   if (state.chunks?.length) {
@@ -118,8 +117,6 @@ function runResponseEvaluation (res, req, responseBody) {
   const responseAddresses = downstream.extractResponseData(res, !!responseBody, responseBody)
 
   if (!Object.keys(responseAddresses).length) return
-
-  downstream.addDownstreamRequestMetric(req)
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'response' }
   const result = waf.run({ ephemeral: responseAddresses }, req, raspRule)
