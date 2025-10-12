@@ -135,6 +135,12 @@ describe('RASP - downstream request integration', () => {
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
+      it('collects response body when stream is consumed via async iterator', async () => {
+        await axios.post('/with-async-iterator')
+
+        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+      })
+
       it('collects response body for form-urlencoded content-type', async () => {
         await axios.post('/with-body-form')
 

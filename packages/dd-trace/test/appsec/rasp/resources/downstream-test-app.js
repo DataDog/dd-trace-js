@@ -120,6 +120,29 @@ app.post('/with-readable', (_, res) => {
     })
 })
 
+// async iterator is using req.read() internally
+app.post('/with-async-iterator', (_, res) => {
+  http.get(`http://localhost:${downstreamPort}/api/data`,
+    {
+      headers: {
+        'Witness': 'pwq3ojtropiw3hjtowir'
+      }
+    },
+    downstreamRes => {
+      downstreamRes.setEncoding('utf8')
+
+        ; (async () => {
+          for await (const chunk of downstreamRes) {
+            // just consume
+          }
+        })().then(() => {
+          res.json({ consumed: true })
+        }).catch(err => {
+          res.status(500).json({ error: err.message })
+        })
+    })
+})
+
 app.post('/without-body-and-headers', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/data`, () => {
     // Don't consume body
