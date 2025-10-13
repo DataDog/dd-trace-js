@@ -29,7 +29,7 @@ describe('RASP - downstream request integration', () => {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
-        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
+        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_downstream_request.json'),
         DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
         ...envOverrides
       }
