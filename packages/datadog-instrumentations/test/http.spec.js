@@ -220,26 +220,26 @@ describe('client', () => {
           responseFinishChannel.unsubscribe(responseFinishChannelCb)
         })
 
-          ;['on', 'addListener', 'once', 'prependListener'].forEach(method => {
-            if (typeof EventEmitter.prototype[method] !== 'function') {
-              return
-            }
+        ;['on', 'addListener', 'once', 'prependListener'].forEach(method => {
+          if (typeof EventEmitter.prototype[method] !== 'function') {
+            return
+          }
 
-            it(`publishes data chunks when customer uses ${method} for data`, (done) => {
-              http.get(url, (res) => {
-                res[method]('data', () => {})
-                res.on('end', () => {
-                  try {
-                    assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
-                    assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
-                    done()
-                  } catch (e) {
-                    done(e)
-                  }
-                })
+          it(`publishes data chunks when customer uses ${method} for data`, (done) => {
+            http.get(url, (res) => {
+              res[method]('data', () => {})
+              res.on('end', () => {
+                try {
+                  assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
+                  assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
+                  done()
+                } catch (e) {
+                  done(e)
+                }
               })
             })
           })
+        })
 
         // Limit readable variants to ones that continue draining so TLS never stalls
         readableMethods.forEach(method => {
@@ -252,7 +252,7 @@ describe('client', () => {
               res.setEncoding('utf8')
               const consume = () => {
                 let chunk
-                while ((chunk = res.read()) !== null) {
+                while ((chunk = res.read()) !== null) { // eslint-disable-line no-unused-vars
                   // wrapping res.read() lets instrumentation capture each chunk
                 }
               }
@@ -274,7 +274,7 @@ describe('client', () => {
         it('publishes data chunks when customer iterates with for-await', (done) => {
           http.get(url, (res) => {
             (async () => {
-              for await (const _ of res) {
+              for await (const _ of res) { // eslint-disable-line no-unused-vars
                 // consume without capturing
               }
               assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)

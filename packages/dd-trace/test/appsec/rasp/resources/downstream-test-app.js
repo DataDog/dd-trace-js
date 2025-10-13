@@ -28,7 +28,6 @@ downstreamApp.get('/api/text', (_, res) => {
   res.send('plain-text-body')
 })
 
-let downstreamServer
 let downstreamPort
 
 // Main app routes
@@ -36,7 +35,7 @@ app.post('/with-body', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/data`,
     {
       headers: {
-        'Witness': 'pwq3ojtropiw3hjtowir'
+        Witness: 'pwq3ojtropiw3hjtowir'
       }
     },
     downstreamRes => {
@@ -57,7 +56,7 @@ app.post('/with-body-form', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/form`,
     {
       headers: {
-        'Witness': 'pwq3ojtropiw3hjtowir'
+        Witness: 'pwq3ojtropiw3hjtowir'
       }
     },
     downstreamRes => {
@@ -78,7 +77,7 @@ app.post('/with-body-text', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/text`,
     {
       headers: {
-        'Witness': 'pwq3ojtropiw3hjtowir'
+        Witness: 'pwq3ojtropiw3hjtowir'
       }
     },
     downstreamRes => {
@@ -99,7 +98,7 @@ app.post('/with-readable', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/data`,
     {
       headers: {
-        'Witness': 'pwq3ojtropiw3hjtowir'
+        Witness: 'pwq3ojtropiw3hjtowir'
       }
     },
     downstreamRes => {
@@ -125,21 +124,21 @@ app.post('/with-async-iterator', (_, res) => {
   http.get(`http://localhost:${downstreamPort}/api/data`,
     {
       headers: {
-        'Witness': 'pwq3ojtropiw3hjtowir'
+        Witness: 'pwq3ojtropiw3hjtowir'
       }
     },
     downstreamRes => {
       downstreamRes.setEncoding('utf8')
 
-        ; (async () => {
-          for await (const chunk of downstreamRes) {
-            // just consume
-          }
-        })().then(() => {
-          res.json({ consumed: true })
-        }).catch(err => {
-          res.status(500).json({ error: err.message })
-        })
+      ; (async () => {
+        for await (const chunk of downstreamRes) { // eslint-disable-line no-unused-vars
+          // just consume
+        }
+      })().then(() => {
+        res.json({ consumed: true })
+      }).catch(err => {
+        res.status(500).json({ error: err.message })
+      })
     })
 })
 
@@ -150,7 +149,7 @@ app.post('/without-body-and-headers', (_, res) => {
   })
 })
 
-downstreamServer = downstreamApp.listen(0, () => {
+const downstreamServer = downstreamApp.listen(0, () => {
   downstreamPort = downstreamServer.address().port
 
   const mainServer = app.listen(0, () => {

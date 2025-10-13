@@ -32,6 +32,11 @@ function disable () {
   perRequestDownstreamAnalysisCount = new WeakMap()
 }
 
+/**
+ * Determines whether the current downstream request/responses bodies should be sampled for analysis.
+ * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @returns {boolean} true when the downstream response body should be captured.
+ */
 function shouldSampleBody (req) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
@@ -53,11 +58,20 @@ function shouldSampleBody (req) {
   return hashed <= threshold
 }
 
+/**
+ * Increments the number of downstream body analyses performed for the given request.
+ * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ */
 function incrementBodyAnalysisCount (req) {
   const currentCount = perRequestBodyAnalysisCount.get(req) || 0
   perRequestBodyAnalysisCount.set(req, currentCount + 1)
 }
 
+/**
+ * Extracts request data from the context for WAF analysis
+ * @param {object} ctx context for the outgoing downstream request.
+ * @returns {object} a map of addresses and request data.
+ */
 function extractRequestData (ctx) {
   const addresses = {}
 
@@ -73,6 +87,13 @@ function extractRequestData (ctx) {
   return addresses
 }
 
+/**
+ * Extracts response data for WAF analysis.
+ * @param {import('http').IncomingMessage} res downstream response object.
+ * @param {boolean} includeBody flag describing if the response body should be collected.
+ * @param {Buffer|string|object|null} responseBody response body.
+ * @returns {object} a map of addresses and response data.
+ */
 function extractResponseData (res, includeBody, responseBody) {
   const addresses = {}
 
@@ -98,6 +119,10 @@ function extractResponseData (res, includeBody, responseBody) {
   return addresses
 }
 
+/**
+ * Tracks how many downstream analyses were executed for a given request and updates tracing tags.
+ * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ */
 function incrementDownstreamAnalysisCount (req) {
   const currentCount = perRequestDownstreamAnalysisCount.get(req) || 0
   perRequestDownstreamAnalysisCount.set(req, currentCount + 1)
@@ -109,20 +134,41 @@ function incrementDownstreamAnalysisCount (req) {
   }
 }
 
+/**
+ * Adds tracing telemetry for matches triggered by downstream responses.
+ * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @param {object} raspRule rule with type and variant
+ */
 function handleResponseTracing (req, raspRule) {
   updateRaspRuleMatchMetricTags(req, raspRule, false, false)
 }
 
+/**
+ * Returns the HTTP method to use for a downstream request, defaulting to GET.
+ * @param {string} method method supplied in the outgoing request options.
+ * @returns {string} validated HTTP method.
+ */
 function determineMethod (method) {
   return typeof method === 'string' && method ? method : 'GET'
 }
 
+/**
+ * Gets the content-type header value from a case-insensitive headers object.
+ * @param {import('http').IncomingHttpHeaders|object|null} headers response headers object.
+ * @returns {string|null} content-type value
+ */
 function getResponseContentType (headers) {
   if (!headers) return null
 
   return headers['content-type'] || headers['Content-Type'] || headers['CONTENT-TYPE'] || null
 }
 
+/**
+ * Parses a downstream response body.
+ * @param {Buffer|string|object|null} body raw response body
+ * @param {string|null} contentType response content-type used to select the parser.
+ * @returns {object|null} parsed body object or null when not supported.
+ */
 function parseBody (body, contentType) {
   if (body === null || body === undefined || !contentType) {
     return null
@@ -177,6 +223,11 @@ function parseBody (body, contentType) {
   }
 }
 
+/**
+ * Extracts the MIME type portion of a content-type header value.
+ * @param {string|null} contentType raw content-type header value.
+ * @returns {string|null} lowercase mime type
+ */
 function extractMimeType (contentType) {
   if (typeof contentType !== 'string') {
     return null
