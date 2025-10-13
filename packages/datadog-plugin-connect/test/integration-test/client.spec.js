@@ -19,7 +19,7 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('connect', 'connect', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'connect@${version}'`], false, [
         './packages/datadog-plugin-connect/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'connect')

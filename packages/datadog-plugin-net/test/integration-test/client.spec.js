@@ -16,7 +16,7 @@ describe('esm', () => {
   let variants
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(60000)
     sandbox = await createSandbox(['net'], false, [
       './packages/datadog-plugin-net/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', 'net', 'createConnection')

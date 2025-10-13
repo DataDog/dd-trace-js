@@ -772,7 +772,10 @@ addHook({
     if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return oldCreateRootSuite.apply(this, arguments)
     }
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+
+    const createRootSuiteReturnValue = await oldCreateRootSuite.apply(this, arguments)
+    // From v1.56.0 on, createRootSuite returns `{ rootSuite, topLevelProjects }`
+    const rootSuite = createRootSuiteReturnValue.rootSuite || createRootSuiteReturnValue
 
     const allTests = rootSuite.allTests()
 
@@ -861,7 +864,7 @@ addHook({
       }
     }
 
-    return rootSuite
+    return createRootSuiteReturnValue
   }
 
   // We need to proxy the createRootSuite function because the function is not configurable

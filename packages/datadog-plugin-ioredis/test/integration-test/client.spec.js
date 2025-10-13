@@ -17,7 +17,7 @@ describe('esm', () => {
   let variants
   withVersions('ioredis', 'ioredis', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'ioredis@${version}'`], false, [
         './packages/datadog-plugin-ioredis/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'ioredis')

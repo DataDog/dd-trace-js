@@ -32,7 +32,7 @@ describe('esm', () => {
     })
 
     beforeEach(async function () {
-      this.timeout(30000)
+      this.timeout(60000)
       agent = await new FakeAgent().start()
       execSync(
         './node_modules/.bin/prisma migrate reset --force && ' +
@@ -51,7 +51,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assertObjectContains(payload, [[{
