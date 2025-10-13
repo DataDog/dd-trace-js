@@ -12,7 +12,7 @@ const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 const downstream = require('../downstream_requests')
 
-// Store response state on ctx and res objects
+// Store response state on ctx
 const RESPONSE_STATE = Symbol('http.client.response.state')
 
 let config
@@ -73,6 +73,13 @@ function analyzeSsrf (ctx) {
   }
 }
 
+/**
+ * Collects outgoing response chunks when body sampling is enabled.
+ * @param {{
+ * ctx: object,
+ * chunk: Buffer|string|Uint8Array,
+ * res: import('http').IncomingMessage}} payload event payload from the channel.
+ */
 function handleResponseData ({ ctx, chunk, res }) {
   if (!res || !chunk) return
 
@@ -91,6 +98,10 @@ function handleResponseData ({ ctx, chunk, res }) {
   }
 }
 
+/**
+ * Finalizes body collection for the response and triggers RASP analysis.
+ * @param {{ctx: object, res: import('http').IncomingMessage}} payload event payload from the channel.
+ */
 function handleResponseFinish ({ ctx, res }) {
   if (!res) return
 
@@ -113,6 +124,12 @@ function handleResponseFinish ({ ctx, res }) {
   delete ctx[RESPONSE_STATE]
 }
 
+/**
+ * Evaluates the downstream response and records telemetry.
+ * @param {import('http').IncomingMessage} res outgoing response object.
+ * @param {import('http').IncomingMessage} req originating inbound request.
+ * @param {string|Buffer|null} responseBody collected downstream response body
+ */
 function runResponseEvaluation (res, req, responseBody) {
   const responseAddresses = downstream.extractResponseData(res, !!responseBody, responseBody)
 

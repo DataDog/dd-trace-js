@@ -63,8 +63,9 @@ describe('RASP - ssrf.js', () => {
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementBodyAnalysisCount: sinon.stub(),
-      addDownstreamRequestMetric: sinon.stub(),
-      handleResponseTracing: sinon.stub()
+      incrementDownstreamAnalysisCount: sinon.stub(),
+      handleResponseTracing: sinon.stub(),
+      perRequestDownstreamAnalysisCount: sinon.stub()
     }
 
     ssrf = proxyquire('../../../src/appsec/rasp/ssrf', {
@@ -179,8 +180,9 @@ describe('RASP - ssrf.js', () => {
       httpClientResponseFinish.publish({ ctx, res: response })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, true, sinon.match.instanceOf(Buffer))
-      sinon.assert.calledOnceWithExactly(downstream.addDownstreamRequestMetric, req)
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledWith(downstream.handleResponseTracing, req, { type: 'ssrf', variant: 'response' })
+      sinon.assert.calledTwice(waf.run)
     })
 
     it('does not collect body when sampling disabled', () => {
@@ -198,7 +200,8 @@ describe('RASP - ssrf.js', () => {
       httpClientResponseFinish.publish({ ctx, res: response })
 
       sinon.assert.calledWith(downstream.extractResponseData, response, false, null)
-      sinon.assert.calledOnceWithExactly(downstream.addDownstreamRequestMetric, req)
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+      sinon.assert.calledTwice(waf.run)
     })
 
     it('concatenates string chunks', () => {
@@ -273,6 +276,8 @@ describe('RASP - ssrf.js', () => {
 
     it('does not call response evaluation when no response addresses', () => {
       const ctx = makeCtx()
+      const { req } = stubStore({}, {})
+
       stubStore({}, {})
 
       downstream.extractResponseData.returns({})
@@ -283,8 +288,8 @@ describe('RASP - ssrf.js', () => {
       const response = createResponse()
       httpClientResponseFinish.publish({ ctx, res: response })
 
-      sinon.assert.notCalled(downstream.addDownstreamRequestMetric)
-      sinon.assert.calledOnce(waf.run)
+      sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
+      sinon.assert.calledOnce(waf.run) // only for request
     })
   })
 })
