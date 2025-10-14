@@ -417,6 +417,64 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 
 Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
+<h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
+
+```javascript
+require('dd-trace').init()
+const { metrics } = require('@opentelemetry/api')
+
+const meter = metrics.getMeter('my-service', '1.0.0')
+
+// Counter - monotonically increasing values
+const requestCounter = meter.createCounter('http.requests', {
+  description: 'Total HTTP requests',
+  unit: 'requests'
+})
+requestCounter.add(1, { method: 'GET', status: 200 })
+
+// Histogram - distribution of values
+const durationHistogram = meter.createHistogram('http.duration', {
+  description: 'HTTP request duration',
+  unit: 'ms'
+})
+durationHistogram.record(145, { route: '/api/users' })
+
+// UpDownCounter - can increase and decrease
+const connectionCounter = meter.createUpDownCounter('active.connections', {
+  description: 'Active connections',
+  unit: 'connections'
+})
+connectionCounter.add(1)  // New connection
+connectionCounter.add(-1) // Connection closed
+
+// ObservableGauge - asynchronous observations
+const cpuGauge = meter.createObservableGauge('system.cpu.usage', {
+  description: 'CPU usage percentage',
+  unit: 'percent'
+})
+cpuGauge.addCallback((result) => {
+  const cpuUsage = process.cpuUsage()
+  result.observe(cpuUsage.system / 1000000, { core: '0' })
+})
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics (default: `http://localhost:4318/v1/metrics`)
+- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers in JSON format for metrics (default: `{}`)
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics (default: `10000`)
+- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `60000`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Export timeout in milliseconds
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - [NOT YET SUPPORTED] Temporality preference (currently delta only)
+
+Metrics are collected periodically and exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. All metrics use delta aggregation temporality to match Datadog's data model. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>

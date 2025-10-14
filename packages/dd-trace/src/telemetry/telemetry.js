@@ -341,6 +341,12 @@ const nameMapping = {
   otelLogsUrl: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
   otelLogsBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
   otelLogsMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+  otelMetricsEnabled: 'DD_METRICS_OTEL_ENABLED',
+  otelMetricsHeaders: 'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+  otelMetricsProtocol: 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
+  otelMetricsTimeout: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT',
+  otelMetricsUrl: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
+  otelMetricsExportInterval: 'OTEL_METRIC_EXPORT_INTERVAL',
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])

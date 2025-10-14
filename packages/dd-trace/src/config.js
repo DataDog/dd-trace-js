@@ -557,6 +557,7 @@ class Config {
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_LOGS_OTEL_ENABLED,
+      DD_METRICS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -643,12 +644,17 @@ class Config {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
-      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_METRIC_EXPORT_INTERVAL
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -679,6 +685,16 @@ class Config {
     env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || env.otelTimeout
     env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
     env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+
+    this._setBoolean(env, 'otelMetricsEnabled', isTrue(DD_METRICS_OTEL_ENABLED))
+    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
+      this._setString(env, 'otelMetricsUrl', OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || env.otelUrl)
+    }
+    this._setString(env, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || env.otelHeaders)
+    this._setString(env, 'otelMetricsProtocol', OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || env.otelProtocol)
+    env.otelMetricsTimeout = maybeInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT) || env.otelTimeout
+    env.otelMetricsExportInterval = maybeInt(OTEL_METRIC_EXPORT_INTERVAL)
     this._setBoolean(
       env,
       'apmTracingEnabled',
@@ -1195,9 +1211,10 @@ class Config {
 
     calc['dogstatsd.hostname'] = this._getHostname()
 
-    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this._getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
 
     this._setBoolean(calc, 'isGitUploadEnabled',
