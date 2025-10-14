@@ -29,6 +29,12 @@ class SpanProcessor {
     this._gitMetadataTagger = new GitMetadataTagger(config)
   }
 
+  sample (span) {
+    const spanContext = span.context()
+    this._prioritySampler.sample(spanContext)
+    this._spanSampler.sample(spanContext)
+  }
+
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -43,8 +49,7 @@ class SpanProcessor {
       return
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
-      this._prioritySampler.sample(spanContext)
-      this._spanSampler.sample(spanContext)
+      this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isChunkRoot = true
