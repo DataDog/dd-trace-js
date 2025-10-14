@@ -380,60 +380,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      // try to read Git metadata from the environment variables
-      this.repositoryUrl = removeUserSensitiveInfo(
-        getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
-        this.tags[GIT_REPOSITORY_URL]
-      )
-      this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
-        this.tags[GIT_COMMIT_SHA]
-
-      // otherwise, try to read Git metadata from the git.properties file
-      if (!this.repositoryUrl || !this.commitSHA) {
-        const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
-          `${process.cwd()}/git.properties`
-        let gitPropertiesString
-        try {
-          gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
-        } catch (e) {
-          // Only log error if the user has set a git.properties path
-          if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
-            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
-          }
-        }
-        if (gitPropertiesString) {
-          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-          this.commitSHA = this.commitSHA || commitSHA
-          this.repositoryUrl = this.repositoryUrl || repositoryUrl
-        }
-      }
-      // otherwise, try to read Git metadata from the .git/ folder
-      if (!this.repositoryUrl || !this.commitSHA) {
-        const DD_GIT_FOLDER_PATH = getEnvironmentVariable('DD_GIT_FOLDER_PATH') ??
-          path.join(process.cwd(), '.git')
-        if (!this.repositoryUrl) {
-          // try to read git config (repository URL)
-          const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
-          try {
-            const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
-            if (gitConfigContent) {
-              this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
-            }
-          } catch (e) {
-            // Only log error if the user has set a .git/ path
-            if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
-              log.error('Error reading git config: %s', gitConfigPath, e)
-            }
-          }
-        }
-        if (!this.commitSHA) {
-          // try to read git HEAD (commit SHA)
-          const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
-          if (gitHeadSha) {
-            this.commitSHA = gitHeadSha
-          }
-        }
-      }
+      this._loadGitMetadata()
     }
   }
 
@@ -1370,6 +1317,63 @@ class Config {
       const value = container[name]
       if (value != null || container === this._defaults) {
         return origin
+      }
+    }
+  }
+
+  _loadGitMetadata () {
+    // try to read Git metadata from the environment variables
+    this.repositoryUrl = removeUserSensitiveInfo(
+      getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
+      this.tags[GIT_REPOSITORY_URL]
+    )
+    this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
+      this.tags[GIT_COMMIT_SHA]
+
+    // otherwise, try to read Git metadata from the git.properties file
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
+        `${process.cwd()}/git.properties`
+      let gitPropertiesString
+      try {
+        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+      } catch (e) {
+        // Only log error if the user has set a git.properties path
+        if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        }
+      }
+      if (gitPropertiesString) {
+        const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+        this.commitSHA = this.commitSHA || commitSHA
+        this.repositoryUrl = this.repositoryUrl || repositoryUrl
+      }
+    }
+    // otherwise, try to read Git metadata from the .git/ folder
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_FOLDER_PATH = getEnvironmentVariable('DD_GIT_FOLDER_PATH') ??
+        path.join(process.cwd(), '.git')
+      if (!this.repositoryUrl) {
+        // try to read git config (repository URL)
+        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        try {
+          const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
+          if (gitConfigContent) {
+            this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git config: %s', gitConfigPath, e)
+          }
+        }
+      }
+      if (!this.commitSHA) {
+        // try to read git HEAD (commit SHA)
+        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        if (gitHeadSha) {
+          this.commitSHA = gitHeadSha
+        }
       }
     }
   }
