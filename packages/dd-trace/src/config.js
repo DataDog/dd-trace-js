@@ -286,6 +286,7 @@ class Config {
     checkIfBothOtelAndDdEnvVarSet()
 
     const DD_API_KEY = getEnvironmentVariable('DD_API_KEY')
+    const DD_APP_KEY = getEnvironmentVariable('DD_APP_KEY')
 
     if (getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') && (
       getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
@@ -338,6 +339,7 @@ class Config {
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
+    this.appKey = DD_APP_KEY
 
     // sent in telemetry event app-started
     this.installSignature = {
@@ -495,7 +497,6 @@ class Config {
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
       DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
-      DD_APP_KEY,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -654,7 +655,6 @@ class Config {
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
-    this._setString(env, 'appKey', DD_APP_KEY)
     this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
     this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
@@ -668,6 +668,7 @@ class Config {
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
+    // TODO appsec.extendedHeadersCollection are deprecated, to delete in a major
     this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
     this._setBoolean(
       env,
@@ -679,6 +680,7 @@ class Config {
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
+    // TODO Deprecated, to delete in a major
     this._setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
     env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
     this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT

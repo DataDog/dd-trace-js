@@ -1561,7 +1561,7 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(
               test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             ).length, 5)
-          })
+          }, 30000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress

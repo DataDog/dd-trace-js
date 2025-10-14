@@ -27,7 +27,6 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
 
 module.exports = {
   apmTracingEnabled: true,
-  appKey: undefined,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
   'appsec.apiSecurity.endpointCollectionEnabled': true,
@@ -37,12 +36,14 @@ module.exports = {
   'appsec.blockedTemplateJson': undefined,
   'appsec.enabled': undefined,
   'appsec.eventTracking.mode': 'identification',
+  // TODO appsec.extendedHeadersCollection is deprecated, to delete in a major
   'appsec.extendedHeadersCollection.enabled': false,
   'appsec.extendedHeadersCollection.redaction': true,
   'appsec.extendedHeadersCollection.maxHeaders': 50,
   'appsec.obfuscatorKeyRegex': defaultWafObfuscatorKeyRegex,
   'appsec.obfuscatorValueRegex': defaultWafObfuscatorValueRegex,
   'appsec.rasp.enabled': true,
+  // TODO Deprecated, to delete in a major
   'appsec.rasp.bodyCollection': false,
   'appsec.rateLimit': 100,
   'appsec.rules': undefined,

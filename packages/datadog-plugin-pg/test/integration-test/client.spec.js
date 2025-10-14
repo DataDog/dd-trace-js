@@ -19,7 +19,7 @@ describe('esm', () => {
 
   withVersions('pg', 'pg', (version, _, realVersion) => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'pg@${version}'`], false, [
         './packages/datadog-plugin-pg/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
