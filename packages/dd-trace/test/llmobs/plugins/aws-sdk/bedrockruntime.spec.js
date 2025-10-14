@@ -75,7 +75,14 @@ describe('Plugin', () => {
               span: apmSpans[0],
               spanKind: 'llm',
               name: 'bedrock-runtime.command',
-              inputMessages: [{ content: model.userPrompt }],
+              inputMessages: model.systemPrompt
+                ? [
+                    { content: model.systemPrompt, role: 'system' },
+                    { content: model.userPrompt, role: 'user' }
+                  ]
+                : [
+                    { content: model.userPrompt }
+                  ],
               outputMessages: [expectedOutput],
               tokenMetrics: {
                 input_tokens: model.response.inputTokens,
@@ -119,7 +126,14 @@ describe('Plugin', () => {
               span: apmSpans[0],
               spanKind: 'llm',
               name: 'bedrock-runtime.command',
-              inputMessages: [{ content: model.userPrompt }],
+              inputMessages: model.systemPrompt
+                ? [
+                    { content: model.systemPrompt, role: 'system' },
+                    { content: model.userPrompt, role: 'user' }
+                  ]
+                : [
+                    { content: model.userPrompt }
+                  ],
               outputMessages: [{ content: expectedResponseObject.text, role: 'assistant' }],
               tokenMetrics: {
                 input_tokens: expectedResponseObject.inputTokens,
