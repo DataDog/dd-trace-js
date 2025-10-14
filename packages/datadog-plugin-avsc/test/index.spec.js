@@ -41,11 +41,9 @@ describe('Plugin', () => {
     let dateNowStub
     let mockTime = 0
 
-    withVersions('avsc', ['avsc'], (version) => {
+    withVersions('avsc', ['avsc'], nodeMajor >= 25 ? '>5.0.0' : undefined, (version) => {
       // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-      if (version === '5.0.0' && nodeMajor >= 25) {
-        return
-      }
+
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas

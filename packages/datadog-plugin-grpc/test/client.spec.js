@@ -78,10 +78,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, (version, pkg) => {
-      if (!semver.satisfies(version, '>=1.3.0') && nodeMajor >= 25) {
-        return
-      }
+    withVersions('grpc', pkgs, nodeMajor >= 25 ? '>=1.3.0' : undefined, (version, pkg) => {
       for (const clientName in clientBuilders) {
         const buildClient = clientBuilders[clientName]
 

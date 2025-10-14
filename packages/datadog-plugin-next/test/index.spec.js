@@ -21,7 +21,7 @@ describe('Plugin', function () {
   let port
 
   describe('next', () => {
-    // These next versions have a dependency which uses a depricated node buffer
+    // These next versions have a dependency which uses a deprecated node buffer
     if (process.env.PACKAGE_VERSION_RANGE === '>=11.0.0 <13' && nodeMajor >= 25) {
       return
     }

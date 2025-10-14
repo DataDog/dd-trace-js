@@ -24,7 +24,7 @@ describe('esm', () => {
     return
   }
   withVersions('next', 'next', '>=11.1 <15.4.1', version => {
-    // These next versions have a dependency which uses a depricated node buffer
+    // These next versions have a dependency which uses a deprecated node buffer
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(300 * 1000)
