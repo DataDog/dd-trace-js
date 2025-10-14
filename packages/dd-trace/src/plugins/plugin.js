@@ -6,6 +6,24 @@ const dc = require('dc-polyfill')
 const logger = require('../log')
 const { storage } = require('../../../datadog-core')
 
+/**
+ * Base class for all Datadog plugins.
+ *
+ * Subclasses MUST define a static field `id` with the integration identifier
+ * used across channels, span names, tags and telemetry.
+ *
+ * Example:
+ * ```js
+ * class MyPlugin extends Plugin {
+ *   static id = 'myframework'
+ * }
+ * ```
+ *
+ * Notes about the tracer instance:
+ * - In some contexts the tracer may be wrapped and available as `{ _tracer: Tracer }`.
+ *   Use the `tracer` getter which normalizes access.
+ */
+
 class Subscription {
   constructor (event, handler) {
     this._channel = dc.channel(event)
@@ -50,6 +68,12 @@ class StoreBinding {
 }
 
 module.exports = class Plugin {
+  /**
+   * Create a new plugin instance.
+   *
+   * @param {object} tracer Tracer instance or wrapper containing it under `_tracer`.
+   * @param {object} tracerConfig Global tracer configuration object.
+   */
   constructor (tracer, tracerConfig) {
     this._subscriptions = []
     this._bindings = []
@@ -59,10 +83,22 @@ module.exports = class Plugin {
     this._tracerConfig = tracerConfig // global tracer configuration
   }
 
+  /**
+   * Normalized tracer access. Returns the underlying tracer even if wrapped.
+   *
+   * @returns {object}
+   */
   get tracer () {
     return this._tracer?._tracer || this._tracer
   }
 
+  /**
+   * Enter a context with the provided span bound in storage.
+   *
+   * @param {object} span The span to bind as current.
+   * @param {object=} store Optional existing store to extend; if omitted, uses current store.
+   * @returns {void}
+   */
   enter (span, store) {
     store = store || storage('legacy').getStore()
     storage('legacy').enterWith({ ...store, span })
@@ -74,8 +110,19 @@ module.exports = class Plugin {
     storage('legacy').enterWith({ noop: true })
   }
 
+  /**
+   * Subscribe to a diagnostic channel with automatic error handling and enable/disable lifecycle.
+   *
+   * @param {string} channelName Diagnostic channel name.
+   * @param {(...args: unknown[]) => unknown} handler Handler invoked on messages.
+   * @returns {void}
+   */
   addSub (channelName, handler) {
     const plugin = this
+    /**
+     * @this {unknown}
+     * @returns {unknown}
+     */
     const wrappedHandler = function () {
       try {
         return handler.apply(this, arguments)
@@ -88,10 +135,23 @@ module.exports = class Plugin {
     this._subscriptions.push(new Subscription(channelName, wrappedHandler))
   }
 
+  /**
+   * Bind the tracer store to a diagnostic channel with a transform function.
+   *
+   * @param {string} channelName Diagnostic channel name.
+   * @param {(data: unknown) => object} transform Transform to compute the bound store.
+   * @returns {void}
+   */
   addBind (channelName, transform) {
     this._bindings.push(new StoreBinding(channelName, transform))
   }
 
+  /**
+   * Attach an error to the current active span (if any).
+   *
+   * @param {unknown} error Error object or sentinel value.
+   * @returns {void}
+   */
   addError (error) {
     const store = storage('legacy').getStore()
 
@@ -102,6 +162,13 @@ module.exports = class Plugin {
     }
   }
 
+  /**
+   * Enable or disable the plugin and (re)apply its configuration.
+   *
+   * @param {boolean|object} config Either a boolean to enable/disable or a configuration object
+   *                                containing at least `{ enabled: boolean }`.
+   * @returns {void}
+   */
   configure (config) {
     if (typeof config === 'boolean') {
       config = { enabled: config }

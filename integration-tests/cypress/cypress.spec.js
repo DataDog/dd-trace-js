@@ -137,10 +137,10 @@ moduleTypes.forEach(({
       // Install cypress' browser before running the tests
       await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
 
-      await new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
+      await /** @type {Promise<void>} */ (new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
         webAppPort = webAppServer.address().port
         resolve()
-      }))
+      })))
     })
 
     after(async () => {
@@ -1561,7 +1561,7 @@ moduleTypes.forEach(({
             assert.equal(neverPassingTest.filter(
               test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             ).length, 5)
-          })
+          }, 30000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress

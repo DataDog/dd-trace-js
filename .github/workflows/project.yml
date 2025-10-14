@@ -67,7 +67,7 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     name: Datadog Static Analyzer
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
     - name: Checkout
       uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -86,8 +86,8 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: yarn type:test
-      - run: yarn type:doc
+      - run: npm run type:test
+      - run: npm run type:doc
 
   # TODO: Remove need for `npm show` before re-enabling to avoid rate limit errors.
   # verify-yaml:

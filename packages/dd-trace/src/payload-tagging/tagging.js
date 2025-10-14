@@ -8,24 +8,33 @@ const redactedKeys = new Set([
 const truncated = 'truncated'
 const redacted = 'redacted'
 
+/**
+ * Escapes dots in keys to preserve hierarchy in flattened tag names.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
 function escapeKey (key) {
   return key.replaceAll('.', String.raw`\.`)
 }
 
 /**
-   * Compute normalized payload tags from any given object.
-   *
-   * @param {object} object
-   * @param {import('./mask').Mask} mask
-   * @param {number} maxDepth
-   * @param {string} prefix
-   * @returns
-   */
+ * Compute normalized payload tags from any given object.
+ *
+ * - Limits total tag count to `PAYLOAD_TAGGING_MAX_TAGS - 1` plus the `_dd.payload_tags_incomplete` flag
+ * - Truncates values at max depth and for large scalars
+ * - Redacts known sensitive keys
+ *
+ * @param {unknown} object - Input to flatten into tags
+ * @param {{ maxDepth: number, prefix: string }} opts - Traversal options
+ * @returns {Record<string, string|boolean>} Map of tag names to values
+ */
 function tagsFromObject (object, opts) {
   const { maxDepth, prefix } = opts
 
   let tagCount = 0
   let abort = false
+  /** @type {Record<string, string|boolean>} */
   const result = {}
 
   function tagRec (prefix, object, depth = 0) {

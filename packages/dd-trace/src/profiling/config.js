@@ -1,6 +1,5 @@
 'use strict'
 
-const coalesce = require('koalas')
 const os = require('os')
 const path = require('path')
 const { URL, format, pathToFileURL } = require('url')
@@ -59,8 +58,8 @@ class Config {
     const host = os.hostname()
     const version = options.version ?? DD_VERSION
     // Must be longer than one minute so pad with five seconds
-    const flushInterval = coalesce(options.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
-    const uploadTimeout = coalesce(options.uploadTimeout, Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
+    const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
+    const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
     const sourceMap = options.sourceMap ?? DD_PROFILING_SOURCE_MAP ?? true
     const pprofPrefix = options.pprofPrefix ?? DD_PROFILING_PPROF_PREFIX ?? ''
 
@@ -134,10 +133,10 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED ?? oomMonitoringSupported)
     checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
 
-    const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
-      Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
-    const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
-      Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT), 0)
+    const heapLimitExtensionSize = options.oomHeapLimitExtensionSize ??
+      (Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE) || 0)
+    const maxHeapExtensionCount = options.oomMaxHeapExtensionCount ??
+      (Number(DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT) || 0)
     const exportStrategies = oomMonitoringEnabled
       ? ensureOOMExportStrategies(options.oomExportStrategies ?? DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES ??
         [oomExportStrategies.PROCESS], this)
@@ -175,10 +174,10 @@ class Config {
     )
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
-    this.samplingInterval = coalesce(options.samplingInterval, 1e3 / 99) // 99hz in millis
+    this.samplingInterval = options.samplingInterval || 1e3 / 99 // 99hz in millis
 
-    this.heapSamplingInterval = coalesce(options.heapSamplingInterval,
-      Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL))
+    this.heapSamplingInterval = options.heapSamplingInterval ??
+      (Number(DD_PROFILING_HEAP_SAMPLING_INTERVAL) || 512 * 1024)
     const uploadCompression0 = options.uploadCompression ?? DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'on'
     let [uploadCompression, level0] = uploadCompression0.split('-')
     if (!['on', 'off', 'gzip', 'zstd'].includes(uploadCompression)) {
@@ -222,8 +221,7 @@ class Config {
 
     const hasExecArg = (arg) => process.execArgv.includes(arg) || String(NODE_OPTIONS).includes(arg)
 
-    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ??
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? false)
+    this.asyncContextFrameEnabled = isTrue(options.useAsyncContextFrame ?? DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED)
     if (this.asyncContextFrameEnabled) {
       if (satisfies(process.versions.node, '>=24.0.0')) {
         if (hasExecArg('--no-async-context-frame')) {

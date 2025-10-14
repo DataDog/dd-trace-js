@@ -4,7 +4,7 @@ const childProcess = require('child_process')
 const readline = require('readline')
 
 function exec (...args) {
-  return new Promise((resolve, reject) => {
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const proc = childProcess.spawn(...args)
     streamAddVersion(proc.stdout)
     proc.on('error', reject)
@@ -15,7 +15,7 @@ function exec (...args) {
         reject(new Error('Process exited with non-zero code.'))
       }
     })
-  })
+  }))
 }
 
 function streamAddVersion (input) {
