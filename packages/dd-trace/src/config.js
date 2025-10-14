@@ -442,6 +442,21 @@ class Config {
   // for _merge to work, every config value must have a default value
   _applyDefaults () {
     setHiddenProperty(this, '_defaults', defaults)
+
+    // Runtime-dependent defaults
+    // NOTE: Should these be part of _applyCalculated instead?
+    const isServerless = this._isInServerlessEnvironment()
+    if (isServerless) {
+      this._defaults['crashtracking.enabled'] = false
+      this._defaults['profiling.enabled'] = false
+      this._defaults['remoteConfig.enabled'] = false
+      this._defaults['telemetry.enabled'] = false
+    }
+
+    // JEST_WORKER_ID disables telemetry even in non-serverless
+    if (getEnvironmentVariable('JEST_WORKER_ID')) {
+      this._defaults['telemetry.enabled'] = false
+    }
   }
 
   _applyLocalStableConfig () {
@@ -517,7 +532,6 @@ class Config {
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
-      JEST_WORKER_ID,
       DD_HEAP_SNAPSHOT_COUNT,
       DD_HEAP_SNAPSHOT_DESTINATION,
       DD_HEAP_SNAPSHOT_INTERVAL,
@@ -681,7 +695,7 @@ class Config {
     target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
     this._setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
-    this._setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED ?? !this._isInServerlessEnvironment())
+    this._setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this._setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setBoolean(
       target,
@@ -770,10 +784,7 @@ class Config {
       unprocessedTarget.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(target, 'port', DD_TRACE_AGENT_PORT)
-    const profilingEnabled = normalizeProfilingEnabledValue(
-      DD_PROFILING_ENABLED ??
-      (this._isInServerlessEnvironment() ? 'false' : undefined)
-    )
+    const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
     this._setString(target, 'profiling.enabled', profilingEnabled)
     this._setString(target, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(target, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
@@ -784,8 +795,7 @@ class Config {
 
     this._setString(target, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(target, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
-    this._setBoolean(target, 'remoteConfig.enabled',
-      DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
+    this._setBoolean(target, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED)
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this._setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
@@ -825,8 +835,7 @@ class Config {
     this._setBoolean(target, 'startupLogs', DD_TRACE_STARTUP_LOGS)
     this._setTags(target, 'tags', tags)
     target.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-    this._setBoolean(target, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED ??
-      !(this._isInServerlessEnvironment() || JEST_WORKER_ID))
+    this._setBoolean(target, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED)
     this._setString(target, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
     this._setBoolean(target, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(target, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
