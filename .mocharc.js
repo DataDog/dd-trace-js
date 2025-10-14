@@ -4,9 +4,11 @@ module.exports = {
   color: true,
   exit: true,
   timeout: 5000,
-  reporter: 'xunit',
+  reporter: 'mocha-multi-reporters',
   reporterOptions: {
-    output: `./node-${process.versions.node}-junit.xml`,
-    showRelativePaths: true
+    reporterEnabled: 'spec, mocha-junit-reporter',
+    mochaJunitReporterReporterOptions: {
+      mochaFile: `./node-${process.versions.node}-junit.xml`
+    }
   },
 }
