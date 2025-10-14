@@ -328,7 +328,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     resolve = _resolve
     reject = _reject
   })
-
+  console.log(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
   const rejectionTimeout = setTimeout(() => {
     if (error) reject(error)
   }, options.timeoutMs || 1000)
@@ -337,20 +337,25 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     handler,
     spanResourceMatch: options.spanResourceMatch
   }
-
+  let invocationCount = 0
   /**
    * @type {TracesCallback | AgentlessCallback}
   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
+    invocationCount++
+    console.log(`[assertSomeTraces] Handler invoked (attempt #${invocationCount})`)
 
     try {
+      console.log(`[assertSomeTraces] Running callback against traces...`)
       const result = callback(...args)
+      console.log(`[assertSomeTraces] ✓ Callback succeeded! Resolving promise.`)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
+      console.log(`[assertSomeTraces] ✗ Callback failed:`, e.message)
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)
@@ -545,7 +550,7 @@ module.exports = {
     const startTime = performance.now()
     process._rawDebug('Entered into assertSomeTraces')
     const result = runCallbackAgainstTraces(callback, options, traceHandlers)
-    process._rawDebug('Exited assertSomeTraces', performance.now() - startTime, result)
+    process._rawDebug('Exited assertSomeTraces', performance.now() - startTime)
     return result
   },
 
