@@ -12,6 +12,7 @@ const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
+  this.timeout(10000)
   setup()
   this.timeout(20000)
 
