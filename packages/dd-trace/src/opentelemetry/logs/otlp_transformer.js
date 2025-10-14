@@ -1,14 +1,12 @@
 'use strict'
 
+const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { getProtobufTypes } = require('../protos/protobuf_loader')
+const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { trace } = require('@opentelemetry/api')
-const log = require('../../log')
 
 /**
- * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
- * @typedef {import('@opentelemetry/resources').Resource} Resource
  */
 
 // Global severity mapping constant - no need to regenerate
@@ -46,24 +44,17 @@ const SEVERITY_MAP = {
  * https://opentelemetry.io/docs/specs/otlp/#log-data-model
  *
  * @class OtlpTransformer
+ * @extends OtlpTransformerBase
  */
-class OtlpTransformer {
-  #resourceAttributes
-
+class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Creates a new OtlpTransformer instance.
    *
-   * @param {Attributes} resourceAttributes - Resource attributes
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    */
   constructor (resourceAttributes, protocol) {
-    this.#resourceAttributes = this.#transformAttributes(resourceAttributes)
-    if (protocol === 'grpc') {
-      log.warn('OTLP gRPC protocol is not supported for logs. ' +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
-      protocol = 'http/protobuf'
-    }
-    this.protocol = protocol
+    super(resourceAttributes, protocol, 'logs')
   }
 
   /**
@@ -72,35 +63,10 @@ class OtlpTransformer {
    * @returns {Buffer} Transformed log records in the appropriate format
    */
   transformLogRecords (logRecords) {
-    // Use the configured protocol to determine serialization format
     if (this.protocol === 'http/json') {
       return this.#transformToJson(logRecords)
     }
-    // Default to protobuf for http/protobuf or any other protocol
     return this.#transformToProtobuf(logRecords)
-  }
-
-  /**
-   * Groups log records by instrumentation library (name and version).
-   * @param {LogRecord[]} logRecords - Array of log records to group
-   * @returns {Map<string, LogRecord[]>} Map of instrumentation library key to log records
-   * @private
-   */
-  #groupByInstrumentationScope (logRecords) {
-    const grouped = new Map()
-
-    for (const record of logRecords) {
-      const instrumentationScope = record.instrumentationScope || { name: '', version: '0.0.0', schemaUrl: '' }
-      const key = `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
-
-      const group = grouped.get(key)
-      if (group === undefined) {
-        grouped.set(key, [record])
-      } else {
-        group.push(record)
-      }
-    }
-    return grouped
   }
 
   /**
@@ -111,19 +77,15 @@ class OtlpTransformer {
    */
   #transformToProtobuf (logRecords) {
     const { protoLogsService } = getProtobufTypes()
-    // Create the OTLP LogsData structure
+
     const logsData = {
       resourceLogs: [{
-        resource: this.#transformResource(),
+        resource: this._transformResource(),
         scopeLogs: this.#transformScope(logRecords),
       }]
     }
 
-    // Serialize to protobuf
-    const message = protoLogsService.create(logsData)
-    const buffer = protoLogsService.encode(message).finish()
-
-    return buffer
+    return this._serializeToProtobuf(protoLogsService, logsData)
   }
 
   /**
@@ -135,11 +97,11 @@ class OtlpTransformer {
   #transformToJson (logRecords) {
     const logsData = {
       resourceLogs: [{
-        resource: this.#transformResource(),
+        resource: this._transformResource(),
         scopeLogs: this.#transformScope(logRecords)
       }]
     }
-    return Buffer.from(JSON.stringify(logsData))
+    return this._serializeToJson(logsData)
   }
 
   /**
@@ -149,10 +111,7 @@ class OtlpTransformer {
    * @private
    */
   #transformScope (logRecords) {
-    // Group log records by instrumentation library
-    const groupedRecords = this.#groupByInstrumentationScope(logRecords)
-
-    // Create scope logs for each instrumentation library
+    const groupedRecords = this._groupByInstrumentationScope(logRecords)
     const scopeLogs = []
 
     for (const records of groupedRecords.values()) {
@@ -161,7 +120,6 @@ class OtlpTransformer {
         scope: {
           name: records[0]?.instrumentationScope?.name || 'dd-trace-js',
           version: records[0]?.instrumentationScope?.version || '',
-          // TODO: Support setting attributes on instrumentation scope
           attributes: [],
           droppedAttributesCount: 0
         },
@@ -174,32 +132,16 @@ class OtlpTransformer {
   }
 
   /**
-   * Transforms resource attributes to OTLP resource format.
-   * @returns {Resource} OTLP resource object
-   * @private
-   */
-  #transformResource () {
-    return {
-      attributes: this.#resourceAttributes,
-      droppedAttributesCount: 0
-    }
-  }
-
-  /**
    * Transforms a single log record to OTLP format.
    * @param {LogRecord} logRecord - Log record to transform
    * @returns {Object} OTLP log record object
    * @private
    */
   #transformLogRecord (logRecord) {
-    const timestamp = logRecord.timestamp
-
-    // Extract span context from the log record's context
     const spanContext = this.#extractSpanContext(logRecord.context)
 
-    // Only timeUnixNano and body are required
     const result = {
-      timeUnixNano: timestamp,
+      timeUnixNano: logRecord.timestamp,
       body: this.#transformBody(logRecord.body)
     }
 
@@ -217,14 +159,14 @@ class OtlpTransformer {
     }
 
     if (logRecord.attributes) {
-      result.attributes = this.#transformAttributes(logRecord.attributes)
+      result.attributes = this._transformAttributes(logRecord.attributes)
     }
 
     if (spanContext?.traceFlags !== undefined) {
       result.flags = spanContext.traceFlags
     }
 
-    // Only include traceId and spanId if they are valid (not empty, undefined, or all zeros)
+    // Only include traceId and spanId if they are valid
     if (spanContext?.traceId && spanContext.traceId !== '00000000000000000000000000000000') {
       result.traceId = this.#hexToBytes(spanContext.traceId)
     }
@@ -285,82 +227,25 @@ class OtlpTransformer {
    */
   #transformBody (body) {
     if (typeof body === 'string') {
-      return {
-        stringValue: body
-      }
+      return { stringValue: body }
     } else if (typeof body === 'number') {
       if (Number.isInteger(body)) {
         return { intValue: body }
       }
       return { doubleValue: body }
     } else if (typeof body === 'boolean') {
-      return {
-        boolValue: body
-      }
+      return { boolValue: body }
     } else if (body && typeof body === 'object') {
       return {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this.#transformAnyValue(value)
+            value: this._transformAnyValue(value)
           }))
         }
       }
     }
-    return {
-      stringValue: String(body)
-    }
-  }
-
-  /**
-   * Transforms attributes to OTLP KeyValue format.
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects
-   * @private
-   */
-  #transformAttributes (attributes) {
-    if (!attributes) {
-      return {}
-    }
-    return Object.entries(attributes).map(([key, value]) => ({
-      key,
-      value: this.#transformAnyValue(value)
-    }))
-  }
-
-  /**
-   * Transforms any value to OTLP AnyValue format.
-   * @param {any} value - Value to transform
-   * @returns {Object} OTLP AnyValue object
-   * @private
-   */
-  #transformAnyValue (value) {
-    if (typeof value === 'string') {
-      return { stringValue: value }
-    } else if (typeof value === 'number') {
-      if (Number.isInteger(value)) {
-        return { intValue: value }
-      }
-      return { doubleValue: value }
-    } else if (typeof value === 'boolean') {
-      return { boolValue: value }
-    } else if (Array.isArray(value)) {
-      return {
-        arrayValue: {
-          values: value.map(v => this.#transformAnyValue(v))
-        }
-      }
-    } else if (value && typeof value === 'object') {
-      return {
-        kvlistValue: {
-          values: Object.entries(value).map(([k, v]) => ({
-            key: k,
-            value: this.#transformAnyValue(v)
-          }))
-        }
-      }
-    }
-    return { stringValue: String(value) }
+    return { stringValue: String(body) }
   }
 }
 
