@@ -198,7 +198,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isImpactedTestsEnabled) {
         try {
           const hasImpactedTests = Object.keys(modifiedFiles).length > 0
-          // TODO: check if `this.testEnvironmentOptions._ddModifiedFiles` is serialized to JSON
           this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)
