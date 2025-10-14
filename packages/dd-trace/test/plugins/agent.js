@@ -542,9 +542,10 @@ module.exports = {
    * @returns Promise
    */
   assertSomeTraces (callback, options) {
+    const startTime = performance.now()
     process._rawDebug('Entered into assertSomeTraces')
     const result = runCallbackAgainstTraces(callback, options, traceHandlers)
-    process._rawDebug('Exited assertSomeTraces')
+    process._rawDebug('Exited assertSomeTraces', performance.now() - startTime, result)
     return result
   },
 
