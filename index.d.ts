@@ -1169,20 +1169,6 @@ declare namespace tracer {
      * @returns Promise resolving to evaluation result with value and reason
      */
     resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
-
-    /**
-     * Gets the current flag configuration.
-     *
-     * @returns The current configuration object
-     */
-    getConfiguration(): any;
-
-    /**
-     * Sets the flag configuration.
-     *
-     * @param config The configuration object to set
-     */
-    setConfiguration(config: any): void;
   }
 
   export namespace aiguard {

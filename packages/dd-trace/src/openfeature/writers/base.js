@@ -41,6 +41,17 @@ class BaseFFEWriter {
     this._eventSizeLimit = eventSizeLimit
     this._headers = headers || {}
 
+    this._requestOptions = {
+      headers: {
+        ...this._headers,
+        'Content-Type': 'application/json'
+      },
+      method: 'POST',
+      timeout: this._timeout,
+      url: this._baseUrl,
+      path: this._endpoint
+    }
+
     this._periodic = setInterval(() => {
       this.flush()
     }, this._interval).unref()
@@ -80,7 +91,8 @@ class BaseFFEWriter {
 
       // Check if adding this event would exceed payload size limit if configured
       if (this._payloadSizeLimit && this._bufferSize + eventSizeBytes > this._payloadSizeLimit) {
-        log.debug(`${this.constructor.name} buffer size would exceed ${this._payloadSizeLimit} bytes, flushing first`)
+        log.debug(() => `${this.constructor.name}
+        buffer size would exceed ${this._payloadSizeLimit} bytes, flushing first`)
         this.flush()
       }
 
@@ -102,15 +114,13 @@ class BaseFFEWriter {
 
     const payload = this._encode(this.makePayload(events))
 
-    log.debug('Encoded payload: %s', safeJSONStringify(payload))
+    log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
 
-    const options = this._getOptions()
-
-    request(payload, options, (err, resp, code) => {
+    request(payload, this._requestOptions, (err, resp, code) => {
       if (err) {
         log.error(`Failed to send events to ${this._baseUrl.href}${this._endpoint}: ${err.message}`)
       } else if (code >= 200 && code < 300) {
-        log.debug(`Successfully sent ${events.length} events`)
+        log.debug(() => `Successfully sent ${events.length} events`)
       } else {
         log.warn(`Events request returned status ${code}`)
       }
@@ -132,7 +142,7 @@ class BaseFFEWriter {
    */
   destroy () {
     if (!this._destroyed) {
-      log.debug(`Stopping ${this.constructor.name}`)
+      log.debug(() => `Stopping ${this.constructor.name}`)
       clearInterval(this._periodic)
       process.removeListener('beforeExit', this._beforeExitHandler)
       this.flush()
@@ -156,25 +166,6 @@ class BaseFFEWriter {
       hostname: hostname || 'localhost',
       port: port || 8126
     }))
-  }
-
-  /**
-   * @private
-   * @returns {Object} constructs HTTP request options
-   */
-  _getOptions () {
-    const options = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...this._headers
-      },
-      method: 'POST',
-      timeout: this._timeout,
-      url: this._baseUrl,
-      path: this._endpoint
-    }
-
-    return options
   }
 
   /**

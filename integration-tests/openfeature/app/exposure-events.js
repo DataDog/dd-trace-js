@@ -22,7 +22,7 @@ const client = OpenFeature.getClient()
 const app = express()
 
 // Used to test remote config polling capabilities
-app.get('/', async (req, res) => {
+app.get('/', (req, res) => {
   res.end('OK')
 })
 
@@ -96,14 +96,14 @@ app.get('/evaluate-multiple-flags', async (req, res) => {
   }
 })
 
-app.get('/flush', async (req, res) => {
+app.get('/flush', (req, res) => {
   flushCh.publish()
   res.json({ flushed: true })
 })
 
-const server = app.listen(process.env.APP_PORT || 0, (error) => {
+app.listen(process.env.APP_PORT || 0, function (error) {
   if (error) {
     throw error
   }
-  process.send?.({ port: server.address().port })
+  process.send?.({ port: this.address().port })
 })

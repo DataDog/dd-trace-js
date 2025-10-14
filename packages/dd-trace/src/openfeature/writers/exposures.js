@@ -62,6 +62,7 @@ class ExposuresWriter extends BaseFFEWriter {
     })
     this._enabled = false // Start disabled until agent strategy is set
     this._pendingEvents = [] // Buffer events until enabled
+    this._context = this._buildContext()
   }
 
   /**
@@ -113,6 +114,18 @@ class ExposuresWriter extends BaseFFEWriter {
   makePayload (events) {
     const formattedEvents = events.map(event => this._formatExposureEvent(event))
 
+    return {
+      context: this._context,
+      exposures: formattedEvents
+    }
+  }
+
+  /**
+   * Builds service context metadata
+   * @private
+   * @returns {ExposureContext} Service context
+   */
+  _buildContext () {
     const context = {
       service_name: this._config.service || 'unknown'
     }
@@ -126,10 +139,7 @@ class ExposuresWriter extends BaseFFEWriter {
       context.env = this._config.env
     }
 
-    return {
-      context,
-      exposures: formattedEvents
-    }
+    return context
   }
 
   /**
