@@ -59,6 +59,8 @@ dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://si
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,mocha-multi-reporters,MIT,Copyright 2015-2019 Yousaf Nabi and Stanley Ng
+dev,mocha-junit-reporter,MIT, Copyright 2015 Michael Allen
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
