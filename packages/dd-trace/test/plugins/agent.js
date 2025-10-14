@@ -543,7 +543,9 @@ module.exports = {
    */
   assertSomeTraces (callback, options) {
     process._rawDebug('Entered into assertSomeTraces')
-    return runCallbackAgainstTraces(callback, options, traceHandlers)
+    const result = runCallbackAgainstTraces(callback, options, traceHandlers)
+    process._rawDebug('Exited assertSomeTraces')
+    return result
   },
 
   /**
