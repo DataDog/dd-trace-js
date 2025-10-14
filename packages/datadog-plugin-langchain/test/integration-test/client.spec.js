@@ -46,7 +46,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs'
       })
 
