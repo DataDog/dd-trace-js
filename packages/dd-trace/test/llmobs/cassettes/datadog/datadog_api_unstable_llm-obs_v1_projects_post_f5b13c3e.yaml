@@ -1,0 +1,39 @@
+interactions:
+- request:
+    body: '{"data": {"type": "projects", "attributes": {"name": "some project", "description":
+      ""}}}'
+    headers:
+      Accept:
+      - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - identity
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '89'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      User-Agent:
+      - python-requests/2.32.5
+    method: POST
+    uri: https://api.datadoghq.com/api/unstable/llm-obs/v1/projects
+  response:
+    body:
+      string: '{"errors":["Unauthorized"]}'
+    headers:
+      content-length:
+      - '27'
+      content-type:
+      - application/json
+      date:
+      - Fri, 03 Oct 2025 17:06:29 GMT
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      x-content-type-options:
+      - nosniff
+    status:
+      code: 401
+      message: Unauthorized
+version: 1

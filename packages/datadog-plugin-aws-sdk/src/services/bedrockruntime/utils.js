@@ -58,7 +58,7 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
           inputTokens = body?.inputTextTokenCount
           outputTokens = body?.totalOutputTextTokenCount
         } else if (body?.contentBlockDelta?.delta?.text) {
-          message += body?.contentBlockDelta?.delta?.text ?? ''
+          message += body.contentBlockDelta.delta.text
         }
 
         break
@@ -251,7 +251,7 @@ function extractRequestParams (params, provider) {
       } else if (Array.isArray(requestBody.messages)) {
         const inferenceConfig = requestBody.inferenceConfig || {}
         const messages = []
-        if (requestBody.system && Array.isArray(requestBody.system)) {
+        if (Array.isArray(requestBody.system)) {
           for (const sysMsg of requestBody.system) {
             messages.push({
               content: sysMsg.text,
