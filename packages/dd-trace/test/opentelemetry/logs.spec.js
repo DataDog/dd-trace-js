@@ -12,7 +12,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
-const { protoLogsService } = require('../../src/opentelemetry/protos/protobuf_loader').getProtobufTypes()
+const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
