@@ -272,12 +272,11 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
+    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
-      if (error) {
-        this.testSuiteSpan.setTag('error', error)
-      } else if (errorMessage) {
+      if (errorMessage) {
         this.testSuiteSpan.setTag('error', new Error(errorMessage))
+        this.testSuiteSpan.setTag(TEST_STATUS, 'fail')
       }
       this.testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
