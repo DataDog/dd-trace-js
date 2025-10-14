@@ -244,7 +244,7 @@ async function assertWorkspaces () {
  */
 function install (force = false, retry = true) {
   const flags = [
-    '--linker=isolated',
+    '--linker=hoisted',
     '--omit=peer',
     '--ignore-engines'
   ]
