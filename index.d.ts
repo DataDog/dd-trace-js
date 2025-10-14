@@ -2570,6 +2570,11 @@ declare namespace tracer {
        * @param links the links to add.
        */
       addLinks(links: otel.Link[]): this;
+
+      /**
+       * Compute the span sampling priority.
+       */
+      sample(): void;
     }
 
     /**
