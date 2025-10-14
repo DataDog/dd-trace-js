@@ -2923,6 +2923,59 @@ apm_configuration_default:
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
     })
+    it('should support all extended configs across product areas', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_TRACE_PROPAGATION_STYLE: 'tracecontext'
+  DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true
+  
+  DD_APPSEC_TRACE_RATE_LIMIT: 100
+  DD_APPSEC_MAX_STACK_TRACES: 2
+  DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: 'password|token'
+
+  DD_IAST_REQUEST_SAMPLING: 50
+  DD_IAST_MAX_CONCURRENT_REQUESTS: 10
+
+  DD_TELEMETRY_HEARTBEAT_INTERVAL: 42
+  DD_TELEMETRY_METRICS_ENABLED: false
+
+  DD_LLMOBS_ML_APP: 'my-llm-app'
+
+  DD_PROFILING_EXPORTERS: 'agent'
+
+  DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: '/tmp/probes
+`)
+      const config = new Config()
+
+      // Tracing
+      expect(config).to.have.nested.deep.property('tracing.propagationStyle.inject', 'tracecontext')
+      expect(config).to.have.nested.deep.property('tracing.propagationStyle.extract', 'tracecontext')
+      expect(config).to.have.nested.property('tracing.traceId128BitGenerationEnabled', true)
+
+      // Appsec
+      expect(config).to.have.nested.property('appsec.rateLimit', 100)
+      expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
+      expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', 'password|token')
+
+      // IAST
+      expect(config).to.have.nested.property('iast.requestSampling', 50)
+      expect(config).to.have.nested.property('iast.maxConcurrentRequests', 10)
+
+      // Telemetry
+      expect(config).to.have.nested.property('telemetry.heartbeatInterval', 42000)
+      expect(config).to.have.nested.property('telemetry.metrics', false)
+
+      // LLMObs
+      expect(config).to.have.nested.property('llmobs.mlApp', 'my-llm-app')
+
+      // Profiling
+      expect(config).to.have.nested.property('profiling.exporters', 'agent')
+
+      // Dynamic Instrumentation
+      expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', '/tmp/probes')
+    })
   })
 
   context('getOrigin', () => {

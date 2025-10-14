@@ -455,35 +455,19 @@ class Config {
   }
 
   _applyStableConfig (config, obj) {
-    const {
-      DD_APPSEC_ENABLED,
-      DD_APPSEC_SCA_ENABLED,
-      DD_DATA_STREAMS_ENABLED,
-      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
-      DD_ENV,
-      DD_IAST_ENABLED,
-      DD_LOGS_INJECTION,
-      DD_PROFILING_ENABLED,
-      DD_RUNTIME_METRICS_ENABLED,
-      DD_SERVICE,
-      DD_VERSION
-    } = config
-
-    this._setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this._setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this._setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this._setString(obj, 'env', DD_ENV)
-    this._setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
-    this._setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
-    const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
-    this._setString(obj, 'profiling.enabled', profilingEnabled)
-    this._setBoolean(obj, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED)
-    this._setString(obj, 'service', DD_SERVICE)
-    this._setString(obj, 'version', DD_VERSION)
+    // Stable config uses the same processing logic as environment variables
+    this._applyConfigValues(config, obj, {})
   }
 
   _applyEnvironment () {
+    const env = setHiddenProperty(this, '_env', {})
+    setHiddenProperty(this, '_envUnprocessed', {})
+
+    // Apply all configs using shared logic
+    this._applyConfigValues(getEnvironmentVariables(), env, this._envUnprocessed)
+  }
+
+  _applyConfigValues (source, target, unprocessedTarget) {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
@@ -636,11 +620,9 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG
-    } = getEnvironmentVariables()
+    } = source
 
     const tags = {}
-    const env = setHiddenProperty(this, '_env', {})
-    setHiddenProperty(this, '_envUnprocessed', {})
 
     tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
 
@@ -650,231 +632,234 @@ class Config {
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
     this._setBoolean(
-      env,
+      target,
       'apmTracingEnabled',
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
-    this._setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
-    env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
-    this._setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
+    this._setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
+    target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
+    this._setBoolean(target, 'appsec.apiSecurity.endpointCollectionEnabled',
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED)
-    env['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+    target['appsec.apiSecurity.endpointCollectionMessageLimit'] =
       maybeInt(DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT)
-    env['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
-    env['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
-    this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
-    env['appsec.blockedTemplateJson'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
-    this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
-    this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
+    target['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
+    target['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
+    unprocessedTarget['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
+    target['appsec.blockedTemplateJson'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
+    unprocessedTarget['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+    this._setBoolean(target, 'appsec.enabled', DD_APPSEC_ENABLED)
+    this._setString(target, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
     // TODO appsec.extendedHeadersCollection are deprecated, to delete in a major
-    this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
+    this._setBoolean(target, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
     this._setBoolean(
-      env,
+      target,
       'appsec.extendedHeadersCollection.redaction',
       DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
     )
-    env['appsec.extendedHeadersCollection.maxHeaders'] = maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS)
-    this._envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
-    this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
-    this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
-    this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
+    target['appsec.extendedHeadersCollection.maxHeaders'] = maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS)
+    unprocessedTarget['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
+    this._setString(target, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
+    this._setString(target, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this._setBoolean(target, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     // TODO Deprecated, to delete in a major
-    this._setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
-    env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
-    this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
-    this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
+    this._setBoolean(target, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
+    target['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
+    unprocessedTarget['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
+    this._setString(target, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
-    this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
-    env['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
-    this._envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
-    env['appsec.stackTrace.maxStackTraces'] = maybeInt(DD_APPSEC_MAX_STACK_TRACES)
-    this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
-    env['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
-    this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
-    env.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
-    env.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
-    env.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
-    this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
-    this._setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED ?? !this._isInServerlessEnvironment())
-    this._setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
+    this._setBoolean(target, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(target, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
+    target['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
+    unprocessedTarget['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
+    target['appsec.stackTrace.maxStackTraces'] = maybeInt(DD_APPSEC_MAX_STACK_TRACES)
+    unprocessedTarget['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
+    target['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
+    unprocessedTarget['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
+    target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
+    target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
+    this._setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
+    this._setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
+    this._setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED ?? !this._isInServerlessEnvironment())
+    this._setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setBoolean(
-      env,
+      target,
       'codeOriginForSpans.experimental.exit_spans.enabled',
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
-    this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
-    this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
-    this._setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
-    this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this._setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this._setString(env, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
-    this._setArray(env, 'dynamicInstrumentation.redactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
+    this._setString(target, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
+    this._setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
+    this._setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
+    this._setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(target, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this._setString(target, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
+    this._setArray(target, 'dynamicInstrumentation.redactedIdentifiers',
+      DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
     this._setArray(
-      env,
+      target,
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
-    env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
-    this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
-    this._setString(env, 'env', DD_ENV || tags.env)
-    this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
-    this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
-    this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
-    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
-    this._envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
-    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
-    this._envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
-    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
-    this._envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
-    this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
-    this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    if (AWS_LAMBDA_FUNCTION_NAME) env.flushInterval = 0
-    env.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
-    this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
-    this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
-    this._setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
-    this._setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
-    this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
-    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
-    this._setString(env, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
-    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
-    this._setString(env, 'hostname', DD_AGENT_HOST)
-    env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
-    this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
-    this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
-    env['iast.maxConcurrentRequests'] = maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS)
-    this._envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
-    env['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
-    this._envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
-    this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
-    this._setString(env, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
-    this._setString(env, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
+    target['dynamicInstrumentation.uploadIntervalSeconds'] =
+      maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
+    unprocessedTarget['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
+    this._setString(target, 'env', DD_ENV || tags.env)
+    this._setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
+    this._setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this._setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    target['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    unprocessedTarget['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    target['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    unprocessedTarget['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    target['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    unprocessedTarget['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
+    this._setBoolean(target, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
+    this._setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
+    if (AWS_LAMBDA_FUNCTION_NAME) target.flushInterval = 0
+    target.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
+    unprocessedTarget.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    this._setBoolean(target, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this._setIntegerRangeSet(target, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
+    this._setIntegerRangeSet(target, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
+    this._setArray(target, 'headerTags', DD_TRACE_HEADER_TAGS)
+    target['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this._setString(target, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
+    target['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
+    this._setString(target, 'hostname', DD_AGENT_HOST)
+    target['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
+    this._setBoolean(target, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
+    this._setBoolean(target, 'iast.enabled', DD_IAST_ENABLED)
+    target['iast.maxConcurrentRequests'] = maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS)
+    unprocessedTarget['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
+    target['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
+    unprocessedTarget['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
+    this._setBoolean(target, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
+    this._setString(target, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
+    this._setString(target, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
-      env['iast.requestSampling'] = iastRequestSampling
+      target['iast.requestSampling'] = iastRequestSampling
     }
-    this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
-    this._setString(env, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
-    this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
-    this._setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
-    this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
-    this._setString(env, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
-    this._setBoolean(env, 'injectForce', DD_INJECT_FORCE)
-    this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
-    this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
-    env['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
-    env['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
-    this._setBoolean(env, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
-    this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
-    this._setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
-    this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
-    this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
+    unprocessedTarget['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
+    this._setString(target, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
+    this._setString(target, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setBoolean(target, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
+    this._setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
+    this._setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
+    this._setBoolean(target, 'injectForce', DD_INJECT_FORCE)
+    this._setBoolean(target, 'isAzureFunction', getIsAzureFunction())
+    this._setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
+    target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    this._setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
+    this._setBoolean(target, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setBoolean(target, 'llmobs.enabled', DD_LLMOBS_ENABLED)
+    this._setString(target, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
+    this._setBoolean(target, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
-    this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-    this._setBoolean(env, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
-    this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    env['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
-    this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+    this._setBoolean(target, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
+    this._setBoolean(target, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
+    this._setBoolean(target, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
+    target['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
+    unprocessedTarget.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
-      env.peerServiceMapping = Object.fromEntries(
+      target.peerServiceMapping = Object.fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       )
-      this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+      unprocessedTarget.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
-    this._setString(env, 'port', DD_TRACE_AGENT_PORT)
+    this._setString(target, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabled = normalizeProfilingEnabledValue(
       DD_PROFILING_ENABLED ??
       (this._isInServerlessEnvironment() ? 'false' : undefined)
     )
-    this._setString(env, 'profiling.enabled', profilingEnabled)
-    this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
-    this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
+    this._setString(target, 'profiling.enabled', profilingEnabled)
+    this._setString(target, 'profiling.exporters', DD_PROFILING_EXPORTERS)
+    this._setBoolean(target, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
     if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
       // This is only used in testing to not have to wait 30s
-      env['profiling.longLivedThreshold'] = Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD)
+      target['profiling.longLivedThreshold'] = Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD)
     }
 
-    this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
-    this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
-    this._setBoolean(env, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
-    env['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
-    this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
-    this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    this._setString(target, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
+    this._setString(target, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
+    this._setBoolean(target, 'remoteConfig.enabled',
+      DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
+    target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
+    unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+    this._setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
-    this._setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
+    this._setBoolean(target, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
-    this._setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
-    this._setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
-    this._setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
-    this._setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
+    this._setBoolean(target, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    this._setBoolean(target, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
+    this._setBoolean(target, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
+    this._setArray(target, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
-    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
+    this._setUnit(target, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
-    env['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
-    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
-    this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
-    this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
+    target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
+    this._setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
+    unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
+    this._setString(target, 'scope', DD_TRACE_SCOPE)
+    this._setString(target, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
-      env.serviceMapping = Object.fromEntries(
+      target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       )
     }
-    this._setString(env, 'site', DD_SITE)
+    this._setString(target, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
-      this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
-      this._envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      this._setString(target, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
+      unprocessedTarget.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
     // 0: disabled, 1: logging, 2: garbage collection + logging
-    env.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
-    this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
-    this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
-    this._setTags(env, 'tags', tags)
-    env.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-    this._setBoolean(env, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED ??
+    target.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
+    this._setBoolean(target, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
+    this._setBoolean(target, 'startupLogs', DD_TRACE_STARTUP_LOGS)
+    this._setTags(target, 'tags', tags)
+    target.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+    this._setBoolean(target, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED ??
       !(this._isInServerlessEnvironment() || JEST_WORKER_ID))
-    this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
-    this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
-    this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
-    env['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
-    this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
-    this._setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
-    this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
-    this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
-    this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
+    this._setString(target, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
+    this._setBoolean(target, 'telemetry.debug', DD_TELEMETRY_DEBUG)
+    this._setBoolean(target, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
+    target['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
+    unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
+    this._setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
+    this._setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    this._setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this._setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    this._setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
-    env.tracePropagationBehaviorExtract =
+    target.tracePropagationBehaviorExtract =
       VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
         ? stringPropagationBehaviorExtract
         : 'continue'
-    this._setBoolean(env, 'tracePropagationStyle.otelPropagators',
+    this._setBoolean(target, 'tracePropagationStyle.otelPropagators',
       DD_TRACE_PROPAGATION_STYLE ||
       DD_TRACE_PROPAGATION_STYLE_INJECT ||
       DD_TRACE_PROPAGATION_STYLE_EXTRACT
         ? false
         : !!OTEL_PROPAGATORS)
-    this._setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
-    this._setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
-    this._setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
-    this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
-    this._setString(env, 'version', DD_VERSION || tags.version)
-    this._setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this._setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
-    this._setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
-    this._setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
-    this._setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
-    env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
-    env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
+    this._setBoolean(target, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
+    this._setBoolean(target, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
+    this._setBoolean(target, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
+    this._setBoolean(target, 'tracing', DD_TRACING_ENABLED)
+    this._setString(target, 'version', DD_VERSION || tags.version)
+    this._setBoolean(target, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
+    this._setBoolean(target, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
+    this._setString(target, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this._setArray(target, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this._setBoolean(target, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
+    target['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    target['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
   }
 
   _applyOptions (options) {

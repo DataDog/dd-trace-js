@@ -78,6 +78,7 @@ module.exports = {
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
+  // Does this method,or callers of this method, need to also check for declarative config source?
   getEnvironmentVariable (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
         !supportedConfigurations[name]) {
