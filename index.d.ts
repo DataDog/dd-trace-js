@@ -178,6 +178,7 @@ interface Plugins {
   "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
+  "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
@@ -810,6 +811,8 @@ declare namespace tracer {
 
         /** Whether to enable request body collection on RASP event
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         bodyCollection?: boolean
       },
@@ -834,20 +837,28 @@ declare namespace tracer {
       },
       /**
        * Configuration for extended headers collection tied to security events
+       *
+       * @deprecated Use UI and Remote Configuration to enable extended data collection
        */
       extendedHeadersCollection?: {
         /** Whether to enable extended headers collection
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         enabled: boolean,
 
         /** Whether to redact collected headers
          * @default true
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         redaction: boolean,
 
         /** Specifies the maximum number of headers collected.
          * @default 50
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         maxHeaders: number,
       }
@@ -1613,6 +1624,12 @@ declare namespace tracer {
      * [amqplib](https://github.com/squaremo/amqp.node) module.
      */
     interface amqplib extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
+     */
+    interface anthropic extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments

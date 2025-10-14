@@ -212,13 +212,6 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/flagging-core@0.1.0-preview.10":
-  version "0.1.0-preview.10"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.10.tgz#a581d391955ec6b7963494cf5312f77c52d2e46f"
-  integrity sha512-E1jRY80xqgL9Hie3vGbQUiK8FXijeN+h9DHXourcPgw+F2fiQ3m1sLTNrjrZTOOpKfhJE/lvahssQpMRtQh1TA==
-  dependencies:
-    spark-md5 "^3.0.2"
-
 "@datadog/libdatadog@0.7.0":
   version "0.7.0"
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.7.0.tgz#81e07d3040c628892db697ccd01ae3c4d2a76315"
@@ -245,14 +238,6 @@
   dependencies:
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
-
-"@datadog/openfeature-node-server@0.1.0-preview.10":
-  version "0.1.0-preview.10"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.10.tgz#9ed827d8d35f09132b65c1cd32a82df31daedd70"
-  integrity sha512-btTKlz80Gn2Xj0m2LR9ZKkoB/Wybu4mFa86wPJv3G1IKU61wgPpvdIILDEwDz+lg5gLjxxeJM50r4tP82bEteQ==
-  dependencies:
-    "@datadog/flagging-core" "0.1.0-preview.10"
-    "@openfeature/server-sdk" "~1.18.0"
 
 "@datadog/pprof@5.10.0":
   version "5.10.0"
@@ -696,15 +681,12 @@
     "@octokit/request-error" "^7.0.0"
     "@octokit/webhooks-methods" "^6.0.0"
 
-"@openfeature/core@^1.8.1":
-  version "1.9.1"
-  resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
-  integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
-
-"@openfeature/server-sdk@~1.18.0":
-  version "1.18.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
-  integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
+"@opentelemetry/api-logs@<1.0.0":
+  version "0.205.0"
+  resolved "https://registry.npmjs.org/@opentelemetry/api-logs/-/api-logs-0.205.0.tgz"
+  integrity sha512-wBlPk1nFB37Hsm+3Qy73yQSobVn28F4isnWIBvKpd5IUH/eat8bwcL02H9yzmHyyPmukeccSl2mbN5sDQZYnPg==
+  dependencies:
+    "@opentelemetry/api" "^1.3.0"
 
 "@opentelemetry/api@>=1.0.0 <1.10.0":
   version "1.9.0"
@@ -716,6 +698,14 @@
   resolved "https://registry.yarnpkg.com/@opentelemetry/core/-/core-1.30.1.tgz#a0b468bb396358df801881709ea38299fc30ab27"
   integrity sha512-OOCM2C/QIURhJMuKaekP3TRBxBKxG/TWWA0TL2J6nXUtDnuCtccy49LUJF8xPFXMX+0LMcxFpCo8M9cGY1W6rQ==
   dependencies:
+    "@opentelemetry/semantic-conventions" "1.28.0"
+
+"@opentelemetry/resources@>=1.0.0 <1.10.0":
+  version "1.9.1"
+  resolved "https://registry.npmjs.org/@opentelemetry/resources/-/resources-1.9.1.tgz"
+  integrity sha512-VqBGbnAfubI+l+yrtYxeLyOoL358JK57btPMJDd3TCOV3mV5TNBmzvOfmesM4NeTyXuGJByd3XvOHvFezLn3rQ==
+  dependencies:
+    "@opentelemetry/core" "1.30.1"
     "@opentelemetry/semantic-conventions" "1.28.0"
 
 "@opentelemetry/semantic-conventions@1.28.0":
@@ -4348,11 +4338,6 @@ source-map@^0.7.4:
   version "0.7.6"
   resolved "https://registry.yarnpkg.com/source-map/-/source-map-0.7.6.tgz#a3658ab87e5b6429c8a1f3ba0083d4c61ca3ef02"
   integrity sha512-i5uvt8C3ikiWeNZSVZNWcfZPItFQOsYTUAOkcUPGd8DqDy1uOUikjt5dG+uRlwyvR108Fb9DOd4GvXfT0N2/uQ==
-
-spark-md5@^3.0.2:
-  version "3.0.2"
-  resolved "https://registry.yarnpkg.com/spark-md5/-/spark-md5-3.0.2.tgz#7952c4a30784347abcee73268e473b9c0167e3fc"
-  integrity sha512-wcFzz9cDfbuqe0FZzfi2or1sgyIrsDwmPwfZC4hiNidPdPINjeUwNfv5kldczoEAcjl9Y1L3SM7Uz2PUEQzxQw==
 
 spawn-wrap@^2.0.0:
   version "2.0.0"

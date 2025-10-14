@@ -9,7 +9,8 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
+  require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
@@ -17,6 +18,7 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
+const path = require('path')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -66,6 +68,8 @@ const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 s
 const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
 
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
+
+const DEFAULT_OTLP_PORT = 4318
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   const OTEL_TRACES_SAMPLER_MAPPING = {
@@ -380,30 +384,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      this.repositoryUrl = removeUserSensitiveInfo(
-        getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
-        this.tags[GIT_REPOSITORY_URL]
-      )
-      this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
-        this.tags[GIT_COMMIT_SHA]
-      if (!this.repositoryUrl || !this.commitSHA) {
-        const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
-          `${process.cwd()}/git.properties`
-        let gitPropertiesString
-        try {
-          gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
-        } catch (e) {
-          // Only log error if the user has set a git.properties path
-          if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
-            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
-          }
-        }
-        if (gitPropertiesString) {
-          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-          this.commitSHA = this.commitSHA || commitSHA
-          this.repositoryUrl = this.repositoryUrl || repositoryUrl
-        }
-      }
+      this._loadGitMetadata()
     }
   }
 
@@ -554,6 +535,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOGS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -636,7 +618,17 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
-      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS,
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
+      OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_PROTOCOL,
+      OTEL_EXPORTER_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_HEADERS,
+      OTEL_EXPORTER_OTLP_TIMEOUT,
+      OTEL_BSP_SCHEDULE_DELAY,
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE
     } = getEnvironmentVariables()
 
     const tags = {}
@@ -650,6 +642,23 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT) {
+      // Only set if there's a custom URL, otherwise let calc phase handle the default
+      this._setString(env, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
+    }
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      this._setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || env.otelUrl)
+    }
+    this._setString(env, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
+    this._setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || env.otelHeaders)
+    this._setString(env, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
+    this._setString(env, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || env.otelProtocol)
+    env.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
+    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || env.otelTimeout
+    env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
+    env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
     this._setBoolean(
       env,
       'apmTracingEnabled',
@@ -669,6 +678,7 @@ class Config {
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
+    // TODO appsec.extendedHeadersCollection are deprecated, to delete in a major
     this._setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
     this._setBoolean(
       env,
@@ -680,6 +690,7 @@ class Config {
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
+    // TODO Deprecated, to delete in a major
     this._setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
     env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
     this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
@@ -1157,7 +1168,20 @@ class Config {
       calc.testManagementAttemptToFixRetries = maybeInt(DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES) ?? 20
       this._setBoolean(calc, 'isImpactedTestsEnabled', !isFalse(DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED))
     }
+
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this._env.otelLogsEnabled) {
+      this._setBoolean(calc, 'logInjection', false)
+    }
+
     calc['dogstatsd.hostname'] = this._getHostname()
+
+    // Compute OTLP logs URL to send payloads to the active Datadog Agent
+    const agentHostname = this._getHostname()
+    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
@@ -1364,6 +1388,63 @@ class Config {
       const value = container[name]
       if (value != null || container === this._defaults) {
         return origin
+      }
+    }
+  }
+
+  _loadGitMetadata () {
+    // try to read Git metadata from the environment variables
+    this.repositoryUrl = removeUserSensitiveInfo(
+      getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
+      this.tags[GIT_REPOSITORY_URL]
+    )
+    this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
+      this.tags[GIT_COMMIT_SHA]
+
+    // otherwise, try to read Git metadata from the git.properties file
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
+        `${process.cwd()}/git.properties`
+      let gitPropertiesString
+      try {
+        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+      } catch (e) {
+        // Only log error if the user has set a git.properties path
+        if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        }
+      }
+      if (gitPropertiesString) {
+        const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+        this.commitSHA = this.commitSHA || commitSHA
+        this.repositoryUrl = this.repositoryUrl || repositoryUrl
+      }
+    }
+    // otherwise, try to read Git metadata from the .git/ folder
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_FOLDER_PATH = getEnvironmentVariable('DD_GIT_FOLDER_PATH') ??
+        path.join(process.cwd(), '.git')
+      if (!this.repositoryUrl) {
+        // try to read git config (repository URL)
+        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        try {
+          const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
+          if (gitConfigContent) {
+            this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git config: %s', gitConfigPath, e)
+          }
+        }
+      }
+      if (!this.commitSHA) {
+        // try to read git HEAD (commit SHA)
+        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        if (gitHeadSha) {
+          this.commitSHA = gitHeadSha
+        }
       }
     }
   }

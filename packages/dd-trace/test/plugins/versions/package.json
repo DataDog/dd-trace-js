@@ -5,6 +5,7 @@
   "private": true,
   "dependencies": {
     "@ai-sdk/openai": "2.0.34",
+    "@anthropic-ai/sdk": "0.63.1",
     "@openai/agents": "0.1.4",
     "@openai/agents-core": "0.1.4",
     "@apollo/gateway": "2.11.2",

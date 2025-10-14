@@ -97,6 +97,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXTENDED_DATA_COLLECTION, true)
 
     if (appsecConfig.rasp?.enabled) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
@@ -135,6 +136,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_HEADER_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_MULTICONFIG, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXTENDED_DATA_COLLECTION, false)
 
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
