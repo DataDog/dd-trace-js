@@ -13,7 +13,7 @@ async function run() {
     const site = core.getInput('site') || 'datadoghq.com';
     const pattern = core.getInput('pattern') || '**/*junit.xml';
     const verbose = /^true$/i.test(core.getInput('verbose') || 'true');
-    const apiKey = core.getInput('api-key', { required: true });
+    const apiKey = core.getInput('dd-api-key', { required: true });
 
     // Decide platform/arch + filename
     const plat = process.platform; // 'linux'|'darwin'|'win32'
