@@ -27,6 +27,10 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:core:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   dd-trace-api:
     runs-on: ubuntu-latest
@@ -35,6 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -43,6 +51,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-body-parser:
     runs-on: ubuntu-latest
@@ -51,6 +61,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-child_process:
     runs-on: ubuntu-latest
@@ -59,6 +71,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-cookie-parser:
     runs-on: ubuntu-latest
@@ -67,6 +81,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -81,6 +97,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-express-session:
     runs-on: ubuntu-latest
@@ -89,6 +107,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-express:
     runs-on: ubuntu-latest
@@ -97,6 +117,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-fs:
     runs-on: ubuntu-latest
@@ -105,6 +127,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-generic-pool:
     runs-on: ubuntu-latest
@@ -113,6 +137,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-http:
     runs-on: ubuntu-latest
@@ -121,6 +147,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-knex:
     runs-on: ubuntu-latest
@@ -129,6 +157,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-mongoose:
     runs-on: ubuntu-latest
@@ -143,6 +173,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -151,6 +183,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-mysql2:
     runs-on: ubuntu-latest
@@ -168,6 +202,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-passport:
     runs-on: ubuntu-latest
@@ -176,6 +212,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-passport-http:
     runs-on: ubuntu-latest
@@ -184,6 +222,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-passport-local:
     runs-on: ubuntu-latest
@@ -192,6 +232,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-pg:
     runs-on: ubuntu-latest
@@ -209,6 +251,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-promise-js:
     runs-on: ubuntu-latest
@@ -217,6 +261,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-promise:
     runs-on: ubuntu-latest
@@ -225,6 +271,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-q:
     runs-on: ubuntu-latest
@@ -233,6 +281,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-url:
     runs-on: ubuntu-latest
@@ -241,6 +291,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-when:
     runs-on: ubuntu-latest
@@ -249,6 +301,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/instrumentations/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentations-misc:
     runs-on: ubuntu-latest
@@ -273,6 +327,11 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: test-${{ github.job }}
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   # TODO: Split this up as it runs tests for multiple different teams.
   integration:
@@ -294,6 +353,11 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   unit-guardrails:
     runs-on: ubuntu-latest
@@ -303,6 +367,11 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
@@ -320,6 +389,11 @@ jobs:
       - run: yarn add --ignore-scripts express@4 # Use older express to support old Node.js versions
       - run: npm i -g npm@8 # Recent enough to support `--pack-destination` and old enough for old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   integration-guardrails-unsupported:
     strategy:
@@ -348,3 +422,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:shimmer:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
