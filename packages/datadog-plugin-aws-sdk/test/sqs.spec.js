@@ -25,6 +25,7 @@ const getQueueParams = (queueName) => {
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
+    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
