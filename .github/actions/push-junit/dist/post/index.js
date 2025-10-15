@@ -84119,7 +84119,7 @@ async function run() {
     await exec.exec(binPath, ['--version']);
 
     // Build args & env
-    const args = ['junit', 'upload', pattern];
+    const args = ['junit', 'upload', pattern, '--service', 'dd-trace-js-tests'];
     if (verbose) args.push('--verbose');
 
     const env = {
