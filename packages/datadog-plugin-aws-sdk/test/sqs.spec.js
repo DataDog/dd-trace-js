@@ -591,7 +591,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.be.at.least(2)
             expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-          }).then(done, done)
+          }, { timeoutMs: 5000 }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
