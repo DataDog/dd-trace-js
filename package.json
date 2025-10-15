@@ -56,6 +56,7 @@
     "test:integration:cypress": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/debugger/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/esbuild/*.spec.js\"",
+    "test:integration:openfeature": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/openfeature/*.spec.js\"",
     "test:integration:jest": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/jest/*.spec.js\"",
     "test:integration:mocha": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/mocha/*.spec.js\"",
     "test:integration:playwright": "mocha --timeout 60000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",
@@ -121,12 +122,15 @@
     "@datadog/native-appsec": "10.2.1",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
-    "@datadog/pprof": "5.10.0",
+    "@datadog/openfeature-node-server": "0.1.0-preview.10",
+    "@datadog/pprof": "5.11.1",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "4.0.1",
     "@isaacs/ttlcache": "^1.4.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
+    "@opentelemetry/api-logs": "<1.0.0",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
+    "@opentelemetry/resources": ">=1.0.0 <1.10.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.10",
     "ignore": "^7.0.5",
@@ -151,11 +155,25 @@
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
   },
+  "peerDependencies": {
+    "@openfeature/core": "^1.9.0",
+    "@openfeature/server-sdk": "~1.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@openfeature/core": {
+      "optional": true
+    },
+    "@openfeature/server-sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@babel/helpers": "^7.27.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.29.0",
     "@msgpack/msgpack": "^3.1.2",
+    "@openfeature/core": "^1.8.1",
+    "@openfeature/server-sdk": "~1.18.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.10",
