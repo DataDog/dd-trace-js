@@ -259,6 +259,34 @@ class LLMObsTagger {
     return filteredToolCalls
   }
 
+  #filterToolResults (toolResults) {
+    if (!Array.isArray(toolResults)) {
+      toolResults = [toolResults]
+    }
+
+    const filteredToolResults = []
+    for (const toolResult of toolResults) {
+      if (typeof toolResult !== 'object') {
+        this.#handleFailure('Tool result must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { toolId, result, name = '', type } = toolResult
+      const toolResultObj = {}
+
+      const condition1 = this.#tagConditionalString(toolId, 'Tool result ID', toolResultObj, 'tool_id')
+      const condition2 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
+      // name can be empty string, so always include it
+      toolResultObj.name = name
+      const condition3 = this.#tagConditionalString(type, 'Tool result type', toolResultObj, 'type')
+
+      if (condition1 && condition2 && condition3) {
+        filteredToolResults.push(toolResultObj)
+      }
+    }
+    return filteredToolResults
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -281,6 +309,7 @@ class LLMObsTagger {
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
+      const toolResults = message.toolResults
       const toolId = message.toolId
       const messageObj = {}
 
@@ -297,17 +326,25 @@ class LLMObsTagger {
         }
       }
 
-      // Only include content if it's not empty OR if there are no tool calls
-      // (For responses API, tool call messages should not have content field)
-      if (content !== '' || !messageObj.tool_calls) {
+      if (toolResults) {
+        const filteredToolResults = this.#filterToolResults(toolResults)
+
+        if (filteredToolResults.length) {
+          messageObj.tool_results = filteredToolResults
+        }
+      }
+
+      // Include content if not empty, no tool calls/results, or explicitly provided
+      if (content !== '' || (!messageObj.tool_calls && !messageObj.tool_results) || ('content' in message)) {
         messageObj.content = content
       }
 
-      // For role, always include it (even if empty string) when there are tool calls
+      // For role, always include it when there are tool calls or tool results
       // Otherwise use conditional tagging which skips empty values
       let condition
-      if (messageObj.tool_calls && messageObj.tool_calls.length > 0) {
-        // For tool call messages, always include role even if empty
+      if ((messageObj.tool_calls && messageObj.tool_calls.length > 0) || 
+          (messageObj.tool_results && messageObj.tool_results.length > 0)) {
+        // For tool call/result messages, always include role
         messageObj.role = role || ''
         condition = true
       } else {
