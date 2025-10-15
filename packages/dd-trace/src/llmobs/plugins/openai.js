@@ -86,12 +86,21 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (outputTokens !== undefined) metrics.outputTokens = outputTokens
 
       const totalTokens = tokenUsage.total_tokens || (inputTokens + outputTokens)
-      if (totalTokens) metrics.totalTokens = totalTokens
+      if (totalTokens !== undefined) metrics.totalTokens = totalTokens
 
-      const promptTokensDetails = tokenUsage.prompt_tokens_details
-      if (promptTokensDetails) {
-        const cacheReadTokens = promptTokensDetails.cached_tokens
-        if (cacheReadTokens) metrics.cacheReadTokens = cacheReadTokens
+      // Cache tokens - Responses API uses input_tokens_details, Chat/Completions use prompt_tokens_details
+      // For Responses API, always include cache tokens (even if 0)
+      // For Chat API, only include if > 0
+      if (tokenUsage.input_tokens_details) {
+        // Responses API - always include
+        const cacheReadTokens = tokenUsage.input_tokens_details.cached_tokens
+        if (cacheReadTokens !== undefined) metrics.cacheReadTokens = cacheReadTokens
+      } else if (tokenUsage.prompt_tokens_details) {
+        // Chat/Completions API - only include if > 0
+        const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
+        if (cacheReadTokens !== undefined && cacheReadTokens > 0) {
+          metrics.cacheReadTokens = cacheReadTokens
+        }
       }
     }
 
