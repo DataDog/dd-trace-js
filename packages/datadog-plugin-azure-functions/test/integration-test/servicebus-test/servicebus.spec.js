@@ -8,7 +8,7 @@ const {
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
-const { assert } = require('chai')
+const { assert, expect } = require('chai')
 const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
@@ -45,42 +45,236 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('propagates context through a service bus queue', async () => {
+    it('propagates a single message through a queue with cardinality of one', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/servicebus-test1', ({ headers, payload }) => {
-        console.log(payload)
-        // assert.strictEqual(payload.length, 3)
-        // assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest')
-        // assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
-        // assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        // assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
-        // assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-1', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
       })
     }).timeout(60000)
 
-    // it('propagates context through a service bus topic', async () => {
-    //   const envArgs = {
-    //     PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
-    //   }
-    //   proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+    it('propagates multiple messages through a queue with cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-    //   return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/servicebus-test2', ({ headers, payload }) => {
-    //     assert.strictEqual(payload.length, 3)
-    //     assert.strictEqual(payload[1][1].span_id, payload[2][0].parent_id)
-    //     assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-    //     assert.strictEqual(payload[2][0].resource, 'ServiceBus topicTest')
-    //     assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'topic.1')
-    //     assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-    //     assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
-    //     assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
-    //   })
-    // }).timeout(60000)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-1', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates a single amqp message through a queue with cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-1', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates multiple amqp messages through a queue with cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-1', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates a message batch through a queue with cardinality of one', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-1', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 3)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[2][0].resource, 'ServiceBus queueTest1')
+        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[2][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'queue.1')
+        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates a single message through a queue with cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-2', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates multiple messages through a queue with cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('propagates a single amqp message through a queue with cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-2', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+      })
+    }).timeout(60000)
+
+    it('propagates multiple amqp messages through a queue with cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-2', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('propagates a message batch through a queue with cardinality of many', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[1][0].resource, 'ServiceBus queueTest2')
+        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
+        assert.strictEqual(payload[1][0].meta['messaging.system'], 'servicebus')
+        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'queue.2')
+        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(parseLinks(payload[1][0]).length, 2)
+      })
+    }).timeout(60000)
+
+    it('should add span links to non-batched messages when batch links are disabled', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
+        expect(payload[1][0].meta).to.have.property('_dd.span_links')
+      })
+    }).timeout(60000)
+
+    it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
+      const envArgs = {
+        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+        DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED: false
+      }
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
+        const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
+        assert.strictEqual(hasCreateSpan, false)
+        expect(payload[1][0].meta).to.not.have.property('_dd.span_links')
+      })
+    }).timeout(60000)
   })
 })
+
+function parseLinks (span) {
+  return JSON.parse(span.meta['_dd.span_links'] || '[]')
+}
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {

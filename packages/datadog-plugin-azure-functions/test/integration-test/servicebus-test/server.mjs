@@ -191,10 +191,11 @@ app.http('servicebus-test4', {
   }
 })
 
-app.serviceBusQueue('queueTest', {
+app.serviceBusQueue('queueTest1', {
   connection: 'MyServiceBus',
   queueName: 'queue.1',
   authLevel: 'anonymous',
+  cardinality: 'one',
   handler: async (message, context) => {
     return {
       status: 200,
@@ -214,10 +215,11 @@ app.serviceBusQueue('queueTest2', {
   }
 })
 
-app.serviceBusTopic('topicTest', {
+app.serviceBusTopic('topicTest1', {
   connection: 'MyServiceBus',
   topicName: 'topic.1',
   subscriptionName: 'subscription.1',
+  cardinality: 'one',
   handler: async (message, context) => {
     return {
       status: 200,

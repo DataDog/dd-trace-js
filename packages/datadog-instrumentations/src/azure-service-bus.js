@@ -18,12 +18,15 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false
       const config = sender._context.config
       const entityPath = sender._entityPath
 
-      shimmer.wrap(sender, 'sendMessages', sendMessages => function (msg) {
-        const functionName = sendMessages.name
-        return producerCh.tracePromise(
-          sendMessages, { config, entityPath, functionName, msg }, this, ...arguments
-        )
-      })
+      shimmer.wrap(sender, 'scheduleMessages', scheduleMessages =>
+        function (msg, scheduledEnqueueTimeUtc) {
+          const functionName = scheduleMessages.name
+          return producerCh.tracePromise(
+            scheduleMessages,
+            { config, entityPath, functionName, msg, scheduledEnqueueTimeUtc },
+            this, ...arguments
+          )
+        })
 
       shimmer.wrap(sender, 'createMessageBatch', createMessageBatch => async function () {
         const batch = await createMessageBatch.apply(this, arguments)
@@ -34,6 +37,21 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false
         })
         return batch
       })
+
+      shimmer.wrap(sender._sender, 'send', send => function (msg) {
+        const functionName = send.name
+        return producerCh.tracePromise(
+          send, { config, entityPath, functionName, msg }, this, ...arguments
+        )
+      })
+
+      shimmer.wrap(sender._sender, 'sendBatch', sendBatch => function (msg) {
+        const functionName = sendBatch.name
+        return producerCh.tracePromise(
+          sendBatch, { config, entityPath, functionName, msg }, this, ...arguments
+        )
+      })
+
       return sender
     })
   return obj

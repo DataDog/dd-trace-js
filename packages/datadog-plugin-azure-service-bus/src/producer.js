@@ -28,7 +28,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
     }, ctx)
 
     if (ctx.functionName === 'tryAddMessage') {
-      span._spanContext._name === 'azure.servicebus.create'
+      span._spanContext._name = 'azure.servicebus.create'
       span.setTag('messaging.operation', 'create')
 
       if (ctx.msg.messageID !== undefined) {
@@ -41,14 +41,11 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       }
     }
 
-    if (ctx.functionName === 'sendMessages') {
-      span.setTag('messaging.operation', 'send')
-
+    if (ctx.functionName === 'send' || ctx.functionName === 'sendBatch' || ctx.functionName === 'scheduleMessages') {
       const messages = ctx.msg
-      const isBatch = messages.constructor.name === 'ServiceBusMessageBatchImpl'
-
+      const isBatch = messages.constructor?.name === 'ServiceBusMessageBatchImpl'
       if (isBatch) {
-        const messagesLength = messages.length || messages._context?.connection?._eventsCount
+        const messagesLength = messages.length || messages.count
         span.setTag('messaging.batch.message_count', messagesLength)
 
         if (batchLinksAreEnabled()) {

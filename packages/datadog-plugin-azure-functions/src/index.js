@@ -122,25 +122,33 @@ function extractTraceContext (tracer, ctx) {
   }
 }
 
+// message & messages & batch with cardinality of 1 == applicationProperties
+// messages with cardinality of many == applicationPropertiesArray
 function setSpanLinks (triggerType, tracer, span, ctx) {
   const cardinality = ctx.invocationContext.options.trigger.cardinality
   const triggerMetadata = ctx.invocationContext.triggerMetadata
-  const traceContexts = triggerType === 'EventHubs'
-    ? triggerMetadata.propertiesArray
-    : triggerMetadata.applicationPropertiesArray
+  const isServiceBus = triggerType === 'ServiceBus'
 
-  if (cardinality === 'many' && traceContexts.length > 0) {
-    traceContexts.forEach(event => {
-      // Check for possible empty event when span links are disabled
-      if (Object.keys(event).length > 0) {
-        span.addLink(tracer.extract('text_map', event))
-      }
-    })
-  } else if (cardinality === 'one') {
-    const spanContext = tracer.extract('text_map', traceContexts)
+  const properties = isServiceBus
+    ? triggerMetadata.applicationProperties
+    : triggerMetadata.properties
+
+  const propertiesArray = isServiceBus
+    ? triggerMetadata.applicationPropertiesArray
+    : triggerMetadata.propertiesArray
+
+  const addLinkFromProperties = (props) => {
+    if (!props || Object.keys(props).length === 0) return
+    const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
       span.addLink(spanContext)
     }
+  }
+
+  if (cardinality === 'many' && propertiesArray?.length > 0) {
+    propertiesArray.forEach(addLinkFromProperties)
+  } else if (cardinality === 'one') {
+    addLinkFromProperties(properties)
   }
 }
 
