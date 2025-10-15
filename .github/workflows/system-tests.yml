@@ -35,7 +35,10 @@ jobs:
     needs:
       - build-artifacts
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
-    secrets: inherit
+    secrets:
+      TEST_OPTIMIZATION_API_KEY: secrets.TEST_OPTIMIZATION_API_KEY
+      DOCKERHUB_USERNAME: secrets.DOCKERHUB_USERNAME
+      DOCKERHUB_TOKEN: secrets.DOCKERHUB_USERNAME
     permissions:
       contents: read
       id-token: write
@@ -48,3 +51,4 @@ jobs:
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
+      push_to_test_optimization: true
