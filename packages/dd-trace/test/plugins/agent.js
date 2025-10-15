@@ -328,8 +328,11 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     resolve = _resolve
     reject = _reject
   })
-  console.log(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
+  process._rawDebug(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
   const rejectionTimeout = setTimeout(() => {
+    process._rawDebug(`[assertSomeTraces] TIMEOUT reached after ${options.timeoutMs || 1000}ms`)
+    process._rawDebug(`[assertSomeTraces] Handler was invoked ${invocationCount} times`)
+    process._rawDebug(`[assertSomeTraces] Error captured:`, error?.message || 'none')
     if (error) reject(error)
   }, options.timeoutMs || 1000)
 
@@ -345,17 +348,17 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
     invocationCount++
-    console.log(`[assertSomeTraces] Handler invoked (attempt #${invocationCount})`)
+    process._rawDebug(`[assertSomeTraces] Handler invoked (attempt #${invocationCount})`)
 
     try {
-      console.log(`[assertSomeTraces] Running callback against traces...`)
+      process._rawDebug(`[assertSomeTraces] Running callback against traces...`)
       const result = callback(...args)
-      console.log(`[assertSomeTraces] ✓ Callback succeeded! Resolving promise.`)
+      process._rawDebug(`[assertSomeTraces] ✓ Callback succeeded! Resolving promise.`)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
-      console.log(`[assertSomeTraces] ✗ Callback failed:`, e.message)
+      process._rawDebug(`[assertSomeTraces] ✗ Callback failed:`, e.message)
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)
