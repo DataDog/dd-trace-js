@@ -36,6 +36,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     this._parentMap = new WeakMap()
 
     this.addBind(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
+      process._rawDebug(`[PLUGIN-DEBUG] ${this.serviceIdentifier} request:start received:`, {
+        operation: ctx.operation,
+        awsService: ctx.awsService,
+        awsRegion: ctx.awsRegion
+      })
       const {
         request,
         operation,
@@ -133,6 +138,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ctx => {
+      process._rawDebug(`[PLUGIN-DEBUG] ${this.serviceIdentifier} request:complete received`)
       const { response, cbExists = false, currentStore } = ctx
       if (!currentStore) return
       const { span } = currentStore
