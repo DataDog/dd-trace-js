@@ -1,7 +1,12 @@
 'use strict'
 
-require('../src/knex')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
+require('../src/knex')
 
 describe('Instrumentation', () => {
   let knex

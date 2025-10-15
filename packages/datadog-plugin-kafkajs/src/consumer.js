@@ -10,8 +10,8 @@ const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'kafkajs' }
-  static get operation () { return 'consume' }
+  static id = 'kafkajs'
+  static operation = 'consume'
 
   constructor () {
     super(...arguments)

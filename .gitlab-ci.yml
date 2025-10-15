@@ -4,16 +4,17 @@ stages:
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
   - macrobenchmarks
+  - macrobenchmarks-gate
+  - macrobenchmarks-notify
 
-check_config_inversion_local_file:
-  rules:
-    - when: on_success
-  extends: .check_config_inversion_local_file
+# Config Registry CI jobs
+validate_supported_configurations_local_file:
+  extends: .validate_supported_configurations_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"
 
-config-inversion-update-supported-range:
-  extends: .config_inversion_update_central
+update_central_configurations_version_range:
+  extends: .update_central_configurations_version_range
   variables:
     LOCAL_REPO_NAME: "dd-trace-js"
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"

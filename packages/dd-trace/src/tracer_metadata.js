@@ -14,7 +14,7 @@ function storeConfig (config) {
     config.tags['runtime-id'],
     tracerVersion,
     config.hostname,
-    config.server || null,
+    config.service || null,
     config.env || null,
     config.version || null
   )

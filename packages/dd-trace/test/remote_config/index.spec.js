@@ -1,6 +1,11 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
@@ -48,7 +53,7 @@ describe('Remote Config index', () => {
       disable: sinon.spy()
     }
 
-    remoteConfig = proxyquire('../src/remote_config', {
+    remoteConfig = proxyquire('../../src/remote_config', {
       './manager': RemoteConfigManager,
       '../appsec/user_tracking': UserTracking,
       '../log': log,
@@ -92,6 +97,13 @@ describe('Remote Config index', () => {
       expect(rc.updateCapabilities)
         .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       expect(rc.setProductHandler).to.not.have.been.called
+    })
+
+    it('should always enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
+      remoteConfig.enable(config)
+
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
     })
 
     describe('ASM_FEATURES remote config listener', () => {

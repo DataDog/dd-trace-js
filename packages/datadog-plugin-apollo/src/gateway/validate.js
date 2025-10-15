@@ -3,10 +3,8 @@
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 class ApolloGatewayValidatePlugin extends ApolloBasePlugin {
-  static get operation () { return 'validate' }
-  static get prefix () {
-    return 'tracing:apm:apollo:gateway:validate'
-  }
+  static operation = 'validate'
+  static prefix = 'tracing:apm:apollo:gateway:validate'
 
   end (ctx) {
     const result = ctx.result

@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.15.0"
+    "rules_version": "1.15.1"
   },
   "rules": [
     {
@@ -5539,6 +5539,7 @@
         "confidence": "0",
         "module": "waf"
       },
+      "max_version": "1.24.9",
       "conditions": [
         {
           "parameters": {
@@ -6671,7 +6672,10 @@
               {
                 "address": "graphql.server.resolver"
               }
-            ]
+            ],
+            "options": {
+              "path-inspection": true
+            }
           },
           "operator": "ssrf_detector"
         }
@@ -8914,6 +8918,271 @@
         }
       ],
       "transformers": []
+    }
+  ],
+  "rules_compat": [
+    {
+      "id": "api-001-100",
+      "name": "JWT: No expiry is present",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "exp"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_expiry": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-110",
+      "name": "JWT: Collect algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ]
+          },
+          "operator": "exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt_alg": {
+            "address": "server.request.jwt",
+            "key_path": [
+              "header",
+              "alg"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-120",
+      "name": "JWT: No audience is specified",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "payload",
+                  "aud"
+                ]
+              }
+            ]
+          },
+          "operator": "!exists"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": false,
+        "attributes": {
+          "_dd.appsec.api.jwt.no_audience": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "api-001-130",
+      "name": "JWT: None algorithm used",
+      "tags": {
+        "type": "jwt",
+        "category": "api_security",
+        "confidence": "0",
+        "module": "business-logic"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.jwt",
+                "key_path": [
+                  "header",
+                  "alg"
+                ]
+              }
+            ],
+            "list": [
+              "none",
+              "nonE",
+              "noNe",
+              "noNE",
+              "nOne",
+              "nOnE",
+              "nONe",
+              "nONE",
+              "None",
+              "NonE",
+              "NoNe",
+              "NoNE",
+              "NOne",
+              "NOnE",
+              "NONe",
+              "NONE"
+            ]
+          },
+          "operator": "exact_match"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "keep": true,
+        "attributes": {
+          "_dd.appsec.api.jwt.none_alg": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-551",
+      "name": "Datadog test scanner - scalar trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-scalar(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.scalar": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ua0-600-552",
+      "name": "Datadog test scanner - reference trace-tagging version: user-agent",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "Datadog Canary Test",
+        "confidence": "1",
+        "module": "waf"
+      },
+      "min_version": "1.25.0",
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "grpc.server.request.metadata",
+                "key_path": [
+                  "dd-canary"
+                ]
+              }
+            ],
+            "regex": "^dd-test-scanner-tag-ref(?:$|/|\\s)"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [],
+      "output": {
+        "event": false,
+        "attributes": {
+          "_dd.appsec.test.scanner.reference": {
+            "address": "server.request.headers.no_cookies",
+            "key_path": [
+              "user-agent"
+            ]
+          }
+        }
+      }
     }
   ],
   "processors": [

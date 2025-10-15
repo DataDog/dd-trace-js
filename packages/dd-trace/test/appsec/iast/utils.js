@@ -1,13 +1,14 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const { assert } = require('chai')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const msgpack = require('@msgpack/msgpack')
+const axios = require('axios')
+const { assert, expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 
 const agent = require('../../plugins/agent')
-const axios = require('axios')
 const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
@@ -239,7 +240,7 @@ function checkVulnerabilityInRequest (
   }
 }
 
-function prepareTestServerForIast (description, tests, iastConfig) {
+function prepareTestServerForIast (description, tests, iastConfig, pluginsToConfigure = []) {
   describe(description, () => {
     const config = {}
     let http
@@ -254,7 +255,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
     })
 
     before(() => {
-      return agent.load('http', undefined, { flushInterval: 1 })
+      return agent.load(['http', ...pluginsToConfigure], { client: false }, { flushInterval: 1 })
         .then(() => {
           http = require('http')
         })
@@ -308,7 +309,14 @@ function prepareTestServerForIast (description, tests, iastConfig) {
   })
 }
 
-function prepareTestServerForIastInExpress (description, expressVersion, loadMiddlewares, tests, iastConfig) {
+function prepareTestServerForIastInExpress (
+  description,
+  expressVersion,
+  loadMiddlewares,
+  tests,
+  iastConfig,
+  pluginsToConfigure = []
+) {
   if (arguments.length === 3) {
     tests = loadMiddlewares
     loadMiddlewares = undefined
@@ -319,7 +327,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     let listener, app, server
 
     before(() => {
-      return agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
+      return agent.load(['express', 'http', ...pluginsToConfigure], { client: false }, { flushInterval: 1 })
     })
 
     before(() => {

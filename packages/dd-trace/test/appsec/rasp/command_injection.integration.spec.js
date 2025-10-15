@@ -1,9 +1,11 @@
 'use strict'
-
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
-const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
+
+const path = require('node:path')
+
+const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - command_injection - integration', () => {
   let axios, sandbox, cwd, appFile, agent, proc
@@ -35,7 +37,7 @@ describe('RASP - command_injection - integration', () => {
         DD_TRACE_DEBUG: 'true',
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json')
       }
     })

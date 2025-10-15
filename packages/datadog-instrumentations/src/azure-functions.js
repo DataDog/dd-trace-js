@@ -8,7 +8,7 @@ const dc = require('dc-polyfill')
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
-addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
+addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
 
   // Http triggers
@@ -22,6 +22,9 @@ addHook({ name: '@azure/functions', versions: ['>=4'] }, azureFunction => {
   // Service Bus triggers
   shimmer.wrap(app, 'serviceBusQueue', wrapHandler)
   shimmer.wrap(app, 'serviceBusTopic', wrapHandler)
+
+  // Event Hub triggers
+  shimmer.wrap(app, 'eventHub', wrapHandler)
 
   return azureFunction
 })

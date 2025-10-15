@@ -1,6 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 describe('docker', () => {
   let docker
@@ -22,7 +27,7 @@ describe('docker', () => {
   })
 
   it('should not inject IDs when the cgroup cannot be read', () => {
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.be.undefined
@@ -36,7 +41,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -50,7 +55,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -64,7 +69,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -78,7 +83,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -94,7 +99,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -108,7 +113,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -122,7 +127,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.equal(id)
@@ -137,7 +142,7 @@ describe('docker', () => {
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     fs.statSync.withArgs('/sys/fs/cgroup/system.slice/garden.service/garden').returns({ ino })
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.be.undefined
@@ -153,7 +158,7 @@ describe('docker', () => {
 
     fs.readFileSync.withArgs('/proc/self/cgroup', 'utf8').returns(cgroup)
     fs.statSync.withArgs('/sys/fs/cgroup/').returns({ ino })
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-Container-Id']).to.be.undefined
@@ -163,7 +168,7 @@ describe('docker', () => {
   it('should support external env', () => {
     process.env.DD_EXTERNAL_ENV = 'test'
 
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)
 
     expect(carrier['Datadog-External-Env']).to.equal('test')

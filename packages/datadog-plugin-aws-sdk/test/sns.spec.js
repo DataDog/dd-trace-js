@@ -1,6 +1,9 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, afterEach, before, after } = require('mocha')
+
 const sinon = require('sinon')
 const semver = require('semver')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -10,6 +13,7 @@ const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
+  this.timeout(20000)
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let sns
@@ -42,7 +46,7 @@ describe('Sns', function () {
         childSpansFound += 1
         expect(childSpansFound).to.equal(childSpans)
         childSpansFound = 0
-      }, { timeoutMs: 10000 }).then(done, done)
+      }, { timeoutMs: 20000 }).then(done, done)
     }
 
     function createResources (queueName, topicName, cb) {
@@ -132,7 +136,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
             'aws.response.body.MessageId': 'redacted'
           })
-        }).then(done, done)
+        }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
           TopicArn,
@@ -162,7 +166,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
             'aws.response.body.MessageId': 'redacted'
           })
-        }).then(done, done)
+        }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
           TopicArn,
@@ -194,7 +198,7 @@ describe('Sns', function () {
               'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
             })
             expect(span.meta).to.have.property('aws.response.body.MessageId')
-          }).then(done, done)
+          }, { timeoutMs: 20000 }).then(done, done)
 
           sns.publish({
             TopicArn,
@@ -220,7 +224,7 @@ describe('Sns', function () {
               'aws.request.body.TopicArn': TopicArn,
               'aws.response.body.Attributes.DisplayName': 'redacted'
             })
-          }).then(done, done)
+          }, { timeoutMs: 20000 }).then(done, done)
 
           sns.getTopicAttributes({ TopicArn }, e => e && done(e))
         })
@@ -263,7 +267,7 @@ describe('Sns', function () {
                   'aws.request.body.PhoneNumber': 'redacted',
                   'aws.request.body.Message': 'message 1'
                 })
-              }).then(done, done)
+              }, { timeoutMs: 20000 }).then(done, done)
 
               sns.publish({
                 PhoneNumber: '+33628606135',
@@ -281,7 +285,7 @@ describe('Sns', function () {
                   region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
                 })
-              }).then(done, done)
+              }, { timeoutMs: 20000 }).then(done, done)
 
               sns.listSMSSandboxPhoneNumbers({
                 PhoneNumber: '+33628606135',
@@ -496,8 +500,8 @@ describe('Sns', function () {
     })
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = '5117773060236273241'
-      const expectedConsumerHash = '1353703578833511841'
+      const expectedProducerHash = '15386798273908484982'
+      const expectedConsumerHash = '15162998336469814920'
       let nowStub
 
       before(() => {

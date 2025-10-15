@@ -1,8 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
@@ -381,16 +384,16 @@ describe('reporter', () => {
     it('should add tags to request span when socket is not there', () => {
       delete req.socket
 
-      const result = Reporter.reportAttack([
-        {
-          rule: {},
-          rule_matches: [{}]
-        }
-      ])
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
 
-      expect(result).to.not.be.false
       expect(web.root).to.have.been.calledOnceWith(req)
-
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -399,15 +402,16 @@ describe('reporter', () => {
     })
 
     it('should add tags to request span', () => {
-      const result = Reporter.reportAttack([
-        {
-          rule: {},
-          rule_matches: [{}]
-        }
-      ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -419,10 +423,9 @@ describe('reporter', () => {
     it('should not overwrite origin tag', () => {
       span.context()._tags = { '_dd.origin': 'tracer' }
 
-      const result = Reporter.reportAttack([])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
+      Reporter.reportAttack({ events: [] })
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
@@ -433,18 +436,19 @@ describe('reporter', () => {
     it('should merge attacks json', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([
-        {
-          rule: {}
-        },
-        {
-          rule: {},
-          rule_matches: [{}]
-        }
-      ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {}
+          },
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -456,18 +460,19 @@ describe('reporter', () => {
     it('should call standalone sample', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
-      const result = Reporter.reportAttack([
-        {
-          rule: {}
-        },
-        {
-          rule: {},
-          rule_matches: [{}]
-        }
-      ])
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
+      Reporter.reportAttack({
+        events: [
+          {
+            rule: {}
+          },
+          {
+            rule: {},
+            rule_matches: [{}]
+          }
+        ]
+      })
 
+      expect(web.root).to.have.been.calledOnceWith(req)
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -508,16 +513,18 @@ describe('reporter', () => {
           }
         )
 
-        Reporter.reportAttack([
-          {
-            rule: {
-              tags: {
-                module: 'rasp'
-              }
-            },
-            rule_matches: [{}]
-          }
-        ])
+        Reporter.reportAttack({
+          events: [
+            {
+              rule: {
+                tags: {
+                  module: 'rasp'
+                }
+              },
+              rule_matches: [{}]
+            }
+          ]
+        })
 
         expect(span.meta_struct['http.request.body']).to.be.deep.equal(expectedBody)
       })
@@ -537,16 +544,18 @@ describe('reporter', () => {
           }
         )
 
-        Reporter.reportAttack([
-          {
-            rule: {
-              tags: {
-                module: 'rasp'
-              }
-            },
-            rule_matches: [{}]
-          }
-        ])
+        Reporter.reportAttack({
+          events: [
+            {
+              rule: {
+                tags: {
+                  module: 'rasp'
+                }
+              },
+              rule_matches: [{}]
+            }
+          ]
+        })
 
         expect(span.meta_struct?.['http.request.body']).to.be.undefined
       })
@@ -619,18 +628,64 @@ describe('reporter', () => {
 
           req.body = requestBody
 
-          Reporter.reportAttack([
-            {
-              rule: {
-                tags: {
-                  module: 'rasp'
-                }
-              },
-              rule_matches: [{}]
-            }
-          ])
+          Reporter.reportAttack({
+            events: [
+              {
+                rule: {
+                  tags: {
+                    module: 'rasp'
+                  }
+                },
+                rule_matches: [{}]
+              }
+            ]
+          })
 
           expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+        })
+
+        it('should set request body size exceeded metric for old and new approaches when both events happen', () => {
+          Reporter.init(
+            {
+              rateLimit: 100,
+              extendedHeadersCollection: {
+                enabled: false,
+                redaction: true,
+                maxHeaders: 50
+              },
+              rasp: {
+                bodyCollection: true
+              }
+            }
+          )
+
+          req.body = requestBody
+
+          Reporter.reportAttack({
+            events: [
+              {
+                rule: {
+                  tags: {
+                    module: 'rasp'
+                  }
+                },
+                rule_matches: [{}]
+              }
+            ],
+            actions: {
+              extended_data_collection: {
+                max_collected_headers: 10
+              }
+            }
+          })
+
+          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+          span.context()._tags = { '_dd.appsec.rasp.request_body_size.exceeded': 'true' }
+
+          const res = {}
+          Reporter.finishRequest(req, res, {})
+
+          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.request_body_size.exceeded', 'true')
         })
       })
     })

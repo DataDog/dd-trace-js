@@ -139,12 +139,12 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addDatabaseSubscriptions () {
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result, 'sequelize')
+      ({ result }) => this._taintDatabaseResult(result, 'sequelize', getIastContext(storage('legacy').getStore()))
     )
 
     this.addSub(
       { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result, 'pg')
+      ({ result, currentStore }) => this._taintDatabaseResult(result, 'pg', getIastContext(currentStore))
     )
   }
 
@@ -263,7 +263,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, dbOrigin, iastContext = getIastContext(storage('legacy').getStore()), name) {
+  _taintDatabaseResult (result, dbOrigin, iastContext, name) {
     if (!iastContext) return result
 
     if (this._rowsToTaint === 0) return result

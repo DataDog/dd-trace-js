@@ -10,6 +10,8 @@ module.exports = {
   start: config => {
     const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA, injectionEnabled } = config
     const { enabled, sourceMap, exporters } = config.profiling
+    const { heartbeatInterval } = config.telemetry
+
     const logger = {
       debug: (message) => log.debug(message),
       info: (message) => log.info(message),
@@ -39,7 +41,8 @@ module.exports = {
       repositoryUrl,
       commitSHA,
       libraryInjected,
-      activation
+      activation,
+      heartbeatInterval
     })
   },
 

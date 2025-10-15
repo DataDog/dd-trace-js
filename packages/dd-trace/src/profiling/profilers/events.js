@@ -3,9 +3,12 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
+const PoissonProcessSamplingFilter = require('./poisson')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
+// The number of sampling intervals that need to pass before we reset the Poisson process sampling instant.
+const POISSON_RESET_FACTOR = 2
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -38,14 +41,9 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
-function getSamplingIntervalMillis (options) {
-  return (options.samplingInterval || 1e3 / 99) // 99Hz
-}
-
 function getMaxSamples (options) {
-  const cpuSamplingInterval = getSamplingIntervalMillis(options)
-  const flushInterval = options.flushInterval || 65 * 1e3 // 60 seconds
-  const maxCpuSamples = flushInterval / cpuSamplingInterval
+  const flushInterval = options.flushInterval || 65 * 1e3 // 65 seconds
+  const maxCpuSamples = flushInterval / options.samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -270,10 +268,11 @@ class EventSerializer {
       new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
     ]
     if (_ddSpanId) {
-      label.push(labelFromStr(this.stringTable, this.spanIdKey, _ddSpanId))
+      label.push(
+        new Label({ key: this.spanIdKey, num: _ddSpanId }))
     }
     if (_ddRootSpanId) {
-      label.push(labelFromStr(this.stringTable, this.rootSpanIdKey, _ddRootSpanId))
+      label.push(new Label({ key: this.rootSpanIdKey, num: _ddRootSpanId }))
     }
 
     const sampleInput = {
@@ -371,35 +370,12 @@ class DatadogInstrumentationEventSource {
 }
 
 function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
-  let nextSamplingInstant = performance.now()
-  let currentSamplingInstant = 0
-  setNextSamplingInstant()
-
-  return event => {
-    const endTime = event.startTime + event.duration
-    while (endTime >= nextSamplingInstant) {
-      setNextSamplingInstant()
-    }
-    // An event is sampled if it started before, and ended on or after a sampling instant. The above
-    // while loop will ensure that the ending invariant is always true for the current sampling
-    // instant so we don't have to test for it below. Across calls, the invariant also holds as long
-    // as the events arrive in endTime order. This is true for events coming from
-    // DatadogInstrumentationEventSource; they will be ordered by endTime by virtue of this method
-    // being invoked synchronously with the plugins' finish() handler which evaluates
-    // performance.now(). OTOH, events coming from NodeAPIEventSource (GC in typical setup) might be
-    // somewhat delayed as they are queued by Node, so they can arrive out of order with regard to
-    // events coming from the non-queued source. By omitting the endTime check, we will pass through
-    // some short events that started and ended before the current sampling instant. OTOH, if we
-    // were to check for this.currentSamplingInstant <= endTime, we would discard some long events
-    // that also ended before the current sampling instant. We'd rather err on the side of including
-    // some short events than excluding some long events.
-    return event.startTime < currentSamplingInstant
-  }
-
-  function setNextSamplingInstant () {
-    currentSamplingInstant = nextSamplingInstant
-    nextSamplingInstant -= Math.log(1 - Math.random()) * samplingIntervalMillis
-  }
+  const poissonFilter = new PoissonProcessSamplingFilter({
+    samplingInterval: samplingIntervalMillis,
+    resetInterval: samplingIntervalMillis * POISSON_RESET_FACTOR,
+    now: performance.now.bind(performance)
+  })
+  return poissonFilter.filter.bind(poissonFilter)
 }
 
 /**
@@ -407,18 +383,21 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
-  type = 'events'
-  #maxSamples
+  #maxSamples = 0
+  #timelineSamplingEnabled = false
   #eventSerializer
   #eventSources
 
+  get type () { return 'events' }
+
   constructor (options = {}) {
     this.#maxSamples = getMaxSamples(options)
+    this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
-    const eventFilter = options.timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
+    const eventFilter = this.#timelineSamplingEnabled
+      ? createPoissonProcessSamplingFilter(options.samplingInterval)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
@@ -454,6 +433,12 @@ class EventsProfiler {
     const thatEventSerializer = this.#eventSerializer
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
     return () => thatEventSerializer.createProfile(startDate, endDate)
+  }
+
+  getInfo () {
+    return {
+      maxSamples: this.#maxSamples
+    }
   }
 
   encode (profile) {

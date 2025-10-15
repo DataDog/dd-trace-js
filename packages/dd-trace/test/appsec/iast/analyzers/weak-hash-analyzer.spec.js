@@ -1,9 +1,13 @@
 'use strict'
 
-const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+const path = require('node:path')
+
+const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const { prepareTestServerForIast, testOutsideRequestHasVulnerability } = require('../utils')
-const path = require('path')
 
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'

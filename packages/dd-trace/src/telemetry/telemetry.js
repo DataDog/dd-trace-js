@@ -3,6 +3,7 @@ const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
 const os = require('os')
 const dependencies = require('./dependencies')
+const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
@@ -254,6 +255,7 @@ function start (aConfig, thePluginManager) {
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
   telemetryLogger.start(config)
+  endpoints.start(config, application, host, getRetryData, updateRetryData)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -280,6 +282,7 @@ function stop () {
 
   telemetryStopChannel.publish(getTelemetryData())
 
+  endpoints.stop()
   config = undefined
 }
 
@@ -325,7 +328,19 @@ const nameMapping = {
   instrumentationSource: 'instrumentation_source',
   injectionEnabled: 'ssi_injection_enabled',
   injectForce: 'ssi_forced_injection_enabled',
-  'runtimeMetrics.enabled': 'runtimeMetrics'
+  'runtimeMetrics.enabled': 'runtimeMetrics',
+  otelLogsEnabled: 'DD_LOGS_OTEL_ENABLED',
+  otelUrl: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+  otelEndpoint: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+  otelHeaders: 'OTEL_EXPORTER_OTLP_HEADERS',
+  otelProtocol: 'OTEL_EXPORTER_OTLP_PROTOCOL',
+  otelTimeout: 'OTEL_EXPORTER_OTLP_TIMEOUT',
+  otelLogsHeaders: 'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+  otelLogsProtocol: 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
+  otelLogsTimeout: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT',
+  otelLogsUrl: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
+  otelLogsBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
+  otelLogsMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])

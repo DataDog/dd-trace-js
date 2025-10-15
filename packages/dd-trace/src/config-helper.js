@@ -5,6 +5,13 @@
 const { deprecate } = require('util')
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
 
+/**
+ * Types for environment variable handling.
+ *
+ * @typedef {keyof typeof supportedConfigurations} SupportedEnvKey
+ * @typedef {Partial<typeof process.env> & Partial<Record<SupportedEnvKey, string|undefined>>} TracerEnv
+ */
+
 const aliasToCanonical = {}
 for (const canonical of Object.keys(aliases)) {
   for (const alias of aliases[canonical]) {
@@ -32,7 +39,7 @@ module.exports = {
    * Returns the environment variables that are supported by the tracer
    * (including all non-Datadog/OTEL specific environment variables)
    *
-   * @returns {Partial<process.env>} The environment variables
+   * @returns {TracerEnv} The environment variables
    */
   getEnvironmentVariables () {
     const configs = {}

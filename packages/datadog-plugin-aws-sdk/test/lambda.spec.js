@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+
 const JSZip = require('jszip')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -12,6 +15,7 @@ const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('
 
 describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
+    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {

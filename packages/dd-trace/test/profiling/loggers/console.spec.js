@@ -1,28 +1,31 @@
 'use strict'
 
-require('../../setup/tap')
-
-/* eslint-disable no-console */
-
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+
+require('../../setup/core')
 
 describe('loggers/console', () => {
   let ConsoleLogger
+  let debugStub
+  let infoStub
+  let warnStub
+  let errorStub
 
   beforeEach(() => {
-    sinon.stub(console, 'debug')
-    sinon.stub(console, 'info')
-    sinon.stub(console, 'warn')
-    sinon.stub(console, 'error')
+    debugStub = sinon.stub(console, 'debug')
+    infoStub = sinon.stub(console, 'info')
+    warnStub = sinon.stub(console, 'warn')
+    errorStub = sinon.stub(console, 'error')
 
     ConsoleLogger = require('../../../src/profiling/loggers/console').ConsoleLogger
   })
 
   afterEach(() => {
-    console.debug.restore()
-    console.info.restore()
-    console.warn.restore()
-    console.error.restore()
+    debugStub.restore()
+    infoStub.restore()
+    warnStub.restore()
+    errorStub.restore()
   })
 
   it('should call the underlying console for error', () => {
@@ -33,11 +36,11 @@ describe('loggers/console', () => {
     logger.info('info')
     logger.debug('debug')
 
-    sinon.assert.calledOnce(console.error)
-    sinon.assert.calledWith(console.error, 'error')
-    sinon.assert.notCalled(console.debug)
-    sinon.assert.notCalled(console.info)
-    sinon.assert.notCalled(console.warn)
+    sinon.assert.calledOnce(errorStub)
+    sinon.assert.calledWith(errorStub, 'error')
+    sinon.assert.notCalled(debugStub)
+    sinon.assert.notCalled(infoStub)
+    sinon.assert.notCalled(warnStub)
   })
 
   it('should call the underlying console for warn', () => {
@@ -48,12 +51,12 @@ describe('loggers/console', () => {
     logger.info('info')
     logger.debug('debug')
 
-    sinon.assert.calledOnce(console.error)
-    sinon.assert.calledWith(console.error, 'error')
-    sinon.assert.calledOnce(console.warn)
-    sinon.assert.calledWith(console.warn, 'warn')
-    sinon.assert.notCalled(console.info)
-    sinon.assert.notCalled(console.debug)
+    sinon.assert.calledOnce(errorStub)
+    sinon.assert.calledWith(errorStub, 'error')
+    sinon.assert.calledOnce(warnStub)
+    sinon.assert.calledWith(warnStub, 'warn')
+    sinon.assert.notCalled(infoStub)
+    sinon.assert.notCalled(debugStub)
   })
 
   it('should call the underlying console for info', () => {
@@ -64,13 +67,13 @@ describe('loggers/console', () => {
     logger.info('info')
     logger.debug('debug')
 
-    sinon.assert.calledOnce(console.error)
-    sinon.assert.calledWith(console.error, 'error')
-    sinon.assert.calledOnce(console.warn)
-    sinon.assert.calledWith(console.warn, 'warn')
-    sinon.assert.calledOnce(console.info)
-    sinon.assert.calledWith(console.info, 'info')
-    sinon.assert.notCalled(console.debug)
+    sinon.assert.calledOnce(errorStub)
+    sinon.assert.calledWith(errorStub, 'error')
+    sinon.assert.calledOnce(warnStub)
+    sinon.assert.calledWith(warnStub, 'warn')
+    sinon.assert.calledOnce(infoStub)
+    sinon.assert.calledWith(infoStub, 'info')
+    sinon.assert.notCalled(debugStub)
   })
 
   it('should call the underlying console for debug', () => {
@@ -81,13 +84,13 @@ describe('loggers/console', () => {
     logger.info('info')
     logger.debug('debug')
 
-    sinon.assert.calledOnce(console.error)
-    sinon.assert.calledWith(console.error, 'error')
-    sinon.assert.calledOnce(console.warn)
-    sinon.assert.calledWith(console.warn, 'warn')
-    sinon.assert.calledOnce(console.info)
-    sinon.assert.calledWith(console.info, 'info')
-    sinon.assert.calledOnce(console.debug)
-    sinon.assert.calledWith(console.debug, 'debug')
+    sinon.assert.calledOnce(errorStub)
+    sinon.assert.calledWith(errorStub, 'error')
+    sinon.assert.calledOnce(warnStub)
+    sinon.assert.calledWith(warnStub, 'warn')
+    sinon.assert.calledOnce(infoStub)
+    sinon.assert.calledWith(infoStub, 'info')
+    sinon.assert.calledOnce(debugStub)
+    sinon.assert.calledWith(debugStub, 'debug')
   })
 })

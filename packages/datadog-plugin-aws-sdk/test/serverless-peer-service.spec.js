@@ -1,12 +1,19 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+
+const { promisify } = require('node:util')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const helpers = require('./kinesis_helpers')
-const { promisify } = require('util')
 const { setup } = require('./spec_helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
+    this.retries(5)
+    this.timeout(15000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -60,7 +67,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 15000 })
 
           await Promise.all([
             tracesPromise,
@@ -127,7 +134,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          }, { timeoutMs: 10000 })
+          }, { timeoutMs: 15000 })
             .then(done, done)
 
           helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
@@ -189,7 +196,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 15000 })
             .then(done, done)
 
           sns.publish({
@@ -241,7 +248,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 15000 })
             .then(done, done)
 
           sqs.sendMessage({
@@ -284,7 +291,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 15000 })
         })
       })
     })

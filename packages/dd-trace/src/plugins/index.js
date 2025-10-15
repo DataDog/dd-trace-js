@@ -1,8 +1,10 @@
 'use strict'
 
 module.exports = {
+  get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
+  get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
   get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
@@ -13,6 +15,7 @@ module.exports = {
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
   get '@grpc/grpc-js' () { return require('../../../datadog-plugin-grpc/src') },
   get '@hapi/hapi' () { return require('../../../datadog-plugin-hapi/src') },
+  get '@happy-dom/jest-environment' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/core' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/test-sequencer' () { return require('../../../datadog-plugin-jest/src') },
   get '@jest/transform' () { return require('../../../datadog-plugin-jest/src') },
@@ -26,6 +29,7 @@ module.exports = {
   get '@smithy/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
   get aerospike () { return require('../../../datadog-plugin-aerospike/src') },
+  get ai () { return require('../../../datadog-plugin-ai/src') },
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
@@ -72,6 +76,7 @@ module.exports = {
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
   get vitest () { return require('../../../datadog-plugin-vitest/src') },
   get workerpool () { return require('../../../datadog-plugin-mocha/src') },
+  get tinypool () { return require('../../../datadog-plugin-vitest/src') },
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },
   get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },
@@ -101,5 +106,6 @@ module.exports = {
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
-  get winston () { return require('../../../datadog-plugin-winston/src') }
+  get winston () { return require('../../../datadog-plugin-winston/src') },
+  get ws () { return require('../../../datadog-plugin-ws/src') }
 }

@@ -1,8 +1,10 @@
 'use strict'
 
 var version = require('./package.json').version
-var ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
-var nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+// @ts-expect-error
+var /** @type {RegExpMatchArray} */ ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
+// @ts-expect-error
+var /** @type {RegExpMatchArray} */ nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
 
 module.exports = {
   VERSION: version,

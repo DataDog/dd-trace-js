@@ -121,6 +121,8 @@ tracer.init({
     },
     apiSecurity: {
       enabled: true,
+      endpointCollectionEnabled: true,
+      endpointCollectionMessageLimit: 300
     },
     rasp: {
       enabled: true,
@@ -303,9 +305,11 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('anthropic');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bunyan');
 tracer.use('couchbase');
@@ -581,6 +585,12 @@ const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
 
+otelSpan.addLink({ context: spanContext })
+otelSpan.addLink({ context: spanContext, attributes: { foo: 'bar' } })
+otelSpan.addLinks([{ context: spanContext }, { context: spanContext, attributes: { foo: 'bar' } }])
+otelSpan.addLink(spanContext)
+otelSpan.addLink(spanContext, { foo: 'bar' })
+
 // -- LLM Observability --
 const llmobsEnableOptions = {
   mlApp: 'mlApp',
@@ -600,6 +610,27 @@ llmobs.enable({
 
 // manually disable
 llmobs.disable()
+
+// register a processor
+llmobs.registerProcessor((llmobsSpan) => {
+  const drop = llmobsSpan.getTag('drop')
+  if (drop) {
+    return null
+  }
+
+  const redactInput = llmobsSpan.getTag('redactInput')
+  if (redactInput) {
+    llmobsSpan.input = llmobsSpan.input.map(input => {
+      return {
+        ...input,
+      }
+    })
+  }
+
+  return llmobsSpan
+})
+
+llmobs.deregisterProcessor()
 
 // trace block of code
 llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
@@ -657,3 +688,46 @@ llmobs.annotate(span, {
 
 // flush
 llmobs.flush()
+
+
+// AI Guard typings tests
+
+tracer.init({
+  experimental: {
+    aiguard: {
+      enabled: true,
+      endpoint: 'http://localhost',
+      maxMessagesLength: 22,
+      maxContentSize: 1024,
+      timeout: 1000
+    }
+  }
+})
+
+const aiguard = tracer.aiguard
+
+aiguard.evaluate([
+  { role: 'user', content: 'What is 2 + 2' },
+]).then(result => {
+  result.action && result.reason
+})
+
+aiguard.evaluate([
+  {
+    role: 'assistant',
+    tool_calls: [
+      {
+        id: 'call_1',
+        function: { name: 'calc', arguments: '{ "operator": "+", "args": [2, 2] }' }
+      },
+    ],
+  }
+]).then(result => {
+  result.action && result.reason
+})
+
+aiguard.evaluate([
+  { role: 'tool', tool_call_id: 'call_1', content: '5' },
+]).then(result => {
+  result.action && result.reason
+})

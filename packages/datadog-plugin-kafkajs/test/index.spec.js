@@ -2,8 +2,11 @@
 
 const { randomUUID } = require('crypto')
 const { expect } = require('chai')
-const semver = require('semver')
 const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
@@ -85,7 +88,7 @@ describe('Plugin', () => {
             const meta = {
               'span.kind': 'producer',
               component: 'kafkajs',
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+              'pathway.hash': expectedProducerHash.readBigUInt64LE(0).toString(),
               'messaging.destination.name': testTopic,
               'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
             }
@@ -253,7 +256,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
+                'pathway.hash': expectedConsumerHash.readBigUInt64LE(0).toString(),
                 'messaging.destination.name': testTopic
               },
               resource: testTopic,

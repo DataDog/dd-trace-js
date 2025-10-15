@@ -2,8 +2,7 @@
 
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
-const tracingChannel = require('dc-polyfill').tracingChannel
+const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:express:request:handle')
 
@@ -57,7 +56,7 @@ function wrapResponseRender (render) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'] }, express => {
+addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
@@ -67,16 +66,12 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
   return express
 })
 
-addHook({ name: 'express', versions: ['4'] }, express => {
+// Express 5 does not rely on router in the same way as v4 and should not be instrumented anymore.
+// It would otherwise produce spans for router and express, and so duplicating them.
+// We now fall back to router instrumentation
+addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
-
-  return express
-})
-
-addHook({ name: 'express', versions: ['>=5.0.0'] }, express => {
-  shimmer.wrap(express.Router.prototype, 'use', wrapRouterMethod)
-  shimmer.wrap(express.Router.prototype, 'route', wrapRouterMethod)
 
   return express
 })
@@ -136,12 +131,12 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })

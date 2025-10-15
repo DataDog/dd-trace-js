@@ -1,27 +1,33 @@
 'use strict'
 
+const assert = require('node:assert')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 module.exports = {
   assertCodeOriginFromTraces (traces, frame) {
     const spans = traces[0]
     const tags = spans[0].meta
 
-    expect(tags).to.have.property('_dd.code_origin.type', 'entry')
+    assertObjectContains(tags, {
+      '_dd.code_origin.type': 'entry',
+      '_dd.code_origin.frames.0.file': frame.file,
+      '_dd.code_origin.frames.0.line': String(frame.line),
+    })
 
-    expect(tags).to.have.property('_dd.code_origin.frames.0.file', frame.file)
-    expect(tags).to.have.property('_dd.code_origin.frames.0.line', String(frame.line))
-    expect(tags).to.have.property('_dd.code_origin.frames.0.column').to.match(/^\d+$/)
+    assert.match(tags['_dd.code_origin.frames.0.column'], /^\d+$/)
     if (frame.method) {
-      expect(tags).to.have.property('_dd.code_origin.frames.0.method', frame.method)
+      assert.strictEqual(tags['_dd.code_origin.frames.0.method'], frame.method)
     } else {
-      expect(tags).to.not.have.property('_dd.code_origin.frames.0.method')
+      assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.0.method'))
     }
     if (frame.type) {
-      expect(tags).to.have.property('_dd.code_origin.frames.0.type', frame.type)
+      assert.strictEqual(tags['_dd.code_origin.frames.0.type'], frame.type)
     } else {
-      expect(tags).to.not.have.property('_dd.code_origin.frames.0.type')
+      assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.0.type'))
     }
 
     // The second frame should not be present, because we only collect 1 frame for entry spans
-    expect(tags).to.not.have.property('_dd.code_origin.frames.1.file')
+    assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.1.file'))
   }
 }

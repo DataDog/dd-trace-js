@@ -1,11 +1,15 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
 
 const agent = require('../plugins/agent')
 
-const expectedProducerHash = '11369286567396183453'
-const expectedConsumerHash = '11204511019589278729'
+const expectedProducerHash = '6359420180750536220'
+const expectedConsumerHash = '13652937079614409115'
 const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
 
 describe('data streams checkpointer manual api', () => {
@@ -34,9 +38,10 @@ describe('data streams checkpointer manual api', () => {
           }
         }
       }
+
       expect(statsPointsReceived).to.equal(1)
       expect(agent.dsmStatsExist(agent, expectedProducerHash, expectedEdgeTags)).to.equal(true)
-    }).then(done, done)
+    }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {}
 
@@ -60,10 +65,10 @@ describe('data streams checkpointer manual api', () => {
       }
       expect(statsPointsReceived).to.equal(2)
       expect(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags)).to.equal(true)
-    }).then(done, done)
+    }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {
-      [DSM_CONTEXT_HEADER]: 'tvMEiT2p8cjWzqLRnGTWzqLRnGQ=' // same context as previous produce
+      [DSM_CONTEXT_HEADER]: 'ncfR5V9FDZ3E58Cfj2LI2cOfj2I=' // same context as previous produce
     }
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)

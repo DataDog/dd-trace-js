@@ -3,13 +3,14 @@
 const { URL, format } = require('url')
 
 const { Writer } = require('./writer')
+const defaults = require('../../config_defaults')
 
 class SpanStatsExporter {
   constructor (config) {
-    const { hostname = '127.0.0.1', port = 8126, tags, url } = config
+    const { hostname = defaults.hostname, port = defaults.port, tags, url } = config
     this._url = url || new URL(format({
       protocol: 'http:',
-      hostname: hostname || 'localhost',
+      hostname,
       port
     }))
     this._writer = new Writer({ url: this._url, tags })

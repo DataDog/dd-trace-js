@@ -1,11 +1,9 @@
 'use strict'
-
-const coalesce = require('koalas')
 const { inspect } = require('util')
 const { isTrue } = require('../util')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
-const { Log } = require('./log')
+const { Log, LogConfig, NoTransmitError } = require('./log')
 const { memoize } = require('./utils')
 const { getEnvironmentVariable } = require('../config-helper')
 
@@ -15,7 +13,14 @@ const config = {
   logLevel: 'debug'
 }
 
+// in most places where we know we want to mute a log we use log.error() directly
+const NO_TRANSMIT = new LogConfig(false)
+
 const log = {
+  LogConfig,
+  NO_TRANSMIT,
+  NoTransmitError,
+
   /**
    * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
    */
@@ -92,18 +97,26 @@ const log = {
     return this
   },
 
+  errorWithoutTelemetry (...args) {
+    args.push(NO_TRANSMIT)
+    if (errorChannel.hasSubscribers) {
+      errorChannel.publish(Log.parse(...args))
+    }
+    return this
+  },
+
   deprecate (code, message) {
     return this._deprecate(code, message)
   },
 
   isEnabled (fleetStableConfigValue, localStableConfigValue) {
-    return isTrue(coalesce(
-      fleetStableConfigValue,
-      getEnvironmentVariable('DD_TRACE_DEBUG'),
-      getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined,
-      localStableConfigValue,
+    return isTrue(
+      fleetStableConfigValue ??
+      getEnvironmentVariable('DD_TRACE_DEBUG') ??
+      (getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
+      localStableConfigValue ??
       config.enabled
-    ))
+    )
   },
 
   getLogLevel (
@@ -111,14 +124,12 @@ const log = {
     fleetStableConfigValue,
     localStableConfigValue
   ) {
-    return coalesce(
-      optionsValue,
-      fleetStableConfigValue,
-      getEnvironmentVariable('DD_TRACE_LOG_LEVEL'),
-      getEnvironmentVariable('OTEL_LOG_LEVEL'),
-      localStableConfigValue,
+    return optionsValue ??
+      fleetStableConfigValue ??
+      getEnvironmentVariable('DD_TRACE_LOG_LEVEL') ??
+      getEnvironmentVariable('OTEL_LOG_LEVEL') ??
+      localStableConfigValue ??
       config.logLevel
-    )
   }
 }
 

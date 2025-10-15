@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -52,6 +56,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -75,6 +80,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -100,6 +106,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -126,6 +133,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -153,6 +161,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',
@@ -180,6 +189,7 @@ describe('Child process plugin', () => {
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
           {
+            startTime: undefined,
             childOf: undefined,
             tags: {
               component: 'subprocess',

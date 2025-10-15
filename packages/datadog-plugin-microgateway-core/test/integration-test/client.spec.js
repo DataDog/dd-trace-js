@@ -7,6 +7,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -17,8 +18,8 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
     before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
+      this.timeout(60000)
+      sandbox = await createSandbox([`'microgateway-core@${version}'`], false, [
         './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
     })
 

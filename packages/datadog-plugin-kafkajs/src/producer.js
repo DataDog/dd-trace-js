@@ -7,9 +7,9 @@ const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 const MESSAGING_DESTINATION_KEY = 'messaging.destination.name'
 
 class KafkajsProducerPlugin extends ProducerPlugin {
-  static get id () { return 'kafkajs' }
-  static get operation () { return 'produce' }
-  static get peerServicePrecursors () { return [BOOTSTRAP_SERVERS_KEY] }
+  static id = 'kafkajs'
+  static operation = 'produce'
+  static peerServicePrecursors = [BOOTSTRAP_SERVERS_KEY]
 
   constructor () {
     super(...arguments)

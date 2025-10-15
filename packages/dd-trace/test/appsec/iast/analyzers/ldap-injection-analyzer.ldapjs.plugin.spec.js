@@ -1,11 +1,14 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const { expect } = require('chai')
+const { describe, beforeEach, afterEach } = require('mocha')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
+const { withVersions } = require('../../../setup/mocha')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -24,7 +27,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
         client = ldapjs.createClient({
           url: 'ldap://localhost:1389'
         })
-        return new Promise((resolve, reject) => {
+        return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
             if (err) {
               reject(err)
@@ -32,7 +35,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               resolve()
             }
           })
-        })
+        }))
       })
 
       afterEach((done) => {
@@ -78,7 +81,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
       describe('context is not null after search end event', () => {
         testThatRequestHasVulnerability(() => {
-          return new Promise((resolve, reject) => {
+          return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
@@ -97,13 +100,13 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                 resolve()
               }).on('error', reject)
             })
-          })
+          }))
         }, 'LDAP_INJECTION')
       })
 
       describe('remove listener should work as expected', () => {
         testThatRequestHasVulnerability(() => {
-          return new Promise((resolve, reject) => {
+          return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             const store = storage('legacy').getStore()
             const iastCtx = iastContextFunctions.getIastContext(store)
 
@@ -128,13 +131,13 @@ describe('ldap-injection-analyzer with ldapjs', () => {
 
               searchRes.on('end', onSearchEnd)
             })
-          })
+          }))
         }, 'LDAP_INJECTION')
       })
 
       describe('search inside bind should detect the vulnerability and not lose the context', () => {
         testThatRequestHasVulnerability(() => {
-          return new Promise((resolve, reject) => {
+          return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
               if (err) {
                 reject(err)
@@ -159,7 +162,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                 })
               }
             })
-          })
+          }))
         }, 'LDAP_INJECTION')
       })
     })

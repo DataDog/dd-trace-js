@@ -1,10 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
-const os = require('os')
-const path = require('path')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const os = require('node:os')
+const path = require('node:path')
+
+require('../setup/core')
 
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
@@ -87,7 +88,7 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[1].codeHotspotsEnabled()).false
@@ -149,7 +150,7 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     if (samplingContextsAvailable) {
@@ -176,6 +177,30 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
   })
 
+  it('should be able to read some env vars', () => {
+    const oldenv = process.env
+    process.env = {
+      DD_PROFILING_DEBUG_SOURCE_MAPS: '1',
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL: '1000',
+      DD_PROFILING_PPROF_PREFIX: 'test-prefix',
+      DD_PROFILING_UPLOAD_TIMEOUT: '10000',
+      DD_PROFILING_TIMELINE_ENABLED: '0'
+    }
+
+    const options = {
+      logger: nullLogger
+    }
+
+    const config = new Config(options)
+    expect(config.debugSourceMaps).to.be.true
+    expect(config.heapSamplingInterval).to.equal(1000)
+    expect(config.pprofPrefix).to.equal('test-prefix')
+    expect(config.uploadTimeout).to.equal(10000)
+    expect(config.timelineEnabled).to.be.false
+
+    process.env = oldenv
+  })
+
   it('should deduplicate profilers', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall,wall',
@@ -188,7 +213,7 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
+    expect(config.profilers.length).to.equal(1 + (samplingContextsAvailable ? 1 : 0))
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     if (samplingContextsAvailable) {
       expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
@@ -371,13 +396,52 @@ describe('config', () => {
         exportCommand: [
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://localhost:8126/',
+          'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'
         ]
       })
     } else {
       expect(config.oomMonitoring.enabled).to.be.false
+    }
+  })
+
+  it('should allow configuring exporters by string or string array', async () => {
+    const checks = [
+      'agent',
+      ['agent']
+    ]
+
+    for (const exporters of checks) {
+      const config = new Config({
+        sourceMap: false,
+        exporters
+      })
+
+      expect(config.exporters[0].export).to.be.a('function')
+    }
+  })
+
+  it('should allow configuring profilers by string or string arrays', async () => {
+    const checks = [
+      ['space', SpaceProfiler],
+      ['wall', WallProfiler, EventsProfiler],
+      ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
+      ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
+      [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
+      [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
+    ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
+
+    for (const [profilers, ...expected] of checks) {
+      const config = new Config({
+        sourceMap: false,
+        profilers
+      })
+
+      expect(config.profilers.length).to.equal(expected.length)
+      for (let i = 0; i < expected.length; i++) {
+        expect(config.profilers[i]).to.be.instanceOf(expected[i])
+      }
     }
   })
 
@@ -400,7 +464,7 @@ describe('config', () => {
         exportCommand: [
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://localhost:8126/',
+          'http://127.0.0.1:8126/',
           `host:${config.host},service:node,snapshot:on_oom`,
           'space'
         ]

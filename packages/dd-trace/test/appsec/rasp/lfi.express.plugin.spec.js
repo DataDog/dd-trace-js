@@ -1,11 +1,14 @@
 'use strict'
 
+const { NODE_MAJOR } = require('../../../../../version')
+const semver = require('semver')
 const Axios = require('axios')
 const os = require('os')
 const fs = require('fs')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
@@ -30,6 +33,12 @@ describe('RASP - lfi', () => {
   }
 
   withVersions('express', 'express', expressVersion => {
+    if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
+      // eslint-disable-next-line mocha/no-pending-tests
+      describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     withVersions('express', 'ejs', ejsVersion => {
       let app, server
 
@@ -133,6 +142,7 @@ describe('RASP - lfi', () => {
           if (vulnerableIndex !== 0) {
             desc += ` with vulnerable index ${vulnerableIndex}`
           }
+
           describe(desc, () => {
             runFsMethodTest(`test fs.${methodName}Sync method`, { ...options, getAppFn: getAppSync }, (args) => {
               return require('fs')[`${methodName}Sync`](...args)

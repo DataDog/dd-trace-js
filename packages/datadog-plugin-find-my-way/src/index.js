@@ -4,9 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class FindMyWayPlugin extends Plugin {
-  static get id () {
-    return 'find-my-way'
-  }
+  static id = 'find-my-way'
 
   constructor (...args) {
     super(...args)

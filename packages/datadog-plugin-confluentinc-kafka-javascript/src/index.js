@@ -6,7 +6,13 @@ const BatchConsumerPlugin = require('./batch-consumer')
 const KafkajsPlugin = require('../../datadog-plugin-kafkajs/src/index')
 
 class ConfluentKafkaJsPlugin extends KafkajsPlugin {
-  static get id () { return 'confluentinc-kafka-javascript' }
+  /**
+   * @override
+   */
+  static id = 'confluentinc-kafka-javascript'
+  /**
+   * @override
+   */
   static get plugins () {
     return {
       producer: ProducerPlugin,

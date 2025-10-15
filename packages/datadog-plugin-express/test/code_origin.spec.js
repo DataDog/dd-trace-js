@@ -1,9 +1,13 @@
 'use strict'
 
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const host = 'localhost'
 
@@ -23,7 +27,7 @@ describe('Plugin', () => {
         const config = { codeOriginForSpans: { enabled: false } }
 
         describe(`with tracer config ${JSON.stringify(config)}`, () => {
-          before(() => agent.load(['express', 'http'], [{}, {}, { client: false }], config))
+          before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
           after(() => agent.close({ ritmReset: false, wipe: true }))
 
@@ -51,7 +55,7 @@ describe('Plugin', () => {
 
         for (const config of configs) {
           describe(`with tracer config ${JSON.stringify(config)}`, () => {
-            before(() => agent.load(['express', 'http'], [{}, {}, { client: false }], config))
+            before(() => agent.load(['express', 'http', 'router'], [{}, { client: false }, {}], config))
 
             after(() => agent.close({ ritmReset: false, wipe: true }))
 
