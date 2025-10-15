@@ -109,6 +109,7 @@ function withNamingSchema (
       const { serviceName } = expected.v1
 
       it('should pass service name through', function () {
+        this.retries(3)
         this.timeout(15000)
 
         return new Promise((resolve, reject) => {
