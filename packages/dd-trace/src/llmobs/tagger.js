@@ -280,11 +280,13 @@ class LLMObsTagger {
         continue
       }
 
-      const { result, toolId, type } = toolResult
+      const { result, toolId, name = '', type } = toolResult
       const toolResultObj = {}
 
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      // name can be empty string, so always include it
+      toolResultObj.name = name
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -356,14 +358,6 @@ class LLMObsTagger {
         condition = true
       } else {
         condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
-      }
-
-      if (toolResults) {
-        const filteredToolResults = this.#filterToolResults(toolResults)
-
-        if (filteredToolResults.length) {
-          messageObj.tool_results = filteredToolResults
-        }
       }
 
       if (toolId) {
