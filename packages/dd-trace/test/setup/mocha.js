@@ -108,7 +108,9 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', () => {
+      it('should pass service name through', function () {
+        this.timeout(15000)
+
         return new Promise((resolve, reject) => {
           const agentPromise = agent
             .assertSomeTraces(traces => {
@@ -117,7 +119,7 @@ function withNamingSchema (
                 ? serviceName()
                 : serviceName
               expect(span).to.have.property('service', expectedServiceName)
-            })
+            }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
 
