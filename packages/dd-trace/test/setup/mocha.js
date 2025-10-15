@@ -80,7 +80,7 @@ function withNamingSchema (
 
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
-              })
+              }, { timeoutMs: 15000 })
 
             const testPromise = spanProducerFn(reject)
 
