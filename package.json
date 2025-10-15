@@ -46,7 +46,7 @@
     "test:llmobs:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/llmobs/**/*.js\" -- npm run test:llmobs:plugins",
     "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
     "test:plugins:ci": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
-    "test:plugins:ci:flaky": "yarn services && npm run test:plugins -- --bail --retries 2",
+    "test:plugins:ci:flaky": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --bail --retries 2",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
