@@ -216,7 +216,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     testAgentReq.write(JSON.stringify(req.body, replacer))
     testAgentReq.end()
   }
-
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
@@ -340,6 +339,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     handler,
     spanResourceMatch: options.spanResourceMatch
   }
+  const startTime = performance.now()
   let invocationCount = 0
   /**
    * @type {TracesCallback | AgentlessCallback}
@@ -348,17 +348,18 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
     invocationCount++
-    process._rawDebug(`[assertSomeTraces] Handler invoked (attempt #${invocationCount})`)
+    // eslint-disable-next-line @stylistic/max-len
+    process._rawDebug(`[assertSomeTraces] Handler invoked (attempt #${invocationCount}) -- ${performance.now() - startTime}`)
 
     try {
       process._rawDebug(`[assertSomeTraces] Running callback against traces...`)
       const result = callback(...args)
-      process._rawDebug(`[assertSomeTraces] ✓ Callback succeeded! Resolving promise.`)
+      process._rawDebug(`[assertSomeTraces] Callback succeeded! Resolving promise.`)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
-      process._rawDebug(`[assertSomeTraces] ✗ Callback failed:`, e.message)
+      process._rawDebug(`[assertSomeTraces] Callback failed:`, e.message)
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)

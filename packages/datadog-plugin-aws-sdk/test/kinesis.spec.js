@@ -299,7 +299,7 @@ describe('Kinesis', function () {
           })
           expect(statsPointsReceived).to.be.at.least(1)
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
+        }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)

@@ -25,7 +25,6 @@ const getQueueParams = (queueName) => {
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
-    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -161,7 +160,7 @@ describe('Plugin', () => {
 
             parentId = span.span_id.toString()
             traceId = span.trace_id.toString()
-          }, { timeoutMs: 10000 })
+          })
 
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
@@ -169,7 +168,7 @@ describe('Plugin', () => {
             expect(parentId).to.be.a('string')
             expect(span.parent_id.toString()).to.equal(parentId)
             expect(span.trace_id.toString()).to.equal(traceId)
-          }, { timeoutMs: 10000 }).then(done, done)
+          }).then(done, done)
 
           sqs.sendMessage({
             MessageBody: 'test body',
@@ -595,7 +594,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.be.at.least(2)
             expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-          }, { timeoutMs: 10000 }, { timeoutMs: 5000 }).then(done, done)
+          }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
