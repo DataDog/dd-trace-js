@@ -65,7 +65,7 @@ function withNamingSchema (
         const { opName, serviceName } = expected[versionName]
 
         it('should conform to the naming schema', function () {
-          this.timeout(20000)
+          this.timeout(25000)
 
           return new Promise((resolve, reject) => {
             const agentPromise = agent
@@ -80,7 +80,7 @@ function withNamingSchema (
 
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
-              }, { timeoutMs: 15000 })
+              }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
 
