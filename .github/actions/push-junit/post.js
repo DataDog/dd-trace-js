@@ -77,8 +77,8 @@ async function run() {
 
     const env = {
       ...process.env,
-      DATADOG_API_KEY: apiKey,
-      DATADOG_SITE: site
+      DD_API_KEY: apiKey,
+      DD_SITE: site
     };
 
     // Run upload
