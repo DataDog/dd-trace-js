@@ -24,9 +24,3 @@ runs:
     - run: tar -cf node_modules.tar node_modules
       shell: bash
       if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'
-    - uses: ./.github/actions/push-junit
-      with:
-        dd-api-key: ${{ secrets.DD_API_KEY }}
-      # Convenient way of deploying push to test optim everywhere, without adding this step everywhere
-      # It also ensure that no job will be forgotten, as long as it uses the .github/action/install action
-      # The trick is as the .github/actions/push-junit performs the push as a post step, so after everything else
