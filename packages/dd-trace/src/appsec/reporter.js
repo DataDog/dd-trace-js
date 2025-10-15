@@ -38,12 +38,18 @@ const config = {
 
 const metricsQueue = new Map()
 
+const extendedDataCollectionRequest = new WeakMap()
+
 // following header lists are ordered in the same way the spec orders them, it doesn't matter but it's easier to compare
 const contentHeaderList = [
   'content-length',
-  'content-type',
   'content-encoding',
   'content-language'
+]
+
+const responseHeaderList = [
+  ...contentHeaderList,
+  'content-type'
 ]
 
 const identificationHeaders = [
@@ -75,15 +81,27 @@ const requestHeadersList = [
   ...identificationHeaders
 ]
 
+const redactedHeadersList = [
+  'authorization',
+  'proxy-authorization',
+  'www-authenticate',
+  'proxy-authenticate',
+  'authentication-info',
+  'proxy-authentication-info',
+  'cookie',
+  'set-cookie'
+]
+
 // these request headers are always collected - it breaks the expected spec orders
 const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
-const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
-const NON_EXTENDED_RESPONSE_HEADERS = new Set(contentHeaderList)
+const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
+const REDACTED_HEADERS = new Set(redactedHeadersList)
 
 function init (_config) {
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
@@ -132,7 +150,9 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   for (const [headerName, headerValue] of Object.entries(headers)) {
     if (counter >= limit) break
     if (!excludedHeaderNames.has(headerName)) {
-      result[getHeaderTag(tagPrefix, headerName)] = String(headerValue)
+      result[getHeaderTag(tagPrefix, headerName)] = REDACTED_HEADERS.has(headerName)
+        ? '<redacted>'
+        : String(headerValue)
       counter++
     }
   }
@@ -140,7 +160,7 @@ function filterExtendedHeaders (headers, excludedHeaderNames, tagPrefix, limit =
   return result
 }
 
-function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}) {
+function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedResponseHeaders = {}, extendedDataCollection) {
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
@@ -154,7 +174,8 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
 
-  if (!config.headersExtendedCollectionEnabled || config.headersRedaction) {
+  // TODO headersExtendedCollectionEnabled and headersRedaction properties are deprecated to delete in a major
+  if ((!config.headersExtendedCollectionEnabled || config.headersRedaction) && !extendedDataCollection) {
     // Standard collection
     return Object.assign(
       mandatoryCollectedHeaders,
@@ -163,11 +184,14 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
     )
   }
 
+  // TODO config.maxHeadersCollected is deprecated to delete in a major
+  const maxHeadersCollected = extendedDataCollection?.max_collected_headers ?? config.maxHeadersCollected
+
   // Extended collection
-  const requestExtendedHeadersAvailableCount =
-    config.maxHeadersCollected -
-    Object.keys(mandatoryCollectedHeaders).length -
+  const collectedHeadersCount = Object.keys(mandatoryCollectedHeaders).length +
     Object.keys(requestEventCollectedHeaders).length
+
+  const requestExtendedHeadersAvailableCount = maxHeadersCollected - collectedHeadersCount
 
   const requestEventExtendedCollectedHeaders =
     filterExtendedHeaders(
@@ -178,7 +202,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
     )
 
   const responseExtendedHeadersAvailableCount =
-    config.maxHeadersCollected -
+    maxHeadersCollected -
     Object.keys(responseEventCollectedHeaders).length
 
   const responseEventExtendedCollectedHeaders =
@@ -199,15 +223,15 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
 
   // Check discarded headers
   const requestHeadersCount = Object.keys(req.headers).length
-  if (requestHeadersCount > config.maxHeadersCollected) {
+  if (requestHeadersCount > maxHeadersCollected) {
     headersTags['_dd.appsec.request.header_collection.discarded'] =
-      requestHeadersCount - config.maxHeadersCollected
+      requestHeadersCount - maxHeadersCollected
   }
 
   const responseHeadersCount = Object.keys(responseHeaders).length
-  if (responseHeadersCount > config.maxHeadersCollected) {
+  if (responseHeadersCount > maxHeadersCollected) {
     headersTags['_dd.appsec.response.header_collection.discarded'] =
-      responseHeadersCount - config.maxHeadersCollected
+      responseHeadersCount - maxHeadersCollected
   }
 
   return headersTags
@@ -307,7 +331,7 @@ function reportTruncationMetrics (rootSpan, metrics) {
   }
 }
 
-function reportAttack (attackData) {
+function reportAttack ({ events: attackData, actions }) {
   const store = storage('legacy').getStore()
   const req = store?.req
   const rootSpan = web.root(req)
@@ -338,8 +362,14 @@ function reportAttack (attackData) {
 
   rootSpan.addTags(newTags)
 
+  // TODO this should be deleted in a major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
-    reportRequestBody(rootSpan, req.body)
+    reportRequestBody(rootSpan, req.body, true)
+  }
+
+  const extendedDataCollection = actions?.extended_data_collection
+  if (extendedDataCollection) {
+    extendedDataCollectionRequest.set(req, extendedDataCollection)
   }
 }
 
@@ -398,18 +428,29 @@ function truncateRequestBody (target, depth = 0) {
   }
 }
 
-function reportRequestBody (rootSpan, requestBody) {
-  if (!requestBody) return
+function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
+  if (!requestBody || Object.keys(requestBody).length === 0) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}
   }
 
-  if (!rootSpan.meta_struct['http.request.body']) {
+  if (rootSpan.meta_struct['http.request.body']) {
+    // If the rasp.exceed metric exists, set also the same for the new tag
+    const currentTags = rootSpan.context()._tags
+    const sizeExceedTagValue = currentTags['_dd.appsec.rasp.request_body_size.exceeded']
+
+    if (sizeExceedTagValue) {
+      rootSpan.setTag('_dd.appsec.request_body_size.exceeded', sizeExceedTagValue)
+    }
+  } else {
     const { truncated, value } = truncateRequestBody(requestBody)
     rootSpan.meta_struct['http.request.body'] = value
     if (truncated) {
-      rootSpan.setTag('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+      const sizeExceedTagKey = comesFromRaspAction
+        ? '_dd.appsec.rasp.request_body_size.exceeded' // TODO old metric to delete in a major
+        : '_dd.appsec.request_body_size.exceeded'
+      rootSpan.setTag(sizeExceedTagKey, 'true')
     }
   }
 }
@@ -496,7 +537,15 @@ function finishRequest (req, res, storedResponseHeaders) {
 
   const tags = rootSpan.context()._tags
 
-  const newTags = getCollectedHeaders(req, res, shouldCollectEventHeaders(tags), storedResponseHeaders)
+  const extendedDataCollection = extendedDataCollectionRequest.get(req)
+  const newTags = getCollectedHeaders(
+    req, res, shouldCollectEventHeaders(tags), storedResponseHeaders, extendedDataCollection
+  )
+
+  if (extendedDataCollection) {
+    // TODO add support for fastify, req.body is not available in fastify
+    reportRequestBody(rootSpan, req.body)
+  }
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path

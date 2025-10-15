@@ -2707,8 +2707,7 @@ versions.forEach(version => {
             }
           })
 
-      const runImpactedTest = (
-        done,
+      const runImpactedTest = async (
         { isModified, isEfd, isParallel, isNew },
         extraEnvVars = {}
       ) => {
@@ -2731,45 +2730,46 @@ versions.forEach(version => {
           }
         )
 
-        childProcess.on('exit', (code) => {
-          testAssertionsPromise.then(done).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', (done) => {
+        it('should be detected as impacted', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
-          runImpactedTest(done, { isModified: true })
+          await runImpactedTest({ isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', (done) => {
+        it('should not be detected as impacted if disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
-          runImpactedTest(done, { isModified: false })
+          await runImpactedTest({ isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          (done) => {
+          async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done,
+            await runImpactedTest(
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
           })
 
         if (version !== '7.0.0') {
-          it('can detect impacted tests in parallel mode', (done) => {
+          it('can detect impacted tests in parallel mode', async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done, { isModified: true, isParallel: true })
+            await runImpactedTest({ isModified: true, isParallel: true })
           })
         }
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
+        it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
             cucumber: {}
           })
@@ -2784,7 +2784,7 @@ versions.forEach(version => {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
+          await runImpactedTest({ isModified: true, isEfd: true, isNew: true })
         })
       })
     })

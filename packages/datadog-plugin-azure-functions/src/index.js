@@ -28,7 +28,6 @@ class AzureFunctionsPlugin extends TracingPlugin {
     const triggerType = triggerMap[ctx.methodName]
     const isMessagingService = (triggerType === 'ServiceBus' || triggerType === 'EventHubs')
     const childOf = isMessagingService ? null : extractTraceContext(this._tracer, ctx)
-
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
