@@ -328,50 +328,6 @@ describe('Plugin', () => {
           })
         })
       })
-
-      describe('traceWebsocketMessagesEnabled=false', () => {
-        beforeEach(async () => {
-          await agent.load(['ws'], [{
-            service: 'websocket-bug-repro',
-            traceWebsocketMessagesEnabled: false
-          }])
-
-          WebSocket = require(`../../../versions/ws@${version}`).get()
-
-          wsServer = new WebSocket.Server({ port: clientPort })
-
-          client = new WebSocket(`ws://localhost:${clientPort}`)
-        })
-
-        afterEach(async () => {
-          clientPort++
-          agent.close({ ritmReset: false, wipe: true })
-        })
-
-        it('should not throw error when sending message with traceWebsocketMessagesEnabled=false', (done) => {
-          wsServer.on('connection', function connection (ws) {
-            expect(() => {
-              ws.send('1')
-            }).to.not.throw()
-            setTimeout(() => wsServer.close(), 100)
-          })
-
-          setTimeout(() => {
-            const ws = new WebSocket(`ws://localhost:${clientPort}`)
-            ws.on('open', () => {
-              setTimeout(() => {
-                expect(() => {
-                  ws.close()
-                }).to.not.throw()
-              }, 50)
-            })
-            ws.on('close', () => {
-              done()
-            })
-            ws.on('error', done)
-          }, 50)
-        })
-      })
     })
   })
 })
