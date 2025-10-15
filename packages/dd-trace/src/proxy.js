@@ -84,7 +84,8 @@ class Tracer extends NoopProxy {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
+      openfeature: new LazyModule(() => require('./openfeature'))
     }
   }
 
@@ -158,6 +159,15 @@ class Tracer extends NoopProxy {
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
+
+        if (config.experimental.flaggingProvider.enabled) {
+          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
+            // Feed UFC config directly to OpenFeature provider
+            if (action === 'apply' || action === 'modify') {
+              this.openfeature._setConfiguration(conf.flag_configuration)
+            }
+          })
+        }
       }
 
       if (config.profiling.enabled === 'true') {
@@ -202,6 +212,11 @@ class Tracer extends NoopProxy {
             'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
+      }
+
+      if (config.otelLogsEnabled) {
+        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
+        initializeOpenTelemetryLogs(config)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
@@ -249,6 +264,11 @@ class Tracer extends NoopProxy {
         }
         this._tracingInitialized = true
       }
+      if (config.experimental.flaggingProvider.enabled) {
+        this._modules.openfeature.enable(config)
+        lazyProxy(this, 'openfeature', config, () =>
+          require('./openfeature/flagging_provider'), this._tracer, config)
+      }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
@@ -257,6 +277,7 @@ class Tracer extends NoopProxy {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
+      this._modules.openfeature.disable()
     }
 
     if (this._tracingInitialized) {

@@ -140,6 +140,16 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
+   * OpenFeature Provider with Remote Config integration.
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  openfeature: tracer.OpenFeatureProvider;
+
+  /**
    * AI Guard SDK
    */
   aiguard: tracer.aiguard.AIGuard;
@@ -199,7 +209,7 @@ interface Plugins {
   "ioredis": tracer.plugins.ioredis;
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
-  "kafkajs": tracer.plugins.kafkajs
+  "kafkajs": tracer.plugins.kafkajs;
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
@@ -622,6 +632,21 @@ declare namespace tracer {
          * Max size of the content property set in the meta-struct
          */
         maxContentSize?: number
+      }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
       }
     };
 
@@ -1096,6 +1121,65 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Flagging Provider (OpenFeature-compatible).
+   *
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface OpenFeatureProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string; [key: string]: any };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
   }
 
   export namespace aiguard {
