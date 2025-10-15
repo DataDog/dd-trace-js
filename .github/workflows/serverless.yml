@@ -155,8 +155,12 @@ jobs:
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
           ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
+      - run: |
+          docker cp \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
+          ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
       - run : |
-          docker restart ${{ job.services.azureeventhubsemulator.id }}
+          docker restart ${{ job.services.azureeventhubsemulator.id }} ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.1.0
