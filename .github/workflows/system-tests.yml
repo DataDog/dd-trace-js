@@ -37,8 +37,6 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
     secrets:
       TEST_OPTIMIZATION_API_KEY: secrets.TEST_OPTIMIZATION_API_KEY
-      DOCKERHUB_USERNAME: secrets.DOCKERHUB_USERNAME
-      DOCKERHUB_TOKEN: secrets.DOCKERHUB_USERNAME
     permissions:
       contents: read
       id-token: write
