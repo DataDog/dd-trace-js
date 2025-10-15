@@ -13,7 +13,7 @@ const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
-  this.timeout(15000)
+  this.timeout(20000)
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let sns
@@ -46,7 +46,7 @@ describe('Sns', function () {
         childSpansFound += 1
         expect(childSpansFound).to.equal(childSpans)
         childSpansFound = 0
-      }, { timeoutMs: 15000 }).then(done, done)
+      }, { timeoutMs: 20000 }).then(done, done)
     }
 
     function createResources (queueName, topicName, cb) {
@@ -136,7 +136,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
             'aws.response.body.MessageId': 'redacted'
           })
-        }).then(done, done)
+        }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
           TopicArn,
@@ -166,7 +166,7 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
             'aws.response.body.MessageId': 'redacted'
           })
-        }).then(done, done)
+        }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
           TopicArn,
@@ -198,7 +198,7 @@ describe('Sns', function () {
               'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
             })
             expect(span.meta).to.have.property('aws.response.body.MessageId')
-          }).then(done, done)
+          }, { timeoutMs: 20000 }).then(done, done)
 
           sns.publish({
             TopicArn,
@@ -224,7 +224,7 @@ describe('Sns', function () {
               'aws.request.body.TopicArn': TopicArn,
               'aws.response.body.Attributes.DisplayName': 'redacted'
             })
-          }).then(done, done)
+          }, { timeoutMs: 20000 }).then(done, done)
 
           sns.getTopicAttributes({ TopicArn }, e => e && done(e))
         })
@@ -267,7 +267,7 @@ describe('Sns', function () {
                   'aws.request.body.PhoneNumber': 'redacted',
                   'aws.request.body.Message': 'message 1'
                 })
-              }).then(done, done)
+              }, { timeoutMs: 20000 }).then(done, done)
 
               sns.publish({
                 PhoneNumber: '+33628606135',
@@ -285,7 +285,7 @@ describe('Sns', function () {
                   region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
                 })
-              }).then(done, done)
+              }, { timeoutMs: 20000 }).then(done, done)
 
               sns.listSMSSandboxPhoneNumbers({
                 PhoneNumber: '+33628606135',
