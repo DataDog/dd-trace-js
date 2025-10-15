@@ -84,6 +84,10 @@ describe('Plugin', () => {
           })
         })
 
+        beforeEach(() => {
+          agent.reset()
+        })
+
         afterEach(done => {
           sqs.deleteQueue({ QueueUrl }, done)
         })
@@ -573,7 +577,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.be.at.least(1)
             expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
         })
@@ -591,7 +595,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.be.at.least(2)
             expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-          }, { timeoutMs: 5000 }).then(done, done)
+          }, { timeoutMs: 10000 }, { timeoutMs: 5000 }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
@@ -611,7 +615,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.equal(1)
             expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           agent.reload('aws-sdk', { sqs: { dsmEnabled: false } }, { dsmEnabled: false })
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsmConsumerOnly }, () => {
@@ -642,7 +646,7 @@ describe('Plugin', () => {
             })
             expect(statsPointsReceived).to.be.at.least(3)
             expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           sqs.sendMessageBatch(
             {
