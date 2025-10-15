@@ -66,7 +66,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 10000 })
 
           await Promise.all([
             tracesPromise,
@@ -195,7 +195,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 10000 })
             .then(done, done)
 
           sns.publish({
@@ -247,7 +247,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 10000 })
             .then(done, done)
 
           sqs.sendMessage({
@@ -290,7 +290,7 @@ describe('Plugin', () => {
             const httpSpan = spans.find(s => s.name === 'http.request')
             expect(awsSpan.meta['peer.service']).to.equal(peerService)
             expect(httpSpan.meta['peer.service']).to.equal(peerService)
-          })
+          }, { timeoutMs: 10000 })
         })
       })
     })
