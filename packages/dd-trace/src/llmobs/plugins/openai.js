@@ -222,19 +222,24 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             }
           }
           inputMessages.push({
-            role: '',
+            role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
               arguments: parsedArgs,
-              type: 'function'
+              type: 'function_call'
             }]
           })
         } else if (item.type === 'function_call_output') {
-          // Function output: convert to tool message
+          // Function output: convert to user message with tool_results
           inputMessages.push({
-            role: 'tool',
-            content: item.output
+            role: 'user',
+            toolResults: [{
+              toolId: item.call_id,
+              result: item.output,
+              name: item.name || '',
+              type: 'function_call_output'
+            }]
           })
         } else if (item.role && item.content) {
           // Regular message
@@ -288,12 +293,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             }
           }
           outputMessages.push({
-            role: '',  // Tool calls have empty role in LLMObs
+            role: 'assistant',
             toolCalls: [{
               toolId: item.call_id,
               name: item.name,
               arguments: args,
-              type: 'function'
+              type: 'function_call'
             }]
           })
         } else {
@@ -328,7 +333,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
                 toolId: tc.id,
                 name: tc.function?.name || tc.name,
                 arguments: args,
-                type: tc.type || 'function'
+                type: tc.type || 'function_call'
               }
             })
           }
@@ -355,9 +360,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }, {})
     
     // Add fields from response
-    if (response.temperature !== undefined) metadata.temperature = Number(response.temperature)
-    if (response.top_p !== undefined) metadata.top_p = Number(response.top_p)
-    if (response.tools !== undefined) {
+    if (response.temperature !== undefined) metadata.temperature = parseFloat(response.temperature)
+    if (response.top_p !== undefined) metadata.top_p = parseFloat(response.top_p)
+    // Only include tools if it's not an empty array
+    if (response.tools !== undefined && !(Array.isArray(response.tools) && response.tools.length === 0)) {
       metadata.tools = Array.isArray(response.tools) ? [...response.tools] : response.tools
     }
     if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
