@@ -660,6 +660,32 @@ describe('jest CommonJS', () => {
     })
   })
 
+  it('reports test suite errors when using bad import', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const suites = events.filter(event => event.type === 'test_suite_end')
+        debugger
+        assert.equal(suites.length, 2)
+      })
+    childProcess = exec(runTestsWithCoverageCommand, {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        TESTS_TO_RUN: 'jest-bad-import/jest-bad-import-test',
+        DISABLE_CODE_COVERAGE: '1'
+      },
+      stdio: 'inherit'
+    })
+    childProcess.stdout.pipe(process.stdout)
+    childProcess.stderr.pipe(process.stderr)
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise
+    ])
+  })
+
   it('does not report total code coverage % if user has not configured coverage manually', (done) => {
     receiver.setSettings({
       itr_enabled: true,
