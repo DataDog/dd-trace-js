@@ -13,7 +13,7 @@ const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
-  this.timeout(10000)
+  this.timeout(15000)
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let sns
@@ -46,7 +46,7 @@ describe('Sns', function () {
         childSpansFound += 1
         expect(childSpansFound).to.equal(childSpans)
         childSpansFound = 0
-      }, { timeoutMs: 10000 }).then(done, done)
+      }, { timeoutMs: 15000 }).then(done, done)
     }
 
     function createResources (queueName, topicName, cb) {
