@@ -54,7 +54,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     } else if (operation === 'embedding') {
       this._tagEmbedding(span, inputs, response, error)
     } else if (operation === 'response') {
-      this._tagResponse(span, inputs, response, error)
+      this.#tagResponse(span, inputs, response, error)
     }
 
     if (!error) {
@@ -205,8 +205,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagMetadata(span, metadata)
   }
 
-  _tagResponse (span, inputs, response, error) {
-    const { input, model, reasoning, background, ...parameters } = inputs
+  #tagResponse (span, inputs, response, error) {
+    const { input, model, ...parameters } = inputs
 
     // Create input messages
     const inputMessages = []
@@ -236,7 +236,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               name: item.name,
               arguments: parsedArgs,
-              type: 'function_call'
+              type: item.type
             }]
           })
         } else if (item.type === 'function_call_output') {
@@ -247,7 +247,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               result: item.output,
               name: item.name || '',
-              type: 'function_call_output'
+              type: item.type
             }]
           })
         } else if (item.role && item.content) {
@@ -307,7 +307,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               name: item.name,
               arguments: args,
-              type: 'function_call'
+              type: item.type
             }]
           })
         } else {
@@ -360,34 +360,29 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     
-    // Tag metadata
+    // Tag metadata - use allowlist approach for request parameters
+    const allowedParamKeys = [
+      'max_output_tokens',
+      'temperature',
+      'stream',
+      'reasoning'
+    ]
+    
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions', 'instructions'].includes(key)) {
+      if (allowedParamKeys.includes(key)) {
         obj[key] = value
       }
       return obj
     }, {})
     
-    // Add fields from response
+    // Add fields from response object (convert numbers to floats)
     if (response.temperature !== undefined) metadata.temperature = parseFloat(response.temperature)
     if (response.top_p !== undefined) metadata.top_p = parseFloat(response.top_p)
-    // Only include tools if it's not an empty array
-    if (response.tools !== undefined && !(Array.isArray(response.tools) && response.tools.length === 0)) {
-      metadata.tools = Array.isArray(response.tools) ? [...response.tools] : response.tools
-    }
     if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) metadata.truncation = response.truncation
     if (response.text !== undefined) metadata.text = response.text
     if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
       metadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
-    }
-    
-    // Add reasoning metadata from input parameters
-    if (reasoning) {
-      metadata.reasoning = reasoning
-    }
-    if (background !== undefined) {
-      metadata.background = background
     }
 
     this._tagger.tagMetadata(span, metadata)

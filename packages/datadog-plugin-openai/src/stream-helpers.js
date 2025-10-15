@@ -124,81 +124,16 @@ function constructResponseResponseFromStreamedChunks (chunks, n) {
   // - response.done/response.incomplete/response.completed: final response with output array and usage
   
   // Find the last chunk with a complete response object (status: done, incomplete, or completed)
-  let finalResponse = null
+  let finalResponse
   for (let i = chunks.length - 1; i >= 0; i--) {
     const chunk = chunks[i]
     if (chunk.response && ['done', 'incomplete', 'completed'].includes(chunk.response.status)) {
       finalResponse = chunk.response
-      break
+      return finalResponse
     }
   }
   
-  // If we found a final response, we may need to add accumulated text
-  if (finalResponse) {
-    // For simple text responses, if output is empty or an empty array, accumulate from deltas
-    const outputIsEmpty = !finalResponse.output || 
-                          finalResponse.output === '' || 
-                          (Array.isArray(finalResponse.output) && finalResponse.output.length === 0)
-    
-    if (outputIsEmpty) {
-      const outputText = chunks
-        .filter(chunk => chunk.type === 'response.output_text.delta')
-        .map(chunk => chunk.delta)
-        .join('')
-      
-      if (outputText) {
-        return {
-          ...finalResponse,
-          output: outputText
-        }
-      }
-    }
-    return finalResponse
-  }
-  
-  // If no final response found, fall back to accumulating from deltas and items
-  const baseResponse = chunks[0]?.response || {}
-  
-  // Accumulate text from delta chunks
-  const outputText = chunks
-    .filter(chunk => chunk.type === 'response.output_text.delta')
-    .map(chunk => chunk.delta)
-    .join('')
-  
-  // Check for tool call chunks (output_item.added with function_call type)
-  const toolCallChunks = chunks.filter(chunk => 
-    chunk.type === 'response.output_item.added' && 
-    chunk.item?.type === 'function_call'
-  )
-  
-  const result = {
-    ...baseResponse,
-    output: outputText || '',
-    usage: chunks[chunks.length - 1]?.response?.usage || null
-  }
-  
-  // If there are tool calls, structure them in the output array format
-  if (toolCallChunks.length > 0) {
-    result.output = []
-    for (const toolCallChunk of toolCallChunks) {
-      const item = toolCallChunk.item
-      result.output.push({
-        type: 'message',
-        role: 'assistant',
-        content: [],
-        tool_calls: [{
-          id: item.call_id,
-          type: 'function',
-          function: {
-            name: item.name,
-            arguments: item.arguments
-          }
-        }]
-      })
-    }
-  }
-  
-  return result
+  return finalResponse
 }
 
 module.exports = {
