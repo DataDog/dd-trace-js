@@ -1,8 +1,11 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
+
 const { CUSTOM_SECURE_MARK, COMMAND_INJECTION_MARK } =
   require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 const { saveIastContext } = require('../../../../src/appsec/iast/iast-context')

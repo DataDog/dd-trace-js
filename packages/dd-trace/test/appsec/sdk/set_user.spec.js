@@ -1,12 +1,16 @@
 'use strict'
 
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+const path = require('node:path')
+
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
-const axios = require('axios')
-const path = require('path')
 
 describe('set_user', () => {
   describe('Internal API', () => {

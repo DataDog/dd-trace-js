@@ -1,8 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
+const sinon = require('sinon')
+
+require('../setup/core')
+
 const id = require('../../src/id')
 
 function randString (length) {

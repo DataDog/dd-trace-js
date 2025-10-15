@@ -1,7 +1,8 @@
 'use strict'
 
 const dgram = require('dgram')
-const port = process.env.SIRUN_STATSD_PORT || 8125
+const defaults = require('../../../packages/dd-trace/src/config_defaults')
+const port = process.env.SIRUN_STATSD_PORT || defaults['dogstatsd.port']
 
 class StatsD {
   constructor (options) {

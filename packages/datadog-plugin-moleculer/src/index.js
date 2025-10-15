@@ -7,7 +7,7 @@ const MoleculerClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 class MoleculerPlugin extends CompositePlugin {
-  static get id () { return 'moleculer' }
+  static id = 'moleculer'
   static get plugins () {
     return {
       server: MoleculerServerPlugin,

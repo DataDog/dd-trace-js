@@ -1,9 +1,12 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, before, after } = require('tap').mocha
+const sinon = require('sinon')
 const dc = require('dc-polyfill')
+const proxyquire = require('proxyquire')
+
+require('./setup/core')
 
 describe('iitm.js', () => {
   let hookFn
@@ -14,9 +17,10 @@ describe('iitm.js', () => {
   }
   let iitmjs
 
-  context('with a supported nodejs version', () => {
+  describe('with a supported Node.js version', () => {
     let listener
     const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
+
     before(() => {
       listener = sinon.stub()
       iitmjs = proxyquire('../src/iitm', {

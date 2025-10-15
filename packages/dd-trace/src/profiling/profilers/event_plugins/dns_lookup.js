@@ -3,9 +3,7 @@
 const DNSPlugin = require('./dns')
 
 class DNSLookupPlugin extends DNSPlugin {
-  static get operation () {
-    return 'lookup'
-  }
+  static operation = 'lookup'
 
   extendEvent (event, startEvent) {
     event.name = 'lookup'

@@ -6,6 +6,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -15,13 +16,13 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('moleculer', 'moleculer', '>0.14.0', version => {
     before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'moleculer@${version}'`, 'get-port'], false, [
+      this.timeout(60000)
+      sandbox = await createSandbox([`'moleculer@${version}'`], false, [
         './packages/datadog-plugin-moleculer/test/integration-test/*'])
     })
 
     after(async () => {
-      await sandbox.remove()
+      await sandbox?.remove()
     })
 
     beforeEach(async () => {

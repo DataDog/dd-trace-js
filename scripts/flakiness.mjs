@@ -1,9 +1,11 @@
 /* eslint-disable no-console */
 
+import { writeFileSync } from 'fs'
 import { Octokit } from 'octokit'
 
 const {
   BRANCH,
+  CI,
   DAYS = '1',
   OCCURRENCES = '1',
   UNTIL
@@ -17,11 +19,11 @@ const workflows = [
   '.github/workflows/apm-integrations.yml',
   '.github/workflows/appsec.yml',
   '.github/workflows/debugger.yml',
-  '.github/workflows/lambda.yml',
   '.github/workflows/llmobs.yml',
   '.github/workflows/platform.yml',
   '.github/workflows/profiling.yml',
   '.github/workflows/project.yml',
+  '.github/workflows/serverless.yml',
   '.github/workflows/system-tests.yml',
   '.github/workflows/test-optimization.yml'
 ]
@@ -111,7 +113,7 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 // TODO: Report this somewhere useful instead.
 
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
-const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)*`
+const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)`
 
 if (Object.keys(flaky).length === 0) {
   console.log(`*No flaky ${logString}`)
@@ -120,21 +122,48 @@ if (Object.keys(flaky).length === 0) {
   const pipelineSuccessRate = +((workflowSuccessRate / 100) ** workflows.length * 100).toFixed(1)
   const pipelineBadge = pipelineSuccessRate >= 85 ? '🟢' : pipelineSuccessRate >= 75 ? '🟡' : '🔴'
 
-  console.log(`*Flaky ${logString}`)
+  let markdown = ''
+  let slack = ''
+
+  markdown += `**Flaky ${logString}**\n`
+  slack += `*Flaky ${logString}*\\n`
+
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     if (!reported.has(workflow)) continue
-    console.log(`* ${workflow}`)
+
+    markdown += `* ${workflow}\n`
+    slack += `  ●   ${workflow}\\n`
+
     for (const [job, urls] of Object.entries(jobs).sort()) {
       if (urls.length < OCCURRENCES) continue
       // Padding is needed because Slack doesn't show single digits as links.
-      const links = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
+      const markdownLinks = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
+      const slackLinks = urls.map((url, idx) => `<${url}|${String(idx + 1).padStart(2, '0')}>`)
       const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
-      console.log(`    * ${job} (${links.join(', ')})${runsBadge}`)
+      markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
+      slack += `         ○   ${job} (${slackLinks.join(', ')})${runsBadge}\\n`
     }
   }
-  console.log('*Flakiness stats*')
-  console.log(`* Total runs: ${totalCount}`)
-  console.log(`* Flaky runs: ${flakeCount}`)
-  console.log(`* Workflow success rate: ${workflowSuccessRate}%`)
-  console.log(`* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`)
+
+  markdown += '\n'
+  markdown += '**Flakiness stats**\n'
+  markdown += `* Total runs: ${totalCount}\n`
+  markdown += `* Flaky runs: ${flakeCount}\n`
+  markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
+  markdown += `* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+
+  slack += '\\n'
+  slack += '*Flakiness stats*\\n'
+  slack += `  ●   Total runs: ${totalCount}\\n`
+  slack += `  ●   Flaky runs: ${flakeCount}\\n`
+  slack += `  ●   Workflow success rate: ${workflowSuccessRate}%\\n`
+  slack += `  ●   Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+
+  console.log(markdown)
+
+  // TODO: Make this an option instead.
+  if (CI) {
+    writeFileSync('flakiness.md', markdown)
+    writeFileSync('flakiness.txt', slack)
+  }
 }

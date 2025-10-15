@@ -11,7 +11,7 @@ const producerStartCh = channel('apm:azure-service-bus:send:start')
 const producerErrorCh = channel('apm:azure-service-bus:send:error')
 const producerFinishCh = channel('apm:azure-service-bus:send:finish')
 
-addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj) => {
+addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false }, (obj) => {
   const ServiceBusClient = obj.ServiceBusClient
   shimmer.wrap(ServiceBusClient.prototype, 'createSender', createSender => function (queueOrTopicName) {
     const sender = createSender.apply(this, arguments)

@@ -33,7 +33,7 @@ function disable () {
 }
 
 function onFirstReceivedRequest () {
-  // nodejs unsubscribe during publish bug: https://github.com/nodejs/node/pull/55116
+  // Node.js unsubscribe during publish bug: https://github.com/nodejs/node/pull/55116
   process.nextTick(() => {
     incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
   })

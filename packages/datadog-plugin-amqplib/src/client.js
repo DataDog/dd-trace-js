@@ -6,9 +6,9 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { getResourceName } = require('./util')
 
 class AmqplibClientPlugin extends ClientPlugin {
-  static get id () { return 'amqplib' }
-  static get type () { return 'messaging' }
-  static get operation () { return 'command' }
+  static id = 'amqplib'
+  static type = 'messaging'
+  static operation = 'command'
 
   bindStart (ctx) {
     const { channel = {}, method, fields } = ctx

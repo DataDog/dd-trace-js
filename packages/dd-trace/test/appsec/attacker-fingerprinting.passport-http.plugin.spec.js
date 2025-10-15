@@ -6,6 +6,7 @@ const { assert } = require('chai')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]

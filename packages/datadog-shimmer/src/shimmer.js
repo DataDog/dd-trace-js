@@ -86,7 +86,7 @@ function wrapFunction (original, wrapper) {
 /**
  * Wraps a method of an object with a wrapper function.
  *
- * @param {Record<string | symbol, unknown> | Function} target - The target
+ * @param {Record<string | symbol, unknown> | Function | undefined} target - The target
  * object.
  * @param {string | symbol} name - The property key of the method to wrap.
  * @param {(original: Function) => (...args) => any} wrapper - The wrapper function.
@@ -95,12 +95,21 @@ function wrapFunction (original, wrapper) {
  * returns the earlier retrieved value. Use with care! This may only be done in
  * case the getter absolutely has no side effect and no setter is defined for the
  * property.
- * @returns {Record<string | symbol, unknown> | Function} The target object with
+ * @returns {Record<string | symbol, unknown> | Function | undefined} The target object with
  * the wrapped method.
  */
 function wrap (target, name, wrapper, options) {
   if (typeof wrapper !== 'function') {
     throw new TypeError(wrapper ? 'Target is not a function' : 'No function provided')
+  }
+
+  if (target == null) {
+    // TODO: Add logging. This is an indicator that the part of a module that we
+    // try to instrument changed.
+    // Accessing the properties directly is in itself also unsafe, so we could just
+    // pass through an array of properties that should be accessed and automatically
+    // handle the access in here.
+    return
   }
 
   // No descriptor means original was on the prototype. This is not totally

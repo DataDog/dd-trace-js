@@ -210,6 +210,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     if (vulnerableIndex !== 0) {
       desc += `with vulnerabile index ${vulnerableIndex}`
     }
+
     describe(desc, () => {
       const fsSyncWayMethodPath = path.join(os.tmpdir(), 'fs-sync-way-method.js')
       const fsAsyncWayMethodPath = path.join(os.tmpdir(), 'fs-async-way-method.js')

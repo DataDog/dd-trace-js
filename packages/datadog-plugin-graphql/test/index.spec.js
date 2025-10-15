@@ -1,14 +1,18 @@
 'use strict'
 
+const axios = require('axios')
 const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const http = require('node:http')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const axios = require('axios')
-const http = require('http')
-const dc = require('dc-polyfill')
 const plugin = require('../src')
 
 const { performance } = require('perf_hooks')
@@ -22,6 +26,30 @@ describe('Plugin', () => {
   let markFast
   let markSlow
   let markSync
+
+  // Mock Mongoose Query that throws if .then() or .exec() is called more than once.
+  class Query {
+    constructor (value) {
+      this._value = value
+      this._called = false
+    }
+
+    then (onFulfilled, onRejected) {
+      if (this._called) {
+        throw new Error('This thenable has already been executed.')
+      }
+      this._called = true
+      return Promise.resolve(this._value).then(onFulfilled, onRejected)
+    }
+
+    exec () {
+      if (this._called) {
+        return Promise.reject(new Error('This thenable has already been executed.'))
+      }
+      this._called = true
+      return Promise.resolve(this._value)
+    }
+  }
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -111,6 +139,10 @@ describe('Plugin', () => {
             markSync = performance.now()
             return 'sync field'
           }
+        },
+        oneTime: {
+          type: graphql.GraphQLString,
+          resolve: () => new Query('one-time result')
         }
       }
     })
@@ -831,6 +863,14 @@ describe('Plugin', () => {
           const document = graphql.parse(source)
           graphql.validate(schema, document)
           graphql.execute({ schema, document })
+        })
+
+        it('should not re-execute thenables from resolvers', async () => {
+          const source = '{ human { oneTime } }'
+
+          const result = await graphql.graphql({ schema, source })
+          expect(result).to.not.have.property('errors')
+          expect(result.data.human.oneTime).to.equal('one-time result')
         })
 
         it('should handle Source objects', done => {

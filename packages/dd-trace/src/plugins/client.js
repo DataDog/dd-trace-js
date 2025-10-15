@@ -3,9 +3,9 @@
 const OutboundPlugin = require('./outbound')
 
 class ClientPlugin extends OutboundPlugin {
-  static get operation () { return 'request' }
-  static get kind () { return 'client' }
-  static get type () { return 'web' } // overridden by storage and other client type plugins
+  static operation = 'request'
+  static kind = 'client'
+  static type = 'web' // overridden by storage and other client type plugins
 }
 
 module.exports = ClientPlugin

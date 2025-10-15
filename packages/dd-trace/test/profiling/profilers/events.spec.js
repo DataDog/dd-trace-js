@@ -1,23 +1,31 @@
 'use strict'
 
-require('../../setup/tap')
-
-const assert = require('assert')
+const assert = require('node:assert')
+const { describe, it } = require('tap').mocha
 const dc = require('dc-polyfill')
-const startCh = dc.channel('apm:dns:lookup:start')
-const finishCh = dc.channel('apm:dns:lookup:finish')
+
+require('../../setup/core')
+
 const { storage } = require('../../../../datadog-core')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')
 const EventsProfiler = require('../../../src/profiling/profilers/events')
 
+const startCh = dc.channel('apm:dns:lookup:start')
+const finishCh = dc.channel('apm:dns:lookup:finish')
+
 describe('profilers/events', () => {
+  it('should provide info', () => {
+    const info = new EventsProfiler({ samplingInterval: 1 }).getInfo()
+    assert(info.maxSamples > 0)
+  })
+
   it('should limit the number of events', async () => {
     const samplingInterval = 1
     const flushInterval = 2
     // Set up a mock span to simulate tracing context
     const span = {
       context: () => ({
-        toSpanId: () => '1234',
+        toBigIntSpanId: () => 1234n,
         _trace: {
           started: [span]
         }

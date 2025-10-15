@@ -1,18 +1,30 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
-const path = require('path')
-const os = require('os')
-const fs = require('fs')
+const { expect } = require('chai')
+const { describe, beforeEach, afterEach } = require('mocha')
+const semver = require('semver')
+
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+const { NODE_MAJOR } = require('../../../../../../version')
+const { prepareTestServerForIastInExpress } = require('../utils')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const { withVersions } = require('../../../setup/mocha')
 
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', version => {
+    if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
+      describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+      return
+    }
+
     describe('Eval', () => {
       let i = 0
       let evalFunctionsPath

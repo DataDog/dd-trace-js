@@ -199,17 +199,15 @@ function instrumentPromise (operation, command, instance, args, server, ns, ops,
   return startCh.runStores(ctx, () => {
     const promise = command.apply(instance, args)
 
-    return promise.then(function (res) {
+    promise.then(function (res) {
       ctx.result = res
-      return finishCh.runStores(ctx, () => {
-        return res
-      })
+      finishCh.publish(ctx)
     }, function (err) {
       ctx.error = err
       errorCh.publish(ctx)
       finishCh.publish(ctx)
-
-      throw err
     })
+
+    return promise
   })
 }

@@ -1,8 +1,11 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
+
 const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 const { IastPlugin } = require('../../../src/appsec/iast/iast-plugin')
 
@@ -59,7 +62,6 @@ describe('IAST Plugin', () => {
         './telemetry': {
           isEnabled: () => false
         },
-        './telemetry/metrics': {},
         '../../../../datadog-core': { storage: () => legacyStorage }
       })
       iastPlugin = new iastPluginMod.IastPlugin()
@@ -381,7 +383,7 @@ describe('IAST Plugin', () => {
 
   describe('Add sub to iast plugin', () => {
     class BadPlugin extends IastPlugin {
-      static get id () { return 'badPlugin' }
+      static id = 'badPlugin'
 
       constructor () {
         super()
@@ -393,7 +395,7 @@ describe('IAST Plugin', () => {
       }
     }
     class GoodPlugin extends IastPlugin {
-      static get id () { return 'goodPlugin' }
+      static id = 'goodPlugin'
 
       constructor () {
         super()

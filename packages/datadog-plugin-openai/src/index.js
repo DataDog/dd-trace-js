@@ -5,7 +5,7 @@ const OpenAiTracingPlugin = require('./tracing')
 const OpenAiLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/openai')
 
 class OpenAiPlugin extends CompositePlugin {
-  static get id () { return 'openai' }
+  static id = 'openai'
   static get plugins () {
     return {
       llmobs: OpenAiLLMObsPlugin,

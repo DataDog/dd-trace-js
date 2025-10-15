@@ -1,8 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('tap').mocha
+const sinon = require('sinon')
+
+require('../setup/core')
+
 const { getNextLineNumber } = require('./helpers')
 const OutboundPlugin = require('../../src/plugins/outbound')
 const parseTags = require('../../../datadog-core/src/utils/src/parse-tags')
@@ -91,7 +94,7 @@ describe('OuboundPlugin', () => {
 
     it('should use specific tags in order of precedence if they are available', () => {
       class WithPrecursors extends OutboundPlugin {
-        static get peerServicePrecursors () { return ['foo', 'bar'] }
+        static peerServicePrecursors = ['foo', 'bar']
       }
       const res = new WithPrecursors().getPeerService({
         fooIsNotAPrecursor: 'bar',

@@ -1,12 +1,15 @@
 'use strict'
 
-require('../../setup/tap')
-
-const fs = require('fs')
-const path = require('path')
-
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const fs = require('node:fs')
+const path = require('node:path')
 const proxyquire = require('proxyquire')
-const execFileSyncStub = sinon.stub().returns('')
+const sinon = require('sinon')
+
+require('../../setup/core')
+
+const cachedExecStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
 const {
@@ -18,8 +21,8 @@ const {
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
-  child_process: {
-    execFileSync: execFileSyncStub
+  './git-cache': {
+    cachedExec: cachedExecStub
   }
 })
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {

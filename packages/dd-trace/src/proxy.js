@@ -84,10 +84,14 @@ class Tracer extends NoopProxy {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
-      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter'))
+      rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
+      openfeature: new LazyModule(() => require('./openfeature'))
     }
   }
 
+  /**
+   * @override
+   */
   init (options) {
     if (this._initialized) return this
 
@@ -155,6 +159,15 @@ class Tracer extends NoopProxy {
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
         }
+
+        if (config.experimental.flaggingProvider.enabled) {
+          rc.setProductHandler('FFE_FLAGS', (action, conf) => {
+            // Feed UFC config directly to OpenFeature provider
+            if (action === 'apply' || action === 'modify') {
+              this.openfeature._setConfiguration(conf.flag_configuration)
+            }
+          })
+        }
       }
 
       if (config.profiling.enabled === 'true') {
@@ -201,6 +214,11 @@ class Tracer extends NoopProxy {
         }
       }
 
+      if (config.otelLogsEnabled) {
+        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
+        initializeOpenTelemetryLogs(config)
+      }
+
       if (config.isTestDynamicInstrumentationEnabled) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
@@ -241,7 +259,15 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', config, () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', config, () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        if (config.experimental?.aiguard?.enabled) {
+          lazyProxy(this, 'aiguard', config, () => require('./aiguard/sdk'), this._tracer, config)
+        }
         this._tracingInitialized = true
+      }
+      if (config.experimental.flaggingProvider.enabled) {
+        this._modules.openfeature.enable(config)
+        lazyProxy(this, 'openfeature', config, () =>
+          require('./openfeature/flagging_provider'), this._tracer, config)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
@@ -251,6 +277,7 @@ class Tracer extends NoopProxy {
       this._modules.appsec.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
+      this._modules.openfeature.disable()
     }
 
     if (this._tracingInitialized) {
@@ -261,6 +288,9 @@ class Tracer extends NoopProxy {
     }
   }
 
+  /**
+   * @override
+   */
   profilerStarted () {
     if (!this._profilerStarted) {
       // injection hardening: this is only ever invoked from tests.
@@ -269,11 +299,17 @@ class Tracer extends NoopProxy {
     return this._profilerStarted
   }
 
+  /**
+   * @override
+   */
   use () {
     this._pluginManager.configurePlugin(...arguments)
     return this
   }
 
+  /**
+   * @override
+   */
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
   }

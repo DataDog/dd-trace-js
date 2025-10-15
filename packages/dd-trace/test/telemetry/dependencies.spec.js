@@ -1,13 +1,27 @@
 'use strict'
 
-require('../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const path = require('path')
+const path = require('node:path')
 const dc = require('dc-polyfill')
+
+require('../setup/core')
+
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
+
 describe('dependencies', () => {
+  function setImmediate2 (callback, ...args) {
+    return callback(...args)
+  }
+
+  setImmediate2.__promisify__ = function (...args) {
+    setImmediate2(() => undefined, ...args)
+    return Promise.resolve()
+  }
+
   describe('start', () => {
     it('should subscribe', () => {
       const subscribe = sinon.stub()
@@ -43,7 +57,8 @@ describe('dependencies', () => {
         './send-data': { sendData },
         '../require-package-json': requirePackageJson
       })
-      global.setImmediate = function (callback) { callback() }
+
+      global.setImmediate = setImmediate2
 
       dependencies.start(config, application, host, getRetryData, updateRetryData)
 
@@ -329,7 +344,7 @@ describe('dependencies', () => {
         './send-data': { sendData },
         '../require-package-json': requirePackageJson
       })
-      global.setImmediate = function (callback) { callback() }
+      global.setImmediate = setImmediate2
 
       dependencies.start(config, application, host, getRetryData, updateRetryData)
 
@@ -392,7 +407,7 @@ describe('dependencies', () => {
         './send-data': { sendData },
         '../require-package-json': requirePackageJson
       })
-      global.setImmediate = function (callback) { callback() }
+      global.setImmediate = setImmediate2
 
       dependencies.start(config, application, host, getRetryData, updateRetryData)
 

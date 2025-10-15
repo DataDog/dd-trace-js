@@ -59,6 +59,10 @@ class DatadogSpanContext {
     return this._spanId.toString(10)
   }
 
+  toBigIntSpanId () {
+    return this._spanId.toBigInt()
+  }
+
   toTraceparent () {
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
     const traceId = this.toTraceId(true)

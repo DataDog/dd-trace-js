@@ -1,8 +1,10 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
+require('../setup/core')
+
 const { registerExtraService, getExtraServices, clear } = require('../../src/service-naming/extra-services')
 
 describe('Extra services', () => {

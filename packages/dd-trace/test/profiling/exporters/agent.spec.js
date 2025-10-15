@@ -1,20 +1,22 @@
 'use strict'
 
-require('../../setup/tap')
-
-const tracer = require('../../../../../init')
-const expect = require('chai').expect
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const express = require('express')
 const upload = require('multer')()
-const os = require('os')
-const path = require('path')
-const { request } = require('http')
-const proxyquire = require('proxyquire')
+const { Profile } = require('pprof-format')
+const os = require('node:os')
+const path = require('node:path')
+const { request } = require('node:http')
+
+require('../../setup/core')
+
+const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
-const { Profile } = require('pprof-format')
 const version = require('../../../../../package.json').version
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
@@ -48,8 +50,6 @@ async function createProfile (periodType) {
   const profile = profiler.profile(false)
   return profiler.encode(profile)
 }
-
-const describeOnUnix = os.platform() === 'win32' ? describe.skip : describe
 
 describe('exporters/agent', function () {
   let AgentExporter
@@ -203,7 +203,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -216,7 +216,7 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
 
       startSpan.getCalls().forEach(call => {
         const [name, { tags }] = call.args
@@ -423,7 +423,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -436,11 +436,11 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
     })
   })
 
-  describeOnUnix('using UDS', () => {
+  describe('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -473,7 +473,7 @@ describe('exporters/agent', function () {
         space
       }
 
-      await new Promise((resolve, reject) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         app.post('/profiling/v1/input', upload.any(), (req, res) => {
           try {
             verifyRequest(req, profiles, start, end)
@@ -486,7 +486,7 @@ describe('exporters/agent', function () {
         })
 
         exporter.export({ profiles, start, end, tags }).catch(reject)
-      })
+      }))
     })
-  })
+  }, { skip: os.platform() === 'win32' })
 })

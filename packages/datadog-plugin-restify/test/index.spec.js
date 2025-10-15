@@ -1,10 +1,16 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer

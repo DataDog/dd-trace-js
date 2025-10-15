@@ -9,7 +9,7 @@ const GraphQLValidatePlugin = require('./validate')
 const GraphQLResolvePlugin = require('./resolve')
 
 class GraphQLPlugin extends CompositePlugin {
-  static get id () { return 'graphql' }
+  static id = 'graphql'
   static get plugins () {
     return {
       execute: GraphQLExecutePlugin,
@@ -19,6 +19,9 @@ class GraphQLPlugin extends CompositePlugin {
     }
   }
 
+  /**
+   * @override
+   */
   configure (config) {
     return super.configure(validateConfig(config))
   }

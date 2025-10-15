@@ -14,11 +14,11 @@ on:
       - APM Integrations
       - AppSec
       - Debugger
-      - Lambda
       - LLMObs
       - Platform
       - Profiling
       - Project
+      - Serverless
       - System Tests
       - Test Optimization
 

@@ -112,7 +112,8 @@ describe('Plugin', () => {
             })
           })
 
-          if (semver.intersects(version, '>=5.1')) { // initial promise support
+          if (semver.intersects(version, '>=5.1')) {
+            // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.assertSomeTraces(traces => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
@@ -139,7 +140,7 @@ describe('Plugin', () => {
             })
           }
 
-          it('should handle errors', done => {
+          it('should handle callback errors', done => {
             let error
 
             agent.assertSomeTraces(traces => {
@@ -161,7 +162,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('should handle errors', done => {
+          it('should handle event emitter errors', done => {
             let error
 
             agent.assertSomeTraces(traces => {

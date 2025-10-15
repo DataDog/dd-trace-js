@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
 import oracledb from 'oracledb'
 
-const hostname = 'oracledb'
+const hostname = 'localhost'
 
 const config = {
   user: 'test',

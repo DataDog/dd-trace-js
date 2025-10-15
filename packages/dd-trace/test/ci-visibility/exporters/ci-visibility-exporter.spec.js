@@ -1,16 +1,20 @@
 'use strict'
 
-require('../../../../dd-trace/test/setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
+const sinon = require('sinon')
+const nock = require('nock')
+const cp = require('node:child_process')
+const fs = require('node:fs')
+const zlib = require('node:zlib')
 
-const cp = require('child_process')
-const fs = require('fs')
-const zlib = require('zlib')
+require('../../../../dd-trace/test/setup/core')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
-const nock = require('nock')
 
 describe('CI Visibility Exporter', () => {
   const port = 8126
+  const url = `http://127.0.0.1:${port}`
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
@@ -26,7 +30,7 @@ describe('CI Visibility Exporter', () => {
 
   describe('sendGitMetadata', () => {
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
-      const scope = nock(`http://localhost:${port}`)
+      const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
           data: []
@@ -34,8 +38,8 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const url = new URL(`http://localhost:${port}`)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const urlObj = new URL(url)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err).not.to.exist
@@ -47,12 +51,12 @@ describe('CI Visibility Exporter', () => {
     })
 
     it('should resolve _gitUploadPromise with an error when git metadata request fails', (done) => {
-      const scope = nock(`http://localhost:${port}`)
+      const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(404)
 
-      const url = new URL(`http://localhost:${port}`)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const urlObj = new URL(url)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         expect(err.message).to.include('Error fetching commits to exclude')
@@ -64,7 +68,7 @@ describe('CI Visibility Exporter', () => {
     })
 
     it('should use the input repository URL', (done) => {
-      nock(`http://localhost:${port}`)
+      nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, function () {
           const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
@@ -74,8 +78,8 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const url = new URL(`http://localhost:${port}`)
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const urlObj = new URL(url)
+      const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata('https://custom-git@datadog.com')
@@ -84,7 +88,7 @@ describe('CI Visibility Exporter', () => {
 
   describe('getLibraryConfiguration', () => {
     it('should upload git metadata when getLibraryConfiguration is called, regardless of ITR config', (done) => {
-      const scope = nock(`http://localhost:${port}`)
+      const scope = nock(url)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
           data: []
@@ -102,7 +106,7 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is disabled', () => {
       it('should resolve immediately and not request settings', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200)
 
@@ -118,7 +122,7 @@ describe('CI Visibility Exporter', () => {
     context('if ITR is enabled', () => {
       it('should add custom configurations', (done) => {
         let customConfig
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting', function (body) {
             customConfig = body.data.attributes.configurations.custom
             return true
@@ -153,7 +157,7 @@ describe('CI Visibility Exporter', () => {
       })
       it('should handle git metadata with tag but no branch', (done) => {
         let requestBody
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting', function (body) {
             requestBody = body
             return true
@@ -190,7 +194,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
       it('should request the API after EVP proxy is resolved', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
             data: {
@@ -221,7 +225,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
       it('should update shouldRequestSkippableSuites if test skipping is enabled', (done) => {
-        nock(`http://localhost:${port}`)
+        nock(url)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
             data: {
@@ -246,7 +250,7 @@ describe('CI Visibility Exporter', () => {
       it('will retry ITR configuration request if require_git is true', (done) => {
         const TIME_TO_UPLOAD_GIT = 50
         let hasUploadedGit = false
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
             data: {
@@ -288,7 +292,7 @@ describe('CI Visibility Exporter', () => {
         }, TIME_TO_UPLOAD_GIT)
       })
       it('will retry ITR configuration request immediately if git upload is already finished', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200, JSON.stringify({
             data: {
@@ -330,7 +334,7 @@ describe('CI Visibility Exporter', () => {
   describe('getSkippableSuites', () => {
     context('if ITR is not enabled', () => {
       it('should resolve immediately with an empty array', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
@@ -345,7 +349,7 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is enabled but the tracer can not use CI Vis protocol', () => {
       it('should resolve immediately with an empty array', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
@@ -366,7 +370,7 @@ describe('CI Visibility Exporter', () => {
       it('should add custom configurations', (done) => {
         let customConfig
 
-        nock(`http://localhost:${port}`)
+        nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
             data: []
@@ -374,7 +378,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
 
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable', function (body) {
             customConfig = body.data.attributes.configurations.custom
             return true
@@ -410,7 +414,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.sendGitMetadata()
       })
       it('should request the API after git upload promise is resolved', (done) => {
-        nock(`http://localhost:${port}`)
+        nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
             data: []
@@ -418,7 +422,7 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/git/repository/packfile')
           .reply(202, '')
 
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, JSON.stringify({
             meta: {
@@ -452,7 +456,7 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is enabled and the tracer can use CI Vis Protocol but git upload fails', () => {
       it('should not request the API and resolve with an empty array', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
@@ -472,7 +476,7 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is enabled and the exporter can use gzip', () => {
       it('should request the API with gzip', (done) => {
-        nock(`http://localhost:${port}`)
+        nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
             data: []
@@ -481,7 +485,7 @@ describe('CI Visibility Exporter', () => {
           .reply(202, '')
 
         let requestHeaders = {}
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, function () {
             requestHeaders = this.req.headers
@@ -523,7 +527,7 @@ describe('CI Visibility Exporter', () => {
     })
     context('if ITR is enabled and the exporter can not use gzip', () => {
       it('should request the API without gzip', (done) => {
-        nock(`http://localhost:${port}`)
+        nock(url)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({
             data: []
@@ -532,7 +536,7 @@ describe('CI Visibility Exporter', () => {
           .reply(202, '')
 
         let requestHeaders = {}
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, function () {
             requestHeaders = this.req.headers
@@ -690,7 +694,7 @@ describe('CI Visibility Exporter', () => {
   describe('getKnownTests', () => {
     context('if known tests is disabled', () => {
       it('should resolve to undefined', (done) => {
-        const knownTestsScope = nock(`http://localhost:${port}`)
+        const knownTestsScope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
 
@@ -712,7 +716,7 @@ describe('CI Visibility Exporter', () => {
 
     context('if known tests is enabled but can not use CI Visibility protocol', () => {
       it('should not request known tests', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
 
@@ -731,7 +735,7 @@ describe('CI Visibility Exporter', () => {
 
     context('if known tests is enabled and can use CI Vis Protocol', () => {
       it('should request known tests', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(200, JSON.stringify({
             data: {
@@ -764,7 +768,7 @@ describe('CI Visibility Exporter', () => {
       })
 
       it('should return an error if the request fails', (done) => {
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(500)
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
@@ -780,7 +784,7 @@ describe('CI Visibility Exporter', () => {
 
       it('should accept gzip if the exporter is gzip compatible', (done) => {
         let requestHeaders = {}
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(200, function () {
             requestHeaders = this.req.headers
@@ -822,7 +826,7 @@ describe('CI Visibility Exporter', () => {
 
       it('should not accept gzip if the exporter is gzip incompatible', (done) => {
         let requestHeaders = {}
-        const scope = nock(`http://localhost:${port}`)
+        const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
           .reply(200, function () {
             requestHeaders = this.req.headers

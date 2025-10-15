@@ -3,6 +3,7 @@
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { format } = require('node:url')
 const log = require('./log')
+const defaults = require('../../config_defaults')
 
 const config = module.exports = {
   ...parentConfig,
@@ -20,7 +21,7 @@ configPort.on('messageerror', (err) =>
 function updateUrl (updates) {
   config.url = updates.url || format({
     protocol: 'http:',
-    hostname: updates.hostname || 'localhost',
+    hostname: updates.hostname || defaults.hostname,
     port: updates.port
   })
 }

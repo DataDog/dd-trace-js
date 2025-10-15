@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+
 const { prepareTestServerForIast } = require('../utils')
 const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')

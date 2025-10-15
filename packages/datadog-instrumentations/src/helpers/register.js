@@ -9,7 +9,6 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { isFalse, isTrue, normalizePluginEnvName } = require('../../../dd-trace/src/util')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
 
 const envs = getEnvironmentVariables()
@@ -25,22 +24,8 @@ const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',').map(name => normalizePluginEnvName(name, true)) ?? []
+  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
 )
-const reenabledInstrumentations = new Set()
-
-// Check for DD_TRACE_<INTEGRATION>_ENABLED environment variables
-for (const [key, value] of Object.entries(envs)) {
-  const match = key.match(/^DD_TRACE_(.+)_ENABLED$/)
-  if (match && value) {
-    const integration = normalizePluginEnvName(match[1], true)
-    if (isFalse(value)) {
-      disabledInstrumentations.add(integration)
-    } else if (isTrue(value)) {
-      reenabledInstrumentations.add(integration)
-    }
-  }
-}
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -65,8 +50,7 @@ const allInstrumentations = {}
 
 // TODO: make this more efficient
 for (const packageName of names) {
-  const normalizedPackageName = normalizePluginEnvName(packageName, true)
-  if (disabledInstrumentations.has(normalizedPackageName)) continue
+  if (disabledInstrumentations.has(packageName)) continue
 
   const hookOptions = {}
 
@@ -75,10 +59,6 @@ for (const packageName of names) {
   if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
-    // some integrations are disabled by default, but can be enabled by setting
-    // the DD_TRACE_<INTEGRATION>_ENABLED environment variable to true
-    if (hook.disabled && !reenabledInstrumentations.has(normalizedPackageName)) continue
-
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
@@ -86,7 +66,7 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -97,7 +77,13 @@ for (const packageName of names) {
     }
 
     const namesAndSuccesses = {}
-    for (const { name, file, versions, hook, filePattern } of instrumentations[packageName]) {
+    for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
+      if (patchDefault === false && !moduleExports.default && isIitm) {
+        return moduleExports
+      } else if (patchDefault === true && moduleExports.default && isIitm) {
+        moduleExports = moduleExports.default
+      }
+
       let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
       if (fullFilePattern) {
@@ -157,7 +143,8 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
-            moduleExports = hook(moduleExports, version, name) ?? moduleExports
+
+            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {
@@ -166,7 +153,11 @@ for (const packageName of names) {
               `error_type:${e.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
-            ])
+            ], {
+              result: 'error',
+              result_class: 'internal_error',
+              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
+            })
           }
           namesAndSuccesses[`${name}@${version}`] = true
         }
@@ -180,7 +171,11 @@ for (const packageName of names) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
-        ])
+        ], {
+          result: 'abort',
+          result_class: 'incompatible_library',
+          result_reason: `Incompatible integration version: ${name}@${version}`
+        })
         log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }

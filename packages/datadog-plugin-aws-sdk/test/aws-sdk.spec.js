@@ -1,8 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+const semver = require('semver')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, sort } = require('./spec_helpers')
-const semver = require('semver')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 describe('Plugin', () => {
@@ -38,6 +42,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
+              'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
               'aws.operation': 'listBuckets'
@@ -105,6 +110,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
               'aws.region': 'us-east-1',
               region: 'us-east-1',
+              'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
               'aws.operation': 'listBuckets'
@@ -204,6 +210,42 @@ describe('Plugin', () => {
                 done(e)
               }
             })
+          })
+        })
+
+        it('should set the correct partition tag for various regions', (done) => {
+          const testCases = [
+            { region: 'us-east-1', partition: 'aws' },
+            { region: 'eu-west-1', partition: 'aws' },
+            { region: 'cn-north-1', partition: 'aws-cn' },
+            { region: 'us-gov-west-1', partition: 'aws-us-gov' }
+          ]
+
+          let completed = 0
+          const total = testCases.length
+
+          testCases.forEach(({ region, partition }) => {
+            const regionalS3 = new AWS.S3({
+              endpoint: 'http://127.0.0.1:4566',
+              region,
+              s3ForcePathStyle: true
+            })
+
+            agent.assertSomeTraces(traces => {
+              const span = sort(traces[0])[0]
+
+              expect(span.meta).to.include({
+                'aws.region': region,
+                region,
+                'aws.partition': partition
+              })
+
+              if (++completed === total) {
+                done()
+              }
+            }).then(null, done)
+
+            regionalS3.listBuckets({}, () => {})
           })
         })
       })

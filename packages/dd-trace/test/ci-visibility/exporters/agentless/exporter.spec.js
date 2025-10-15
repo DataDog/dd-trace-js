@@ -1,11 +1,12 @@
 'use strict'
 
-require('../../../../../dd-trace/test/setup/tap')
-
-const cp = require('child_process')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after, context } = require('tap').mocha
+const sinon = require('sinon')
 const nock = require('nock')
+const cp = require('node:child_process')
+
+require('../../../../../dd-trace/test/setup/core')
 
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')

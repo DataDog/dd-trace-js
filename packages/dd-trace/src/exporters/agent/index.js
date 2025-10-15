@@ -3,16 +3,17 @@
 const { URL, format } = require('url')
 const log = require('../../log')
 const Writer = require('./writer')
+const defaults = require('../../config_defaults')
 
 class AgentExporter {
   #timer
 
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const { url, hostname = defaults.hostname, port, lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
     this._url = url || new URL(format({
       protocol: 'http:',
-      hostname: hostname || 'localhost',
+      hostname,
       port
     }))
 

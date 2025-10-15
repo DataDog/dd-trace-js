@@ -1,0 +1,127 @@
+interactions:
+- request:
+    body: "{\n  \"model\": \"gpt-3.5-turbo-instruct\",\n  \"temperature\": 0.7,\n
+      \ \"max_tokens\": 256,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\":
+      0,\n  \"n\": 1,\n  \"stream\": false,\n  \"prompt\": [\n    \"what is 2 + 2?\",\n
+      \   \"what is the circumference of the earth?\"\n  ]\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '263'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.104.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600'
+    method: POST
+    uri: https://api.openai.com/v1/completions
+  response:
+    body:
+      string: "{\n  \"id\": \"cmpl-C1vNj3w07OzBZJ7WOnhCqm1q713Mn\",\n  \"object\":
+        \"text_completion\",\n  \"created\": 1754574939,\n  \"model\": \"gpt-3.5-turbo-instruct:20230824-v2\",\n
+        \ \"choices\": [\n    {\n      \"text\": \"\\n\\n2 + 2 is equal to 4.\",\n
+        \     \"index\": 0,\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\"\n
+        \   },\n    {\n      \"text\": \"\\n\\nThe circumference of the Earth is approximately
+        24,901 miles (40,075 kilometers).\",\n      \"index\": 1,\n      \"logprobs\":
+        null,\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\":
+        16,\n    \"completion_tokens\": 30,\n    \"total_tokens\": 46\n  }\n}\n"
+    headers:
+      CF-RAY:
+      - 96b745dbbb1639a6-IAD
+      Cache-Control:
+      - no-cache, must-revalidate
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 07 Aug 2025 13:55:39 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=0UYox2n_S0TVt2QSrMXtp.cq9ZVKrHcclJN5OJmeb3A-1754574939-1.0.1.1-h11E8sJ0IlhTuoVS3br8n4v9nwxO617xVzvafWO2IM8c6UfRuR2kg2ch_Jjy4Dnh7oY1P5TpyTLdtkyMly8DUY3K3L8xIN4EJq5xGsfeSPM;
+        path=/; expires=Thu, 07-Aug-25 14:25:39 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=K9HPfR3.SUPh_87nRFd8XJwEC8ZpoD6StNFZfKzHxJE-1754574939983-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      access-control-allow-origin:
+      - '*'
+      access-control-expose-headers:
+      - X-Request-ID
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-model:
+      - gpt-3.5-turbo-instruct:20230824-v2
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '394'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - envoy-router-56b8ccc9b7-rx9tf
+      x-envoy-upstream-service-time:
+      - '440'
+      x-ratelimit-limit-requests:
+      - '3500'
+      x-ratelimit-limit-tokens:
+      - '90000'
+      x-ratelimit-remaining-requests:
+      - '3498'
+      x-ratelimit-remaining-tokens:
+      - '89985'
+      x-ratelimit-reset-requests:
+      - 17ms
+      x-ratelimit-reset-tokens:
+      - 10ms
+      x-request-id:
+      - req_34bfb9bc05d84eb18068c518aa55435e
+    status:
+      code: 200
+      message: OK
+version: 1

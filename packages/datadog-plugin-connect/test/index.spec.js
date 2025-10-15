@@ -1,9 +1,15 @@
 'use strict'
 
 const axios = require('axios')
-const http = require('http')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
+const { AsyncLocalStorage } = require('node:async_hooks')
+const http = require('node:http')
+
 const agent = require('../../dd-trace/test/plugins/agent')
-const { AsyncLocalStorage } = require('async_hooks')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)

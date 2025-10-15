@@ -1,0 +1,67 @@
+interactions:
+- request:
+    body: '{"prompt":"What is the capital of France?","temperature":0.5,"max_gen_len":512}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '79'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/meta.llama3-8b-instruct-v1:0/invoke
+  response:
+    body:
+      string: '{"generation":"**\nA) Berlin\nB) Paris\nC) London\nD) Rome\n\nAnswer:
+        B) Paris\n\n**What is the largest planet in our solar system?**\nA) Earth\nB)
+        Saturn\nC) Jupiter\nD) Uranus\n\nAnswer: C) Jupiter\n\n**What is the smallest
+        state in the United States?**\nA) Rhode Island\nB) Delaware\nC) Montana\nD)
+        California\n\nAnswer: A) Rhode Island\n\n**What is the chemical symbol for
+        gold?**\nA) Ag\nB) Au\nC) Hg\nD) Pb\n\nAnswer: B) Au\n\n**What is the largest
+        mammal on Earth?**\nA) Elephant\nB) Blue whale\nC) Hippopotamus\nD) Rhinoceros\n\nAnswer:
+        B) Blue whale\n\n**What is the chemical symbol for carbon?**\nA) C\nB) N\nC)
+        O\nD) H\n\nAnswer: A) C\n\n**What is the largest country in the world by land
+        area?**\nA) Russia\nB) Canada\nC) China\nD) United States\n\nAnswer: A) Russia\n\n**What
+        is the chemical symbol for oxygen?**\nA) O\nB) N\nC) H\nD) C\n\nAnswer: A)
+        O\n\n**What is the smallest bone in the human body?**\nA) Femur\nB) Tibia\nC)
+        Fibula\nD) Stapes\n\nAnswer: D) Stapes\n\n**What is the chemical symbol for
+        iron?**\nA) Fe\nB) Cu\nC) Zn\nD) Ag\n\nAnswer: A) Fe\n\n**What is the largest
+        living species of lizard?**\nA) Komodo dragon\nB) Saltwater crocodile\nC)
+        Black mamba\nD) African elephant\n\nAnswer: A) Komodo dragon\n\n**What is
+        the chemical symbol for copper?**\nA) Cu\nB) Ag\nC) Au\nD) Hg\n\nAnswer: A)
+        Cu\n\n**What is the smallest country in the world by land area?**\nA) Vatican
+        City\nB) Monaco\nC) Nauru\nD) Tuvalu\n\nAnswer: A) Vatican City\n\n**What
+        is the chemical symbol for sulfur?**\nA) S\nB) P\nC) Cl\nD) Br\n\nAnswer:
+        A) S\n\n**What is the largest species of shark?**\nA) Great white shark\nB)
+        Whale shark\nC) Tiger","prompt_token_count":7,"generation_token_count":512,"stop_reason":"length"}'
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '1720'
+      Content-Type:
+      - application/json
+      Date:
+      - Wed, 03 Sep 2025 17:55:53 GMT
+      X-Amzn-Bedrock-Input-Token-Count:
+      - '7'
+      X-Amzn-Bedrock-Invocation-Latency:
+      - '5073'
+      X-Amzn-Bedrock-Output-Token-Count:
+      - '512'
+      x-amzn-RequestId:
+      - 351a9a73-e431-4697-b228-3c09e21d00ac
+    status:
+      code: 200
+      message: OK
+version: 1

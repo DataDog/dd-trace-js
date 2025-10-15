@@ -9,7 +9,10 @@ on:
     - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  # this ensures that only one workflow runs at a time for a given branch on pull requests
+  # as the group key is the workflow name and the branch name
+  # for scheduled runs and pushes to master, we use the run id to ensure that all runs are executed
+  group: ${{ (github.event_name == 'pull_request' && format('{0}-{1}', github.workflow, github.ref)) || format('{0}-{1}', github.workflow, github.run_id) }}
   cancel-in-progress: true
 
 jobs:
@@ -17,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dd-trace-js
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           path: dd-trace-js
       - name: Pack dd-trace-js
@@ -35,6 +38,7 @@ jobs:
     secrets: inherit
     permissions:
       contents: read
+      id-token: write
       packages: write
     with:
       library: nodejs

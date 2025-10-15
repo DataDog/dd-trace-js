@@ -1,15 +1,20 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
 const sinon = require('sinon')
+const { it, describe, beforeEach, afterEach, context } = require('tap').mocha
+const proxyquire = require('proxyquire')
+
+const { readFileSync } = require('node:fs')
+const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const path = require('node:path')
+
+require('./setup/core')
+
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
-const { it, describe } = require('tap/lib/mocha.js')
-const assert = require('assert/strict')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
-const { once } = require('events')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Config', () => {
   let Config
@@ -31,7 +36,6 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
-  const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -40,8 +44,12 @@ describe('Config', () => {
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
+    const configDefaults = proxyquire('../src/config_defaults', {
+      './pkg': pkg
+    })
+
     Config = proxyquire('../src/config', {
-      './pkg': pkg,
+      './config_defaults': configDefaults,
       './log': log,
       './telemetry': { updateConfig },
       fs,
@@ -263,8 +271,11 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
+    expect(config).to.have.property('appKey', undefined)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 300)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
@@ -298,6 +309,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', [])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 1)
     expect(config).to.have.property('env', undefined)
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', false)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', undefined)
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 512 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 16)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 10_000)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.property('flushInterval', 2000)
@@ -355,6 +371,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: true, origin: 'default' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 300, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -399,6 +419,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
+      { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
+      { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
       { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
@@ -511,6 +536,7 @@ describe('Config', () => {
 
   it('should initialize from the default service', () => {
     pkg.name = 'test'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -520,6 +546,7 @@ describe('Config', () => {
 
   it('should initialize from the default version', () => {
     pkg.version = '1.2.3'
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -528,9 +555,17 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'true'
+    process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
+    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 1024 * 1024
+    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 32
+    process.env.DD_AI_GUARD_TIMEOUT = 2000
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '500'
     process.env.DD_APM_TRACING_ENABLED = 'false'
+    process.env.DD_APP_KEY = 'myAppKey'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_COLLECT_ALL_HEADERS = 'true'
     process.env.DD_APPSEC_ENABLED = 'true'
@@ -546,7 +581,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_RASP_COLLECT_REQUEST_BODY = 'true'
     process.env.DD_APPSEC_RASP_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
-    process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_APPSEC_SCA_ENABLED = 'true'
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'false'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
@@ -566,12 +601,12 @@ describe('Config', () => {
     process.env.DD_HEAP_SNAPSHOT_COUNT = '1'
     process.env.DD_HEAP_SNAPSHOT_DESTINATION = '/tmp'
     process.env.DD_HEAP_SNAPSHOT_INTERVAL = '1800'
-    process.env.DD_IAST_DB_ROWS_TO_TAINT = 2
-    process.env.DD_IAST_DEDUPLICATION_ENABLED = false
+    process.env.DD_IAST_DB_ROWS_TO_TAINT = '2'
+    process.env.DD_IAST_DEDUPLICATION_ENABLED = 'false'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
-    process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_REDACTION_ENABLED = 'false'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
     process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
@@ -584,8 +619,8 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
-    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = 50
-    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
+    process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = '50'
+    process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = '0.5'
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_PROFILING_ENABLED = 'true'
@@ -636,8 +671,8 @@ describe('Config', () => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACING_ENABLED = 'false'
     process.env.DD_VERSION = '1.0.0'
-    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = 50
-    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = 0.5
+    process.env.DD_VERTEXAI_SPAN_CHAR_LIMIT = '50'
+    process.env.DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = '0.5'
 
     // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
     reloadLoggerAndConfig()
@@ -645,8 +680,11 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.nested.property('apmTracingEnabled', false)
+    expect(config).to.have.property('appKey', 'myAppKey')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 25)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 500)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
@@ -680,6 +718,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config.grpc.client.error.statuses).to.deep.equal([3, 13, 400, 401, 402, 403])
@@ -754,6 +797,10 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionEnabled', value: false, origin: 'env_var' },
+      { name: 'appsec.apiSecurity.endpointCollectionMessageLimit', value: 500, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML_PATH, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -785,6 +832,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
+      { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
+      { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
+      { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
@@ -1005,6 +1057,13 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         b3: true,
+        aiguard: {
+          enabled: true,
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+          maxContentSize: 1024 * 1024,
+          maxMessagesLength: 32,
+          timeout: 2000
+        },
         exporter: 'log',
         enableGetRumData: true,
         iast: {
@@ -1093,6 +1152,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a', 'b', 'c'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.1)
     expect(config).to.have.property('env', 'test')
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.property('flushInterval', 5000)
@@ -1177,6 +1241,11 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
+      { name: 'experimental.aiguard.enabled', value: true, origin: 'code' },
+      { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
+      { name: 'experimental.aiguard.maxContentSize', value: 1024 * 1024, origin: 'code' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: 32, origin: 'code' },
+      { name: 'experimental.aiguard.timeout', value: 2_000, origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
       { name: 'flushInterval', value: 5000, origin: 'code' },
@@ -1368,8 +1437,15 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_ENABLED = 'false'
+    process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
+    process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = 512 * 1024
+    process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = 16
+    process.env.DD_AI_GUARD_TIMEOUT = 1_000
     process.env.DD_API_KEY = '123'
     process.env.DD_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT = '42'
     process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
@@ -1388,8 +1464,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_RASP_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'true'
-    process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
-    process.env.DD_APPSEC_WAF_TIMEOUT = 11
+    process.env.DD_APPSEC_TRACE_RATE_LIMIT = '11'
+    process.env.DD_APPSEC_WAF_TIMEOUT = '11'
     process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'false'
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
@@ -1407,7 +1483,7 @@ describe('Config', () => {
     process.env.DD_IAST_STACK_TRACE_ENABLED = 'true'
     process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
-    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
+    process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '11'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
@@ -1426,7 +1502,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
-    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
+    process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = '2000'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
@@ -1441,7 +1517,9 @@ describe('Config', () => {
       apmTracingEnabled: true,
       appsec: {
         apiSecurity: {
-          enabled: true
+          enabled: true,
+          endpointCollectionEnabled: true,
+          endpointCollectionMessageLimit: 150
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
@@ -1492,6 +1570,13 @@ describe('Config', () => {
       },
       env: 'development',
       experimental: {
+        aiguard: {
+          enabled: true,
+          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
+          maxContentSize: 1024 * 1024,
+          maxMessagesLength: 32,
+          timeout: 2000
+        },
         b3: false,
         traceparent: false,
         exporter: 'agent',
@@ -1548,6 +1633,8 @@ describe('Config', () => {
 
     expect(config).to.have.nested.property('apmTracingEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 150)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
@@ -1578,6 +1665,11 @@ describe('Config', () => {
     expect(config).to.have.nested.deep.property('dynamicInstrumentation.redactionExcludedIdentifiers', ['a2', 'b2'])
     expect(config).to.have.nested.property('dynamicInstrumentation.uploadIntervalSeconds', 0.2)
     expect(config).to.have.property('env', 'development')
+    expect(config).to.have.nested.property('experimental.aiguard.enabled', true)
+    expect(config).to.have.nested.property('experimental.aiguard.endpoint', 'https://dd.datad0g.com/api/unstable/ai-guard')
+    expect(config).to.have.nested.property('experimental.aiguard.maxContentSize', 1024 * 1024)
+    expect(config).to.have.nested.property('experimental.aiguard.maxMessagesLength', 32)
+    expect(config).to.have.nested.property('experimental.aiguard.timeout', 2000)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.property('flushMinSpans', 500)
@@ -1624,7 +1716,9 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         apiSecurity: {
-          enabled: true
+          enabled: true,
+          endpointCollectionEnabled: true,
+          endpointCollectionMessageLimit: 500
         },
         blockedTemplateGraphql: undefined,
         blockedTemplateHtml: undefined,
@@ -1666,7 +1760,9 @@ describe('Config', () => {
       experimental: {
         appsec: {
           apiSecurity: {
-            enabled: false
+            enabled: false,
+            endpointCollectionEnabled: false,
+            endpointCollectionMessageLimit: 42
           },
           blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
@@ -1711,7 +1807,9 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       apiSecurity: {
         enabled: true,
-        sampleDelay: 30
+        sampleDelay: 30,
+        endpointCollectionEnabled: true,
+        endpointCollectionMessageLimit: 500
       },
       blockedTemplateGraphql: undefined,
       blockedTemplateHtml: undefined,
@@ -2076,13 +2174,6 @@ describe('Config', () => {
     const error = new Error('file not found')
     fs.readFileSync = () => { throw error }
 
-    const Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      fs,
-      os
-    })
-
     const config = new Config({
       appsec: {
         enabled: true,
@@ -2193,7 +2284,7 @@ describe('Config', () => {
       })
 
       it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
-        process.env.DD_TRACE_AGENT_PORT = 12345
+        process.env.DD_TRACE_AGENT_PORT = '12345'
 
         const config = new Config()
 
@@ -2370,6 +2461,8 @@ describe('Config', () => {
   context('sci embedding', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
+    const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
     let ddTags
     beforeEach(() => {
       ddTags = process.env.DD_TAGS
@@ -2379,6 +2472,7 @@ describe('Config', () => {
       delete process.env.DD_GIT_COMMIT_SHA
       delete process.env.DD_GIT_REPOSITORY_URL
       delete process.env.DD_TRACE_GIT_METADATA_ENABLED
+      delete process.env.DD_GIT_FOLDER_PATH
       process.env.DD_TAGS = ddTags
     })
     it('reads DD_GIT_* env vars', () => {
@@ -2408,17 +2502,18 @@ describe('Config', () => {
     })
     it('does not crash if git.properties is not available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-      const config = new Config({})
-      expect(config).to.have.property('commitSHA', undefined)
-      expect(config).to.have.property('repositoryUrl', undefined)
+      expect(() => {
+        const config = new Config({})
+        expect(config).to.be.an('object')
+      }).to.not.throw()
     })
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
       process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
-      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:env-var/dd-trace-js.git'
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
-      expect(config).to.have.property('repositoryUrl', 'https://github.com:env-var/dd-trace-js.git')
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
     })
     it('still reads git.properties if one of the env vars is missing', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
@@ -2438,6 +2533,34 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+    it('reads .git/ folder if it is available', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      const config = new Config({})
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dd-trace-js.git')
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+    })
+    it('does not crash if .git/ folder is not available', () => {
+      process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
+      expect(() => {
+        const config = new Config({})
+        expect(config).to.be.an('object')
+      }).to.not.throw()
+    })
+    it('does not read .git/ folder if env vars are passed', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
+    })
+    it('still reads .git/ if one of the env vars is missing', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_REPOSITORY_URL = 'git@github.com:DataDog/dummy-dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dummy-dd-trace-js.git')
     })
   })
 
@@ -2499,7 +2622,7 @@ describe('Config', () => {
   context('payload tagging', () => {
     let env
 
-    const staticConfig = require('../src/payload-tagging/config/aws')
+    const staticConfig = require('../src/payload-tagging/config/aws.json')
 
     beforeEach(() => {
       env = process.env
@@ -2567,11 +2690,39 @@ describe('Config', () => {
     it('overriding max depth', () => {
       process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
       process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
-      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 7
-      const taggingConfig = new Config().cloudPayloadTagging
-      expect(taggingConfig).to.have.property('requestsEnabled', true)
-      expect(taggingConfig).to.have.property('responsesEnabled', true)
-      expect(taggingConfig).to.have.property('maxDepth', 7)
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+
+      let { cloudPayloadTagging } = new Config()
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 7,
+        requestsEnabled: true,
+        responsesEnabled: true
+      })
+
+      delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
+
+      ;({ cloudPayloadTagging } = new Config({ cloudPayloadTagging: { maxDepth: 7 } }))
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 7,
+        requestsEnabled: true,
+        responsesEnabled: true
+      })
+    })
+
+    it('use default max depth if max depth is not a number', () => {
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 'abc'
+
+      let { cloudPayloadTagging } = new Config()
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 10,
+      })
+
+      delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
+
+      ;({ cloudPayloadTagging } = new Config({ cloudPayloadTagging: { maxDepth: NaN } }))
+      assertObjectContains(cloudPayloadTagging, {
+        maxDepth: 10,
+      })
     })
   })
 

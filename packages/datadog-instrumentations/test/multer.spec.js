@@ -1,9 +1,14 @@
 'use strict'
 
-const dc = require('dc-polyfill')
 const axios = require('axios')
+const { expect } = require('chai')
+const dc = require('dc-polyfill')
+const { describe, it, beforeEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 withVersions('multer', 'multer', version => {
   describe('multer parser instrumentation', () => {

@@ -4,6 +4,7 @@ const sum = require('./dependency')
 const { expect } = require('chai')
 
 let count = 0
+
 describe('dynamic-instrumentation', () => {
   it('retries with DI', function () {
     if (process.env.TEST_SHOULD_PASS_AFTER_RETRY && count++ === 1) {

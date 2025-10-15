@@ -6,10 +6,10 @@ const { extractErrorIntoSpanEvent } = require('./utils')
 let tools
 
 class GraphQLExecutePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'execute' }
-  static get type () { return 'graphql' }
-  static get kind () { return 'server' }
+  static id = 'graphql'
+  static operation = 'execute'
+  static type = 'graphql'
+  static kind = 'server'
 
   bindStart (ctx) {
     const { operation, args, docSource } = ctx

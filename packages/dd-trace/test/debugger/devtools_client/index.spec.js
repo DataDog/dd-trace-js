@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('../../setup/mocha')
 
 const breakpoint = { file: 'file.js', line: 1 }
@@ -47,13 +52,22 @@ describe('onPause', function () {
     send = sinon.spy()
     send['@noCallThru'] = true
 
-    proxyquire('../src/debugger/devtools_client/state', { './session': session })
-    proxyquire('../src/debugger/devtools_client/status', { './config': config })
-    proxyquire('../src/debugger/devtools_client/snapshot/collector', { '../session': session })
-    proxyquire('../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
-    proxyquire('../src/debugger/devtools_client', {
+    const state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
+    proxyquire.noCallThru()('../../../src/debugger/devtools_client/status', { './config': config })
+    const collector = proxyquire('../../../src/debugger/devtools_client/snapshot/collector', { '../session': session })
+    const redaction = proxyquire('../../../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
+    const processor = proxyquire('../../../src/debugger/devtools_client/snapshot/processor', {
+      './redaction': redaction
+    })
+    const snapshot = proxyquire('../../../src/debugger/devtools_client/snapshot', {
+      './collector': collector,
+      './processor': processor
+    })
+    proxyquire('../../../src/debugger/devtools_client', {
       './config': config,
       './session': session,
+      './state': state,
+      './snapshot': snapshot,
       './send': send,
       './status': { ackReceived },
       './remote_config': { '@noCallThru': true }

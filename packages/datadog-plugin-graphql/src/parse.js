@@ -3,8 +3,8 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class GraphQLParsePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'parser' }
+  static id = 'graphql'
+  static operation = 'parser'
 
   bindStart (ctx) {
     this.startSpan('graphql.parse', {

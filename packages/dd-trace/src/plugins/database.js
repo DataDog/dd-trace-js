@@ -4,8 +4,8 @@ const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 
 class DatabasePlugin extends StoragePlugin {
-  static get operation () { return 'query' }
-  static get peerServicePrecursors () { return ['db.name'] }
+  static operation = 'query'
+  static peerServicePrecursors = ['db.name']
 
   constructor (...args) {
     super(...args)

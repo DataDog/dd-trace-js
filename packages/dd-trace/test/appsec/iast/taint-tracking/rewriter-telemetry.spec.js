@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { INSTRUMENTED_PROPAGATION } = require('../../../../src/appsec/iast/telemetry/iast-metric')

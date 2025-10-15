@@ -76,6 +76,7 @@ versionRange.forEach(version => {
     ]
     testFrameworks.forEach(({ name, command }) => {
       if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', (done) => {
           const assertionPromise = receiver

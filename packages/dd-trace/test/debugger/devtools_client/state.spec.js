@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before } = require('mocha')
+const proxyquire = require('proxyquire')
+
 require('../../setup/mocha')
 
 describe('findScriptFromPartialPath', function () {
@@ -13,8 +17,8 @@ describe('findScriptFromPartialPath', function () {
   ]
 
   before(function () {
-    state = proxyquire('../src/debugger/devtools_client/state', {
-      './source-maps': proxyquire('../src/debugger/devtools_client/source-maps', {
+    state = proxyquire('../../../src/debugger/devtools_client/state', {
+      './source-maps': proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: {
           // Mock reading the source map file
           readFileSync: () => JSON.stringify({

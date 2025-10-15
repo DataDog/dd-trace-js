@@ -3,8 +3,6 @@
 const LogPlugin = require('../../dd-trace/src/plugins/log_plugin')
 
 class BunyanPlugin extends LogPlugin {
-  static get id () {
-    return 'bunyan'
-  }
+  static id = 'bunyan'
 }
 module.exports = BunyanPlugin

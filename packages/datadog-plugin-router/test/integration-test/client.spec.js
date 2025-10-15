@@ -7,6 +7,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -16,7 +17,7 @@ describe('esm', () => {
 
   withVersions('router', 'router', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'router@${version}'`]
         , false, ['./packages/datadog-plugin-router/test/integration-test/*'])
     })

@@ -13,14 +13,24 @@ exports.channel = function (name) {
   return ch
 }
 
+const tracingChannelMap = {}
+exports.tracingChannel = function (name) {
+  const maybe = tracingChannelMap[name]
+  if (maybe) return maybe
+  const tc = dc.tracingChannel(name)
+  tracingChannelMap[name] = tc
+  return tc
+}
+
 /**
- * @param {string} args.name module name
+ * @param {object} args
+ * @param {string|string[]} args.name module name
  * @param {string[]} args.versions array of semver range strings
- * @param {string} args.file path to file within package to instrument
- * @param {string} args.filePattern pattern to match files within package to instrument
+ * @param {string} [args.file='index.js'] path to file within package to instrument
+ * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param Function hook
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern }, hook) {
+exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
   if (typeof name === 'string') {
     name = [name]
   }
@@ -29,7 +39,7 @@ exports.addHook = function addHook ({ name, versions, file, filePattern }, hook)
     if (!instrumentations[val]) {
       instrumentations[val] = []
     }
-    instrumentations[val].push({ name: val, versions, file, filePattern, hook })
+    instrumentations[val].push({ name: val, versions, file, filePattern, hook, patchDefault })
   }
 }
 

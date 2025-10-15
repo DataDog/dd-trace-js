@@ -5,6 +5,7 @@ const axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
+const { withVersions } = require('../setup/mocha')
 
 describe('sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {

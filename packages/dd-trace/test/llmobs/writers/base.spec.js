@@ -1,6 +1,11 @@
 'use strict'
+
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
+const { useEnv } = require('../../../../../integration-tests/helpers')
 
 describe('BaseLLMObsWriter', () => {
   let BaseLLMObsWriter
@@ -25,7 +30,9 @@ describe('BaseLLMObsWriter', () => {
       })
     })
 
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     options = {
       endpoint: '/endpoint',
@@ -58,6 +65,19 @@ describe('BaseLLMObsWriter', () => {
 
     expect(writer._agentless).to.be.false
     expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+  })
+
+  describe('with override origin', () => {
+    useEnv({
+      _DD_LLMOBS_OVERRIDE_ORIGIN: 'http://override-origin:12345'
+    })
+
+    it('constructs a writer with the correct url', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+
+      expect(writer.url).to.equal('http://override-origin:12345/evp_proxy/v2/endpoint')
+    })
   })
 
   describe('with config url', () => {

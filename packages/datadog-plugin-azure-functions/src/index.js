@@ -13,24 +13,31 @@ const triggerMap = {
   put: 'Http',
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
+  eventHub: 'EventHubs',
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
-  static get id () { return 'azure-functions' }
-  static get operation () { return 'invoke' }
-  static get kind () { return 'server' }
-  static get type () { return 'serverless' }
-  static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
+  static id = 'azure-functions'
+  static operation = 'invoke'
+  static kind = 'server'
+  static type = 'serverless'
+  static prefix = 'tracing:datadog:azure:functions:invoke'
 
   bindStart (ctx) {
     const childOf = extractTraceContext(this._tracer, ctx)
     const meta = getMetaForTrigger(ctx)
+    const triggerType = triggerMap[ctx.methodName]
+    const isMessagingService = (triggerType === 'ServiceBus' || triggerType === 'EventHubs')
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
       type: 'serverless',
       meta,
     }, ctx)
+
+    if (isMessagingService) {
+      setSpanLinks(this.tracer, span, ctx)
+    }
 
     ctx.span = span
     return ctx.currentStore
@@ -86,6 +93,16 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `ServiceBus ${functionName}`,
       'span.kind': 'consumer'
     }
+  } else if (triggerMap[methodName] === 'EventHubs') {
+    const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
+    meta = {
+      ...meta,
+      'messaging.destination.name': partitionContext.eventHubName,
+      'messaging.operation': 'receive',
+      'messaging.system': 'eventhubs',
+      'resource.name': `EventHubs ${functionName}`,
+      'span.kind': 'consumer'
+    }
   }
 
   return meta
@@ -101,6 +118,26 @@ function extractTraceContext (tracer, ctx) {
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
     case 'ServiceBus':
       return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
+    default:
+      null
+  }
+}
+
+function setSpanLinks (tracer, span, ctx) {
+  const cardinality = ctx.invocationContext.options.trigger.cardinality
+  const triggerMetadata = ctx.invocationContext.triggerMetadata
+  if (cardinality === 'many' && triggerMetadata.propertiesArray.length > 0) {
+    triggerMetadata.propertiesArray.forEach(event => {
+      // Check for possible empty event when span links are disabled
+      if (Object.keys(event).length > 0) {
+        span.addLink(tracer.extract('text_map', event))
+      }
+    })
+  } else if (cardinality === 'one') {
+    const spanContext = tracer.extract('text_map', triggerMetadata.properties)
+    if (spanContext) {
+      span.addLink(spanContext)
+    }
   }
 }
 

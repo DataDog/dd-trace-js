@@ -20,6 +20,8 @@ const {
   NAME,
   PROPAGATED_PARENT_ID_KEY,
   ROOT_PARENT_ID,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -65,7 +67,8 @@ class LLMObsTagger {
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp
+      this._config.llmobs.mlApp ||
+      this._config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(
@@ -142,6 +145,12 @@ class LLMObsTagger {
           break
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
+          break
+        case 'cacheReadTokens':
+          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWriteTokens':
+          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
           break
       }
 
@@ -271,14 +280,12 @@ class LLMObsTagger {
         continue
       }
 
-      const { toolId, result, name = '', type } = toolResult
+      const { result, toolId, type } = toolResult
       const toolResultObj = {}
 
-      const condition1 = this.#tagConditionalString(toolId, 'Tool result ID', toolResultObj, 'tool_id')
-      const condition2 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
-      // name can be empty string, so always include it
-      toolResultObj.name = name
-      const condition3 = this.#tagConditionalString(type, 'Tool result type', toolResultObj, 'type')
+      const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
+      const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
         filteredToolResults.push(toolResultObj)
@@ -349,6 +356,14 @@ class LLMObsTagger {
         condition = true
       } else {
         condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+      }
+
+      if (toolResults) {
+        const filteredToolResults = this.#filterToolResults(toolResults)
+
+        if (filteredToolResults.length) {
+          messageObj.tool_results = filteredToolResults
+        }
       }
 
       if (toolId) {

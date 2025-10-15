@@ -2,8 +2,13 @@
 
 require('../../setup/mocha')
 
-const { hostname: getHostname } = require('os')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const { hostname: getHostname } = require('node:os')
+
 const { getRequestOptions } = require('./utils')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version } = require('../../../../../package.json')
@@ -25,7 +30,9 @@ describe('input message http requests', function () {
   let clock, send, request, jsonBuffer
 
   beforeEach(function () {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     request = sinon.spy()
     request['@noCallThru'] = true
@@ -38,7 +45,7 @@ describe('input message http requests', function () {
       }
     }
 
-    send = proxyquire('../src/debugger/devtools_client/send', {
+    send = proxyquire('../../../src/debugger/devtools_client/send', {
       './config': {
         service,
         commitSHA,

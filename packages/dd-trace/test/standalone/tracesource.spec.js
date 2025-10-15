@@ -1,8 +1,10 @@
 'use strict'
 
-require('../setup/tap')
-
 const { assert } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
+require('../setup/core')
+
 const { ASM } = require('../../src/standalone/product')
 const { TRACE_SOURCE_PROPAGATION_KEY } = require('../../src/constants')
 const { addTraceSourceTag } = require('../../src/standalone/tracesource')

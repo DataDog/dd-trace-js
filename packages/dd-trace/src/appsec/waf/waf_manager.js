@@ -7,7 +7,7 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 const contexts = new WeakMap()
 
 class WAFManager {
-  static get defaultWafConfigPath () { return 'datadog/00/ASM_DD/default/config' }
+  static defaultWafConfigPath = 'datadog/00/ASM_DD/default/config'
 
   constructor (rules, config) {
     this.config = config

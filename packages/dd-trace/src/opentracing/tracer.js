@@ -86,7 +86,7 @@ class DatadogTracer {
     }
 
     try {
-      if (format !== 'text_map_dsm') {
+      if (format !== 'text_map_dsm' && format !== formats.LOG) {
         this._prioritySampler.sample(context)
       }
       this._propagators[format].inject(context, carrier)

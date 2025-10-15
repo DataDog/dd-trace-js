@@ -6,6 +6,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -14,7 +15,7 @@ describe('esm', () => {
   let sandbox
   withVersions('kafkajs', 'kafkajs', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'kafkajs@${version}'`], false, [
         './packages/datadog-plugin-kafkajs/test/integration-test/*'])
     })
@@ -31,6 +32,7 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
+
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

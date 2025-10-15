@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 require('../../setup/mocha')
 
 const parsedSourceMap = {
@@ -23,7 +28,7 @@ describe('source map utils', function () {
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
-      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
+      const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
         'fs/promises': { readFile }
       })
@@ -98,11 +103,13 @@ describe('source map utils', function () {
     let clock
 
     function setup () {
-      clock = sinon.useFakeTimers()
+      clock = sinon.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      })
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
-      const sourceMaps = proxyquire('../src/debugger/devtools_client/source-maps', {
+      const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
         'fs/promises': { readFile }
       })

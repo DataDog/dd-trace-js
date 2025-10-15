@@ -4,9 +4,7 @@ const Plugin = require('../../dd-trace/src/plugins/plugin')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 class WebPlugin extends Plugin {
-  static get id () {
-    return 'web'
-  }
+  static id = 'web'
 
   configure (config) {
     return super.configure(web.normalizeConfig(config))

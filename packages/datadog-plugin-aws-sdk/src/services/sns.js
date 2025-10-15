@@ -4,9 +4,9 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Sns extends BaseAwsSdkPlugin {
-  static get id () { return 'sns' }
-  static get peerServicePrecursors () { return ['topicname'] }
-  static get isPayloadReporter () { return true }
+  static id = 'sns'
+  static peerServicePrecursors = ['topicname']
+  static isPayloadReporter = true
 
   generateTags (params, operation, response) {
     if (!params) return {}

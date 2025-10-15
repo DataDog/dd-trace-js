@@ -1,7 +1,10 @@
 'use strict'
 
 const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 const semver = require('semver')
+
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')

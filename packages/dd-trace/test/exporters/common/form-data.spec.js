@@ -1,8 +1,9 @@
 'use strict'
 
-require('../../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+
+require('../../setup/core')
 
 const FormData = require('../../../src/exporters/common/form-data')
 

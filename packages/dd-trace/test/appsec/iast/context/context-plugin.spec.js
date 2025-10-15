@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const { IastPlugin } = require('../../../../src/appsec/iast/iast-plugin')
 const { TagKey } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { storage } = require('../../../../../datadog-core')

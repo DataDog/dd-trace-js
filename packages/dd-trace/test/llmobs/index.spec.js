@@ -1,15 +1,17 @@
 'use strict'
 
+const { expect } = require('chai')
+const { channel } = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach, after } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
 
-const { channel } = require('dc-polyfill')
 const spanProcessCh = channel('dd-trace:span:process')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
-
-const { expect } = require('chai')
 
 describe('module', () => {
   let llmobsModule

@@ -6,6 +6,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -16,7 +17,7 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('sharedb', 'sharedb', '>=3', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'sharedb@${version}'`], false, [
         './packages/datadog-plugin-sharedb/test/integration-test/*'])
     })

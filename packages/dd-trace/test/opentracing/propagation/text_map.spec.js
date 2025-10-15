@@ -1,6 +1,11 @@
 'use strict'
 
-require('../../setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../../setup/core')
 
 const Config = require('../../../src/config')
 const id = require('../../../src/id')
@@ -11,7 +16,6 @@ const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItem
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
-const { expect } = require('chai')
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -23,6 +27,7 @@ describe('TextMapPropagator', () => {
   let baggageItems
   let config
   let log
+  let telemetryMetrics
 
   const createContext = (params = {}) => {
     const trace = { started: [], finished: [], tags: {} }
@@ -45,8 +50,18 @@ describe('TextMapPropagator', () => {
     log = {
       debug: sinon.spy()
     }
-    TextMapPropagator = proxyquire('../src/opentracing/propagation/text_map', {
-      '../../log': log
+    telemetryMetrics = {
+      manager: {
+        namespace: sinon.stub().returns({
+          count: sinon.stub().returns({
+            inc: sinon.spy()
+          })
+        })
+      }
+    }
+    TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
+      '../../log': log,
+      '../../telemetry/metrics': telemetryMetrics
     })
     config = new Config({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
@@ -387,6 +402,68 @@ describe('TextMapPropagator', () => {
       } finally {
         injectCh.unsubscribe(onSpanInject)
       }
+    })
+
+    describe('baggage telemetry metrics', () => {
+      let tracerMetrics
+
+      beforeEach(() => {
+        // Get the mocked tracer metrics instance
+        tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+      })
+
+      it('should track baggage injection metric when baggage is successfully injected', () => {
+        const carrier = {}
+        setBaggageItem('test-key', 'test-value')
+
+        propagator.inject(undefined, carrier)
+
+        expect(tracerMetrics.count).to.have.been.calledWith('context_header_style.injected', ['header_style:baggage'])
+        expect(tracerMetrics.count().inc).to.have.been.called
+        expect(carrier.baggage).to.equal('test-key=test-value')
+      })
+
+      it('should track truncation metric when baggage item count exceeds limit', () => {
+        const carrier = {}
+        const originalMaxItems = config.baggageMaxItems
+        config.baggageMaxItems = 2
+
+        // Add 3 items to exceed the limit
+        setBaggageItem('key1', 'value1')
+        setBaggageItem('key2', 'value2')
+        setBaggageItem('key3', 'value3')
+
+        propagator.inject(undefined, carrier)
+
+        expect(tracerMetrics.count).to.have.been.calledWith(
+          'context_header.truncated',
+          ['truncation_reason:baggage_item_count_exceeded']
+        )
+        expect(tracerMetrics.count().inc).to.have.been.called
+
+        // Restore original config
+        config.baggageMaxItems = originalMaxItems
+      })
+
+      it('should track truncation metric when baggage byte count exceeds limit', () => {
+        const carrier = {}
+        const originalMaxBytes = config.baggageMaxBytes
+        config.baggageMaxBytes = 50
+
+        // Add a large value to exceed byte limit
+        setBaggageItem('small-key', 'a'.repeat(100))
+
+        propagator.inject(undefined, carrier)
+
+        expect(tracerMetrics.count).to.have.been.calledWith(
+          'context_header.truncated',
+          ['truncation_reason:baggage_byte_count_exceeded']
+        )
+        expect(tracerMetrics.count().inc).to.have.been.called
+
+        // Restore original config
+        config.baggageMaxBytes = originalMaxBytes
+      })
     })
   })
 
@@ -853,6 +930,45 @@ describe('TextMapPropagator', () => {
       } finally {
         extractCh.unsubscribe(onSpanExtract)
       }
+    })
+
+    describe('baggage telemetry metrics', () => {
+      let tracerMetrics
+
+      beforeEach(() => {
+        // Get the mocked tracer metrics instance
+        tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+        // Reset baggage between tests
+        removeAllBaggageItems()
+      })
+
+      it('should track baggage extraction metric when baggage is successfully extracted', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: 'test-key=test-value'
+        }
+
+        propagator.extract(carrier)
+
+        expect(tracerMetrics.count).to.have.been.calledWith('context_header_style.extracted', ['header_style:baggage'])
+        expect(tracerMetrics.count().inc).to.have.been.called
+        expect(getBaggageItem('test-key')).to.equal('test-value')
+      })
+
+      it('should track malformed metric when baggage has empty key', () => {
+        const carrier = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          baggage: '=value-without-key'
+        }
+
+        propagator.extract(carrier)
+
+        expect(tracerMetrics.count).to.have.been.calledWith('context_header_style.malformed', ['header_style:baggage'])
+        expect(tracerMetrics.count().inc).to.have.been.called
+        expect(getAllBaggageItems()).to.deep.equal({})
+      })
     })
 
     it('should create span links when traces have inconsistent traceids', () => {

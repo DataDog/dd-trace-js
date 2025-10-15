@@ -1,6 +1,8 @@
 'use strict'
 
-const path = require('path')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const path = require('node:path')
 
 const agent = require('../plugins/agent')
 
@@ -33,7 +35,7 @@ const restoreEnv = () => {
 const loadAgent = ({ exporter = 'agent' } = {}) => {
   // Make sure the hook is re-registered
   require('../../src/lambda')
-  return agent.load(null, [], {
+  return agent.load([], [], {
     experimental: {
       exporter
     }

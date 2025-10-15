@@ -1,5 +1,6 @@
 'use strict'
 
+const { once } = require('node:events')
 const { exec, execSync } = require('child_process')
 
 const { assert } = require('chai')
@@ -111,6 +112,7 @@ versions.forEach(version => {
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
         let envVars, isAgentless, logsEndpoint
+
         beforeEach(() => {
           isAgentless = reportMethod === 'agentless'
           envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
@@ -268,6 +270,7 @@ versions.forEach(version => {
             })
           })
         })
+
         context('intelligent test runner', () => {
           it('can report git metadata', (done) => {
             const searchCommitsRequestPromise = receiver.payloadReceived(
@@ -997,7 +1000,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
 
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1102,7 +1107,9 @@ versions.forEach(version => {
               known_tests_enabled: true
             })
             receiver.setKnownTestsResponseCode(500)
-            receiver.setKnownTests({})
+            receiver.setKnownTests({
+              cucumber: {}
+            })
             const eventsPromise = receiver
               .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1235,7 +1242,8 @@ versions.forEach(version => {
             })
           })
 
-          if (version !== '7.0.0') { // EFD in parallel mode only supported from cucumber>=11
+          if (version !== '7.0.0') {
+            // EFD in parallel mode only supported from cucumber>=11
             context('parallel mode', () => {
               it('retries new tests', (done) => {
                 const NUM_RETRIES_EFD = 3
@@ -1313,7 +1321,9 @@ versions.forEach(version => {
                   known_tests_enabled: true
                 })
                 // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-                receiver.setKnownTests({})
+                receiver.setKnownTests({
+                  cucumber: {}
+                })
 
                 const eventsPromise = receiver
                   .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1466,11 +1476,65 @@ versions.forEach(version => {
                   }).catch(done)
                 })
               })
+
+              it('does not detect new tests if the response is invalid', async () => {
+                const NUM_RETRIES_EFD = 3
+                receiver.setSettings({
+                  early_flake_detection: {
+                    enabled: true,
+                    slow_test_retries: {
+                      '5s': NUM_RETRIES_EFD
+                    },
+                    faulty_session_threshold: 0
+                  },
+                  known_tests_enabled: true
+                })
+                receiver.setKnownTests(
+                  {
+                    'not-cucumber': {
+                      'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                    }
+                  }
+                )
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const testSession = events.find(event => event.type === 'test_session_end').content
+                    assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+                    assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+                    assert.propertyVal(testSession.meta, CUCUMBER_IS_PARALLEL, 'true')
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                    assert.equal(newTests.length, 0)
+
+                    const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  parallelModeCommand,
+                  {
+                    cwd,
+                    env: envVars,
+                    stdio: 'pipe'
+                  }
+                )
+
+                await Promise.all([
+                  once(childProcess, 'exit'),
+                  eventsPromise,
+                ])
+              })
             })
           }
         })
 
-        if (version === 'latest') { // flaky test retries only supported from >=8.0.0
+        if (version === 'latest') {
+          // flaky test retries only supported from >=8.0.0
           context('flaky test retries', () => {
             it('can retry failed tests', (done) => {
               receiver.setSettings({
@@ -2643,8 +2707,7 @@ versions.forEach(version => {
             }
           })
 
-      const runImpactedTest = (
-        done,
+      const runImpactedTest = async (
         { isModified, isEfd, isParallel, isNew },
         extraEnvVars = {}
       ) => {
@@ -2667,46 +2730,49 @@ versions.forEach(version => {
           }
         )
 
-        childProcess.on('exit', (code) => {
-          testAssertionsPromise.then(done).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', (done) => {
+        it('should be detected as impacted', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
-          runImpactedTest(done, { isModified: true })
+          await runImpactedTest({ isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', (done) => {
+        it('should not be detected as impacted if disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
-          runImpactedTest(done, { isModified: false })
+          await runImpactedTest({ isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          (done) => {
+          async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done,
+            await runImpactedTest(
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
           })
 
         if (version !== '7.0.0') {
-          it('can detect impacted tests in parallel mode', (done) => {
+          it('can detect impacted tests in parallel mode', async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done, { isModified: true, isParallel: true })
+            await runImpactedTest({ isModified: true, isParallel: true })
           })
         }
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
-          receiver.setKnownTests({})
+        it('should be retried and marked both as new and modified', async () => {
+          receiver.setKnownTests({
+            cucumber: {}
+          })
 
           receiver.setSettings({
             impacted_tests_enabled: true,
@@ -2718,7 +2784,7 @@ versions.forEach(version => {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
+          await runImpactedTest({ isModified: true, isEfd: true, isNew: true })
         })
       })
     })

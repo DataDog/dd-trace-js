@@ -287,11 +287,11 @@ class CiVisibilityExporter extends AgentInfoExporter {
     this._export(formattedCoverage, this._coverageWriter, '_coverageTimer')
   }
 
-  formatLogMessage (testConfiguration, logMessage) {
+  formatLogMessage (testEnvironmentMetadata, logMessage) {
     const {
       [GIT_REPOSITORY_URL]: gitRepositoryUrl,
       [GIT_COMMIT_SHA]: gitCommitSha
-    } = testConfiguration
+    } = testEnvironmentMetadata
 
     const { service, env, version } = this._config
 
@@ -315,14 +315,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
   }
 
   // DI logs
-  exportDiLogs (testConfiguration, logMessage) {
+  exportDiLogs (testEnvironmentMetadata, logMessage) {
     // TODO: could we lose logs if it's not initialized?
     if (!this._config.isTestDynamicInstrumentationEnabled || !this._isInitialized || !this._canForwardLogs) {
       return
     }
 
     this._export(
-      this.formatLogMessage(testConfiguration, logMessage),
+      this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
       '_logsTimer'
     )

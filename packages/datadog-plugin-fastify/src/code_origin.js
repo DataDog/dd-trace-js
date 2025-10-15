@@ -7,9 +7,7 @@ const web = require('../../dd-trace/src/plugins/util/web')
 const kCodeOriginForSpansTagsSym = Symbol('datadog.codeOriginForSpansTags')
 
 class FastifyCodeOriginForSpansPlugin extends Plugin {
-  static get id () {
-    return 'fastify'
-  }
+  static id = 'fastify'
 
   constructor (...args) {
     super(...args)
@@ -17,8 +15,7 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
     this.addSub('apm:fastify:request:handle', ({ req, routeConfig }) => {
       const tags = routeConfig?.[kCodeOriginForSpansTagsSym]
       if (!tags) return
-      const context = web.getContext(req)
-      context.span?.addTags(tags)
+      web.getContext(req)?.span?.addTags(tags)
     })
 
     this.addSub('apm:fastify:route:added', ({ routeOptions, onRoute }) => {

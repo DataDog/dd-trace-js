@@ -6,6 +6,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
 describe('esm', () => {
@@ -15,7 +16,7 @@ describe('esm', () => {
 
   withVersions('azure-service-bus', '@azure/service-bus', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@azure/service-bus@${version}'`], false, [
         './packages/datadog-plugin-azure-service-bus/test/integration-test/*'])
     })

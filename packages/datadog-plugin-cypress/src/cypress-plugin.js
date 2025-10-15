@@ -45,7 +45,7 @@ const {
   getLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
-  getModifiedTestsFromDiff,
+  getModifiedFilesFromDiff,
   TEST_IS_MODIFIED,
   getPullRequestBaseBranch
 } = require('../../dd-trace/src/plugins/util/test')
@@ -188,7 +188,7 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
-function getModifiedTests (testEnvironmentMetadata) {
+function getModifiedFiles (testEnvironmentMetadata) {
   const {
     [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
     [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
@@ -199,9 +199,9 @@ function getModifiedTests (testEnvironmentMetadata) {
 
   if (baseBranchSha) {
     const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
-    const modifiedTests = getModifiedTestsFromDiff(diff)
-    if (modifiedTests) {
-      return modifiedTests
+    const modifiedFiles = getModifiedFilesFromDiff(diff)
+    if (modifiedFiles) {
+      return modifiedFiles
     }
   }
 
@@ -245,7 +245,7 @@ class CypressPlugin {
   isTestManagementTestsEnabled = false
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
-  modifiedTests = []
+  modifiedFiles = []
 
   constructor () {
     const {
@@ -339,10 +339,10 @@ class CypressPlugin {
 
   getIsTestModified (testSuiteAbsolutePath) {
     const relativeTestSuitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-    if (!this.modifiedTests) {
+    if (!this.modifiedFiles) {
       return false
     }
-    const lines = this.modifiedTests[relativeTestSuitePath]
+    const lines = this.modifiedFiles[relativeTestSuitePath]
     if (!lines) {
       return false
     }
@@ -389,7 +389,6 @@ class CypressPlugin {
 
   getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
-      [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
       [TEST_MODULE]: TEST_FRAMEWORK_NAME
     }
@@ -482,8 +481,12 @@ class CypressPlugin {
         this.isEarlyFlakeDetectionEnabled = false
         this.isKnownTestsEnabled = false
       } else {
-        // We use TEST_FRAMEWORK_NAME for the name of the module
-        this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        if (knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]) {
+          this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
+        } else {
+          this.isEarlyFlakeDetectionEnabled = false
+          this.isKnownTestsEnabled = false
+        }
       }
     }
 
@@ -517,7 +520,7 @@ class CypressPlugin {
 
     if (this.isImpactedTestsEnabled) {
       try {
-        this.modifiedTests = getModifiedTests(this.testEnvironmentMetadata)
+        this.modifiedFiles = getModifiedFiles(this.testEnvironmentMetadata)
       } catch (error) {
         log.error(error)
         this.isImpactedTestsEnabled = false

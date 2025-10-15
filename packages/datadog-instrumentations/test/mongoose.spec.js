@@ -1,7 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const semver = require('semver')
 
 const startCh = channel('datadog:mongoose:model:filter:start')

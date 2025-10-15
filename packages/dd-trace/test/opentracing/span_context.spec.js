@@ -1,8 +1,10 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
+
+require('../setup/core')
+
 const id = require('../../src/id')
 
 describe('SpanContext', () => {

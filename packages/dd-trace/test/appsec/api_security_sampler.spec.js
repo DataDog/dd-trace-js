@@ -1,6 +1,9 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { assert } = require('chai')
 const { performance } = require('node:perf_hooks')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
@@ -11,7 +14,10 @@ describe('API Security Sampler', () => {
   let apiSecuritySampler, webStub, span, clock, performanceNowStub
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers({ now: 10 })
+    clock = sinon.useFakeTimers({
+      now: 10,
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     performanceNowStub = sinon.stub(performance, 'now').callsFake(() => clock.now)
 
     webStub = {

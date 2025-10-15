@@ -1,5 +1,9 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const { Buffer } = require('node:buffer')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -79,7 +83,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.meta).to.have.property('_dd.integration', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -99,7 +103,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('out.host', 'localhost')
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -119,7 +123,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(span.meta).to.have.property(ERROR_STACK, error.stack)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -159,7 +163,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('amqp.routingKey', 'routingKey')
                   expect(span.meta).to.have.property('component', 'amqplib')
                   expect(span.metrics).to.have.property('network.destination.port', 5672)
-                }, 3)
+                })
                 .then(done)
                 .catch(done)
 
@@ -179,7 +183,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
                   expect(span.meta).to.have.property(ERROR_STACK, error.stack)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 2)
+                })
                 .then(done)
                 .catch(done)
 
@@ -214,7 +218,7 @@ describe('Plugin', () => {
                   expect(span.meta).to.have.property('span.kind', 'consumer')
                   expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
                   expect(span.meta).to.have.property('component', 'amqplib')
-                }, 5)
+                })
                 .then(done)
                 .catch(done)
 
@@ -320,20 +324,20 @@ describe('Plugin', () => {
               'type:rabbitmq'
             ], ENTRY_PARENT_HASH)
 
-            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64BE(0).toString()
+            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64LE(0).toString()
 
             expectedProducerHashWithExchange = computePathwayHash('test', 'tester', [
               'direction:out',
               'exchange:namedExchange',
               'has_routing_key:true',
               'type:rabbitmq'
-            ], ENTRY_PARENT_HASH).readBigUInt64BE(0).toString()
+            ], ENTRY_PARENT_HASH).readBigUInt64LE(0).toString()
 
             expectedConsumerHash = computePathwayHash('test', 'tester', [
               'direction:in',
               `topic:${queue}`,
               'type:rabbitmq'
-            ], producerHashWithTopic).readBigUInt64BE(0).toString()
+            ], producerHashWithTopic).readBigUInt64LE(0).toString()
           })
 
           it('Should emit DSM stats to the agent when sending a message on an unnamed exchange', done => {
@@ -548,7 +552,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               expect(traces[0][0]).to.have.property('service', 'test-custom-service')
               expect(traces[0][0]).to.have.property('resource', `queue.declare ${queue}`)
-            }, 2)
+            })
             .then(done)
             .catch(done)
 

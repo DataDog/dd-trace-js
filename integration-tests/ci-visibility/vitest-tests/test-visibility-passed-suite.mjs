@@ -23,9 +23,7 @@ describe('other context', () => {
   test.todo('can todo', () => {
     expect(sum(1, 2)).to.equal(3)
   })
-  // eslint-disable-next-line
   test('can programmatic skip', (context) => {
-    // eslint-disable-next-line
     context.skip()
     expect(sum(1, 2)).to.equal(3)
   })
@@ -39,9 +37,7 @@ test.skip('skip no suite', () => {
   expect(sum(1, 2)).to.equal(3)
 })
 
-// eslint-disable-next-line
 test('programmatic skip no suite', (context) => {
-  // eslint-disable-next-line
   context.skip()
   expect(sum(1, 2)).to.equal(3)
 })

@@ -5,6 +5,7 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
+const defaults = require('../config_defaults')
 const { URL } = require('url')
 const pkg = require('../../../../package.json')
 
@@ -49,7 +50,7 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const { hostname = '127.0.0.1', port = 8126 } = config
+    const { hostname = defaults.hostname, port = defaults.port } = config
     const url = config.url || new URL(`http://${hostname}:${port}`)
 
     return {

@@ -3,8 +3,8 @@
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 
 class FetchPlugin extends HttpClientPlugin {
-  static get id () { return 'fetch' }
-  static get prefix () { return 'tracing:apm:fetch:request' }
+  static id = 'fetch'
+  static prefix = 'tracing:apm:fetch:request'
 
   bindStart (ctx) {
     const req = ctx.req

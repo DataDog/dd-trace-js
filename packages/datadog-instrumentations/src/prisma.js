@@ -66,23 +66,21 @@ class TracingHelper {
 addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
   const tracingHelper = new TracingHelper()
 
-  /*
-    * This is a custom PrismaClient that extends the original PrismaClient
-    * This allows us to grab additional information from the PrismaClient such as DB connection strings
-  */
-  class PrismaClient extends prisma.PrismaClient {
-    constructor (...args) {
-      super(...args)
-
-      const datasources = this._engine?.config.inlineDatasources?.db.url?.value
+  // we need to patch the prototype to get db config since this works for ESM and CJS alike.
+  const originalRequest = prisma.PrismaClient.prototype._request
+  prisma.PrismaClient.prototype._request = function () {
+    if (!tracingHelper.dbConfig) {
+      const inlineDatasources = this._engine?.config.inlineDatasources
+      const overrideDatasources = this._engine?.config.overrideDatasources
+      const datasources = inlineDatasources?.db.url?.value ?? overrideDatasources?.db?.url
       if (datasources) {
         const result = parseDBString(datasources)
         tracingHelper.setDbString(result)
       }
     }
+    return originalRequest.apply(this, arguments)
   }
 
-  prisma.PrismaClient = PrismaClient
   /*
     * This is taking advantage of the built in tracing support from Prisma.
     * The below variable is setting a global tracing helper that Prisma uses

@@ -1,6 +1,8 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 // we will use this to populate the span-tags map
@@ -42,7 +44,7 @@ describe('span processor', () => {
     it('should do nothing if the span is not an llm obs span', () => {
       span = { context: () => ({ _tags: {} }) }
 
-      expect(processor._writer.append).to.not.have.been.called
+      expect(writer.append).to.not.have.been.called
     })
 
     it('should format the span event for the writer', () => {
@@ -64,8 +66,6 @@ describe('span processor', () => {
         '_ml_obs.meta.model_provider': 'myProvider',
         '_ml_obs.meta.metadata': { foo: 'bar' },
         '_ml_obs.meta.ml_app': 'myApp',
-        '_ml_obs.meta.input.value': 'input-value',
-        '_ml_obs.meta.output.value': 'output-value',
         '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
         '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
         '_ml_obs.llmobs_parent_id': '1234'
@@ -97,11 +97,9 @@ describe('span processor', () => {
           model_name: 'myModel',
           model_provider: 'myprovider', // should be lowercase
           input: {
-            value: 'input-value',
             messages: [{ role: 'user', content: 'hello' }]
           },
           output: {
-            value: 'output-value',
             messages: [{ role: 'assistant', content: 'world' }]
           },
           metadata: { foo: 'bar' }

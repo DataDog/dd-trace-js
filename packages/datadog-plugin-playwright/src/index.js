@@ -17,6 +17,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TELEMETRY_TEST_SESSION,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -48,30 +49,29 @@ const {
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 class PlaywrightPlugin extends CiPlugin {
-  static get id () {
-    return 'playwright'
-  }
+  static id = 'playwright'
 
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new Map()
+    this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
-      modifiedTests,
+      modifiedFiles,
       onDone
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
       onDone({ isModified })
     })
 
     this.addSub('ci:playwright:session:finish', ({
       status,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       onDone
     }) => {
@@ -81,7 +81,9 @@ class PlaywrightPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
-
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
       if (this.numFailedSuites > 0) {
         let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
         if (this.numFailedTests > 0) {
@@ -144,7 +146,7 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
 
-      this._testSuites.set(testSuiteAbsolutePath, testSuiteSpan)
+      this._testSuiteSpansByTestSuiteAbsolutePath.set(testSuiteAbsolutePath, testSuiteSpan)
 
       return ctx.currentStore
     })
@@ -249,7 +251,9 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
-            const testSuite = this._testSuites.get(formattedSpan.meta.test_suite_absolute_path)
+            const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
+              formattedSpan.meta.test_suite_absolute_path
+            )
             if (testSuite) {
               formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
             }
@@ -393,7 +397,7 @@ class PlaywrightPlugin extends CiPlugin {
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
   startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
-    const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
+    const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
       [TEST_SOURCE_START]: testSourceLine

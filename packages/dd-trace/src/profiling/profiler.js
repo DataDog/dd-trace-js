@@ -41,9 +41,16 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+function processInfo (infos, info, type) {
+  if (Object.keys(info).length > 0) {
+    infos[type] = info
+  }
+}
+
 class Profiler extends EventEmitter {
   #compressionFn
   #compressionOptions
+  #config
   #enabled = false
   #endpointCounts = new Map()
   #lastStart
@@ -54,8 +61,11 @@ class Profiler extends EventEmitter {
 
   constructor () {
     super()
-    this._config = undefined
     this._timeoutInterval = undefined
+  }
+
+  get flushInterval () {
+    return this.#config?.flushInterval
   }
 
   start (options) {
@@ -77,7 +87,7 @@ class Profiler extends EventEmitter {
   async _start (options) {
     if (this.enabled) return true
 
-    const config = this._config = new Config(options)
+    const config = this.#config = new Config(options)
 
     this.#logger = config.logger
     this.#enabled = true
@@ -110,11 +120,13 @@ class Profiler extends EventEmitter {
           }
           break
         case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') {
+          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
+            // eslint-disable-next-line n/no-unsupported-features/node-builtins
             this.#compressionFn = promisify(zlib.zstdCompress)
             if (clevel !== undefined) {
               this.#compressionOptions = {
                 params: {
+                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
                   [zlib.constants.ZSTD_c_compressionLevel]: clevel
                 }
               }
@@ -156,16 +168,18 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #nearOOMExport (profileType, encodedProfile) {
+  #nearOOMExport (profileType, encodedProfile, info) {
     const start = this.#lastStart
     const end = new Date()
+    const infos = this.#createInitialInfos()
+    processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile
-    }, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
-    this._timeoutInterval = this._config.flushInterval
+    this._timeoutInterval = this.#config.flushInterval
   }
 
   stop () {
@@ -187,7 +201,7 @@ class Profiler extends EventEmitter {
       this.#spanFinishListener = undefined
     }
 
-    for (const profiler of this._config.profilers) {
+    for (const profiler of this.#config.profilers) {
       profiler.stop()
       this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
     }
@@ -227,28 +241,34 @@ class Profiler extends EventEmitter {
     }
   }
 
+  #createInitialInfos () {
+    return {
+      settings: this.#config.systemInfoReport
+    }
+  }
+
   async _collect (snapshotKind, restart = true) {
     if (!this.enabled) return
 
-    const startDate = this.#lastStart
-    const endDate = new Date()
-    const profiles = []
-    const encodedProfiles = {}
-
     try {
-      if (this._config.profilers.length === 0) {
+      if (this.#config.profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
+      const startDate = this.#lastStart
+      const endDate = new Date()
+      const profiles = []
+
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
-        for (const profiler of this._config.profilers) {
+        for (const profiler of this.#config.profilers) {
+          const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
             this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
           }
           if (!profile) continue
-          profiles.push({ profiler, profile })
+          profiles.push({ profiler, profile, info })
         }
       })
 
@@ -258,16 +278,20 @@ class Profiler extends EventEmitter {
 
       let hasEncoded = false
 
+      const encodedProfiles = {}
+      const infos = this.#createInitialInfos()
+
       // encode and export asynchronously
-      await Promise.all(profiles.map(async ({ profiler, profile }) => {
+      await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
           const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
             ? await this.#compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
-            const profileJson = JSON.stringify(profile, (key, value) => {
+            const profileJson = JSON.stringify(profile, (_, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
             return `Collected ${profiler.type} profile: ` + profileJson
@@ -281,7 +305,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
         this.#logger.debug('Submitted profiles')
       }
@@ -291,8 +315,8 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #submit (profiles, start, end, snapshotKind) {
-    const { tags } = this._config
+  #submit (profiles, infos, start, end, snapshotKind) {
+    const { tags } = this.#config
 
     // Flatten endpoint counts
     const endpointCounts = {}
@@ -303,8 +327,8 @@ class Profiler extends EventEmitter {
 
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
-    const exportSpec = { profiles, start, end, tags, endpointCounts }
-    const tasks = this._config.exporters.map(exporter =>
+    const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
+    const tasks = this.#config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
         if (this.#logger) {
           this.#logger.warn(err)
@@ -334,7 +358,7 @@ class ServerlessProfiler extends Profiler {
 
   _setInterval () {
     this._timeoutInterval = this.#interval * 1000
-    this.#flushAfterIntervals = this._config.flushInterval / 1000
+    this.#flushAfterIntervals = this.flushInterval / 1000
   }
 
   async _collect (snapshotKind, restart = true) {

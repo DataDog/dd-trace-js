@@ -1,6 +1,8 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 function unserializbleObject () {
@@ -182,8 +184,16 @@ describe('tagger', () => {
           expect(tags['_ml_obs.meta.ml_app']).to.equal('my-propagated-ml-app')
         })
 
-        it('throws an error if no mlApp is provided and no propagated mlApp is provided', () => {
+        it('throws an error if no mlApp is provided and no propagated mlApp is provided and no service', () => {
           expect(() => tagger.registerLLMObsSpan(span, { kind: 'llm' })).to.throw()
+        })
+
+        it('uses the service name if no mlApp is provided and no propagated mlApp is provided', () => {
+          tagger = new Tagger({ llmobs: { enabled: true }, service: 'my-service' })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          expect(tags['_ml_obs.meta.ml_app']).to.equal('my-service')
         })
       })
     })
@@ -389,6 +399,62 @@ describe('tagger', () => {
           ]
 
           expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw()
+        })
+      })
+
+      describe('tagging tool results appropriately', () => {
+        it('tags a span with tool results', () => {
+          const inputData = [
+            { content: 'hello', toolResults: [{ result: 'foo', toolId: '123', type: 'tool_result' }] }
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData)
+          expect(Tagger.tagMap.get(span)).to.deep.equal({
+            '_ml_obs.meta.input.messages': [
+              { content: 'hello', tool_results: [{ result: 'foo', tool_id: '123', type: 'tool_result' }] }
+            ]
+          })
+        })
+
+        it('throws for a non-object tool result', () => {
+          const messages = [
+            { content: 'a', toolResults: 5 }
+          ]
+
+          tagger._register(span)
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('Tool result must be an object.')
+        })
+
+        it('throws for a non-string tool result', () => {
+          const messages = [
+            { content: 'a', toolResults: [{ result: 5 }] }
+          ]
+
+          tagger._register(span)
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool result" must be a string.')
+        })
+
+        it('throws for a non-string tool id', () => {
+          const messages = [
+            { content: 'a', toolResults: [{ result: 'foo', toolId: 123 }] }
+          ]
+
+          tagger._register(span)
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool ID" must be a string.')
+        })
+
+        it('throws for a non-string tool type', () => {
+          const messages = [
+            { content: 'a', toolResults: [{ result: 'foo', toolId: '123', type: 5 }] }
+          ]
+
+          tagger._register(span)
+
+          expect(() => tagger.tagLLMIO(span, messages, undefined)).to.throw('"Tool type" must be a string.')
         })
       })
 

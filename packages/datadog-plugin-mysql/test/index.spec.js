@@ -1,8 +1,12 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const proxyquire = require('proxyquire').noPreserveCache()
+const sinon = require('sinon')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const proxyquire = require('proxyquire').noPreserveCache()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -311,7 +315,7 @@ describe('Plugin', () => {
         let remapStub
 
         before(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -383,7 +387,7 @@ describe('Plugin', () => {
         let connection
 
         before(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -433,7 +437,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -467,7 +471,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           connection = mysql.createConnection({
@@ -547,7 +551,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           pool = mysql.createPool({

@@ -85,7 +85,8 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     error: 0,
     agentless: Number(config.llmobs.agentlessEnabled),
     site: config.site,
-    auto: Number(autoEnabled)
+    auto: Number(autoEnabled),
+    ml_app: config.llmobs.mlApp
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
@@ -154,6 +155,11 @@ function recordSubmitEvaluation (options, err, value = 1) {
   llmobsMetrics.count('evals_submitted', tags).inc(value)
 }
 
+function recordLLMObsUserProcessorCalled (error, value = 1) {
+  const tags = { error: error ? 1 : 0 }
+  llmobsMetrics.count('user_processor_called', tags).inc(value)
+}
+
 module.exports = {
   recordLLMObsEnabled,
   incrementLLMObsSpanStartCount,
@@ -164,5 +170,6 @@ module.exports = {
   recordLLMObsAnnotate,
   recordUserFlush,
   recordExportSpan,
-  recordSubmitEvaluation
+  recordSubmitEvaluation,
+  recordLLMObsUserProcessorCalled
 }

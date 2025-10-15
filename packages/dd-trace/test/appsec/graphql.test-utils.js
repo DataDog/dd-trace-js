@@ -1,8 +1,12 @@
 'use strict'
 
 const axios = require('axios')
-const path = require('path')
-const fs = require('fs')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const path = require('node:path')
+const fs = require('node:fs')
+
 const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')

@@ -1,20 +1,19 @@
 'use strict'
 
-require('../setup/tap')
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
+const { channel } = require('dc-polyfill')
+
+require('../setup/core')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
 const Config = require('../../src/config')
 
-const { channel } = require('dc-polyfill')
-const { expect } = require('chai')
-
 const testLogChannel = channel('apm:test:log')
 
 class TestLog extends LogPlugin {
-  static get id () {
-    return 'test'
-  }
+  static id = 'test'
 }
 
 const config = {

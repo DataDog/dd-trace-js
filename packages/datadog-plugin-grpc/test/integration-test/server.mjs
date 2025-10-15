@@ -2,13 +2,12 @@ import 'dd-trace/init.js'
 import * as grpc from '@grpc/grpc-js'
 import * as protoLoader from '@grpc/proto-loader'
 import path from 'path'
-import getPort from 'get-port'
 
 const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
 const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
 
 let server
-const port = await getPort()
+let port = 0
 
 function buildClient (service, callback) {
   service = Object.assign(
@@ -28,8 +27,9 @@ function buildClient (service, callback) {
 
   return new Promise((resolve, reject) => {
     if (server.bindAsync) {
-      server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+      server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
         if (err) return reject(err)
+        port = boundPort
 
         server.addService(TestService.service, service)
         server.start()
@@ -37,7 +37,7 @@ function buildClient (service, callback) {
         resolve(new TestService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
       })
     } else {
-      server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
+      port = server.bind('127.0.0.1:0', grpc.ServerCredentials.createInsecure())
       server.addService(TestService.service, service)
       server.start()
 

@@ -6,7 +6,8 @@ const nextConfig = {
   experimental: {
     appDir: true
   },
-  output: 'standalone'
+  output: 'standalone',
+  outputFileTracingRoot: __dirname
 }
 
 module.exports = nextConfig

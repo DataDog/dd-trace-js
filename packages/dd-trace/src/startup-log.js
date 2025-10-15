@@ -4,6 +4,7 @@ const { info, warn } = require('./log/writer')
 
 const os = require('os')
 const { inspect } = require('util')
+const defaults = require('./config_defaults')
 const tracerVersion = require('../../../package.json').version
 
 const errors = {}
@@ -12,12 +13,18 @@ let pluginManager
 let samplingRules = []
 let alreadyRan = false
 
+/**
+ * @returns {Record<string, unknown>}
+ */
 function getIntegrationsAndAnalytics () {
   return {
     integrations_loaded: Object.keys(pluginManager._pluginsByName)
   }
 }
 
+/**
+ * @param {{ agentError: { code: string, message: string } }} [options]
+ */
 function startupLog ({ agentError } = {}) {
   if (!config || !pluginManager) {
     return
@@ -33,7 +40,7 @@ function startupLog ({ agentError } = {}) {
     return
   }
 
-  const out = tracerInfo({ agentError })
+  const out = tracerInfo()
 
   if (agentError) {
     out.agent_error = agentError.message
@@ -49,8 +56,11 @@ function startupLog ({ agentError } = {}) {
   }
 }
 
+/**
+ * @returns {Record<string, unknown>}
+ */
 function tracerInfo () {
-  const url = config.url || `http://${config.hostname || 'localhost'}:${config.port}`
+  const url = config.url || `http://${config.hostname || defaults.hostname}:${config.port}`
 
   const out = {
     [inspect.custom] () {
@@ -93,14 +103,23 @@ function tracerInfo () {
   return out
 }
 
+/**
+ * @param {import('./config')} aConfig
+ */
 function setStartupLogConfig (aConfig) {
   config = aConfig
 }
 
+/**
+ * @param {import('./plugin_manager')} thePluginManager
+ */
 function setStartupLogPluginManager (thePluginManager) {
   pluginManager = thePluginManager
 }
 
+/**
+ * @param {import('./sampling_rule')} theRules
+ */
 function setSamplingRules (theRules) {
   samplingRules = theRules
 }

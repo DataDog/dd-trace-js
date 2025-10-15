@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
 const { prepareTestServerForIast } = require('../utils')
 

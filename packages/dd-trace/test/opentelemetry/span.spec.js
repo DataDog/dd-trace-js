@@ -1,13 +1,14 @@
 'use strict'
 
-require('../setup/tap')
-
+const { expect } = require('chai')
+const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const { performance } = require('perf_hooks')
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('@opentelemetry/core')
 
-const { expect } = require('chai')
+require('../setup/core')
+
 const tracer = require('../../').init()
 
 const api = require('@opentelemetry/api')
@@ -319,10 +320,10 @@ describe('OTel Span', () => {
 
     const { _links } = span._ddSpan
 
-    span.addLink(span2.spanContext())
+    span.addLink({ context: span2.spanContext() })
     expect(_links).to.have.lengthOf(1)
 
-    span.addLink(span3.spanContext())
+    span.addLink({ context: span3.spanContext() })
     expect(_links).to.have.lengthOf(2)
   })
 

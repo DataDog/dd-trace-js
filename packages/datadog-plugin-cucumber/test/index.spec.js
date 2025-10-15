@@ -1,14 +1,18 @@
 'use strict'
-const path = require('path')
-const { PassThrough } = require('stream')
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const nock = require('nock')
+
+const path = require('node:path')
+const { PassThrough } = require('node:stream')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const { SAMPLING_PRIORITY } = require('../../../ext/tags')
 const { AUTO_KEEP } = require('../../../ext/priority')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
   TEST_TYPE,
@@ -66,7 +70,8 @@ describe('Plugin', function () {
         .get('/')
         .reply(200, 'OK')
 
-      return agent.load(['cucumber', 'http']).then(() => {
+      return agent.load(
+        ['cucumber', 'http'], { service: 'test' }, { isCiVisibility: true }).then(() => {
         Cucumber = proxyquire(`../../../versions/@cucumber/cucumber@${version}`, {}).get()
       })
     })

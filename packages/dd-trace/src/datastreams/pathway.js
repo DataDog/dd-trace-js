@@ -17,7 +17,7 @@ const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 const logKeys = [CONTEXT_PROPAGATION_KEY, CONTEXT_PROPAGATION_KEY_BASE64]
 
 function shaHash (checkpointString) {
-  const hash = crypto.createHash('md5').update(checkpointString).digest('hex').slice(0, 16)
+  const hash = crypto.createHash('sha256').update(checkpointString).digest('hex').slice(0, 16)
   return Buffer.from(hash, 'hex')
 }
 

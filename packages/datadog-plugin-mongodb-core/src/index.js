@@ -2,31 +2,33 @@
 
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const coalesce = require('koalas')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
-  static get id () { return 'mongodb-core' }
-  static get component () { return 'mongodb' }
+  static id = 'mongodb-core'
+  static component = 'mongodb'
   // avoid using db.name for peer.service since it includes the collection name
   // should be removed if one day this will be fixed
-  static get peerServicePrecursors () { return [] }
+  /**
+   * @override
+   */
+  static peerServicePrecursors = []
 
+  /**
+   * @override
+   */
   configure (config) {
     super.configure(config)
 
     const heartbeatFromEnv = getEnvironmentVariable('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
 
-    this.config.heartbeatEnabled = coalesce(
-      config.heartbeatEnabled,
-      heartbeatFromEnv && isTrue(heartbeatFromEnv),
+    this.config.heartbeatEnabled = config.heartbeatEnabled ??
+      (heartbeatFromEnv && isTrue(heartbeatFromEnv)) ??
       true
-    )
   }
 
   bindStart (ctx) {
     const { ns, ops, options = {}, name } = ctx
-
     // heartbeat commands can be disabled if this.config.heartbeatEnabled is false
     if (!this.config.heartbeatEnabled && isHeartbeat(ops, this.config)) {
       return
@@ -55,11 +57,18 @@ class MongodbCorePlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
+  /**
+   * @override
+   */
   getPeerService (tags) {
-    const ns = tags['db.name']
+    let ns = tags['db.name']
     if (ns && tags['peer.service'] === undefined) {
+      const dotIndex = ns.indexOf('.')
+      if (dotIndex !== -1) {
+        ns = ns.slice(0, dotIndex)
+      }
       // the mongo ns is either dbName either dbName.collection. So we keep the first part
-      tags['peer.service'] = ns.split('.', 1)[0]
+      tags['peer.service'] = ns
     }
     return super.getPeerService(tags)
   }
@@ -90,21 +99,38 @@ function sanitizeBigInt (data) {
   return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
 }
 
+function extractQuery (statements) {
+  if (statements.length === 1 && statements[0].q) return statements[0].q
+
+  const extractedQueries = []
+  for (let i = 0; i < statements.length; i++) {
+    if (statements[i].q) {
+      extractedQueries.push(limitDepth(statements[i].q))
+    }
+  }
+
+  return extractedQueries
+}
+
 function getQuery (cmd) {
-  if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
+  if (!cmd || (typeof cmd !== 'object' && !Array.isArray(cmd))) return
+
+  if (Array.isArray(cmd)) return sanitizeBigInt(extractQuery(cmd))
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
   if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
+  if (cmd.deletes) return sanitizeBigInt(extractQuery(cmd.deletes))
+  if (cmd.updates) return sanitizeBigInt(extractQuery(cmd.updates))
 }
 
 function getResource (plugin, ns, query, operationName) {
-  const parts = [operationName, ns]
+  let resource = `${operationName} ${ns}`
 
   if (plugin.config.queryInResourceName && query) {
-    parts.push(query)
+    resource += ` ${query}`
   }
 
-  return parts.join(' ')
+  return resource
 }
 
 function truncate (input) {

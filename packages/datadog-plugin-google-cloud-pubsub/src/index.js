@@ -7,7 +7,7 @@ const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
 // TODO: Consider splitting channels for publish/receive in the instrumentation.
 class GoogleCloudPubsubPlugin extends CompositePlugin {
-  static get id () { return 'google-cloud-pubsub' }
+  static id = 'google-cloud-pubsub'
   static get plugins () {
     return {
       producer: ProducerPlugin,

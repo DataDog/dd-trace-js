@@ -1,0 +1,83 @@
+interactions:
+- request:
+    body: '{"prompt":"\n\nHuman:What is the capital of France?\n\nAssistant:","temperature":0.5,"max_tokens_to_sample":512}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '112'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-amzn-bedrock-accept
+      : - application/json
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-v2:1/invoke-with-response-stream
+  response:
+    body:
+      string: !!binary |
+        AAAA6AAAAEuciMtvCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0
+        aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaVkyOXRj
+        R3hsZEdsdmJpSXNJbU52YlhCc1pYUnBiMjRpT2lJZ1ZHaGxJaXdpYzNSdmNGOXlaV0Z6YjI0aU9t
+        NTFiR3dzSW5OMGIzQWlPbTUxYkd4OSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5eiJ9
+        OdpdhgAAAQMAAABLCNDuBAs6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBs
+        aWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUowZVhCbElqb2lZ
+        Mjl0Y0d4bGRHbHZiaUlzSW1OdmJYQnNaWFJwYjI0aU9pSWdZMkZ3YVhSaGJDSXNJbk4wYjNCZmNt
+        VmhjMjl1SWpwdWRXeHNMQ0p6ZEc5d0lqcHVkV3hzZlE9PSIsInAiOiJhYmNkZWZnaGlqa2xtbm9w
+        cXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OT1BRUlMifUksQAsAAADjAAAAS+tY+n4LOmV2ZW50LXR5
+        cGUHAAVjaHVuaw06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBl
+        BwAFZXZlbnR7ImJ5dGVzIjoiZXlKMGVYQmxJam9pWTI5dGNHeGxkR2x2YmlJc0ltTnZiWEJzWlhS
+        cGIyNGlPaUlnYjJZaUxDSnpkRzl3WDNKbFlYTnZiaUk2Ym5Wc2JDd2ljM1J2Y0NJNmJuVnNiSDA9
+        IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dSJ9tRZMbwAAAPgAAABL/Ghc7Qs6ZXZlbnQtdHlw
+        ZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUH
+        AAVldmVudHsiYnl0ZXMiOiJleUowZVhCbElqb2lZMjl0Y0d4bGRHbHZiaUlzSW1OdmJYQnNaWFJw
+        YjI0aU9pSWdSbkpoYm1ObElpd2ljM1J2Y0Y5eVpXRnpiMjRpT201MWJHd3NJbk4wYjNBaU9tNTFi
+        R3g5IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMIn3ThKaeAAAB
+        BwAAAEv9UEjECzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9u
+        L2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SjBlWEJsSWpvaVkyOXRjR3hs
+        ZEdsdmJpSXNJbU52YlhCc1pYUnBiMjRpT2lJZ2FYTWlMQ0p6ZEc5d1gzSmxZWE52YmlJNmJuVnNi
+        Q3dpYzNSdmNDSTZiblZzYkgwPSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RF
+        RkdISUpLTE1OT1BRUlNUVVZXWFlaMDEyMzQifTl1nJ4AAADyAAAAS7bYREwLOmV2ZW50LXR5cGUH
+        AAVjaHVuaw06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAF
+        ZXZlbnR7ImJ5dGVzIjoiZXlKMGVYQmxJam9pWTI5dGNHeGxkR2x2YmlJc0ltTnZiWEJzWlhScGIy
+        NGlPaUlnVUdGeWFYTWlMQ0p6ZEc5d1gzSmxZWE52YmlJNmJuVnNiQ3dpYzNSdmNDSTZiblZzYkgw
+        PSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRiJ9GaiYXwAAAP4AAABLcyip
+        TQs6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTpt
+        ZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUowZVhCbElqb2lZMjl0Y0d4bGRHbHZiaUlz
+        SW1OdmJYQnNaWFJwYjI0aU9pSXVJaXdpYzNSdmNGOXlaV0Z6YjI0aU9tNTFiR3dzSW5OMGIzQWlP
+        bTUxYkd4OSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OT1BR
+        UlNUVVZXWFlaIn2Swb5yAAABwQAAAEubBVW/CzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQt
+        dHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5
+        SjBlWEJsSWpvaVkyOXRjR3hsZEdsdmJpSXNJbU52YlhCc1pYUnBiMjRpT2lJaUxDSnpkRzl3WDNK
+        bFlYTnZiaUk2SW5OMGIzQmZjMlZ4ZFdWdVkyVWlMQ0p6ZEc5d0lqb2lYRzVjYmtoMWJXRnVPaUlz
+        SW1GdFlYcHZiaTFpWldSeWIyTnJMV2x1ZG05allYUnBiMjVOWlhSeWFXTnpJanA3SW1sdWNIVjBW
+        RzlyWlc1RGIzVnVkQ0k2TVRZc0ltOTFkSEIxZEZSdmEyVnVRMjkxYm5RaU9qRXhMQ0pwYm5adlky
+        RjBhVzl1VEdGMFpXNWplU0k2TkRneUxDSm1hWEp6ZEVKNWRHVk1ZWFJsYm1ONUlqb3pNelY5ZlE9
+        PSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OT1BRUlNUVVZX
+        WFkifdgkH3E=
+    headers:
+      Connection:
+      - keep-alive
+      Content-Type:
+      - application/vnd.amazon.eventstream
+      Date:
+      - Tue, 09 Sep 2025 18:50:03 GMT
+      Transfer-Encoding:
+      - chunked
+      X-Amzn-Bedrock-Content-Type:
+      - application/json
+      x-amzn-RequestId:
+      - cf2215b3-0158-4918-a314-c38c97379400
+    status:
+      code: 200
+      message: OK
+version: 1

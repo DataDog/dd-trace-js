@@ -6,8 +6,8 @@ const dc = require('dc-polyfill')
 const collapsedPathSym = Symbol('collapsedPaths')
 
 class GraphQLResolvePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'resolve' }
+  static id = 'graphql'
+  static operation = 'resolve'
 
   start (fieldCtx) {
     const { info, rootCtx, args } = fieldCtx

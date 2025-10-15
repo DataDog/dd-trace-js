@@ -235,14 +235,18 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
   try {
     const result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
-      // bind callback to this scope
-      result.then(
-        res => cb(null, res),
-        err => cb(err)
+      return result.then(
+        res => {
+          cb(null, res)
+          return res
+        },
+        err => {
+          cb(err)
+          throw err
+        }
       )
-    } else {
-      cb(null, result)
     }
+    cb(null, result)
     return result
   } catch (err) {
     cb(err)

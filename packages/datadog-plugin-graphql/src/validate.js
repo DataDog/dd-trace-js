@@ -4,8 +4,8 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { extractErrorIntoSpanEvent } = require('./utils')
 
 class GraphQLValidatePlugin extends TracingPlugin {
-  static get id () { return 'graphql' }
-  static get operation () { return 'validate' }
+  static id = 'graphql'
+  static operation = 'validate'
 
   bindStart (ctx) {
     const { docSource, document } = ctx

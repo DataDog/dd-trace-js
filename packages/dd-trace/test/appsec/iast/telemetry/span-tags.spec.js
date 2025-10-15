@@ -1,6 +1,9 @@
 'use strict'
 
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+
 const { EXECUTED_SINK, EXECUTED_SOURCE, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { addMetricsToSpan } = require('../../../../src/appsec/iast/telemetry/span-tags')
 const {

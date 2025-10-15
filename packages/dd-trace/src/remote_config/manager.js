@@ -11,6 +11,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
+const defaults = require('../config_defaults')
 
 const clientId = uuid()
 
@@ -22,7 +23,7 @@ const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfigManager extends EventEmitter {
-  static get kPreUpdate () { return kPreUpdate }
+  static kPreUpdate = kPreUpdate
 
   constructor (config) {
     super()
@@ -31,7 +32,7 @@ class RemoteConfigManager extends EventEmitter {
 
     this.url = config.url || new URL(format({
       protocol: 'http:',
-      hostname: config.hostname || 'localhost',
+      hostname: config.hostname || defaults.hostname,
       port: config.port
     }))
 
@@ -153,7 +154,7 @@ class RemoteConfigManager extends EventEmitter {
       if (statusCode === 404) return cb()
 
       if (err) {
-        log.error('[RC] Error in request', err)
+        log.errorWithoutTelemetry('[RC] Error in request', err)
         return cb()
       }
 

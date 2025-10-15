@@ -1,7 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, before, after, it, beforeEach, afterEach } = require('mocha')
+
+const path = require('node:path')
+
 const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
-const path = require('path')
 
 describe('telemetry', () => {
   describe('dependencies', () => {
@@ -27,7 +31,7 @@ describe('telemetry', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          DD_LOGS_INJECTION: true
+          DD_LOGS_INJECTION: 'true'
         }
       })
     })

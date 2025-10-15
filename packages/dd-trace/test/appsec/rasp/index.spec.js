@@ -1,11 +1,13 @@
 'use strict'
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const { handleUncaughtExceptionMonitor } = require('../../../src/appsec/rasp')
+
 const { DatadogRaspAbortError } = require('../../../src/appsec/rasp/utils')
 
 describe('RASP', () => {
-  let rasp, subscribe, unsubscribe, block, blocked, updateRaspRuleMatchMetricTags
+  let rasp, channels, blocking, blocked, updateRaspRuleMatchMetricTags
 
   beforeEach(() => {
     const config = {
@@ -18,24 +20,37 @@ describe('RASP', () => {
       }
     }
 
-    subscribe = sinon.stub()
-    unsubscribe = sinon.stub()
+    channels = {
+      expressMiddlewareError: {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        hasSubscribers: true
+      },
+      fastifyMiddlewareError: {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        hasSubscribers: true
+      },
+      routerMiddlewareError: {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+        hasSubscribers: true
+      },
+    }
 
-    block = sinon.stub().returns(true)
+    blocked = false
+
+    blocking = {
+      block: sinon.stub().returns(true),
+      registerBlockDelegation: sinon.stub().resolves(true),
+      isBlocked: sinon.stub().callsFake(() => blocked)
+    }
+
     updateRaspRuleMatchMetricTags = sinon.stub()
 
     rasp = proxyquire('../../../src/appsec/rasp', {
-      '../blocking': {
-        block,
-        isBlocked: sinon.stub().callsFake(() => blocked)
-      },
-      '../channels': {
-        expressMiddlewareError: {
-          subscribe,
-          unsubscribe,
-          hasSubscribers: true
-        }
-      },
+      '../blocking': blocking,
+      '../channels': channels,
       '../telemetry': {
         updateRaspRuleMatchMetricTags
       }
@@ -54,19 +69,23 @@ describe('RASP', () => {
       const err = new Error()
       err.cause = err
 
-      handleUncaughtExceptionMonitor(err)
+      rasp.handleUncaughtExceptionMonitor(err)
     })
   })
 
   describe('enable/disable', () => {
-    it('should subscribe to apm:express:middleware:error', () => {
-      sinon.assert.calledOnce(subscribe)
+    it('should subscribe to error channels', () => {
+      sinon.assert.calledOnce(channels.expressMiddlewareError.subscribe)
+      sinon.assert.calledOnce(channels.fastifyMiddlewareError.subscribe)
+      sinon.assert.calledOnce(channels.routerMiddlewareError.subscribe)
     })
 
-    it('should unsubscribe to apm:express:middleware:error', () => {
+    it('should unsubscribe from error channels', () => {
       rasp.disable()
 
-      sinon.assert.calledOnce(unsubscribe)
+      sinon.assert.calledOnce(channels.expressMiddlewareError.unsubscribe)
+      sinon.assert.calledOnce(channels.fastifyMiddlewareError.unsubscribe)
+      sinon.assert.calledOnce(channels.routerMiddlewareError.unsubscribe)
     })
   })
 
@@ -87,20 +106,25 @@ describe('RASP', () => {
     it('should skip non DatadogRaspAbortError', () => {
       rasp.blockOnDatadogRaspAbortError({ error: new Error() })
 
-      sinon.assert.notCalled(block)
+      sinon.assert.notCalled(blocking.block)
+      sinon.assert.notCalled(blocking.registerBlockDelegation)
       sinon.assert.notCalled(updateRaspRuleMatchMetricTags)
     })
 
-    it('should block DatadogRaspAbortError first time and update metrics', () => {
+    it('should block DatadogRaspAbortError first time and update metrics', (done) => {
       rasp.blockOnDatadogRaspAbortError({
         error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
-      sinon.assert.calledOnce(block)
-      sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
+      sinon.assert.calledOnce(blocking.registerBlockDelegation)
+
+      setImmediate(() => {
+        sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
+        done()
+      })
     })
 
-    it('should skip calling block if blocked before', () => {
+    it('should skip calling block if blocked before', (done) => {
       rasp.blockOnDatadogRaspAbortError({
         error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
@@ -114,8 +138,23 @@ describe('RASP', () => {
         error: new DatadogRaspAbortError(req, res, blockingAction, raspRule, true)
       })
 
-      sinon.assert.calledOnce(block)
-      sinon.assert.calledOnce(updateRaspRuleMatchMetricTags)
+      sinon.assert.calledOnce(blocking.registerBlockDelegation)
+
+      setImmediate(() => {
+        sinon.assert.calledOnce(updateRaspRuleMatchMetricTags)
+        done()
+      })
+    })
+
+    it('should block without delegate when called by handleUncaughtExceptionMonitor', (done) => {
+      rasp.handleUncaughtExceptionMonitor(new DatadogRaspAbortError(req, res, blockingAction, raspRule, true))
+
+      sinon.assert.calledOnce(blocking.block)
+
+      setImmediate(() => {
+        sinon.assert.calledOnceWithExactly(updateRaspRuleMatchMetricTags, req, raspRule, true, true)
+        done()
+      })
     })
   })
 })

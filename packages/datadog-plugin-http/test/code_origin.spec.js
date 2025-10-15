@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {

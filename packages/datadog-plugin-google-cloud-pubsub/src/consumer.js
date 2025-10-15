@@ -4,8 +4,8 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
-  static get id () { return 'google-cloud-pubsub' }
-  static get operation () { return 'receive' }
+  static id = 'google-cloud-pubsub'
+  static operation = 'receive'
 
   bindStart (ctx) {
     const { message } = ctx

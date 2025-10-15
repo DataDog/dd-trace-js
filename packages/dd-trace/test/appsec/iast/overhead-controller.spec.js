@@ -1,5 +1,12 @@
 'use strict'
 
+const axios = require('axios')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+const { EventEmitter } = require('node:events')
+
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const Config = require('../../../src/config')
@@ -8,9 +15,6 @@ const iast = require('../../../src/appsec/iast')
 const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
-const axios = require('axios')
-const { EventEmitter } = require('events')
-const proxyquire = require('proxyquire')
 const vulnerabilities = require('../../../src/appsec/iast/vulnerabilities')
 
 describe('Overhead controller', () => {

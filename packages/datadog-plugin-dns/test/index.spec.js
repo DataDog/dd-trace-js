@@ -1,7 +1,11 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const { promisify } = require('node:util')
+
 const agent = require('../../dd-trace/test/plugins/agent')
-const { promisify } = require('util')
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 

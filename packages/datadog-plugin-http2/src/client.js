@@ -24,8 +24,8 @@ const HTTP2_HEADER_STATUS = ':status'
 const HTTP2_METHOD_GET = 'GET'
 
 class Http2ClientPlugin extends ClientPlugin {
-  static get id () { return 'http2' }
-  static get prefix () { return 'apm:http2:client:request' }
+  static id = 'http2'
+  static prefix = 'apm:http2:client:request'
 
   bindStart (message) {
     const { authority, options, headers = {} } = message

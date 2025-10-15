@@ -1,6 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('ldap-injection-analyzer', () => {
