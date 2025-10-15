@@ -46,7 +46,7 @@ const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
-const impactedTestsCh = channel('ci:jest:modified-tests')
+const modifiedFilesCh = channel('ci:jest:modified-files')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -78,7 +78,7 @@ let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
-let modifiedTests = {}
+let modifiedFiles = {}
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -197,10 +197,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isImpactedTestsEnabled) {
         try {
-          const hasImpactedTests = Object.keys(modifiedTests).length > 0
-          this.modifiedTestsForThisSuite = hasImpactedTests
-            ? this.getModifiedTestForThisSuite(modifiedTests)
-            : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
+          const hasImpactedTests = Object.keys(modifiedFiles).length > 0
+          this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)
           this.isImpactedTestsEnabled = false
@@ -290,19 +288,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return result
     }
 
-    getModifiedTestForThisSuite (modifiedTests) {
-      if (this.modifiedTestsForThisSuite) {
-        return this.modifiedTestsForThisSuite
-      }
-      let modifiedTestsForThisSuite = modifiedTests
-      // If jest is using workers, modified tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof modifiedTestsForThisSuite === 'string') {
-        modifiedTestsForThisSuite = JSON.parse(modifiedTestsForThisSuite)
-      }
-      return modifiedTestsForThisSuite
-    }
-
     // Generic function to handle test retries
     retryTest ({
       jestEvent,
@@ -378,7 +363,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite,
+            this.modifiedFiles,
             'jest'
           )
         }
@@ -465,7 +450,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite,
+            this.modifiedFiles,
             'jest'
           )
           if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
@@ -831,12 +816,12 @@ function getCliWrapper (isNewJestVersion) {
           onDone = resolve
         })
 
-        impactedTestsCh.publish({ onDone })
+        modifiedFilesCh.publish({ onDone })
 
         try {
-          const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
+          const { err, modifiedFiles: receivedModifiedFiles } = await impactedTestsPromise
           if (!err) {
-            modifiedTests = receivedModifiedTests
+            modifiedFiles = receivedModifiedFiles
           }
         } catch (err) {
           log.error('Jest impacted tests error', err)
@@ -1237,7 +1222,7 @@ addHook({
       _ddIsTestManagementTestsEnabled,
       _ddTestManagementTests,
       _ddTestManagementAttemptToFixRetries,
-      _ddModifiedTests,
+      _ddModifiedFiles,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1365,17 +1350,15 @@ function sendWrapper (send) {
 
       const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
-      const suiteModifiedTests = Object.keys(modifiedTests).length > 0
-        ? modifiedTests
-        : {}
-
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
           _ddTestManagementTests: suiteTestManagementTests,
-          _ddModifiedTests: suiteModifiedTests
+          // TODO: figure out if we can reduce the size of the modified files object
+          // Can we use `testSuite` (it'd have to be relative to repository root though)
+          _ddModifiedFiles: modifiedFiles
         }
       }
     }
