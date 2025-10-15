@@ -16,6 +16,10 @@ const messaging = {
       opName: () => 'amqp.send',
       serviceName: amqpServiceName
     },
+    'azure-event-hubs': {
+      opName: () => 'azure.eventhubs.send',
+      serviceName: ({ tracerService }) => `${tracerService}-azure-event-hubs`
+    },
     'azure-service-bus': {
       opName: () => 'azure.servicebus.send',
       serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`

@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const forEach = require('../../../versions/mocha-each').get()
+const forEach = require('mocha-each')
 
 describe('mocha-parameterized', () => {
   forEach([[1, 2, 3]]).it('can do parameterized', (left, right, expected) => {
