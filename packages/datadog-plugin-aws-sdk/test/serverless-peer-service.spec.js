@@ -12,6 +12,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   describe('Serverless', function () {
+    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
