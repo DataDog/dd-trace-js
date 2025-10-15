@@ -182,6 +182,7 @@ interface Plugins {
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
@@ -1704,6 +1705,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * @azure/event-hubs module
+     */
+    interface azure_event_hubs extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * @azure/functions module.
     */
     interface azure_functions extends Instrumentation {}
@@ -1713,6 +1720,7 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
