@@ -45,18 +45,14 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       const messages = ctx.msg
       const isBatch = messages.constructor?.name === 'ServiceBusMessageBatchImpl'
       if (isBatch) {
-        const messagesLength = messages.length || messages.count
-        span.setTag('messaging.batch.message_count', messagesLength)
-
+        span.setTag('messaging.batch.message_count', messages.count)
         if (batchLinksAreEnabled()) {
           messages._spanContexts.forEach(spanContext => {
             span.addLink(spanContext)
           })
         }
       } else if (Array.isArray(messages)) {
-        const messagesLength = messages.length || messages._context?.connection?._eventsCount
-        span.setTag('messaging.batch.message_count', messagesLength)
-
+        span.setTag('messaging.batch.message_count', messages.length)
         messages.forEach(event => {
           injectTraceContext(this.tracer, span, event)
         })

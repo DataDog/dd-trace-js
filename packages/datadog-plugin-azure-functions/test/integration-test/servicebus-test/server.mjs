@@ -60,7 +60,7 @@ app.http('send-messages-1', {
     await sender1.sendMessages(messages)
     return {
       status: 200,
-      body: 'Sent message batch'
+      body: 'Sent messages'
     }
   }
 })
@@ -84,7 +84,7 @@ app.http('send-amqp-messages-1', {
     await sender1.sendMessages(amqpMessages)
     return {
       status: 200,
-      body: 'Sent AMQP message batch'
+      body: 'Sent AMQP message'
     }
   }
 })
@@ -124,7 +124,7 @@ app.http('send-messages-2', {
     await sender2.sendMessages(messages)
     return {
       status: 200,
-      body: 'Sent message batch'
+      body: 'Sent messages'
     }
   }
 })
@@ -148,7 +148,7 @@ app.http('send-amqp-messages-2', {
     await sender2.sendMessages(amqpMessages)
     return {
       status: 200,
-      body: 'Sent AMQP message batch'
+      body: 'Sent AMQP messages'
     }
   }
 })

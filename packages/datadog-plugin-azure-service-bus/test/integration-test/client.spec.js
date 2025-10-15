@@ -137,6 +137,7 @@ describe('esm', () => {
         assert.strictEqual(payload[18][0].name, 'azure.servicebus.create')
         assert.strictEqual(payload[19][0].name, 'azure.servicebus.send')
         assert.strictEqual(payload[19][0].metrics['messaging.batch.message_count'], 2)
+        assert.strictEqual(parseLinks(payload[19][0]).length, 2)
 
         // topic batch
         assert.strictEqual(payload[20][0].name, 'azure.servicebus.create')
@@ -148,6 +149,7 @@ describe('esm', () => {
         assert.strictEqual(payload[21][0].name, 'azure.servicebus.create')
         assert.strictEqual(payload[22][0].name, 'azure.servicebus.send')
         assert.strictEqual(payload[22][0].metrics['messaging.batch.message_count'], 2)
+        assert.strictEqual(parseLinks(payload[22][0]).length, 2)
       })
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
@@ -156,3 +158,7 @@ describe('esm', () => {
     }).timeout(60000)
   })
 })
+
+function parseLinks (span) {
+  return JSON.parse(span.meta['_dd.span_links'] || '[]')
+}
