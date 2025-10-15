@@ -393,25 +393,6 @@ function createResponseRequestExtraction (tags, payload, openaiStore) {
     tags['openai.request.model'] = payload.model
   }
   
-  // Extract input information
-  if (payload.input) {
-    openaiStore.input = payload.input
-    tags['openai.request.input_length'] = payload.input.length
-  }
-  
-  // Extract reasoning configuration
-  if (payload.reasoning) {
-    if (payload.reasoning.effort) {
-      tags['openai.request.reasoning.effort'] = payload.reasoning.effort
-    }
-    openaiStore.reasoning = payload.reasoning
-  }
-  
-  // Extract background flag
-  if (payload.background !== undefined) {
-    tags['openai.request.background'] = payload.background
-  }
-  
   // Store the full payload for response extraction
   openaiStore.responseData = payload
 }
