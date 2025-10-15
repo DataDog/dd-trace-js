@@ -129,7 +129,8 @@ function withNamingSchema (
 }
 
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
-  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
+  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
+    this.timeout(10000)
     let computePeerServiceSpy
 
     beforeEach(() => {

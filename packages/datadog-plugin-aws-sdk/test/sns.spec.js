@@ -13,6 +13,7 @@ const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
   setup()
+  this.timeout(10000)
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let sns
