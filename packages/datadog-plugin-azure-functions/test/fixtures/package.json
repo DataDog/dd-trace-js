@@ -1,0 +1,9 @@
+{
+  "name": "azure-function-tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./server.mjs",
+  "scripts": {
+    "start": "func start"
+  }
+}

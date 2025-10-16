@@ -19,7 +19,7 @@ describe('esm', () => {
   // issue link: https://github.com/DataDog/import-in-the-middle/issues/60
   withVersions('openai', 'openai', '>=3 <4.0.0 || >4.1.0', (version) => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox(
         [
           `'openai@${version}'`,
