@@ -24,6 +24,7 @@ describe('OpenTelemetry Metrics Configuration', () => {
     delete process.env.OTEL_EXPORTER_OTLP_METRICS_HEADERS
     delete process.env.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL
     delete process.env.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
     delete process.env.OTEL_METRIC_EXPORT_INTERVAL
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
@@ -33,7 +34,7 @@ describe('OpenTelemetry Metrics Configuration', () => {
 
   afterEach(() => {
     process.env = originalEnv
-    
+
     // Clean up meter provider
     const provider = metrics.getMeterProvider()
     if (provider && provider.shutdown) {
@@ -184,4 +185,3 @@ describe('OpenTelemetry Metrics Configuration', () => {
     })
   })
 })
-

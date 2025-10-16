@@ -648,6 +648,8 @@ class Config {
       OTEL_EXPORTER_OTLP_METRICS_HEADERS,
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS,
@@ -686,15 +688,25 @@ class Config {
     env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
     env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
 
-    this._setBoolean(env, 'otelMetricsEnabled', isTrue(DD_METRICS_OTEL_ENABLED))
-    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars taking precedence over generic _EXPORTERS_ vars
+    const otelMetricsExporter = String(OTEL_METRICS_EXPORTER).toLowerCase() !== 'none'
+    this._setBoolean(env, 'otelMetricsEnabled', isTrue(DD_METRICS_OTEL_ENABLED) && otelMetricsExporter)
+    // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
+    // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       this._setString(env, 'otelMetricsUrl', OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || env.otelUrl)
     }
     this._setString(env, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || env.otelHeaders)
     this._setString(env, 'otelMetricsProtocol', OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || env.otelProtocol)
     env.otelMetricsTimeout = maybeInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT) || env.otelTimeout
+    env.otelMetricsExportTimeout = maybeInt(OTEL_METRIC_EXPORT_TIMEOUT)
     env.otelMetricsExportInterval = maybeInt(OTEL_METRIC_EXPORT_INTERVAL)
+    // Parse temporality preference (default to DELTA for Datadog)
+    if (OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) {
+      const temporalityPref = OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.toUpperCase()
+      if (['DELTA', 'CUMULATIVE', 'LOWMEMORY'].includes(temporalityPref)) {
+        this._setString(env, 'otelMetricsTemporalityPreference', temporalityPref)
+      }
+    }
     this._setBoolean(
       env,
       'apmTracingEnabled',

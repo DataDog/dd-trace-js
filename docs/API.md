@@ -469,9 +469,9 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 - `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers in JSON format for metrics (default: `{}`)
 - `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics (default: `http/protobuf`)
 - `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics (default: `10000`)
-- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `60000`)
-- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Export timeout in milliseconds
-- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - [NOT YET SUPPORTED] Temporality preference (currently delta only)
+- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `10000`)
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Temporality preference (default: `DELTA`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries.
 
 Metrics are collected periodically and exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. All metrics use delta aggregation temporality to match Datadog's data model. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 

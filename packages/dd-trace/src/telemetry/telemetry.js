@@ -345,8 +345,10 @@ const nameMapping = {
   otelMetricsHeaders: 'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
   otelMetricsProtocol: 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
   otelMetricsTimeout: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT',
+  otelMetricsExportTimeout: 'OTEL_METRIC_EXPORT_TIMEOUT',
   otelMetricsUrl: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
   otelMetricsExportInterval: 'OTEL_METRIC_EXPORT_INTERVAL',
+  otelMetricsTemporalityPreference: 'OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE',
 }
 
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
