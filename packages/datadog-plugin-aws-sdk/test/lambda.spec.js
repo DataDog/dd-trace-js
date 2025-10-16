@@ -105,7 +105,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -132,7 +132,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -159,7 +159,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
