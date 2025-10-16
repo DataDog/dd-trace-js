@@ -192,7 +192,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: fix performance issues and test more Node versions
   plugin-cypress:

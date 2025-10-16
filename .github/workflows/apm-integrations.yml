@@ -95,7 +95,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   amqplib:
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   apollo:
     runs-on: ubuntu-latest
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   avsc:
     runs-on: ubuntu-latest
@@ -132,7 +132,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   axios:
     runs-on: ubuntu-latest
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   bunyan:
     runs-on: ubuntu-latest
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   cassandra:
     runs-on: ubuntu-latest
@@ -168,7 +168,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   child_process:
     runs-on: ubuntu-latest
@@ -297,7 +297,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   dns:
     runs-on: ubuntu-latest
@@ -374,7 +374,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fetch:
     runs-on: ubuntu-latest
@@ -384,7 +384,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fs:
     runs-on: ubuntu-latest
@@ -394,7 +394,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   graphql:
     runs-on: ubuntu-latest
@@ -404,7 +404,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   grpc:
     runs-on: ubuntu-latest
@@ -414,7 +414,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hapi:
     runs-on: ubuntu-latest
@@ -424,7 +424,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hono:
     runs-on: ubuntu-latest
@@ -434,7 +434,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   http:
     strategy:
@@ -547,7 +547,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -567,7 +567,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mariadb:
     runs-on: ubuntu-latest
@@ -586,7 +586,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   memcached:
     runs-on: ubuntu-latest
@@ -602,7 +602,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   microgateway-core:
     runs-on: ubuntu-latest
@@ -612,7 +612,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   moleculer:
     runs-on: ubuntu-latest
@@ -622,7 +622,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb:
     runs-on: ubuntu-latest
@@ -639,7 +639,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -656,7 +656,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongoose:
     runs-on: ubuntu-latest
@@ -672,7 +672,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql:
     runs-on: ubuntu-latest
@@ -691,7 +691,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql2:
     runs-on: ubuntu-latest
@@ -710,7 +710,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   net:
     runs-on: ubuntu-latest
@@ -811,7 +811,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
@@ -904,7 +904,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   prisma:
     runs-on: ubuntu-latest
@@ -922,7 +922,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   protobufjs:
     runs-on: ubuntu-latest
@@ -933,7 +933,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   redis:
     runs-on: ubuntu-latest
@@ -949,7 +949,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ioredis:
     runs-on: ubuntu-latest
@@ -965,7 +965,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   valkey:
     runs-on: ubuntu-latest
@@ -981,7 +981,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
@@ -1016,7 +1016,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   router:
     runs-on: ubuntu-latest
@@ -1026,7 +1026,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   sharedb:
     runs-on: ubuntu-latest
@@ -1089,7 +1089,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   winston:
     runs-on: ubuntu-latest
@@ -1099,7 +1099,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ws:
     runs-on: ubuntu-latest
@@ -1109,4 +1109,4 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}

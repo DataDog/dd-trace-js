@@ -123,11 +123,8 @@ jobs:
     steps:
         - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         - uses: ./.github/actions/plugins/test
-        - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-          if: always()
           with:
-            api_key: ${{ secrets.DD_API_KEY }}
-            service: dd-trace-js-tests
+            dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
     runs-on: ubuntu-latest
@@ -211,12 +208,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -232,9 +224,4 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
