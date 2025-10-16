@@ -379,6 +379,44 @@ The following attributes are available to override Datadog-specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
+<h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
+
+```javascript
+require('dd-trace').init()
+const { logs } = require('@opentelemetry/api-logs')
+const express = require('express')
+
+const app = express()
+const logger = logs.getLogger('my-service', '1.0.0')
+
+app.get('/api/users/:id', (req, res) => {
+  logger.emit({
+    severityText: 'INFO',
+    severityNumber: 9,
+    body: `Processing user request for ID: ${req.params.id}`,
+  })
+  res.json({ id: req.params.id, name: 'John Doe' })
+})
+
+app.listen(3000)
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs (default: `http://localhost:4318`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format for logs (default: `{}`)
+- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
+- `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+
+Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>
