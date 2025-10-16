@@ -1,7 +1,7 @@
 'use strict'
 
 const packageVersion = require('../../../../../package.json').version
-const { Counter, UpDownCounter, Histogram, ObservableGauge } = require('./instruments')
+const { Counter, UpDownCounter, Histogram, Gauge, ObservableGauge } = require('./instruments')
 
 /**
  * @typedef {import('@opentelemetry/api').Counter} Counter
@@ -32,13 +32,15 @@ class Meter {
    * @param {string} [instrumentationScope.name] - Meter name (defaults to 'dd-trace-js')
    * @param {string} [instrumentationScope.version] - Meter version (defaults to tracer version)
    * @param {string} [instrumentationScope.schemaUrl] - Schema URL
+   * @param {Object} [instrumentationScope.attributes] - Attributes for the instrumentation scope
    */
   constructor (meterProvider, instrumentationScope) {
     this.meterProvider = meterProvider
     this.#instrumentationScope = {
       name: instrumentationScope?.name || 'dd-trace-js',
       version: instrumentationScope?.version || packageVersion,
-      schemaUrl: instrumentationScope?.schemaUrl || ''
+      schemaUrl: instrumentationScope?.schemaUrl || '',
+      attributes: instrumentationScope?.attributes || {}
     }
     this.#instruments = new Map()
   }
@@ -46,7 +48,7 @@ class Meter {
   /**
    * Creates a Counter instrument.
    *
-   * @param {string} name - Instrument name
+   * @param {string} name - Instrument name (case-insensitive)
    * @param {Object} [options] - Instrument options
    * @param {string} [options.description] - Instrument description
    * @param {string} [options.unit] - Unit of measurement
@@ -54,9 +56,10 @@ class Meter {
    * @returns {Counter} Counter instrument
    */
   createCounter (name, options = {}) {
-    const key = `counter:${name}`
+    const normalizedName = name.toLowerCase()
+    const key = `counter:${normalizedName}`
     if (!this.#instruments.has(key)) {
-      const counter = new Counter(name, options, this.#instrumentationScope, this.meterProvider.reader)
+      const counter = new Counter(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
       this.#instruments.set(key, counter)
     }
     return this.#instruments.get(key)
@@ -73,9 +76,10 @@ class Meter {
    * @returns {UpDownCounter} UpDownCounter instrument
    */
   createUpDownCounter (name, options = {}) {
-    const key = `updowncounter:${name}`
+    const normalizedName = name.toLowerCase()
+    const key = `updowncounter:${normalizedName}`
     if (!this.#instruments.has(key)) {
-      const counter = new UpDownCounter(name, options, this.#instrumentationScope, this.meterProvider.reader)
+      const counter = new UpDownCounter(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
       this.#instruments.set(key, counter)
     }
     return this.#instruments.get(key)
@@ -84,7 +88,7 @@ class Meter {
   /**
    * Creates a Histogram instrument.
    *
-   * @param {string} name - Instrument name
+   * @param {string} name - Instrument name (case-insensitive)
    * @param {Object} [options] - Instrument options
    * @param {string} [options.description] - Instrument description
    * @param {string} [options.unit] - Unit of measurement
@@ -92,10 +96,31 @@ class Meter {
    * @returns {Histogram} Histogram instrument
    */
   createHistogram (name, options = {}) {
-    const key = `histogram:${name}`
+    const normalizedName = name.toLowerCase()
+    const key = `histogram:${normalizedName}`
     if (!this.#instruments.has(key)) {
-      const histogram = new Histogram(name, options, this.#instrumentationScope, this.meterProvider.reader)
+      const histogram = new Histogram(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
       this.#instruments.set(key, histogram)
+    }
+    return this.#instruments.get(key)
+  }
+
+  /**
+   * Creates a Gauge instrument.
+   *
+   * @param {string} name - Instrument name (case-insensitive)
+   * @param {Object} [options] - Instrument options
+   * @param {string} [options.description] - Instrument description
+   * @param {string} [options.unit] - Unit of measurement
+   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @returns {Gauge} Gauge instrument
+   */
+  createGauge (name, options = {}) {
+    const normalizedName = name.toLowerCase()
+    const key = `gauge:${normalizedName}`
+    if (!this.#instruments.has(key)) {
+      const gauge = new Gauge(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
+      this.#instruments.set(key, gauge)
     }
     return this.#instruments.get(key)
   }
@@ -103,7 +128,7 @@ class Meter {
   /**
    * Creates an ObservableGauge instrument.
    *
-   * @param {string} name - Instrument name
+   * @param {string} name - Instrument name (case-insensitive)
    * @param {Object} [options] - Instrument options
    * @param {string} [options.description] - Instrument description
    * @param {string} [options.unit] - Unit of measurement
@@ -111,9 +136,10 @@ class Meter {
    * @returns {ObservableGauge} ObservableGauge instrument
    */
   createObservableGauge (name, options = {}) {
-    const key = `gauge:${name}`
+    const normalizedName = name.toLowerCase()
+    const key = `observable-gauge:${normalizedName}`
     if (!this.#instruments.has(key)) {
-      const gauge = new ObservableGauge(name, options, this.#instrumentationScope, this.meterProvider.reader)
+      const gauge = new ObservableGauge(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
       this.#instruments.set(key, gauge)
     }
     return this.#instruments.get(key)
@@ -122,30 +148,45 @@ class Meter {
   /**
    * Creates an ObservableCounter instrument.
    *
-   * @param {string} name - Instrument name
+   * @param {string} name - Instrument name (case-insensitive)
    * @param {Object} [options] - Instrument options
    * @param {string} [options.description] - Instrument description
    * @param {string} [options.unit] - Unit of measurement
-   * @returns {ObservableGauge} ObservableCounter instrument (implemented as gauge for now)
+   * @returns {ObservableCounter} ObservableCounter instrument
    */
   createObservableCounter (name, options = {}) {
-    // ObservableCounter is similar to ObservableGauge but monotonic
-    // For now, implement as gauge - can be enhanced later
-    return this.createObservableGauge(name, options)
+    const { ObservableCounter } = require('./instruments')
+    const normalizedName = name.toLowerCase()
+    const key = `observable-counter:${normalizedName}`
+    if (!this.#instruments.has(key)) {
+      const counter = new ObservableCounter(
+        normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
+      )
+      this.#instruments.set(key, counter)
+    }
+    return this.#instruments.get(key)
   }
 
   /**
    * Creates an ObservableUpDownCounter instrument.
    *
-   * @param {string} name - Instrument name
+   * @param {string} name - Instrument name (case-insensitive)
    * @param {Object} [options] - Instrument options
    * @param {string} [options.description] - Instrument description
    * @param {string} [options.unit] - Unit of measurement
-   * @returns {ObservableGauge} ObservableUpDownCounter instrument (implemented as gauge for now)
+   * @returns {ObservableUpDownCounter} ObservableUpDownCounter instrument
    */
   createObservableUpDownCounter (name, options = {}) {
-    // ObservableUpDownCounter is similar to ObservableGauge
-    return this.createObservableGauge(name, options)
+    const { ObservableUpDownCounter } = require('./instruments')
+    const normalizedName = name.toLowerCase()
+    const key = `observable-updowncounter:${normalizedName}`
+    if (!this.#instruments.has(key)) {
+      const updown = new ObservableUpDownCounter(
+        normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
+      )
+      this.#instruments.set(key, updown)
+    }
+    return this.#instruments.get(key)
   }
 }
 

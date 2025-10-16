@@ -71,7 +71,8 @@ function initializeOpenTelemetryMetrics (config) {
   // Create periodic reader for collecting and exporting metrics
   const reader = new PeriodicMetricReader(
     exporter,
-    config.otelMetricsExportInterval
+    config.otelMetricsExportInterval,
+    config.otelMetricsTemporalityPreference
   )
 
   // Create meter provider with reader for Datadog Agent export

@@ -35,7 +35,7 @@ class OtlpTransformerBase {
   }
 
   /**
-   * Groups items by instrumentation scope (name, version, and schemaUrl).
+   * Groups items by instrumentation scope (name, version, schemaUrl, and attributes).
    * @param {Array} items - Array of items to group
    * @returns {Map<string, Array>} Map of instrumentation scope key to items
    * @protected
@@ -44,8 +44,10 @@ class OtlpTransformerBase {
     const grouped = new Map()
 
     for (const item of items) {
-      const instrumentationScope = item.instrumentationScope || { name: '', version: '', schemaUrl: '' }
-      const key = `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
+      const instrumentationScope = item.instrumentationScope || { name: '', version: '', schemaUrl: '', attributes: {} }
+      const attrsKey = JSON.stringify(instrumentationScope.attributes || {})
+      const key = `${instrumentationScope.name}@${instrumentationScope.version}@` +
+        `${instrumentationScope.schemaUrl}@${attrsKey}`
 
       const group = grouped.get(key)
       if (group === undefined) {

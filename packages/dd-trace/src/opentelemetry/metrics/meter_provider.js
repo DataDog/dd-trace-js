@@ -40,10 +40,11 @@ class MeterProvider {
   /**
    * Gets or creates a meter instance.
    *
-   * @param {string} name - Meter name
+   * @param {string} name - Meter name (case-insensitive)
    * @param {string} [version] - Meter version
    * @param {Object} [options] - Additional options
    * @param {string} [options.schemaUrl] - Schema URL for the meter
+   * @param {Object} [options.attributes] - Attributes for the instrumentation scope
    * @returns {Meter} Meter instance
    */
   getMeter (name, version = '', options = {}) {
@@ -51,12 +52,15 @@ class MeterProvider {
       return this.#createNoOpMeter()
     }
 
+    const normalizedName = name.toLowerCase()
     const meterVersion = version || ''
     const schemaUrl = options?.schemaUrl || ''
-    const key = `${name}@${meterVersion}@${schemaUrl}`
+    const attributes = options?.attributes || {}
+    const attrsKey = JSON.stringify(attributes)
+    const key = `${normalizedName}@${meterVersion}@${schemaUrl}@${attrsKey}`
 
     if (!this.#meters.has(key)) {
-      this.#meters.set(key, new Meter(this, { name, version: meterVersion, schemaUrl }))
+      this.#meters.set(key, new Meter(this, { name: normalizedName, version: meterVersion, schemaUrl, attributes }))
     }
     return this.#meters.get(key)
   }
