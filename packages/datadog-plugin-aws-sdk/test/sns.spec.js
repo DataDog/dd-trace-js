@@ -11,7 +11,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
-describe.only('Sns', function () {
+describe('Sns', function () {
   setup()
   this.timeout(20000)
 

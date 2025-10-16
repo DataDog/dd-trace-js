@@ -20,7 +20,7 @@ function wrapRequest (send) {
       request: this,
       cbExists: typeof cb === 'function'
     }
-    process._rawDebug(`[AWS-SDK-DEBUG] Publishing start event for ${channelSuffix}:${ctx.operation}`)
+    console.log(`[AWS-SDK-DEBUG] Publishing start event for ${channelSuffix}:${ctx.operation}`)
     this.on('complete', response => {
       ctx.response = response
       channel(`apm:aws:request:complete:${channelSuffix}`).publish(ctx)
@@ -29,7 +29,7 @@ function wrapRequest (send) {
     if (ctx.cbExists) {
       arguments[0] = wrapCb(cb, channelSuffix, ctx)
     }
-    process._rawDebug(`[AWS-SDK-DEBUG] Publishing start event for ${channelSuffix}:${ctx.operation}`)
+    console.log(`[AWS-SDK-DEBUG] Publishing start event for ${channelSuffix}:${ctx.operation}`)
     return startCh.runStores(ctx, send, this, ...arguments)
   }
 }
@@ -160,7 +160,7 @@ function wrapCb (cb, serviceName, ctx) {
   // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrapFunction(cb, cb => function wrappedCb (err, response) {
     ctx = { request: ctx.request, response }
-    process._rawDebug(`[AWS-SDK-DEBUG] Publishing start event for ${serviceName}:${ctx.operation}`)
+    console.log(`[AWS-SDK-DEBUG] Publishing start event for ${serviceName}:${ctx.operation}`)
     return channel(`apm:aws:response:start:${serviceName}`).runStores(ctx, () => {
       const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
       try {

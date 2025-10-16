@@ -327,11 +327,11 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     resolve = _resolve
     reject = _reject
   })
-  process._rawDebug(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
+  console.log(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
   const rejectionTimeout = setTimeout(() => {
-    process._rawDebug(`[assertSomeTraces] TIMEOUT reached after ${options.timeoutMs || 1000}ms`)
-    process._rawDebug(`[assertSomeTraces] Handler was invoked ${invocationCount} times`)
-    process._rawDebug(`[assertSomeTraces] Error captured:`, error?.message || 'none')
+    console.log(`[assertSomeTraces] TIMEOUT reached after ${options.timeoutMs || 1000}ms`)
+    console.log(`[assertSomeTraces] Handler was invoked ${invocationCount} times`)
+    console.log(`[assertSomeTraces] Error captured:`, error?.message || 'none')
     if (error) reject(error)
   }, options.timeoutMs || 1000)
 
@@ -349,17 +349,17 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     assertIntegrationName(args[0])
     invocationCount++
     // eslint-disable-next-line @stylistic/max-len
-    process._rawDebug(`[assertSomeTraces] Handler invoked (attempt #${invocationCount}) -- ${performance.now() - startTime}`)
+    console.log(`[assertSomeTraces] Handler invoked (attempt #${invocationCount}) -- ${performance.now() - startTime}`)
 
     try {
-      process._rawDebug(`[assertSomeTraces] Running callback against traces...`)
+      console.log(`[assertSomeTraces] Running callback against traces...`)
       const result = callback(...args)
-      process._rawDebug(`[assertSomeTraces] Callback succeeded! Resolving promise.`)
+      console.log(`[assertSomeTraces] Callback succeeded! Resolving promise.`)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
-      process._rawDebug(`[assertSomeTraces] Callback failed:`, e.message)
+      console.log(`[assertSomeTraces] Callback failed:`, e.message)
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)
@@ -552,9 +552,9 @@ module.exports = {
    */
   assertSomeTraces (callback, options) {
     const startTime = performance.now()
-    process._rawDebug('Entered into assertSomeTraces')
+    console.log('Entered into assertSomeTraces')
     const result = runCallbackAgainstTraces(callback, options, traceHandlers)
-    process._rawDebug('Exited assertSomeTraces', performance.now() - startTime)
+    console.log('Exited assertSomeTraces', performance.now() - startTime)
     return result
   },
 
