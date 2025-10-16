@@ -10,31 +10,7 @@ const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
 const { initApp, startServer } = require('./next.utils')
-
-function findWebSpan (traces) {
-  for (const trace of traces) {
-    for (const span of trace) {
-      if (span.type === 'web') {
-        return span
-      }
-    }
-  }
-  throw new Error('web span not found')
-}
-
-function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
-  if (currentLevel === max) {
-    return {
-      [`s-${currentLevel}`]: `s-${currentLevel}`,
-      [`o-${currentLevel}`]: sheetValue
-    }
-  }
-
-  return {
-    [`s-${currentLevel}`]: `s-${currentLevel}`,
-    [`o-${currentLevel}`]: createDeepObject(sheetValue, currentLevel + 1, max)
-  }
-}
+const { createDeepObject, getWebSpan } = require('./utils')
 
 describe('extended data collection', () => {
   withVersions('next', 'next', '>=11.1', version => {
@@ -87,7 +63,7 @@ describe('extended data collection', () => {
           )
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             assert.strictEqual(span.meta['http.request.headers.custom-request-header-1'], undefined)
             assert.strictEqual(span.meta['http.request.headers.custom-request-header-2'], undefined)
@@ -124,7 +100,7 @@ describe('extended data collection', () => {
           )
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             assert.strictEqual(span.meta['http.request.headers.authorization'], '<redacted>')
             assert.strictEqual(span.meta['http.request.headers.proxy-authorization'], '<redacted>')
@@ -175,7 +151,7 @@ describe('extended data collection', () => {
           )
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             const collectedRequestHeaders = Object.keys(span.meta)
               .filter(metaKey => metaKey.startsWith('http.request.headers.')).length
@@ -208,7 +184,7 @@ describe('extended data collection', () => {
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
             assert.deepEqual(metaStructBody, expectedRequestBody)
@@ -228,7 +204,7 @@ describe('extended data collection', () => {
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
             assert.deepEqual(metaStructBody, expectedRequestBody)
@@ -249,7 +225,7 @@ describe('extended data collection', () => {
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
           await agent.assertSomeTraces((traces) => {
-            const span = findWebSpan(traces)
+            const span = getWebSpan(traces)
 
             const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
             assert.deepEqual(metaStructBody, expectedRequestBody)
