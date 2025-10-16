@@ -159,7 +159,7 @@ jobs:
           ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
 
           docker cp \
-          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json \
           ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
       - name: Restart emulators to pick up config changes
         run : |
