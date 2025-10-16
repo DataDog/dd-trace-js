@@ -102,7 +102,7 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec == 'integration-test/client' && 'integration-test-client' || matrix.spec }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
   azure-event-hubs:
     runs-on: ubuntu-latest
