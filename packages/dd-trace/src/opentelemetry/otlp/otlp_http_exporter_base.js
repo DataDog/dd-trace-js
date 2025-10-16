@@ -68,10 +68,12 @@ class OtlpHttpExporterBase {
    * Records telemetry metrics for exported data.
    * @param {string} metricName - Name of the metric to record
    * @param {number} count - Count to increment
+   * @param {Array<string>} [tags] - Optional custom tags (defaults to this exporter's tags)
    * @protected
    */
-  _recordTelemetry (metricName, count) {
-    tracerMetrics.count(metricName, this.#telemetryTags).inc(count)
+  _recordTelemetry (metricName, count, tags) {
+    const telemetryTags = tags || this.#telemetryTags
+    tracerMetrics.count(metricName, telemetryTags).inc(count)
   }
 
   /**
