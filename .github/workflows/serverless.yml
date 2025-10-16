@@ -130,6 +130,13 @@ jobs:
             BLOB_SERVER: azurite
             METADATA_SERVER: azurite
             ACCEPT_EULA: "Y"
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
         azureservicebusemulator:
           image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
           ports:
@@ -139,29 +146,25 @@ jobs:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
               SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - run: |
+
+      - name: Copy emulator config files
+        run: |
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
           ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
-      - run: |
+
           docker cp \
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
           ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
-      - run : |
-          docker restart ${{ job.services.azureeventhubsemulator.id }} \
-          ${{job.services.azuresqledge}} ${{ job.services.azureservicebusemulator.id }}
+      - name: Restart emulators to pick up config changes
+        run : |
+          docker restart ${{ job.services.azureeventhubsemulator.id }}
+          docker restart ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.1.0
