@@ -74,11 +74,32 @@ jobs:
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
+  integration-mocha:
+    strategy:
+      matrix:
+        version: [oldest, latest]
+        mocha-version: [5.2.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:mocha
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+          MOCHA_VERSION: ${{ matrix.mocha-version }}
+
   integration-ci:
     strategy:
       matrix:
         version: [oldest, latest]
-        framework: [cucumber, selenium, jest, mocha]
+        framework: [cucumber, selenium, jest]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -216,13 +237,3 @@ jobs:
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
-
-  plugin-mocha:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: mocha
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/plugins/test
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}

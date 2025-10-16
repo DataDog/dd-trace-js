@@ -16,6 +16,14 @@ const messaging = {
   producer: {
     amqplib: amqpOutbound,
     amqp10: amqpOutbound,
+    'azure-service-bus': {
+      opName: () => 'azure.servicebus.send',
+      serviceName: identityService
+    },
+    'azure-event-hubs': {
+      opName: () => 'azure.eventhubs.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService

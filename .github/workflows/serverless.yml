@@ -86,7 +86,8 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
+      # TODO: Remove :flaky once flakiness is better
+      - run: yarn test:plugins:ci:flaky
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -98,6 +99,36 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  azure-event-hubs:
+    runs-on: ubuntu-latest
+    services:
+        azurite:
+          image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+          ports:
+            - "127.0.0.1:10000:10000"
+            - "127.0.0.1:10001:10001"
+            - "127.0.0.1:10002:10002"
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          ports:
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
+          env:
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
+            ACCEPT_EULA: "Y"
+    env:
+      PLUGINS: azure-event-hubs
+      SERVICES: azurite,azureeventhubsemulator
+    steps:
+        - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        - uses: ./.github/actions/plugins/test
+        - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+          if: always()
+          with:
+            api_key: ${{ secrets.DD_API_KEY }}
+            service: dd-trace-js-tests
+
   azure-functions:
     runs-on: ubuntu-latest
     services:
@@ -107,6 +138,15 @@ jobs:
               - "127.0.0.1:10000:10000"
               - "127.0.0.1:10001:10001"
               - "127.0.0.1:10002:10002"
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          ports:
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
+          env:
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
+            ACCEPT_EULA: "Y"
         azureservicebusemulator:
           image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
           ports:
@@ -125,10 +165,16 @@ jobs:
               MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
-      SERVICES: azureservicebusemulator,azuresqledge
+      SERVICES: azureservicebusemulator,azuresqledge,azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/node/active-lts
+      - run: |
+          docker cp \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
+          ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
+      - run : |
+          docker restart ${{ job.services.azureeventhubsemulator.id }}
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.1.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
@@ -166,6 +212,11 @@ jobs:
       - uses: ./.github/actions/plugins/test
         with:
           api_key: ${{ secrets.DD_API_KEY }}
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -182,3 +233,8 @@ jobs:
       - uses: ./.github/actions/plugins/test
         with:
           api_key: ${{ secrets.DD_API_KEY }}
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
