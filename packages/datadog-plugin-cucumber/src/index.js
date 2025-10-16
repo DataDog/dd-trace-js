@@ -407,7 +407,7 @@ class CucumberPlugin extends CiPlugin {
     this.addSub('ci:cucumber:is-modified-test', ({
       scenarios,
       testFileAbsolutePath,
-      modifiedTests,
+      modifiedFiles,
       stepIds,
       stepDefinitions,
       setIsModified
@@ -418,7 +418,7 @@ class CucumberPlugin extends CiPlugin {
           testScenarioPath,
           scenario.location.line,
           scenario.steps[scenario.steps.length - 1].location.line,
-          modifiedTests,
+          modifiedFiles,
           'cucumber'
         )
         if (isModified) {
@@ -436,7 +436,7 @@ class CucumberPlugin extends CiPlugin {
           stepDefinition.uri,
           testStartLineStep,
           testEndLineStep,
-          modifiedTests,
+          modifiedFiles,
           'cucumber'
         )
         if (isModified) {
