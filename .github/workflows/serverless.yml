@@ -37,6 +37,7 @@ jobs:
 
   aws-sdk:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
         spec:
