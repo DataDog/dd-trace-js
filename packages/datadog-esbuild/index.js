@@ -294,17 +294,17 @@ ${build.initialOptions.banner.js}`
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
           const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
           contents = `
-import { register } from ${JSON.stringify(iitmPath)}
-import * as namespace from ${JSON.stringify(args.path)}
-// Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
-const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } })
-const set = {}
-const get = {}
+import { register } from ${JSON.stringify(iitmPath)};
+import * as namespace from ${JSON.stringify(args.path)};
+const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
+const set = {};
+const get = {};
 
-${Array.from(setters.values()).join('\n')}
+${Array.from(setters.values()).join(';\n')};
 
-register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)})
+register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
 `
         } else {
           contents = fs.readFileSync(args.path, 'utf8')
