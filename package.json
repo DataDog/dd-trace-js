@@ -184,7 +184,7 @@
     "axios": "^1.12.2",
     "benchmark": "^2.1.4",
     "body-parser": "^2.2.0",
-    "chai": "^4.5.0",
+    "chai": "6.2.0",
     "eslint": "^9.29.0",
     "eslint-plugin-cypress": "^5.1.0",
     "eslint-plugin-import": "^2.32.0",
