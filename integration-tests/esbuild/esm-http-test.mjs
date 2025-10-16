@@ -5,7 +5,7 @@ import http from 'http'
 process.env.DD_TRACE_DEBUG = 'true'
 
 const server = http.createServer((req, res) => {
-  res.end('Egunon!')
+  res.end('Egun on!')
 })
 
 server.listen(0, () => {
