@@ -33,8 +33,9 @@ class Counter extends Instrument {
    *
    * @param {number} value - The value to add (must be non-negative)
    * @param {Attributes} [attributes] - Attributes to associate with this measurement
+   * @param {Context} [context] - Context (currently unused, for API compatibility)
    */
-  add (value, attributes = {}) {
+  add (value, attributes = {}, context) {
     if (!this.reader || value < 0) {
       return
     }
@@ -66,8 +67,9 @@ class UpDownCounter extends Instrument {
    *
    * @param {number} value - The value to add (can be negative)
    * @param {Attributes} [attributes] - Attributes to associate with this measurement
+   * @param {Context} [context] - Context (currently unused, for API compatibility)
    */
-  add (value, attributes = {}) {
+  add (value, attributes = {}, context) {
     if (!this.reader) {
       return
     }
@@ -96,12 +98,14 @@ class UpDownCounter extends Instrument {
 class Histogram extends Instrument {
   /**
    * Records a value in the histogram.
+   * Negative values are ignored per OpenTelemetry specification.
    *
-   * @param {number} value - The value to record
+   * @param {number} value - The value to record (negative values are ignored)
    * @param {Attributes} [attributes] - Attributes to associate with this measurement
+   * @param {Context} [context] - Context (currently unused, for API compatibility)
    */
-  record (value, attributes = {}) {
-    if (!this.reader) {
+  record (value, attributes = {}, context) {
+    if (!this.reader || value < 0) {
       return
     }
 
@@ -110,6 +114,41 @@ class Histogram extends Instrument {
       description: this.description,
       unit: this.unit,
       type: 'histogram',
+      instrumentationScope: this.instrumentationScope,
+      value,
+      attributes: sanitizeAttributes(attributes),
+      timestamp: Number(process.hrtime.bigint())
+    }
+
+    this.reader.record(measurement)
+  }
+}
+
+/**
+ * Gauge is a synchronous instrument that records instantaneous values.
+ * Each call to record() replaces the previous value.
+ *
+ * @class Gauge
+ * @extends Instrument
+ */
+class Gauge extends Instrument {
+  /**
+   * Records an instantaneous gauge value.
+   *
+   * @param {number} value - The value to record
+   * @param {Attributes} [attributes] - Attributes to associate with this measurement
+   * @param {Context} [context] - Context (currently unused, for API compatibility)
+   */
+  record (value, attributes = {}, context) {
+    if (!this.reader) {
+      return
+    }
+
+    const measurement = {
+      name: this.name,
+      description: this.description,
+      unit: this.unit,
+      type: 'gauge',
       instrumentationScope: this.instrumentationScope,
       value,
       attributes: sanitizeAttributes(attributes),
@@ -194,9 +233,128 @@ class ObservableGauge extends Instrument {
   }
 }
 
+/**
+ * ObservableCounter instrument for asynchronous counter observations.
+ * @class ObservableCounter
+ * @extends Instrument
+ */
+class ObservableCounter extends Instrument {
+  #callbacks
+
+  constructor (name, options, instrumentationScope, reader) {
+    super(name, options, instrumentationScope, reader)
+    this.#callbacks = []
+  }
+
+  addCallback (callback) {
+    if (typeof callback === 'function') {
+      this.#callbacks.push(callback)
+      if (this.reader) {
+        this.reader.registerObservableInstrument(this)
+      }
+    }
+  }
+
+  removeCallback (callback) {
+    const index = this.#callbacks.indexOf(callback)
+    if (index !== -1) {
+      this.#callbacks.splice(index, 1)
+    }
+  }
+
+  collect () {
+    const observations = []
+    const observableResult = {
+      observe: (value, attributes = {}) => {
+        observations.push({
+          name: this.name,
+          description: this.description,
+          unit: this.unit,
+          type: 'observable-counter',
+          instrumentationScope: this.instrumentationScope,
+          value,
+          attributes: sanitizeAttributes(attributes),
+          timestamp: Number(process.hrtime.bigint())
+        })
+      }
+    }
+
+    for (const callback of this.#callbacks) {
+      try {
+        callback(observableResult)
+      } catch {
+        // Silently ignore callback errors to prevent disruption
+      }
+    }
+
+    return observations
+  }
+}
+
+/**
+ * ObservableUpDownCounter instrument for asynchronous updowncounter observations.
+ * @class ObservableUpDownCounter
+ * @extends Instrument
+ */
+class ObservableUpDownCounter extends Instrument {
+  #callbacks
+
+  constructor (name, options, instrumentationScope, reader) {
+    super(name, options, instrumentationScope, reader)
+    this.#callbacks = []
+  }
+
+  addCallback (callback) {
+    if (typeof callback === 'function') {
+      this.#callbacks.push(callback)
+      if (this.reader) {
+        this.reader.registerObservableInstrument(this)
+      }
+    }
+  }
+
+  removeCallback (callback) {
+    const index = this.#callbacks.indexOf(callback)
+    if (index !== -1) {
+      this.#callbacks.splice(index, 1)
+    }
+  }
+
+  collect () {
+    const observations = []
+    const observableResult = {
+      observe: (value, attributes = {}) => {
+        observations.push({
+          name: this.name,
+          description: this.description,
+          unit: this.unit,
+          type: 'observable-updowncounter',
+          instrumentationScope: this.instrumentationScope,
+          value,
+          attributes: sanitizeAttributes(attributes),
+          timestamp: Number(process.hrtime.bigint())
+        })
+      }
+    }
+
+    for (const callback of this.#callbacks) {
+      try {
+        callback(observableResult)
+      } catch {
+        // Silently ignore callback errors to prevent disruption
+      }
+    }
+
+    return observations
+  }
+}
+
 module.exports = {
   Counter,
   UpDownCounter,
   Histogram,
-  ObservableGauge
+  Gauge,
+  ObservableGauge,
+  ObservableCounter,
+  ObservableUpDownCounter
 }

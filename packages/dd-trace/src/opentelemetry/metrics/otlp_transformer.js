@@ -6,6 +6,7 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 // Get the aggregation temporality enum
 const { protoAggregationTemporality } = getProtobufTypes()
 const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
+const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_CUMULATIVE
 
 /**
  * OtlpTransformer transforms metrics to OTLP format.
@@ -86,15 +87,25 @@ class OtlpTransformer extends OtlpTransformerBase {
     const groupedMetrics = this._groupByInstrumentationScope(metrics)
     const scopeMetrics = []
 
-    for (const [key, metricsInScope] of groupedMetrics) {
-      const [name, version, schemaUrl] = key.split('@')
+    for (const [, metricsInScope] of groupedMetrics) {
+      // Get the first metric to extract the instrumentation scope details
+      const firstMetric = metricsInScope[0]
+      const instrumentationScope = firstMetric.instrumentationScope || {}
+      const { name = '', version = '', schemaUrl = '', attributes = {} } = instrumentationScope
+
+      const scope = {
+        name,
+        version,
+        droppedAttributesCount: 0
+      }
+
+      // Add attributes if present
+      if (attributes && Object.keys(attributes).length > 0) {
+        scope.attributes = isJson ? this._attributesToJson(attributes) : this._transformAttributes(attributes)
+      }
 
       scopeMetrics.push({
-        scope: {
-          name,
-          version,
-          droppedAttributesCount: 0
-        },
+        scope,
         schemaUrl,
         metrics: metricsInScope.map(metric =>
           isJson ? this.#transformMetricToJson(metric) : this.#transformMetric(metric)
@@ -116,6 +127,11 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
+    // Determine aggregation temporality
+    const temporality = metric.temporality === 'CUMULATIVE'
+      ? AGGREGATION_TEMPORALITY_CUMULATIVE
+      : AGGREGATION_TEMPORALITY_DELTA
+
     if (metric.type === 'histogram') {
       result.histogram = {
         dataPoints: metric.data.map(dp => ({
@@ -131,18 +147,18 @@ class OtlpTransformer extends OtlpTransformerBase {
           min: dp.min,
           max: dp.max
         })),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA
+        aggregationTemporality: temporality
       }
-    } else if (metric.type === 'counter') {
+    } else if (metric.type === 'counter' || metric.type === 'observable-counter') {
       result.sum = {
         dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
+        aggregationTemporality: temporality,
         isMonotonic: true
       }
-    } else if (metric.type === 'updowncounter') {
+    } else if (metric.type === 'updowncounter' || metric.type === 'observable-updowncounter') {
       result.sum = {
         dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
+        aggregationTemporality: temporality,
         isMonotonic: false
       }
     } else if (metric.type === 'gauge') {
@@ -165,6 +181,11 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
+    // Determine aggregation temporality for JSON
+    const temporalityStr = metric.temporality === 'CUMULATIVE'
+      ? 'AGGREGATION_TEMPORALITY_CUMULATIVE'
+      : 'AGGREGATION_TEMPORALITY_DELTA'
+
     if (metric.type === 'histogram') {
       result.histogram = {
         dataPoints: metric.data.map(dp => ({
@@ -178,18 +199,18 @@ class OtlpTransformer extends OtlpTransformerBase {
           min: dp.min,
           max: dp.max
         })),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA'
+        aggregationTemporality: temporalityStr
       }
-    } else if (metric.type === 'counter') {
+    } else if (metric.type === 'counter' || metric.type === 'observable-counter') {
       result.sum = {
         dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA',
+        aggregationTemporality: temporalityStr,
         isMonotonic: true
       }
-    } else if (metric.type === 'updowncounter') {
+    } else if (metric.type === 'updowncounter' || metric.type === 'observable-updowncounter') {
       result.sum = {
         dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA',
+        aggregationTemporality: temporalityStr,
         isMonotonic: false
       }
     } else if (metric.type === 'gauge') {
