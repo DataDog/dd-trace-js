@@ -6,25 +6,21 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
-  workflow_call:
+  workflow_dispatch:
     inputs:
       runNightly:
         description: 'Whether to run nightly tests'
         required: false
         default: 'false'
         type: string
-      workflowName:
-        description: 'Workflow Name accessible from inputs'
-        required: false
-        default: 'NightlyCall'
-        type: string
 
-concurrency:
-  group: ${{ inputs.runNightly == 'true' && inputs.workflowName || github.workflow }}-${{ github.ref || github.run_id }}"
-  cancel-in-progress: ${{ inputs.runNightly != 'true' }}
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-  RUN_NIGHTLY: true
+  RUN_NIGHTLY: ${{ inputs.runNightly }}
+
+concurrency:
+  group: ${{ inputs.runNightly == 'true' && format('{0}-{1}', github.workflow, '-nightly') || github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: true
 
 # TODO: upstream jobs
 

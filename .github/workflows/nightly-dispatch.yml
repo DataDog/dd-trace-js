@@ -29,37 +29,54 @@ on:
         default: true
         type: boolean
 
+permissions:
+  actions: write
+  contents: read
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
 jobs:
   apm-integrations:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger apm-integrations workflow
         if: ${{ inputs.runApmIntegrations }}
-        run: gh workflow run apm-integrations.yml --ref ${{ github.ref }} -f runNightly=true
+        run: gh workflow run apm-integrations.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   apm-capabilities:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger apm-capabilities workflow
         if: ${{ inputs.runApmCapabilities }}
-        run: gh workflow run apm-capabilities.yml --ref ${{ github.ref }} -f runNightly=true
+        run: gh workflow run apm-capabilities.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+        env:
+          GH_TOKEN: ${{ github.token }}
   llmobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger llmobs workflow
         if: ${{ inputs.runLlmobs }}
-        run: gh workflow run llmobs.yml --ref ${{ github.ref }} -f runNightly=true
+        run: gh workflow run llmobs.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   platform:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger platform workflow
         if: ${{ inputs.runPlatform }}
-        run: gh workflow run platform.yml --ref ${{ github.ref }} -f runNightly=true
+        run: gh workflow run platform.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   serverless:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger serverless workflow
         if: ${{ inputs.runServerless }}
-        run: gh workflow run serverless.yml --ref ${{ github.ref }} -f runNightly=true
+        run: gh workflow run serverless.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+        env:
+          GH_TOKEN: ${{ github.token }}

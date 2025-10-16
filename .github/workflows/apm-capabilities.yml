@@ -14,12 +14,13 @@ on:
         default: 'false'
         type: string
 
-concurrency:
-  group: github.workflow-${{ github.ref || github.run_id }}"
-  cancel-in-progress: true
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   RUN_NIGHTLY: ${{ inputs.runNightly }}
+
+concurrency:
+  group: ${{ inputs.runNightly == 'true' && format('{0}-{1}', github.workflow, '-nightly') || github.workflow }}-${{ github.ref || github.run_id }}"
+  cancel-in-progress: true
 
 jobs:
   tracing-macos:
