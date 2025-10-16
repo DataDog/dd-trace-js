@@ -39,6 +39,20 @@ jobs:
     strategy:
       matrix:
         node-version: [oldest, latest]
+        spec:
+          - integration-test/client
+          - aws-sdk
+          - bedrockruntime
+          - dynamodb
+          - eventbridge
+          - kinesis
+          - lambda
+          - s3
+          - serverless-peer-service
+          - sns
+          - sqs
+          - stepfunctions
+          - util
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -72,6 +86,7 @@ jobs:
           EDGE_PORT_HTTP: 4567
     env:
       PLUGINS: aws-sdk
+      SPEC: ${{ matrix.spec }}
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
