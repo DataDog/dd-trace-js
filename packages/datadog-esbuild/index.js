@@ -47,6 +47,12 @@ for (const builtin of RAW_BUILTINS) {
 const DEBUG = !!process.env.DD_TRACE_DEBUG
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
+// Modules that should always be excluded from esbuild
+// These are typically peer dependencies of dd-trace optionally installed by the customer
+const EXCLUDED_MODULES = new Set([
+  '@openfeature/core'
+])
+
 // We don't want to handle any built-in packages
 // Those packages will still be handled via RITM
 // Attempting to instrument them would fail as they have no package.json file
@@ -153,6 +159,12 @@ ${build.initialOptions.banner.js}`
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
+      return
+    }
+
+    if (EXCLUDED_MODULES.has(args.path)) {
+      // Excluded modules should not be processed by the plugin
+      if (DEBUG) console.log(`EXCLUDED: ${args.path}`)
       return
     }
 
