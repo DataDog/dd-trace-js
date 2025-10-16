@@ -148,7 +148,7 @@ jobs:
               MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
-      SERVICES: azureservicebusemulator,azuresqledge,azurite,azureeventhubsemulator
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - run: |
@@ -160,7 +160,8 @@ jobs:
           ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
           ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
       - run : |
-          docker restart ${{ job.services.azureeventhubsemulator.id }} ${{ job.services.azureservicebusemulator.id }}
+          docker restart ${{ job.services.azureeventhubsemulator.id }} \
+          ${{job.services.azuresqledge}} ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.1.0
