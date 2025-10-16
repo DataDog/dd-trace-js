@@ -32,7 +32,7 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
-const impactedTestsCh = channel('ci:vitest:modified-tests')
+const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
@@ -92,7 +92,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      _ddModifiedTests: modifiedTests
+      _ddModifiedFiles: modifiedFiles
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -106,7 +106,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -121,7 +121,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       isImpactedTestsEnabled: false,
-      modifiedTests: {}
+      modifiedFiles: {}
     }
   }
 }
@@ -316,14 +316,14 @@ function getSortWrapper (sort, frameworkVersion) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
       if (err) {
         log.error('Could not get modified tests.')
       } else {
         try {
           const workspaceProject = this.ctx.getCoreWorkspaceProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
-          workspaceProject._provided._ddModifiedTests = modifiedTests
+          workspaceProject._provided._ddModifiedFiles = modifiedFiles
         } catch {
           log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
         }
@@ -464,7 +464,7 @@ addHook({
       testManagementAttemptToFixRetries,
       testManagementTests,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -499,7 +499,7 @@ addHook({
 
     if (isImpactedTestsEnabled) {
       isModifiedCh.publish({
-        modifiedTests,
+        modifiedFiles,
         testSuiteAbsolutePath: task.file.filepath,
         onDone: (isImpacted) => {
           if (isImpacted) {

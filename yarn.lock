@@ -254,10 +254,10 @@
     "@datadog/flagging-core" "0.1.0-preview.10"
     "@openfeature/server-sdk" "~1.18.0"
 
-"@datadog/pprof@5.10.0":
-  version "5.10.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.10.0.tgz#47e9589c6d9c423470e312e00def06e249672571"
-  integrity sha512-tEMhLeOM78FHC/rTltDd7pQN8WPAUZ1b0BPadYsKWqo/v6jWTbF6xeIMojdJa5yIW2vHjDU4LFJpkFFNacHpQw==
+"@datadog/pprof@5.11.1":
+  version "5.11.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.11.1.tgz#3eea3fb815b2d06111954d66dfaf6197fd874576"
+  integrity sha512-DX3F0v0BVOuP7RUBiu7bDhuGfFfICJRcElB+ZrEykMvkvBXe7FdVXoybYFviLH177hulwYTtW9Rcly7NXGarTw==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
@@ -2624,9 +2624,9 @@ import-fresh@^3.2.1:
     resolve-from "^4.0.0"
 
 import-in-the-middle@^1.14.2:
-  version "1.14.4"
-  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-1.14.4.tgz#5350cf8eba46e3b51cd3e507f5fe36a8faeb3684"
-  integrity sha512-eWjxh735SJLFJJDs5X82JQ2405OdJeAHDBnaoFCfdr5GVc7AWc9xU7KbrF+3Xd5F2ccP1aQFKtY+65X6EfKZ7A==
+  version "1.15.0"
+  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-1.15.0.tgz#9e20827a322bbadaeb5e3bac49ea8f6d4685fdd8"
+  integrity sha512-bpQy+CrsRmYmoPMAE/0G33iwRqwW4ouqdRg8jgbH3aKuCtOc8lxgmYXg2dMM92CRiGP660EtBcymH/eVUpCSaA==
   dependencies:
     acorn "^8.14.0"
     acorn-import-attributes "^1.9.5"
