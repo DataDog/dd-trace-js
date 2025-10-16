@@ -33,23 +33,33 @@ jobs:
   apm-integrations:
     runs-on: ubuntu-latest
     steps:
-      - run: gh workflow run apm-integrations.yml -f runNightly=true
+      - name: Trigger apm-integrations workflow
+        if: ${{ inputs.runApmIntegrations }}
+        run: gh workflow run apm-integrations.yml --ref ${{ github.ref }} -f runNightly=true
 
   apm-capabilities:
     runs-on: ubuntu-latest
     steps:
-      - run: gh workflow run apm-capabilities.yml -f runNightly=true
+      - name: Trigger apm-capabilities workflow
+        if: ${{ inputs.runApmCapabilities }}
+        run: gh workflow run apm-capabilities.yml --ref ${{ github.ref }} -f runNightly=true
   llmobs:
     runs-on: ubuntu-latest
     steps:
-      - run: gh workflow run llmobs.yml -f runNightly=true
+      - name: Trigger llmobs workflow
+        if: ${{ inputs.runLlmobs }}
+        run: gh workflow run llmobs.yml --ref ${{ github.ref }} -f runNightly=true
 
   platform:
     runs-on: ubuntu-latest
     steps:
-      - run: gh workflow run platform.yml -f runNightly=true
+      - name: Trigger platform workflow
+        if: ${{ inputs.runPlatform }}
+        run: gh workflow run platform.yml --ref ${{ github.ref }} -f runNightly=true
 
   serverless:
     runs-on: ubuntu-latest
     steps:
-      - run: gh workflow run serverless.yml -f runNightly=true
+      - name: Trigger serverless workflow
+        if: ${{ inputs.runServerless }}
+        run: gh workflow run serverless.yml --ref ${{ github.ref }} -f runNightly=true
