@@ -31,36 +31,25 @@ on:
 
 jobs:
   apm-integrations:
-    if: inputs.runApmIntegrations
-    uses: ./.github/workflows/apm-integrations.yml
-    with:
-      runNightly: ${{ 'true' }}
-      workflowName: apm-integrations
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run apm-integrations.yml -f runNightly=true
 
   apm-capabilities:
-    if: inputs.runApmCapabilities
-    uses: ./.github/workflows/apm-capabilities.yml
-    with:
-      runNightly: ${{ 'true' }}
-      workflowName: apm-capabilities
-
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run apm-capabilities.yml -f runNightly=true
   llmobs:
-    if: inputs.runLlmobs
-    uses: ./.github/workflows/llmobs.yml
-    with:
-      runNightly: ${{ 'true' }}
-      workflowName: llmobs
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run llmobs.yml -f runNightly=true
 
   platform:
-    if: inputs.runPlatform
-    uses: ./.github/workflows/platform.yml
-    with:
-      runNightly: ${{ 'true' }}
-      workflowName: platform
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run platform.yml -f runNightly=true
 
   serverless:
-    if: inputs.runServerless
-    uses: ./.github/workflows/serverless.yml
-    with:
-      runNightly: ${{ 'true' }}
-      workflowName: serverless
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run serverless.yml -f runNightly=true
