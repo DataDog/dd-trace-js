@@ -14,7 +14,7 @@
   "author": "Carles Capell <carles.capell@datadoghq.com>",
   "license": "ISC",
   "dependencies": {
-    "esbuild": "^0.25.9",
+    "esbuild": "0.25.11",
     "express": "^4.21.2"
   }
 }
