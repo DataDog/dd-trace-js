@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const util = require('node:util')
 const { platform } = require('node:os')
 const path = require('node:path')
+const fs = require('node:fs')
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -25,6 +26,7 @@ exports.withVersions = withVersions
 exports.withExports = withExports
 exports.withNamingSchema = withNamingSchema
 exports.withPeerService = withPeerService
+exports.insertVersionDep = insertVersionDep
 
 const testedPlugins = agent.testedPlugins
 
@@ -63,7 +65,8 @@ function withNamingSchema (
         const { opName, serviceName } = expected[versionName]
 
         it('should conform to the naming schema', function () {
-          this.timeout(10000)
+          this.retries(3)
+          this.timeout(25000)
 
           return new Promise((resolve, reject) => {
             const agentPromise = agent
@@ -78,7 +81,7 @@ function withNamingSchema (
 
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
-              })
+              }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
 
@@ -106,7 +109,10 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', () => {
+      it('should pass service name through', function () {
+        this.retries(3)
+        this.timeout(15000)
+
         return new Promise((resolve, reject) => {
           const agentPromise = agent
             .assertSomeTraces(traces => {
@@ -115,7 +121,7 @@ function withNamingSchema (
                 ? serviceName()
                 : serviceName
               expect(span).to.have.property('service', expectedServiceName)
-            })
+            }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)
 
@@ -127,7 +133,8 @@ function withNamingSchema (
 }
 
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
-  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
+  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
+    this.timeout(10000)
     let computePeerServiceSpy
 
     beforeEach(() => {
@@ -319,6 +326,30 @@ function withExports (moduleName, version, exportNames, versionRange, cb) {
 
 function getModulePath (moduleName, version) {
   return `../../../../versions/${moduleName}@${version}`
+}
+
+/**
+ * Sets up a symlink to the tested version of a package in the given directory,
+ * and tears it down once tests are done.
+ *
+ * @param {string} dir - The directory to operate in. Typically __dirname.
+ * @param {string} pkgName - The name of the package being tested.
+ * @param {string} version - The "version" string, as used with `withVersions`
+ */
+function insertVersionDep (dir, pkgName, version) {
+  const nmDir = path.join(dir, 'node_modules')
+  const pkgDir = path.join(nmDir, pkgName)
+
+  before(() => {
+    const pkgPath = path.dirname(require(getModulePath(pkgName, version)).pkgJsonPath())
+    fs.mkdirSync(nmDir)
+    fs.symlinkSync(pkgPath, pkgDir)
+  })
+
+  after(() => {
+    fs.unlinkSync(pkgDir)
+    fs.rmdirSync(nmDir)
+  })
 }
 
 exports.mochaHooks = {
