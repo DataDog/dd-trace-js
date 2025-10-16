@@ -1,0 +1,256 @@
+category: messaging
+description: Operations and tags for messaging systems (queues, pub/sub, event buses)
+
+roles:
+  producer:
+    required_operations:
+      - produce
+    optional_operations:
+      - connect
+      - disconnect
+      - produce_bulk
+
+  consumer:
+    required_operations:
+      - consume
+      - process
+    optional_operations:
+      - connect
+      - disconnect
+      - acknowledge
+      - reject
+
+operations:
+  connect:
+    description: Establish connection to message broker
+    span_operation: messaging.connect
+    span_kind: client
+    test_action:
+      name: connect
+      args:
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - span.kind
+    optional_tags:
+      - out.host
+      - out.port
+
+  produce:
+    description: Send/produce a message to queue/topic
+    span_operation: messaging.produce
+    span_kind: producer
+    test_action:
+      name: produce
+      args:
+        destination:
+          type: string
+          description: Queue, topic, or channel name
+          required: false
+        message:
+          anyOf:
+            - type: object
+            - type: string
+          description: Message payload to send
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.destination.name
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.message.id
+      - messaging.message.payload_size_bytes
+
+  produce_bulk:
+    description: Send multiple messages in bulk/batch
+    span_operation: messaging.produce
+    span_kind: producer
+    test_action:
+      name: produce_bulk
+      args:
+        messages:
+          type: array
+          description: Array of message payloads
+          required: true
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.destination.name
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.batch_message_count
+
+  consume:
+    description: Receive/fetch a message from queue/topic
+    span_operation: messaging.consume
+    span_kind: consumer
+    test_action:
+      name: consume
+      args:
+        destination:
+          type: string
+          description: Queue, topic, or channel name
+          required: false
+        message_id:
+          type: string
+          description: Optional message ID to fetch specific message
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.destination.name
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.message.id
+
+  process:
+    description: Process a message via registered handler/worker
+    span_operation: messaging.process
+    span_kind: consumer
+    test_action:
+      name: process
+      args:
+        destination:
+          type: string
+          description: Queue, topic, or channel name
+          required: false
+        trigger_message:
+          type: object
+          description: Message to produce that will trigger the handler
+          required: false
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.destination.name
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.message.id
+
+  acknowledge:
+    description: Acknowledge successful message processing
+    span_operation: messaging.acknowledge
+    span_kind: consumer
+    test_action:
+      name: acknowledge
+      args:
+        message:
+          type: object
+          description: Message object to acknowledge
+          required: true
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.message.id
+
+  reject:
+    description: Reject/nack a message (failed processing)
+    span_operation: messaging.reject
+    span_kind: consumer
+    test_action:
+      name: reject
+      args:
+        message:
+          type: object
+          description: Message object to reject
+          required: true
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - messaging.operation
+      - span.kind
+    optional_tags:
+      - messaging.message.id
+
+  disconnect:
+    description: Close connection to message broker
+    span_operation: messaging.disconnect
+    span_kind: client
+    test_action:
+      name: disconnect
+      args:
+        expectError:
+          type: boolean
+          description: Whether to intentionally trigger an error
+          required: false
+          default: false
+    required_tags:
+      - messaging.system
+      - span.kind
+    optional_tags: []
+
+tag_definitions:
+  messaging.system:
+    type: string
+    description: Messaging system identifier (e.g., 'kafka', 'rabbitmq', 'sqs', 'bee-queue')
+
+  messaging.destination.name:
+    type: string
+    description: Queue, topic, or channel name
+
+  messaging.operation:
+    type: string
+    description: Operation type (e.g., 'produce', 'consume', 'process')
+
+  messaging.message.id:
+    type: string
+    description: Unique message identifier
+
+  messaging.message.payload_size_bytes:
+    type: number
+    description: Message payload size in bytes
+
+  messaging.batch_message_count:
+    type: number
+    description: Number of messages in a batch operation
+
+  span.kind:
+    type: string
+    enum:
+      - producer
+      - consumer
+      - client
+    description: Span kind indicating role in messaging pattern
+
+  out.host:
+    type: string
+    description: Outbound connection host
+
+  out.port:
+    type: string
+    description: Outbound connection port
