@@ -25,6 +25,7 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
@@ -42,7 +43,6 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
@@ -241,6 +241,26 @@ class Config {
     this.heartbeatInterval = options.heartbeatInterval || 60 * 1000 // 1 minute
 
     this.profilers = ensureProfilers(profilers, this)
+  }
+
+  get systemInfoReport () {
+    const report = {
+      asyncContextFrameEnabled: this.asyncContextFrameEnabled,
+      codeHotspotsEnabled: this.codeHotspotsEnabled,
+      cpuProfilingEnabled: this.cpuProfilingEnabled,
+      debugSourceMaps: this.debugSourceMaps,
+      endpointCollectionEnabled: this.endpointCollectionEnabled,
+      heapSamplingInterval: this.heapSamplingInterval,
+      oomMonitoring: { ...this.oomMonitoring },
+      profilerTypes: this.profilers.map(p => p.type),
+      sourceMap: this.sourceMap,
+      timelineEnabled: this.timelineEnabled,
+      timelineSamplingEnabled: this.timelineSamplingEnabled,
+      uploadCompression: { ...this.uploadCompression },
+      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled
+    }
+    delete report.oomMonitoring.exportCommand
+    return report
   }
 }
 
