@@ -34,7 +34,9 @@ function withBun (env = process.env) {
 
   if (hasCompatibleBun()) return env
 
-  execSync(`curl -fsSL https://bun.com/install | BUN_INSTALL="${BUN_INSTALL}" bash -s "bun-v${BUN_VERSION}"`)
+  execSync(`curl -fsSL https://bun.com/install | bash -s "bun-v${BUN_VERSION}"`, {
+    env: { BUN_INSTALL }
+  })
 
   hasCompatibleBun = () => true
 
