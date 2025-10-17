@@ -478,6 +478,18 @@ describe('Plugin', () => {
             })
           })
 
+          it('regression test: should handle basic.get when queue is empty', done => {
+            channel.assertQueue(queue, {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.get(ok.queue, {}, (err, msg) => {
+                if (err) return done(err)
+                expect(msg).to.equal(false)
+                done()
+              })
+            })
+          })
+
           it('Should set pathway hash tag on a span when producing', (done) => {
             channel.assertQueue(queue, {}, (err, ok) => {
               if (err) return done(err)
