@@ -221,7 +221,7 @@ function execHelper (command, options) {
     console.log('Exec SUCCESS: ', command)
   } catch (error) {
     console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('yarn')) {
+    if (command.startsWith('bun')) {
       try {
         console.log('Exec RETRY START: ', command)
         execSync(command, options)
