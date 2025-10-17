@@ -2693,7 +2693,8 @@ declare namespace tracer {
       addLinks(links: otel.Link[]): this;
 
       /**
-       * Compute the span sampling priority.
+       * Triggers the span sampling decision
+       * @returns {void}
        */
       sample(): void;
     }
