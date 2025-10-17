@@ -10,11 +10,9 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
   static operation = 'consume'
 
   bindStart (ctx) {
-    const { method, fields, message, queue } = ctx
+    const { method, fields = {}, message, queue } = ctx
 
     if (method !== 'basic.deliver' && method !== 'basic.get') return
-
-    if (!fields || !message) return
 
     const childOf = extract(this.tracer, message)
 
