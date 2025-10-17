@@ -12,59 +12,60 @@ const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
   before(() => {
-    return agent.load(['express', 'http'], { client: false })
+    return agent.load(['fastify', 'http'], { client: false })
   })
 
   after(() => {
     return agent.close({ ritmReset: false })
   })
 
-  withVersions('express', 'express', expressVersion => {
-    let port, server
+  withVersions('fastify', 'fastify', '>=2', fastifyVersion => {
+    let port, app
 
     before((done) => {
-      const express = require(`../../../../versions/express@${expressVersion}`).get()
-      const bodyParser = require('../../../../versions/body-parser').get()
+      const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = express()
-      app.use(bodyParser.json())
+      app = fastify()
 
-      app.post('/', (req, res) => {
-        res.setHeader('custom-response-header-1', 'custom-response-header-value-1')
-        res.setHeader('custom-response-header-2', 'custom-response-header-value-2')
-        res.setHeader('custom-response-header-3', 'custom-response-header-value-3')
-        res.setHeader('custom-response-header-4', 'custom-response-header-value-4')
-        res.setHeader('custom-response-header-5', 'custom-response-header-value-5')
-        res.setHeader('custom-response-header-6', 'custom-response-header-value-6')
-        res.setHeader('custom-response-header-7', 'custom-response-header-value-7')
-        res.setHeader('custom-response-header-8', 'custom-response-header-value-8')
-        res.setHeader('custom-response-header-9', 'custom-response-header-value-9')
-        res.setHeader('custom-response-header-10', 'custom-response-header-value-10')
+      app.post('/', (request, reply) => {
+        reply.header('custom-response-header-1', 'custom-response-header-value-1')
+        reply.header('custom-response-header-2', 'custom-response-header-value-2')
+        reply.header('custom-response-header-3', 'custom-response-header-value-3')
+        reply.header('custom-response-header-4', 'custom-response-header-value-4')
+        reply.header('custom-response-header-5', 'custom-response-header-value-5')
+        reply.header('custom-response-header-6', 'custom-response-header-value-6')
+        reply.header('custom-response-header-7', 'custom-response-header-value-7')
+        reply.header('custom-response-header-8', 'custom-response-header-value-8')
+        reply.header('custom-response-header-9', 'custom-response-header-value-9')
+        reply.header('custom-response-header-10', 'custom-response-header-value-10')
 
-        res.end('DONE')
+        reply.send('DONE')
       })
 
-      app.post('/redacted-headers', (req, res) => {
-        res.setHeader('authorization', 'header-value-1')
-        res.setHeader('proxy-authorization', 'header-value-2')
-        res.setHeader('www-authenticate', 'header-value-4')
-        res.setHeader('proxy-authenticate', 'header-value-5')
-        res.setHeader('authentication-info', 'header-value-6')
-        res.setHeader('proxy-authentication-info', 'header-value-7')
-        res.setHeader('cookie', 'header-value-8')
-        res.setHeader('set-cookie', 'header-value-9')
+      app.post('/redacted-headers', (request, reply) => {
+        reply.header('authorization', 'header-value-1')
+        reply.header('proxy-authorization', 'header-value-2')
+        reply.header('www-authenticate', 'header-value-4')
+        reply.header('proxy-authenticate', 'header-value-5')
+        reply.header('authentication-info', 'header-value-6')
+        reply.header('proxy-authentication-info', 'header-value-7')
+        reply.header('cookie', 'header-value-8')
+        reply.header('set-cookie', 'header-value-9')
 
-        res.end('DONE')
+        reply.send('DONE')
       })
 
-      server = app.listen(port, () => {
-        port = server.address().port
+      app.listen(port, (err, address) => {
+        if (err) {
+          throw err
+        }
+        port = app.server.address().port
         done()
       })
     })
 
     after(() => {
-      server.close()
+      app.close()
     })
 
     beforeEach(() => {
