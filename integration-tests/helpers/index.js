@@ -271,15 +271,18 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDeps = [`file:${out}`].concat(cappedDependencies).join(' ')
+  const deps = [`file:${out}`].concat(cappedDependencies).join(' ')
 
   await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `bun add --linker=hoisted --trust ${allDeps} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
   execHelper(`bun pm pack --silent --destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  execHelper(addCommand, addOptions)
+  if (deps) {
+    execHelper(`bun add ${deps} --linker=hoisted --trust --ignore-engines${preferOfflineFlag}`, addOptions)
+  }
+
+  execHelper(`bun add file:${out} --linker=hoisted --ignore-engines${preferOfflineFlag}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
