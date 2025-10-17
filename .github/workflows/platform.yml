@@ -17,6 +17,16 @@ env:
 # TODO: upstream jobs
 
 jobs:
+  bun-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/active-lts
+      - run: mkdir -p npm bun
+      - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
+      - run: bun pm pack --filename bun.tgz && tar -zxf bun.tgz -C bun
+      - run: diff npm bun
+
   core:
     runs-on: ubuntu-latest
     steps:
