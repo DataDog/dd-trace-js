@@ -46,7 +46,7 @@ const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
 const knownTestsCh = channel('ci:jest:known-tests')
 const testManagementTestsCh = channel('ci:jest:test-management-tests')
-const impactedTestsCh = channel('ci:jest:modified-tests')
+const modifiedFilesCh = channel('ci:jest:modified-files')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -78,7 +78,7 @@ let isTestManagementTestsEnabled = false
 let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
-let modifiedTests = {}
+let modifiedFiles = {}
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -89,6 +89,7 @@ const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
+const testSuiteAbsolutePathsWithFastCheck = new Set()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 
@@ -197,10 +198,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isImpactedTestsEnabled) {
         try {
-          const hasImpactedTests = Object.keys(modifiedTests).length > 0
-          this.modifiedTestsForThisSuite = hasImpactedTests
-            ? this.getModifiedTestForThisSuite(modifiedTests)
-            : this.getModifiedTestForThisSuite(this.testEnvironmentOptions._ddModifiedTests)
+          const hasImpactedTests = Object.keys(modifiedFiles).length > 0
+          this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)
           this.isImpactedTestsEnabled = false
@@ -290,19 +289,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return result
     }
 
-    getModifiedTestForThisSuite (modifiedTests) {
-      if (this.modifiedTestsForThisSuite) {
-        return this.modifiedTestsForThisSuite
-      }
-      let modifiedTestsForThisSuite = modifiedTests
-      // If jest is using workers, modified tests are serialized to json.
-      // If jest runs in band, they are not.
-      if (typeof modifiedTestsForThisSuite === 'string') {
-        modifiedTestsForThisSuite = JSON.parse(modifiedTestsForThisSuite)
-      }
-      return modifiedTestsForThisSuite
-    }
-
     // Generic function to handle test retries
     retryTest ({
       jestEvent,
@@ -319,9 +305,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    getShouldStripSeedFromTestName () {
+      return testSuiteAbsolutePathsWithFastCheck.has(this.testSuiteAbsolutePath)
+    }
+
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
-      const describeSuffix = getJestTestName(state.currentDescribeBlock)
+      const describeSuffix = getJestTestName(state.currentDescribeBlock, this.getShouldStripSeedFromTestName())
       return describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
     }
 
@@ -344,7 +334,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'test_start') {
-        const testName = getJestTestName(event.test)
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're trying tests with the same name
           this.resetSnapshotState()
@@ -378,7 +368,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite,
+            this.modifiedFiles,
             'jest'
           )
         }
@@ -465,7 +455,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.testSourceFile,
             testStartLine,
             testEndLine,
-            this.modifiedTestsForThisSuite,
+            this.modifiedFiles,
             'jest'
           )
           if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
@@ -506,7 +496,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let failedAllTests = false
         let isAttemptToFix = false
         if (this.isTestManagementTestsEnabled) {
-          const testName = getJestTestName(event.test)
+          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
             if (attemptToFixRetriedTestsStatuses.has(testName)) {
@@ -534,7 +524,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
-          const testName = getJestTestName(event.test)
+          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
@@ -594,16 +584,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         testSkippedCh.publish({
           test: {
-            name: getJestTestName(event.test),
+            name: testName,
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           },
-          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(getJestTestName(event.test))
+          isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testName)
         })
       }
     }
@@ -831,12 +822,12 @@ function getCliWrapper (isNewJestVersion) {
           onDone = resolve
         })
 
-        impactedTestsCh.publish({ onDone })
+        modifiedFilesCh.publish({ onDone })
 
         try {
-          const { err, modifiedTests: receivedModifiedTests } = await impactedTestsPromise
+          const { err, modifiedFiles: receivedModifiedFiles } = await impactedTestsPromise
           if (!err) {
-            modifiedTests = receivedModifiedTests
+            modifiedFiles = receivedModifiedFiles
           }
         } catch (err) {
           log.error('Jest impacted tests error', err)
@@ -1237,7 +1228,7 @@ addHook({
       _ddIsTestManagementTestsEnabled,
       _ddTestManagementTests,
       _ddTestManagementAttemptToFixRetries,
-      _ddModifiedTests,
+      _ddModifiedFiles,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
@@ -1315,6 +1306,10 @@ addHook({
       // To bypass jest's own require engine
       return this._requireCoreModule(moduleName)
     }
+    // This means that `@fast-check/jest` is used in the test file.
+    if (moduleName === '@fast-check/jest') {
+      testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
+    }
     return requireModuleOrMock.apply(this, arguments)
   })
 
@@ -1365,17 +1360,15 @@ function sendWrapper (send) {
 
       const suiteTestManagementTests = testManagementTests?.jest?.suites?.[testSuite]?.tests || {}
 
-      const suiteModifiedTests = Object.keys(modifiedTests).length > 0
-        ? modifiedTests
-        : {}
-
       args[0].config = {
         ...config,
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
           _ddTestManagementTests: suiteTestManagementTests,
-          _ddModifiedTests: suiteModifiedTests
+          // TODO: figure out if we can reduce the size of the modified files object
+          // Can we use `testSuite` (it'd have to be relative to repository root though)
+          _ddModifiedFiles: modifiedFiles
         }
       }
     }

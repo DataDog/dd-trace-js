@@ -37,11 +37,14 @@ describe('Plugin', () => {
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
+    let openaiVersion
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
+      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      openaiVersion = OpenAIModule.version()
+      const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
@@ -339,7 +342,7 @@ describe('Plugin', () => {
 
     it('creates a span for a tool call', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -360,7 +363,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -372,7 +375,15 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
+      }
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
       }
 
       await ai.generateText({
@@ -380,7 +391,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -390,9 +401,16 @@ describe('Plugin', () => {
       const toolCallSpan = llmobsSpans[2]
       const llmSpan2 = llmobsSpans[3]
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
-        : 'The current weather in Tokyo is 72°F.'
+      let expectedFinalOutput
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput = 'The current temperature in Tokyo is 72°F.'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -494,7 +512,7 @@ describe('Plugin', () => {
 
     it('created a span for a tool call from a stream', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -515,7 +533,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -527,7 +545,15 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
+      }
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
       }
 
       const result = await ai.streamText({
@@ -535,7 +561,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
 
       const textStream = result.textStream
@@ -549,9 +575,17 @@ describe('Plugin', () => {
       const toolCallSpan = llmobsSpans[2]
       const llmSpan2 = llmobsSpans[3]
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
-        : 'The current weather in Tokyo is 72°F.'
+      let expectedFinalOutput
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput =
+        'The current temperature in Tokyo is 72°F. If you need more detailed weather information, feel free to ask!'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
