@@ -272,7 +272,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const deps = [`file:${out}`].concat(cappedDependencies).join(' ')
+  const deps = cappedDependencies.join(' ')
 
   await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
