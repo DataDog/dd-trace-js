@@ -661,7 +661,7 @@ describe('jest CommonJS', () => {
   })
 
   context('when using off timing imports', () => {
-    it('reports test suite errors when using off timing import', async () => {
+    it.only('reports test suite errors when using off timing import', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -701,7 +701,7 @@ describe('jest CommonJS', () => {
       ])
     })
 
-    it('reports test suite errors when importing after environment is torn down', async () => {
+    it.only('reports test suite errors when importing after environment is torn down', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -713,19 +713,22 @@ describe('jest CommonJS', () => {
               'ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
           )
           assert.equal(failedTestSuites.length, 1)
-          failedTestSuites.forEach(suite => {
-            assert.equal(suite.content.meta[TEST_STATUS], 'fail')
-            assert.include(
-              suite.content.meta[ERROR_MESSAGE],
-              'a file after the Jest environment has been torn down'
-            )
-            assert.include(
-              suite.content.meta[ERROR_MESSAGE],
-              'From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
-            )
-            // This is the error message that jest should show. We check that we don't mess it up.
-            assert.include(suite.content.meta[ERROR_MESSAGE], "require('./off-timing-import.js')")
-          })
+          const [failedTestSuite] = failedTestSuites
+
+          // REMOVE BEFORE MERGING
+          console.log('ACTUAL ERROR MESSAGE: ', failedTestSuite.content.meta[ERROR_MESSAGE])
+
+          assert.equal(failedTestSuite.content.meta[TEST_STATUS], 'fail')
+          assert.include(
+            failedTestSuite.content.meta[ERROR_MESSAGE],
+            'a file after the Jest environment has been torn down'
+          )
+          assert.include(
+            failedTestSuite.content.meta[ERROR_MESSAGE],
+            'From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
+          )
+          // This is the error message that jest should show. We check that we don't mess it up.
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], "require('./off-timing-import.js')")
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
           )
