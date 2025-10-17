@@ -13,6 +13,7 @@ const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { withBun } = require('./bun')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -220,7 +221,7 @@ function execHelper (command, options) {
     console.log('Exec SUCCESS: ', command)
   } catch (error) {
     console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('yarn')) {
+    if (command.startsWith('bun')) {
       try {
         console.log('Exec RETRY START: ', command)
         execSync(command, options)
@@ -257,7 +258,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
@@ -271,15 +272,18 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
+  const deps = cappedDependencies.join(' ')
 
   await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  execHelper(`bun pm pack --silent --destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
-  execHelper(addCommand, addOptions)
+  if (deps) {
+    execHelper(`bun add ${deps} --linker=hoisted --trust --ignore-engines${preferOfflineFlag}`, addOptions)
+  }
+
+  execHelper(`bun add file:${out} --linker=hoisted --ignore-scripts --ignore-engines${preferOfflineFlag}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
