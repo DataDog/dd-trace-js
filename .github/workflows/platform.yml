@@ -25,7 +25,7 @@ jobs:
       - run: mkdir -p npm bun
       - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
       - run: bun pm pack --filename bun.tgz && tar -zxf bun.tgz -C bun
-      - run: diff npm bun
+      - run: diff -r npm bun
 
   core:
     runs-on: ubuntu-latest
