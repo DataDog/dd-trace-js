@@ -1315,7 +1315,7 @@ addHook({
     const originalPrepareStackTrace = Error.prepareStackTrace
     Error.prepareStackTrace = function (error, structuredStackTrace) {
       const filteredStackTrace = structuredStackTrace
-        .filter(callSite => !callSite.getFileName().includes('datadog-instrumentations/src/jest.js'))
+        .filter(callSite => !callSite.getFileName()?.includes('datadog-instrumentations/src/jest.js'))
 
       return originalPrepareStackTrace(error, filteredStackTrace)
     }
