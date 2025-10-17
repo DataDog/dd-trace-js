@@ -461,17 +461,17 @@ class Config {
 
   _applyLocalStableConfig () {
     const obj = setHiddenProperty(this, '_localStableConfig', {})
-    this._applyStableConfig(this.stableConfig?.localEntries ?? {}, obj)
+    this._applyStableConfig(this.stableConfig?.localEntries ?? {}, obj, 'local stable config')
   }
 
   _applyFleetStableConfig () {
     const obj = setHiddenProperty(this, '_fleetStableConfig', {})
-    this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, obj)
+    this._applyStableConfig(this.stableConfig?.fleetEntries ?? {}, obj, 'fleet stable config')
   }
 
-  _applyStableConfig (config, obj) {
+  _applyStableConfig (config, obj, origin) {
     // Stable config uses the same processing logic as environment variables
-    this._applyConfigValues(config, obj, {})
+    this._applyConfigValues(config, obj, {}, origin)
   }
 
   _applyEnvironment () {
@@ -479,10 +479,10 @@ class Config {
     setHiddenProperty(this, '_envUnprocessed', {})
 
     // Apply all configs using shared logic
-    this._applyConfigValues(getEnvironmentVariables(), env, this._envUnprocessed)
+    this._applyConfigValues(getEnvironmentVariables(), env, this._envUnprocessed, 'environment')
   }
 
-  _applyConfigValues (source, target, unprocessedTarget) {
+  _applyConfigValues (source, target, unprocessedTarget, origin) {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
@@ -638,10 +638,11 @@ class Config {
 
     const tags = {}
 
-    tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
+    const parsedDdTags = parseSpaceSeparatedTags(DD_TAGS)
+    tagger.add(this.#parsedDdTags, parsedDdTags)
 
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, this.#parsedDdTags)
+    tagger.add(tags, parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
@@ -846,17 +847,24 @@ class Config {
     this._setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
-    const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
-    target.tracePropagationBehaviorExtract =
-      VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
-        ? stringPropagationBehaviorExtract
-        : 'continue'
-    this._setBoolean(target, 'tracePropagationStyle.otelPropagators',
-      DD_TRACE_PROPAGATION_STYLE ||
-      DD_TRACE_PROPAGATION_STYLE_INJECT ||
-      DD_TRACE_PROPAGATION_STYLE_EXTRACT
-        ? false
-        : !!OTEL_PROPAGATORS)
+    if (DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== undefined) {
+      const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+      target.tracePropagationBehaviorExtract =
+        VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+          ? stringPropagationBehaviorExtract
+          : 'continue'
+    }
+    if (DD_TRACE_PROPAGATION_STYLE !== undefined ||
+        DD_TRACE_PROPAGATION_STYLE_INJECT !== undefined ||
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT !== undefined ||
+        OTEL_PROPAGATORS !== undefined) {
+      // At least one var is defined, calculate value using truthy logic
+      const useDdStyle = DD_TRACE_PROPAGATION_STYLE ||
+                         DD_TRACE_PROPAGATION_STYLE_INJECT ||
+                         DD_TRACE_PROPAGATION_STYLE_EXTRACT
+      this._setBoolean(target, 'tracePropagationStyle.otelPropagators',
+        useDdStyle ? false : !!OTEL_PROPAGATORS)
+    }
     this._setBoolean(target, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
     this._setBoolean(target, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
     this._setBoolean(target, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)

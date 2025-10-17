@@ -480,7 +480,7 @@ describe('Config', () => {
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
-      { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
+      { name: 'remoteConfig.enabled', value: true, origin: 'default' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
@@ -500,7 +500,7 @@ describe('Config', () => {
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
+      { name: 'telemetry.enabled', value: true, origin: 'default' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
@@ -882,7 +882,6 @@ describe('Config', () => {
       { name: 'service', value: 'service', origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
@@ -2948,12 +2947,6 @@ apm_configuration_default:
   DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: "/tmp/probes"
 `)
       const config = new Config()
-
-      // Debug: inspect what stable config loaded
-      // eslint-disable-next-line no-console
-      // console.log('MTOFF: stable cfg local:', config.stableConfig?.localEntries)
-      // // eslint-disable-next-line no-console
-      // console.log('MTOFF: FULL CONFIG:', config)
 
       // Tracing
       expect(config).to.have.nested.property('traceId128BitGenerationEnabled', true)

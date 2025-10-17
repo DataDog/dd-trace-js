@@ -12,6 +12,8 @@ class StableConfig {
     this.wasm_loaded = false
 
     const { localConfigPath, fleetConfigPath } = this._getStableConfigPaths()
+    // temporary for testing
+    this.fleetConfigPath = fleetConfigPath
     if (!fs.existsSync(localConfigPath) && !fs.existsSync(fleetConfigPath)) {
       // Bail out early if files don't exist to avoid unnecessary library loading
       return
