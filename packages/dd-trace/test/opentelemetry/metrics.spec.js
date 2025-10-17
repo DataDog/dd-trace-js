@@ -56,44 +56,49 @@ describe('OTLP Metrics Export', () => {
 
   const allMetricTypes = [
     {
-      name: 'counter',
+      name: 'http_requests_total',
       type: 'counter',
       data: [{
-        attributes: { env: 'test', count: 5, enabled: true },
+        attributes: { method: 'GET', status_code: '200', endpoint: '/api/users' },
         startTimeUnixNano: '1000000000',
         timeUnixNano: '2000000000',
         value: 42
       }]
     },
     {
-      name: 'updowncounter',
+      name: 'active_connections',
       type: 'updowncounter',
-      data: [{ attributes: {}, timeUnixNano: '3000000000', value: -10.5 }]
+      data: [{ attributes: { protocol: 'http' }, timeUnixNano: '3000000000', value: -10.5 }]
     },
     {
-      name: 'histogram',
+      name: 'http_request_duration_seconds',
       type: 'histogram',
       data: [{
-        attributes: { endpoint: '/api' },
+        attributes: { method: 'POST', endpoint: '/api/orders' },
         startTimeUnixNano: '1000000000',
         timeUnixNano: '2000000000',
         count: 5,
-        sum: 250.5,
-        min: 10.5,
-        max: 100.0,
+        sum: 0.2505,
+        min: 0.0105,
+        max: 0.1000,
         bucketCounts: [1, 2, 1],
-        explicitBounds: [10, 50]
+        explicitBounds: [0.01, 0.05]
       }]
     },
     {
-      name: 'gauge',
+      name: 'memory_usage_bytes',
       type: 'gauge',
-      data: [{ attributes: {}, timeUnixNano: '4000000000', value: 75 }]
+      data: [{ attributes: { instance: 'web-01' }, timeUnixNano: '4000000000', value: 75 }]
     }
-  ].map(m => ({ ...m, instrumentationScope: { name: 'meter', version: '1.0.0', schemaUrl: '' } }))
+  ].map(m => ({ ...m, instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' } }))
 
   beforeEach(() => {
-    resourceAttributes = { 'service.name': 'test-service', 'service.version': '1.0.0' }
+    resourceAttributes = {
+      'service.name': 'ecommerce-api',
+      'service.version': '2.1.0',
+      'deployment.environment': 'production',
+      'host.name': 'web-server-01'
+    }
   })
 
   afterEach(() => { sinon.restore() })
@@ -105,7 +110,7 @@ describe('OTLP Metrics Export', () => {
       const decoded = protoMetricsService.decode(buffer)
 
       const resource = decoded.resourceMetrics[0].resource
-      assert(resource.attributes.find(a => a.key === 'service.name').value.stringValue === 'test-service')
+      assert(resource.attributes.find(a => a.key === 'service.name').value.stringValue === 'ecommerce-api')
 
       const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
       assert.strictEqual(metrics[0].sum.isMonotonic, true)
@@ -127,7 +132,7 @@ describe('OTLP Metrics Export', () => {
     it('handles missing metric metadata and transforms complex attribute types to OTLP format', () => {
       const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
 
-      const minimal = [{ name: 'minimal', type: 'counter', data: [{ timeUnixNano: '1000000000', value: 1 }] }]
+      const minimal = [{ name: 'ping_count', type: 'counter', data: [{ timeUnixNano: '1000000000', value: 1 }] }]
       const buffer = transformer.transformMetrics(minimal)
       const decoded = protoMetricsService.decode(buffer)
       const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
@@ -135,16 +140,16 @@ describe('OTLP Metrics Export', () => {
       assert.strictEqual(metric.unit, '')
 
       const complex = [{
-        name: 'complex',
+        name: 'user_login_events',
         type: 'counter',
         data: [{
           attributes: {
-            string: 'value',
-            integer: 42,
-            double: 3.14159,
-            boolean: true,
-            array: [1, 2],
-            object: { nested: 'value' },
+            user_agent: 'Mozilla/5.0',
+            session_count: 42,
+            success_rate: 3.14159,
+            authenticated: true,
+            roles: ['admin', 'user'],
+            metadata: { source: 'web-app' },
             null: null,
             undefined
           },
@@ -155,8 +160,8 @@ describe('OTLP Metrics Export', () => {
       const complexBuffer = transformer.transformMetrics(complex)
       const complexDecoded = protoMetricsService.decode(complexBuffer)
       const attrs = complexDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes
-      assert(attrs.find(a => a.key === 'string').value.stringValue === 'value')
-      assert(attrs.find(a => a.key === 'double').value.doubleValue === 3.14159)
+      assert(attrs.find(a => a.key === 'user_agent').value.stringValue === 'Mozilla/5.0')
+      assert(attrs.find(a => a.key === 'success_rate').value.doubleValue === 3.14159)
     })
 
     it('handles optional startTimeUnixNano for gauges, missing histogram buckets, and null attributes in JSON mode',
@@ -164,7 +169,11 @@ describe('OTLP Metrics Export', () => {
         const transformer = new OtlpTransformer(resourceAttributes, 'http/json')
 
         const noStart = [
-          { name: 'no.start', type: 'gauge', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }] }
+          {
+            name: 'cpu_usage_percent',
+            type: 'gauge',
+            data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
+          }
         ]
         const buffer = transformer.transformMetrics(noStart)
         const decoded = JSON.parse(buffer.toString())
@@ -174,7 +183,7 @@ describe('OTLP Metrics Export', () => {
         )
 
         const minHist = [{
-          name: 'min.hist',
+          name: 'request_size_bytes',
           type: 'histogram',
           data: [{ attributes: {}, timeUnixNano: '1000000000', count: 3, sum: 15.5 }]
         }]
@@ -185,7 +194,7 @@ describe('OTLP Metrics Export', () => {
         assert.deepStrictEqual(histDp.explicitBounds, [])
 
         const nullAttrs = [{
-          name: 'null.attrs',
+          name: 'system_errors_total',
           type: 'counter',
           data: [{ attributes: null, timeUnixNano: '1000000000', value: 1 }]
         }]
@@ -214,12 +223,12 @@ describe('OTLP Metrics Export', () => {
 
       const mixedValues = [
         {
-          name: 'int.counter',
+          name: 'database_connections_total',
           type: 'counter',
           data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
         },
         {
-          name: 'double.counter',
+          name: 'cache_hit_ratio',
           type: 'counter',
           data: [{ attributes: {}, timeUnixNano: '1000000000', value: 3.14159 }]
         }
@@ -256,7 +265,7 @@ describe('OTLP Metrics Export', () => {
     it('successfully exports metrics via HTTP', (done) => {
       const validator = mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
-        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].name, 'test')
+        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].name, 'api_calls_total')
       })
 
       const exporter = new OtlpHttpMetricExporter(
@@ -267,9 +276,9 @@ describe('OTLP Metrics Export', () => {
         resourceAttributes
       )
       const metrics = [{
-        name: 'test',
+        name: 'api_calls_total',
         type: 'counter',
-        instrumentationScope: { name: 'meter', version: '1.0.0', schemaUrl: '' },
+        instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' },
         data: [{ attributes: {}, timeUnixNano: '2000000000', value: 1 }]
       }]
 
@@ -315,9 +324,9 @@ describe('OTLP Metrics Export', () => {
         })
 
         const testMetrics = [{
-          name: 'test',
+          name: 'api_calls_total',
           type: 'counter',
-          instrumentationScope: { name: 't', version: '1', schemaUrl: '' },
+          instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' },
           data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
         }]
         exporter.export(testMetrics, (result) => {
@@ -356,7 +365,7 @@ describe('OTLP Metrics Export', () => {
         resourceAttributes
       )
       const metrics = [{
-        name: 'test',
+        name: 'api_calls_total',
         type: 'counter',
         data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
       }]
@@ -414,7 +423,7 @@ describe('OTLP Metrics Export', () => {
       })
 
       const metrics = [
-        { name: 'test', type: 'counter', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }] }
+        { name: 'api_calls_total', type: 'counter', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }] }
       ]
       exporter.export(metrics, (result) => {
         assert.strictEqual(result.code, 1)

@@ -10,7 +10,7 @@ const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGA
 /**
  * OtlpTransformer transforms metrics to OTLP format.
  *
- * This implementation follows the OTLP Metrics Data Model specification:
+ * This implementation follows the OTLP Metrics v1.7.0 Data Model specification:
  * https://opentelemetry.io/docs/specs/otlp/#metrics-data-model
  *
  * @class OtlpTransformer
