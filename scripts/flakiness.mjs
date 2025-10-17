@@ -78,6 +78,7 @@ async function checkWorkflowRuns (id, page = 1) {
 }
 
 async function checkWorkflowJobs (id, attempt, page = 1) {
+  console.log(id, attempt, page)
   if (attempt < 1) return
 
   const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
@@ -90,12 +91,6 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
   })
 
   const { jobs } = response.data
-
-  // We've reached the last page and there are no more results.
-  if (jobs.length === 0) {
-    // Check previous attempt to include successive failures.
-    return checkWorkflowJobs(id, attempt - 1, page + 1)
-  }
 
   for (const job of jobs) {
     if (job.conclusion !== 'failure') continue
@@ -111,6 +106,12 @@ async function checkWorkflowJobs (id, attempt, page = 1) {
     if (flaky[workflow][name].length >= OCCURRENCES) {
       reported.add(workflow)
     }
+  }
+
+  // We've reached the last page and there are no more results.
+  if (jobs.length < 100) {
+    // Check previous attempt to include successive failures.
+    return checkWorkflowJobs(id, attempt - 1)
   }
 
   return checkWorkflowJobs(id, attempt, page + 1)
