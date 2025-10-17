@@ -3,6 +3,7 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const { getEnvironmentVariable } = require('../../config-helper')
+const log = require('../../log')
 
 function getTestManagementTests ({
   url,
@@ -53,12 +54,16 @@ function getTestManagementTests ({
     }
   })
 
+  log.debug('Requesting test management tests: %j', data)
+
   request(data, options, (err, res) => {
     if (err) {
       done(err)
     } else {
       try {
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+
+        lo
 
         done(null, testManagementTests)
       } catch (err) {
