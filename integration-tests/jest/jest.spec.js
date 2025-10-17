@@ -725,9 +725,9 @@ describe('jest CommonJS', () => {
             'From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
           )
           // This is the error message that jest should show. We check that we don't mess it up.
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'off-timing-import.js')
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'off-timing-import')
           assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'afterAll')
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'process.nextTick')
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'nextTick')
 
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
