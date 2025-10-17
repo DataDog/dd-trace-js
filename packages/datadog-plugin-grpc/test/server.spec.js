@@ -65,7 +65,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, (version, pkg) => {
+    withVersions('grpc', pkgs, nodeMajor >= 25 ? '>=1.3.0' : undefined, (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })

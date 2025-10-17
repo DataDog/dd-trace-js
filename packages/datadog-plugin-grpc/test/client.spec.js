@@ -78,7 +78,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, (version, pkg) => {
+    withVersions('grpc', pkgs, nodeMajor >= 25 ? '>=1.3.0' : undefined, (version, pkg) => {
       for (const clientName in clientBuilders) {
         const buildClient = clientBuilders[clientName]
 
