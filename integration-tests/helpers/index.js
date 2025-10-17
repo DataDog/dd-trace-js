@@ -13,6 +13,7 @@ const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { withBun } = require('./bun')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -257,7 +258,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
