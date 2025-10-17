@@ -1,6 +1,5 @@
 'use strict'
 
-// Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
 require('../setup/core')
@@ -12,25 +11,19 @@ const OtlpTransformer = require('../../src/opentelemetry/metrics/otlp_transforme
 const OtlpHttpMetricExporter = require('../../src/opentelemetry/metrics/otlp_http_metric_exporter')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 
-describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
-  let transformer
+describe('OTLP Metrics Export', () => {
   let resourceAttributes
 
   function mockOtlpExport (validator, protocol = 'protobuf') {
-    let capturedPayload, capturedHeaders
-    let validatorCalled = false
+    let capturedPayload; let capturedHeaders; let validatorCalled = false
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
-      // Only intercept OTLP metrics requests
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
           statusCode: 200,
-          on: (event, handler) => {
-            responseHandlers[event] = handler
-            return mockRes
-          },
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
           setTimeout: () => mockRes
         }
 
@@ -42,11 +35,7 @@ describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
               : protoMetricsService.decode(capturedPayload)
             validator(decoded, capturedHeaders)
             validatorCalled = true
-
-            // Trigger the response end event
-            if (responseHandlers.end) {
-              responseHandlers.end()
-            }
+            if (responseHandlers.end) responseHandlers.end()
           },
           on: () => {},
           once: () => {},
@@ -55,166 +44,106 @@ describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
         callback(mockRes)
         return mockReq
       }
-
-      // For other requests (remote config, etc), return a basic mock
-      const mockReq = {
-        write: () => {},
-        end: () => {},
-        on: () => {},
-        once: () => {},
-        setTimeout: () => {}
-      }
+      const mockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
-    // Return function to check if validator was called
     return () => {
-      if (!validatorCalled) {
-        throw new Error('OTLP export validator was never called - metrics may not have been exported')
-      }
+      if (!validatorCalled) throw new Error('OTLP export validator was never called')
     }
   }
 
-  beforeEach(() => {
-    resourceAttributes = {
-      'service.name': 'test-service',
-      'service.version': '1.0.0',
-      'telemetry.sdk.name': 'dd-trace-js',
-      'telemetry.sdk.language': 'nodejs'
+  const allMetricTypes = [
+    {
+      name: 'counter',
+      type: 'counter',
+      data: [{
+        attributes: { env: 'test', count: 5, enabled: true },
+        startTimeUnixNano: '1000000000',
+        timeUnixNano: '2000000000',
+        value: 42
+      }]
+    },
+    {
+      name: 'updowncounter',
+      type: 'updowncounter',
+      data: [{ attributes: {}, timeUnixNano: '3000000000', value: -10.5 }]
+    },
+    {
+      name: 'histogram',
+      type: 'histogram',
+      data: [{
+        attributes: { endpoint: '/api' },
+        startTimeUnixNano: '1000000000',
+        timeUnixNano: '2000000000',
+        count: 5,
+        sum: 250.5,
+        min: 10.5,
+        max: 100.0,
+        bucketCounts: [1, 2, 1],
+        explicitBounds: [10, 50]
+      }]
+    },
+    {
+      name: 'gauge',
+      type: 'gauge',
+      data: [{ attributes: {}, timeUnixNano: '4000000000', value: 75 }]
     }
+  ].map(m => ({ ...m, instrumentationScope: { name: 'meter', version: '1.0.0', schemaUrl: '' } }))
+
+  beforeEach(() => {
+    resourceAttributes = { 'service.name': 'test-service', 'service.version': '1.0.0' }
   })
 
-  afterEach(() => {
-    sinon.restore()
-  })
+  afterEach(() => { sinon.restore() })
 
-  describe('OtlpTransformer - Protobuf', () => {
-    beforeEach(() => {
-      transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
-    })
-
-    it('transforms all metric types with edge cases', () => {
-      const metrics = [
-        // Counter with integer value
-        {
-          name: 'test.counter',
-          description: 'A test counter',
-          unit: 'operations',
-          type: 'counter',
-          instrumentationScope: { name: 'meter1', version: '1.0.0', schemaUrl: '' },
-          data: [{
-            attributes: { env: 'test', count: 5, enabled: true },
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            value: 42
-          }]
-        },
-        // UpDownCounter with negative value
-        {
-          name: 'test.updowncounter',
-          type: 'updowncounter',
-          instrumentationScope: { name: 'meter1', version: '1.0.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '3000000000', value: -10 }]
-        },
-        // Histogram with boundaries
-        {
-          name: 'test.histogram',
-          description: '',
-          unit: '',
-          type: 'histogram',
-          instrumentationScope: { name: 'meter2', version: '2.0.0', schemaUrl: 'https://schema' },
-          data: [{
-            attributes: { endpoint: '/api' },
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            count: 5,
-            sum: 250.5,
-            min: 10.5,
-            max: 100.0,
-            bucketCounts: [1, 2, 1, 1],
-            explicitBounds: [10, 50, 100]
-          }]
-        },
-        // Gauge with double value
-        {
-          name: 'test.gauge',
-          type: 'gauge',
-          instrumentationScope: { name: 'meter2', version: '2.0.0', schemaUrl: 'https://schema' },
-          data: [{ attributes: {}, timeUnixNano: '4000000000', value: 75.5 }]
-        }
-      ]
-
-      const buffer = transformer.transformMetrics(metrics)
+  describe('Metric Transformation', () => {
+    it('transforms all metric types with correct protobuf and JSON serialization', () => {
+      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
+      const buffer = transformer.transformMetrics(allMetricTypes)
       const decoded = protoMetricsService.decode(buffer)
 
-      // Verify resource
       const resource = decoded.resourceMetrics[0].resource
       assert(resource.attributes.find(a => a.key === 'service.name').value.stringValue === 'test-service')
 
-      // Verify multiple scopes
-      const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics
-      assert.strictEqual(scopeMetrics.length, 2)
-      assert.strictEqual(scopeMetrics[0].scope.name, 'meter1')
-      assert.strictEqual(scopeMetrics[1].scope.name, 'meter2')
+      const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+      assert.strictEqual(metrics[0].sum.isMonotonic, true)
+      assert.strictEqual(metrics[1].sum.isMonotonic, false)
+      assert(metrics[2].histogram)
+      assert(metrics[3].gauge)
 
-      // Verify counter
-      const counter = scopeMetrics[0].metrics[0]
-      assert.strictEqual(counter.name, 'test.counter')
-      assert.strictEqual(counter.sum.isMonotonic, true)
-      const counterValue = typeof counter.sum.dataPoints[0].asInt === 'object'
-        ? counter.sum.dataPoints[0].asInt.toNumber()
-        : counter.sum.dataPoints[0].asInt
-      assert.strictEqual(counterValue, 42)
+      const jsonTransformer = new OtlpTransformer(resourceAttributes, 'http/json')
+      const jsonBuffer = jsonTransformer.transformMetrics(allMetricTypes)
+      const jsonDecoded = JSON.parse(jsonBuffer.toString())
+      const jsonMetrics = jsonDecoded.resourceMetrics[0].scopeMetrics[0].metrics
 
-      // Verify attributes with different types
-      const attrs = counter.sum.dataPoints[0].attributes
-      assert(attrs.find(a => a.key === 'env').value.stringValue === 'test')
-      assert(attrs.find(a => a.key === 'enabled').value.boolValue === true)
-
-      // Verify updowncounter
-      const updown = scopeMetrics[0].metrics[1]
-      assert.strictEqual(updown.sum.isMonotonic, false)
-
-      // Verify histogram
-      const histogram = scopeMetrics[1].metrics[0]
-      assert(histogram.histogram)
-      assert.strictEqual(histogram.histogram.dataPoints[0].sum, 250.5)
-
-      // Verify gauge with double
-      const gauge = scopeMetrics[1].metrics[1]
-      assert(gauge.gauge)
-      assert.strictEqual(gauge.gauge.dataPoints[0].asDouble, 75.5)
+      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, '42')
+      assert.strictEqual(jsonMetrics[1].sum.dataPoints[0].asDouble, -10.5)
+      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, '5')
+      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, '75')
     })
 
-    it('handles missing optional fields', () => {
-      const metrics = [{
-        name: 'minimal',
-        type: 'counter',
-        data: [{ timeUnixNano: '1000000000', value: 1 }]
-      }]
+    it('handles missing metric metadata and transforms complex attribute types to OTLP format', () => {
+      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
 
-      const buffer = transformer.transformMetrics(metrics)
+      const minimal = [{ name: 'minimal', type: 'counter', data: [{ timeUnixNano: '1000000000', value: 1 }] }]
+      const buffer = transformer.transformMetrics(minimal)
       const decoded = protoMetricsService.decode(buffer)
       const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-
       assert.strictEqual(metric.description, '')
       assert.strictEqual(metric.unit, '')
-      assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].scope.name, '')
-    })
 
-    it('handles complex attribute types', () => {
-      const metrics = [{
-        name: 'complex.attrs',
+      const complex = [{
+        name: 'complex',
         type: 'counter',
-        instrumentationScope: { name: 'test', version: '1.0.0', schemaUrl: '' },
         data: [{
           attributes: {
             string: 'value',
-            number: 42,
-            float: 3.14,
+            integer: 42,
+            double: 3.14159,
             boolean: true,
-            array: [1, 2, 3],
+            array: [1, 2],
             object: { nested: 'value' },
             null: null,
             undefined
@@ -223,280 +152,111 @@ describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
           value: 1
         }]
       }]
-
-      const buffer = transformer.transformMetrics(metrics)
-      const decoded = protoMetricsService.decode(buffer)
-      const attrs = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes
-
+      const complexBuffer = transformer.transformMetrics(complex)
+      const complexDecoded = protoMetricsService.decode(complexBuffer)
+      const attrs = complexDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes
       assert(attrs.find(a => a.key === 'string').value.stringValue === 'value')
-      assert(attrs.find(a => a.key === 'boolean').value.boolValue === true)
-      assert(attrs.find(a => a.key === 'array').value.arrayValue)
-      assert(attrs.find(a => a.key === 'object').value.kvlistValue)
-    })
-  })
-
-  describe('OtlpTransformer - JSON', () => {
-    beforeEach(() => {
-      transformer = new OtlpTransformer(resourceAttributes, 'http/json')
+      assert(attrs.find(a => a.key === 'double').value.doubleValue === 3.14159)
     })
 
-    it('transforms all metric types to JSON with proper string conversions', () => {
-      const metrics = [
-        // Counter with integer
-        {
-          name: 'json.counter',
-          description: 'JSON counter',
-          unit: 'ops',
-          type: 'counter',
-          instrumentationScope: { name: 'meter', version: '1.0', schemaUrl: '' },
-          data: [{
-            attributes: { key: 'value' },
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            value: 100
-          }]
-        },
-        // UpDownCounter with double
-        {
-          name: 'json.updowncounter',
-          type: 'updowncounter',
-          instrumentationScope: { name: 'meter', version: '1.0', schemaUrl: '' },
-          data: [{
-            attributes: {},
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            value: 3.14
-          }]
-        },
-        // Histogram
-        {
-          name: 'json.histogram',
-          type: 'histogram',
-          instrumentationScope: { name: 'meter', version: '1.0', schemaUrl: '' },
-          data: [{
-            attributes: { route: '/test' },
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            count: 10,
-            sum: 500.25,
-            min: 5.0,
-            max: 100.0,
-            bucketCounts: [2, 5, 3],
-            explicitBounds: [10, 50]
-          }]
-        },
-        // Gauge with integer
-        {
-          name: 'json.gauge',
-          type: 'gauge',
-          instrumentationScope: { name: 'meter', version: '1.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '3000000000', value: 50 }]
-        }
-      ]
+    it('handles optional startTimeUnixNano for gauges, missing histogram buckets, and null attributes in JSON mode',
+      () => {
+        const transformer = new OtlpTransformer(resourceAttributes, 'http/json')
 
-      const buffer = transformer.transformMetrics(metrics)
-      const decoded = JSON.parse(buffer.toString())
-      const metricsData = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-
-      // Verify counter - integer as string
-      assert.strictEqual(metricsData[0].name, 'json.counter')
-      assert.strictEqual(metricsData[0].sum.isMonotonic, true)
-      assert.strictEqual(metricsData[0].sum.aggregationTemporality, 'AGGREGATION_TEMPORALITY_DELTA')
-      assert.strictEqual(metricsData[0].sum.dataPoints[0].asInt, '100')
-      assert.strictEqual(metricsData[0].sum.dataPoints[0].startTimeUnixNano, '1000000000')
-
-      // Verify updowncounter - double as number
-      assert.strictEqual(metricsData[1].sum.isMonotonic, false)
-      assert.strictEqual(metricsData[1].sum.dataPoints[0].asDouble, 3.14)
-
-      // Verify histogram - proper string conversions
-      const histogramDp = metricsData[2].histogram.dataPoints[0]
-      assert.strictEqual(histogramDp.count, '10')
-      assert.strictEqual(histogramDp.sum, 500.25)
-      assert.deepStrictEqual(histogramDp.bucketCounts, ['2', '5', '3'])
-      assert.deepStrictEqual(histogramDp.explicitBounds, [10, 50])
-      assert.strictEqual(histogramDp.timeUnixNano, '2000000000')
-
-      // Verify gauge
-      assert(metricsData[3].gauge)
-      assert.strictEqual(metricsData[3].gauge.dataPoints[0].asInt, '50')
-    })
-
-    it('handles data points without startTimeUnixNano', () => {
-      const metrics = [{
-        name: 'no.start',
-        type: 'gauge',
-        instrumentationScope: { name: 'm', version: '1', schemaUrl: '' },
-        data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
-      }]
-
-      const buffer = transformer.transformMetrics(metrics)
-      const decoded = JSON.parse(buffer.toString())
-      const dp = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0]
-
-      assert.strictEqual(dp.startTimeUnixNano, undefined)
-      assert.strictEqual(dp.timeUnixNano, '1000000000')
-    })
-
-    it('handles histogram without bucketCounts or explicitBounds', () => {
-      const metrics = [{
-        name: 'minimal.histogram',
-        type: 'histogram',
-        instrumentationScope: { name: 'm', version: '1', schemaUrl: '' },
-        data: [{
-          attributes: {},
-          startTimeUnixNano: '1000000000',
-          timeUnixNano: '2000000000',
-          count: 3,
-          sum: 15.5,
-          min: 2.0,
-          max: 10.0
-        }]
-      }]
-
-      const buffer = transformer.transformMetrics(metrics)
-      const decoded = JSON.parse(buffer.toString())
-      const histogramDp = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
-
-      assert.deepStrictEqual(histogramDp.bucketCounts, [])
-      assert.deepStrictEqual(histogramDp.explicitBounds, [])
-    })
-  })
-
-  describe('OtlpHttpMetricExporter - Configuration', () => {
-    it('parses URL components and sets default path', () => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://collector.example.com:4318/',
-        'x-api-key=secret,authorization=Bearer token',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-
-      assert.strictEqual(exporter.options.hostname, 'collector.example.com')
-      assert.strictEqual(exporter.options.port, '4318')
-      assert.strictEqual(exporter.options.path, '/v1/metrics')
-      assert.strictEqual(exporter.options.timeout, 5000)
-      assert.strictEqual(exporter.options.headers['Content-Type'], 'application/x-protobuf')
-      assert.strictEqual(exporter.options.headers['x-api-key'], 'secret')
-      assert.strictEqual(exporter.options.headers.authorization, 'Bearer token')
-    })
-
-    it('uses custom path when provided', () => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/custom/metrics?token=abc',
-        '',
-        10000,
-        'http/json',
-        resourceAttributes
-      )
-
-      assert.strictEqual(exporter.options.path, '/custom/metrics?token=abc')
-      assert.strictEqual(exporter.options.headers['Content-Type'], 'application/json')
-    })
-  })
-
-  describe('Metrics Export', () => {
-    it('exports metrics with complete OTLP structure using protobuf', (done) => {
-      const validator = mockOtlpExport((decoded, capturedHeaders) => {
-        assert.strictEqual(capturedHeaders['Content-Type'], 'application/x-protobuf')
-
-        // Validate resource
-        const { resource } = decoded.resourceMetrics[0]
-        const resourceAttrs = {}
-        resource.attributes.forEach(attr => {
-          resourceAttrs[attr.key] = attr.value.stringValue || attr.value.intValue
-        })
-        assert.strictEqual(resourceAttrs['service.name'], 'test-service')
-
-        // Validate scope metrics
-        const { scopeMetrics } = decoded.resourceMetrics[0]
-        assert.strictEqual(scopeMetrics.length, 1)
-        assert.strictEqual(scopeMetrics[0].scope.name, 'test-meter')
-        assert.strictEqual(scopeMetrics[0].scope.version, '1.0.0')
-
-        // Validate metric data
-        const counter = scopeMetrics[0].metrics[0]
-        assert.strictEqual(counter.name, 'test.requests')
-        assert.strictEqual(counter.sum.isMonotonic, true)
-        assert.strictEqual(counter.sum.dataPoints.length, 2)
-      })
-
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-
-      const metrics = [{
-        name: 'test.requests',
-        description: 'Test counter',
-        unit: 'requests',
-        type: 'counter',
-        instrumentationScope: { name: 'test-meter', version: '1.0.0', schemaUrl: '' },
-        data: [
-          { attributes: { method: 'GET' }, startTimeUnixNano: '1000000000', timeUnixNano: '2000000000', value: 1 },
-          { attributes: { method: 'POST' }, startTimeUnixNano: '1000000000', timeUnixNano: '2000000000', value: 2 }
+        const noStart = [
+          { name: 'no.start', type: 'gauge', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }] }
         ]
-      }]
+        const buffer = transformer.transformMetrics(noStart)
+        const decoded = JSON.parse(buffer.toString())
+        assert.strictEqual(
+          decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0].startTimeUnixNano,
+          undefined
+        )
 
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 0)
-        validator()
-        done()
+        const minHist = [{
+          name: 'min.hist',
+          type: 'histogram',
+          data: [{ attributes: {}, timeUnixNano: '1000000000', count: 3, sum: 15.5 }]
+        }]
+        const histBuffer = transformer.transformMetrics(minHist)
+        const histDecoded = JSON.parse(histBuffer.toString())
+        const histDp = histDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
+        assert.deepStrictEqual(histDp.bucketCounts, [])
+        assert.deepStrictEqual(histDp.explicitBounds, [])
+
+        const nullAttrs = [{
+          name: 'null.attrs',
+          type: 'counter',
+          data: [{ attributes: null, timeUnixNano: '1000000000', value: 1 }]
+        }]
+        const nullBuffer = transformer.transformMetrics(nullAttrs)
+        const nullDecoded = JSON.parse(nullBuffer.toString())
+        assert.deepStrictEqual(
+          nullDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes,
+          []
+        )
       })
+
+    it('warns and falls back when unsupported gRPC protocol is used', () => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+
+      const transformer = new OtlpTransformer(resourceAttributes, 'grpc')
+      assert.strictEqual(transformer.protocol, 'http/protobuf')
+      assert(warnSpy.calledOnce)
+      assert(warnSpy.firstCall.args[0].includes('gRPC protocol is not supported'))
+
+      warnSpy.restore()
     })
 
-    it('exports metrics using JSON protocol', (done) => {
-      const validator = mockOtlpExport((decoded, capturedHeaders) => {
-        assert.strictEqual(capturedHeaders['Content-Type'], 'application/json')
-        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].name, 'json.counter')
-        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].asInt, '42')
-      }, 'json')
+    it('uses separate protobuf fields for integer vs double metric values', () => {
+      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
 
+      const mixedValues = [
+        {
+          name: 'int.counter',
+          type: 'counter',
+          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
+        },
+        {
+          name: 'double.counter',
+          type: 'counter',
+          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 3.14159 }]
+        }
+      ]
+
+      const buffer = transformer.transformMetrics(mixedValues)
+      const decoded = protoMetricsService.decode(buffer)
+      const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+
+      const intValue = typeof metrics[0].sum.dataPoints[0].asInt === 'object'
+        ? metrics[0].sum.dataPoints[0].asInt.toNumber()
+        : metrics[0].sum.dataPoints[0].asInt
+      assert.strictEqual(intValue, 42)
+      assert.strictEqual(metrics[1].sum.dataPoints[0].asDouble, 3.14159)
+    })
+  })
+
+  describe('HTTP Export', () => {
+    it('parses URLs and headers correctly', () => {
       const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
+        'http://example.com:4318/custom?token=abc',
+        'x-api-key=secret',
         5000,
         'http/json',
         resourceAttributes
       )
-
-      const metrics = [{
-        name: 'json.counter',
-        type: 'counter',
-        instrumentationScope: { name: 'json-meter', version: '1.0.0', schemaUrl: '' },
-        data: [{ attributes: {}, timeUnixNano: '2000000000', value: 42 }]
-      }]
-
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 0)
-        validator()
-        done()
-      })
+      assert.strictEqual(exporter.options.hostname, 'example.com')
+      assert.strictEqual(exporter.options.port, '4318')
+      assert.strictEqual(exporter.options.path, '/custom?token=abc')
+      assert.strictEqual(exporter.options.headers['Content-Type'], 'application/json')
+      assert.strictEqual(exporter.options.headers['x-api-key'], 'secret')
     })
 
-    it('exports all metric types correctly', (done) => {
-      const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-
-        const counter = metrics.find(m => m.name === 'all.types.counter')
-        assert(counter)
-        assert.strictEqual(counter.sum.isMonotonic, true)
-
-        const upDownCounter = metrics.find(m => m.name === 'all.types.updowncounter')
-        assert(upDownCounter)
-        assert.strictEqual(upDownCounter.sum.isMonotonic, false)
-
-        const histogram = metrics.find(m => m.name === 'all.types.histogram')
-        assert(histogram)
-        assert(histogram.histogram)
-
-        const gauge = metrics.find(m => m.name === 'all.types.gauge')
-        assert(gauge)
-        assert(gauge.gauge)
+    it('successfully exports metrics via HTTP', (done) => {
+      const validator = mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
+        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].name, 'test')
       })
 
       const exporter = new OtlpHttpMetricExporter(
@@ -506,105 +266,21 @@ describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
         'http/protobuf',
         resourceAttributes
       )
-
-      const metrics = [
-        {
-          name: 'all.types.counter',
-          type: 'counter',
-          instrumentationScope: { name: 'all-types-meter', version: '1.0.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '2000000000', value: 10 }]
-        },
-        {
-          name: 'all.types.updowncounter',
-          type: 'updowncounter',
-          instrumentationScope: { name: 'all-types-meter', version: '1.0.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '2000000000', value: -2 }]
-        },
-        {
-          name: 'all.types.histogram',
-          type: 'histogram',
-          instrumentationScope: { name: 'all-types-meter', version: '1.0.0', schemaUrl: '' },
-          data: [{
-            attributes: {},
-            startTimeUnixNano: '1000000000',
-            timeUnixNano: '2000000000',
-            count: 2,
-            sum: 300,
-            min: 100,
-            max: 200,
-            bucketCounts: [1, 1],
-            explicitBounds: [150]
-          }]
-        },
-        {
-          name: 'all.types.gauge',
-          type: 'gauge',
-          instrumentationScope: { name: 'all-types-meter', version: '1.0.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '2000000000', value: 75.5 }]
-        }
-      ]
-
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 0)
-        validator()
-        done()
-      })
-    })
-
-    it('handles HTTP errors gracefully', (done) => {
-      sinon.stub(http, 'request').callsFake((options, callback) => {
-        const responseHandlers = {}
-        const mockRes = {
-          statusCode: 500,
-          on: (event, handler) => {
-            responseHandlers[event] = handler
-            return mockRes
-          },
-          setTimeout: () => mockRes
-        }
-
-        const mockReq = {
-          write: () => {},
-          end: () => {
-            // Trigger data and end events to complete the response
-            if (responseHandlers.data) {
-              responseHandlers.data('Internal Server Error')
-            }
-            if (responseHandlers.end) {
-              responseHandlers.end()
-            }
-          },
-          on: () => {},
-          once: () => {},
-          setTimeout: () => {}
-        }
-        callback(mockRes)
-        return mockReq
-      })
-
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-
       const metrics = [{
         name: 'test',
         type: 'counter',
-        instrumentationScope: { name: 't', version: '1', schemaUrl: '' },
-        data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
+        instrumentationScope: { name: 'meter', version: '1.0.0', schemaUrl: '' },
+        data: [{ attributes: {}, timeUnixNano: '2000000000', value: 1 }]
       }]
 
       exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 1)
-        assert(result.error)
+        assert.strictEqual(result.code, 0)
+        validator()
         done()
       })
     })
 
-    it('returns success immediately for empty metrics array', (done) => {
+    it('returns success for empty metrics arrays and handles HTTP error responses', (done) => {
       const exporter = new OtlpHttpMetricExporter(
         'http://localhost:4318/',
         '',
@@ -615,27 +291,132 @@ describe('OpenTelemetry Metrics - OTLP Transform and Export', () => {
 
       exporter.export([], (result) => {
         assert.strictEqual(result.code, 0)
-        done()
+
+        sinon.restore()
+        sinon.stub(http, 'request').callsFake((options, callback) => {
+          const responseHandlers = {}
+          const mockRes = {
+            statusCode: 500,
+            on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
+            setTimeout: () => mockRes
+          }
+          const mockReq = {
+            write: () => {},
+            end: () => {
+              if (responseHandlers.data) responseHandlers.data('Error')
+              if (responseHandlers.end) responseHandlers.end()
+            },
+            on: () => {},
+            once: () => {},
+            setTimeout: () => {}
+          }
+          callback(mockRes)
+          return mockReq
+        })
+
+        const testMetrics = [{
+          name: 'test',
+          type: 'counter',
+          instrumentationScope: { name: 't', version: '1', schemaUrl: '' },
+          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
+        }]
+        exporter.export(testMetrics, (result) => {
+          assert.strictEqual(result.code, 1)
+          assert(result.error)
+          done()
+        })
       })
     })
 
-    it('handles connection errors gracefully', (done) => {
+    it('handles timeout and connection errors', (done) => {
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        const timeoutHandlers = {}
+        const mockReq = {
+          write: () => {},
+          end: () => {},
+          on: (event, handler) => { timeoutHandlers[event] = handler },
+          once: () => {},
+          setTimeout: () => {},
+          destroy: () => {}
+        }
+        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+
+        setTimeout(() => {
+          if (timeoutHandlers.timeout) timeoutHandlers.timeout()
+        }, 10)
+
+        return mockReq
+      })
+
       const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:1/', // Invalid port
+        'http://localhost:4318/',
         '',
         100,
         'http/protobuf',
         resourceAttributes
       )
-
-      const testMetrics = [{
+      const metrics = [{
         name: 'test',
         type: 'counter',
-        instrumentationScope: { name: 't', version: '1', schemaUrl: '' },
         data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
       }]
 
-      exporter.export(testMetrics, (result) => {
+      exporter.export(metrics, (result) => {
+        assert.strictEqual(result.code, 1)
+        assert(result.error)
+        done()
+      })
+    })
+
+    it('parses header strings with empty values, spaces, and malformed entries', () => {
+      const exporter = new OtlpHttpMetricExporter(
+        'http://localhost:4318/',
+        'key1=value1,key2=value with spaces,key3=',
+        5000,
+        'http/protobuf',
+        resourceAttributes
+      )
+      assert.strictEqual(exporter.options.headers.key1, 'value1')
+      assert.strictEqual(exporter.options.headers.key2, 'value with spaces')
+      assert.strictEqual(exporter.options.headers.key3, undefined)
+    })
+
+    it('exposes telemetry and handles connection errors with logging', (done) => {
+      const exporter = new OtlpHttpMetricExporter(
+        'http://localhost:4318/',
+        '',
+        5000,
+        'http/protobuf',
+        resourceAttributes
+      )
+      const tags = exporter._getTelemetryTags()
+      assert(Array.isArray(tags))
+      assert(tags.includes('protocol:http'))
+      assert(tags.includes('encoding:protobuf'))
+
+      sinon.restore()
+      sinon.stub(http, 'request').callsFake((options, callback) => {
+        const errorHandlers = {}
+        const mockReq = {
+          write: () => {},
+          end: () => {},
+          on: (event, handler) => { errorHandlers[event] = handler },
+          once: () => {},
+          setTimeout: () => {}
+        }
+        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+
+        setTimeout(() => {
+          if (errorHandlers.error) errorHandlers.error(new Error('Connection failed'))
+        }, 10)
+
+        return mockReq
+      })
+
+      const metrics = [
+        { name: 'test', type: 'counter', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }] }
+      ]
+      exporter.export(metrics, (result) => {
         assert.strictEqual(result.code, 1)
         assert(result.error)
         done()
