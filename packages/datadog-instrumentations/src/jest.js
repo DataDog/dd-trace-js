@@ -1309,6 +1309,16 @@ addHook({
   })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
+    // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
+    // from the stack trace, the user might see a useless stack trace rather than the error
+    // that `jest` tries to show.
+    const originalPrepareStackTrace = Error.prepareStackTrace
+    Error.prepareStackTrace = function (error, structuredStackTrace) {
+      const filteredStackTrace = structuredStackTrace
+        .filter(callSite => !callSite.getFileName().includes('datadog-instrumentations/src/jest.js'))
+
+      return originalPrepareStackTrace(error, filteredStackTrace)
+    }
     try {
       // TODO: do this for every library that we instrument
       if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
@@ -1319,11 +1329,28 @@ addHook({
       if (moduleName === '@fast-check/jest') {
         testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
       }
-      return requireModuleOrMock.apply(this, arguments)
+      const returnedValue = requireModuleOrMock.apply(this, arguments)
+      if (process.exitCode === 1) {
+        if (this.loggedReferenceErrors.size > 0) {
+          const errorMessage = [...this.loggedReferenceErrors][0]
+          testSuiteErrorCh.publish({
+            errorMessage,
+            testSuiteAbsolutePath: this._testPath
+          })
+        } else {
+          testSuiteErrorCh.publish({
+            errorMessage: 'An error occurred while importing a module',
+            testSuiteAbsolutePath: this._testPath
+          })
+        }
+      }
+      return returnedValue
     } catch (error) {
-      // we want to be able to catch these errors
       testSuiteErrorCh.publish({ error, testSuiteAbsolutePath: this._testPath })
       throw error
+    } finally {
+      // Restore original prepareStackTrace
+      Error.prepareStackTrace = originalPrepareStackTrace
     }
   })
 
