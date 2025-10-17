@@ -283,7 +283,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     execHelper(`bun add ${deps} --linker=hoisted --trust --ignore-engines${preferOfflineFlag}`, addOptions)
   }
 
-  execHelper(`bun add file:${out} --linker=hoisted --ignore-engines${preferOfflineFlag}`, addOptions)
+  execHelper(`bun add file:${out} --linker=hoisted --ignore-scripts --ignore-engines${preferOfflineFlag}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
