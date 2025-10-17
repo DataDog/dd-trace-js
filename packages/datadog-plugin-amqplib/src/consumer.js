@@ -14,6 +14,8 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
 
     if (method !== 'basic.deliver' && method !== 'basic.get') return
 
+    if (!fields || !message) return
+
     const childOf = extract(this.tracer, message)
 
     const queueName = queue || fields.queue || fields.routingKey
