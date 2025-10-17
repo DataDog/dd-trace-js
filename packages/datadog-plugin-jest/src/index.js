@@ -50,6 +50,7 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const log = require('../../dd-trace/src/log')
 
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 
@@ -102,6 +103,7 @@ class JestPlugin extends CiPlugin {
       }
       process.on('message', handler)
     }
+    this.testSuiteSpanPerTestSuiteAbsolutePath = new Map()
 
     this.addSub('ci:jest:session:finish', ({
       status,
@@ -196,7 +198,8 @@ class JestPlugin extends CiPlugin {
       testSourceFile,
       testEnvironmentOptions,
       frameworkVersion,
-      displayName
+      displayName,
+      testSuiteAbsolutePath
     }) => {
       const {
         _ddTestSessionId: testSessionId,
@@ -259,6 +262,7 @@ class JestPlugin extends CiPlugin {
       if (_ddTestCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
+      this.testSuiteSpanPerTestSuiteAbsolutePath.set(testSuiteAbsolutePath, this.testSuiteSpan)
     })
 
     this.addSub('ci:jest:worker-report:coverage', data => {
@@ -272,27 +276,50 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
-      this.testSuiteSpan.setTag(TEST_STATUS, status)
+    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
+      const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
+      if (!testSuiteSpan) {
+        log.warn('"ci:jest:test-suite:finish": no span found for test suite absolute path %s', testSuiteAbsolutePath)
+        return
+      }
+      const hasStatus = testSuiteSpan.context()._tags[TEST_STATUS]
+      if (!hasStatus) {
+        // The status may have been set in 'ci:jest:test-suite:error'
+        testSuiteSpan.setTag(TEST_STATUS, status)
+      }
       if (error) {
-        this.testSuiteSpan.setTag('error', error)
-        this.testSuiteSpan.setTag(TEST_STATUS, 'fail')
+        testSuiteSpan.setTag('error', error)
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
       } else if (errorMessage) {
-        this.testSuiteSpan.setTag('error', new Error(errorMessage))
-        this.testSuiteSpan.setTag(TEST_STATUS, 'fail')
+        testSuiteSpan.setTag('error', new Error(errorMessage))
+        testSuiteSpan.setTag(TEST_STATUS, 'fail')
       }
-      this.testSuiteSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
-      // Suites potentially run in a different process than the session,
-      // so calling finishAllTraceSpans on the session span is not enough
-      finishAllTraceSpans(this.testSuiteSpan)
-      // Flushing within jest workers is cheap, as it's just interprocess communication
-      // We do not want to flush after every suite if jest is running tests serially,
-      // as every flush is an HTTP request.
-      if (isJestWorker) {
-        this.tracer._exporter.flush()
+      // We need to give the potential error in 'ci:jest:test-suite:error' time to be published
+      process.nextTick(() => {
+        testSuiteSpan.finish()
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+        // Suites potentially run in a different process than the session,
+        // so calling finishAllTraceSpans on the session span is not enough
+        finishAllTraceSpans(testSuiteSpan)
+        // Flushing within jest workers is cheap, as it's just interprocess communication
+        // We do not want to flush after every suite if jest is running tests serially,
+        // as every flush is an HTTP request.
+        if (isJestWorker) {
+          this.tracer._exporter.flush()
+        }
+        this.removeAllDiProbes()
+        this.testSuiteSpanPerTestSuiteAbsolutePath.delete(testSuiteAbsolutePath)
+      })
+    })
+
+    this.addSub('ci:jest:test-suite:error', ({ error, testSuiteAbsolutePath }) => {
+      const runningTestSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
+      if (!runningTestSuiteSpan) {
+        log.warn('"ci:jest:test-suite:error": no span found for test suite absolute path %s', testSuiteAbsolutePath)
+        return
       }
-      this.removeAllDiProbes()
+      runningTestSuiteSpan.setTag('error', error)
+      runningTestSuiteSpan.setTag(TEST_STATUS, 'fail')
     })
 
     /**
@@ -422,7 +449,8 @@ class JestPlugin extends CiPlugin {
       isJestRetry,
       isDisabled,
       isQuarantined,
-      isModified
+      isModified,
+      testSuiteAbsolutePath
     } = test
 
     const extraTags = {
@@ -470,8 +498,9 @@ class JestPlugin extends CiPlugin {
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
     }
+    const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 
-    return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
+    return super.startTestSpan(name, suite, testSuiteSpan, extraTags)
   }
 }
 

@@ -29,6 +29,7 @@ const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
 const testSuiteStartCh = channel('ci:jest:test-suite:start')
 const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
+const testSuiteErrorCh = channel('ci:jest:test-suite:error')
 
 const workerReportTraceCh = channel('ci:jest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:jest:worker-report:coverage')
@@ -397,7 +398,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isJestRetry,
           isDisabled,
           isQuarantined,
-          isModified
+          isModified,
+          testSuiteAbsolutePath: this.testSuiteAbsolutePath
         }
         testContexts.set(event.test, ctx)
 
@@ -1092,7 +1094,8 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testEnvironmentOptions: environment.testEnvironmentOptions,
       testSourceFile: environment.testSourceFile,
       displayName: environment.displayName,
-      frameworkVersion: jestVersion
+      frameworkVersion: jestVersion,
+      testSuiteAbsolutePath: environment.testSuiteAbsolutePath
     })
     return adapter.apply(this, arguments).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
@@ -1116,12 +1119,17 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
         const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
 
-        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile, mockedFiles })
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          testSuite: environment.testSourceFile,
+          mockedFiles,
+          testSuiteAbsolutePath: environment.testSuiteAbsolutePath
+        })
       }
-      testSuiteFinishCh.publish({ status, errorMessage })
+      testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
       return suiteResults
     }).catch(error => {
-      testSuiteFinishCh.publish({ status: 'fail', error })
+      testSuiteFinishCh.publish({ status: 'fail', error, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
       throw error
     })
   })
@@ -1301,16 +1309,22 @@ addHook({
   })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
-    // TODO: do this for every library that we instrument
-    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-      // To bypass jest's own require engine
-      return this._requireCoreModule(moduleName)
+    try {
+      // TODO: do this for every library that we instrument
+      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+        // To bypass jest's own require engine
+        return this._requireCoreModule(moduleName)
+      }
+      // This means that `@fast-check/jest` is used in the test file.
+      if (moduleName === '@fast-check/jest') {
+        testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
+      }
+      return requireModuleOrMock.apply(this, arguments)
+    } catch (error) {
+      // we want to be able to catch these errors
+      testSuiteErrorCh.publish({ error, testSuiteAbsolutePath: this._testPath })
+      throw error
     }
-    // This means that `@fast-check/jest` is used in the test file.
-    if (moduleName === '@fast-check/jest') {
-      testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
-    }
-    return requireModuleOrMock.apply(this, arguments)
   })
 
   return runtimePackage

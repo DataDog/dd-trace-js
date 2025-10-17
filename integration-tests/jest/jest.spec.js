@@ -61,7 +61,7 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 
 const testFile = 'ci-visibility/run-jest.js'
@@ -71,7 +71,7 @@ const expectedCoverageFiles = [
   'ci-visibility/test/ci-visibility-test.js',
   'ci-visibility/test/ci-visibility-test-2.js'
 ]
-const runTestsWithCoverageCommand = 'node ./ci-visibility/run-jest.js'
+const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
 // TODO: add ESM tests
 describe('jest CommonJS', () => {
@@ -362,7 +362,7 @@ describe('jest CommonJS', () => {
         }
       ])
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -398,7 +398,7 @@ describe('jest CommonJS', () => {
       })
     })
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
         env: {
@@ -580,7 +580,7 @@ describe('jest CommonJS', () => {
           snapshotIdByLog = diLog.debugger.snapshot.id
         })
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -665,20 +665,34 @@ describe('jest CommonJS', () => {
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const suites = events.filter(event => event.type === 'test_suite_end')
-        debugger
-        assert.equal(suites.length, 2)
+        assert.equal(suites.length, 6)
+        const failedTestSuites = suites.filter(
+          suite => suite.content.meta[TEST_SUITE] === 'ci-visibility/jest-bad-import/jest-bad-import-test.js'
+        )
+        assert.equal(failedTestSuites.length, 4)
+        failedTestSuites.forEach(suite => {
+          assert.equal(suite.content.meta[TEST_STATUS], 'fail')
+          assert.include(suite.content.meta[ERROR_MESSAGE], 'a file outside of the scope of the test code')
+          assert.equal(suite.content.meta[ERROR_TYPE], 'ReferenceError')
+        })
+        const passedTestSuites = suites.filter(
+          suite => suite.content.meta[TEST_STATUS] === 'pass'
+        )
+        assert.equal(passedTestSuites.length, 2)
       })
-    childProcess = exec(runTestsWithCoverageCommand, {
+
+    const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+    childProcess = exec(runTestsCommand, {
       cwd,
       env: {
-        ...getCiVisAgentlessConfig(receiver.port),
+        ...restEnvVars,
+        // need --experimental-vm-modules to trigger the error
+        NODE_OPTIONS: `${NODE_OPTIONS} --experimental-vm-modules`,
         TESTS_TO_RUN: 'jest-bad-import/jest-bad-import-test',
-        DISABLE_CODE_COVERAGE: '1'
+        RUN_IN_PARALLEL: true,
       },
       stdio: 'inherit'
     })
-    childProcess.stdout.pipe(process.stdout)
-    childProcess.stderr.pipe(process.stderr)
 
     await Promise.all([
       once(childProcess, 'exit'),
@@ -699,13 +713,10 @@ describe('jest CommonJS', () => {
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
-        env: {
-          ...getCiVisAgentlessConfig(receiver.port),
-          DISABLE_CODE_COVERAGE: '1'
-        },
+        env: getCiVisAgentlessConfig(receiver.port),
         stdio: 'inherit'
       }
     )
@@ -724,10 +735,10 @@ describe('jest CommonJS', () => {
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
-        env: getCiVisAgentlessConfig(receiver.port),
+        env: { ...getCiVisAgentlessConfig(receiver.port), ENABLE_CODE_COVERAGE: '1' },
         stdio: 'inherit'
       }
     )
@@ -861,7 +872,7 @@ describe('jest CommonJS', () => {
       })
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
         env: {
@@ -981,14 +992,14 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('can report code coverage', (done) => {
+    it('can report code coverage', async () => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
       const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
       const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
-      Promise.all([
+      const requestsPromises = Promise.all([
         libraryConfigRequestPromise,
         codeCovRequestPromise,
         eventsRequestPromise
@@ -1022,25 +1033,26 @@ describe('jest CommonJS', () => {
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
         assert.equal(numSuites, 2)
-      }).catch(done)
+      })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1'
+          },
           stdio: 'pipe'
         }
       )
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.on('exit', () => {
-        done()
-      })
+      await Promise.all([
+        requestsPromises,
+        once(childProcess, 'exit')
+      ])
     })
 
-    it('does not report code coverage if disabled by the API', (done) => {
+    it('does not report per test code coverage if disabled by the API', (done) => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -1068,10 +1080,13 @@ describe('jest CommonJS', () => {
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1'
+          },
           stdio: 'inherit'
         }
       )
@@ -1130,7 +1145,7 @@ describe('jest CommonJS', () => {
       }).catch(done)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1164,7 +1179,7 @@ describe('jest CommonJS', () => {
           assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
         })
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1213,7 +1228,7 @@ describe('jest CommonJS', () => {
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1253,7 +1268,7 @@ describe('jest CommonJS', () => {
       }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1316,7 +1331,7 @@ describe('jest CommonJS', () => {
         }, 25000)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1382,7 +1397,7 @@ describe('jest CommonJS', () => {
         }, 25000)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1421,7 +1436,7 @@ describe('jest CommonJS', () => {
         }, 25000)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1447,7 +1462,7 @@ describe('jest CommonJS', () => {
           })
         }, 25000)
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -1536,13 +1551,14 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand, // Requirement: the user must've opted in to code coverage
+        runTestsCommand, // Requirement: the user must've opted in to code coverage
         {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-total-code-coverage/test-',
-            COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**'
+            COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**',
+            ENABLE_CODE_COVERAGE: '1'
           },
           stdio: 'inherit'
         }
@@ -1611,7 +1627,7 @@ describe('jest CommonJS', () => {
       }).catch(done)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1688,7 +1704,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
@@ -1761,7 +1777,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test-early-flake-detection/test' },
@@ -1813,7 +1829,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1877,7 +1893,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1935,7 +1951,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1999,7 +2015,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2049,7 +2065,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2189,7 +2205,7 @@ describe('jest CommonJS', () => {
           assert.equal(passedFlakyTests.length, 2)
         })
 
-      childProcess = exec(runTestsWithCoverageCommand, {
+      childProcess = exec(runTestsCommand, {
         cwd,
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
@@ -2248,7 +2264,7 @@ describe('jest CommonJS', () => {
           assert.equal(passedFlakyTests.length, 2)
         })
 
-      childProcess = exec(runTestsWithCoverageCommand, {
+      childProcess = exec(runTestsCommand, {
         cwd,
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
@@ -2299,7 +2315,7 @@ describe('jest CommonJS', () => {
           assert.equal(newTests.length, 0)
         })
 
-      childProcess = exec(runTestsWithCoverageCommand, {
+      childProcess = exec(runTestsCommand, {
         cwd,
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
@@ -2367,7 +2383,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2442,7 +2458,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2506,7 +2522,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
@@ -2568,7 +2584,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'jest/failing-test' },
@@ -2643,7 +2659,7 @@ describe('jest CommonJS', () => {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -2698,7 +2714,7 @@ describe('jest CommonJS', () => {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -2772,7 +2788,7 @@ describe('jest CommonJS', () => {
             assert.equal(passedFlakyTests.length, 4)
           })
 
-        childProcess = exec(runTestsWithCoverageCommand, {
+        childProcess = exec(runTestsCommand, {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
@@ -2864,7 +2880,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2913,7 +2929,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2963,7 +2979,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -3010,7 +3026,7 @@ describe('jest CommonJS', () => {
           }
         }, 5000)
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3058,7 +3074,7 @@ describe('jest CommonJS', () => {
           }
         }, 5000)
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3142,7 +3158,7 @@ describe('jest CommonJS', () => {
           snapshotIdByLog = diLog.debugger.snapshot.id
         })
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3230,7 +3246,7 @@ describe('jest CommonJS', () => {
           snapshotIdByLog = diLog.debugger.snapshot.id
         })
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3280,7 +3296,7 @@ describe('jest CommonJS', () => {
           }
         }, 5000)
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3319,7 +3335,7 @@ describe('jest CommonJS', () => {
           assert.equal(retriedTest.duration < 200 * 1e6, true)
         })
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3360,7 +3376,7 @@ describe('jest CommonJS', () => {
           assert.equal(tests.length, 1)
         })
 
-      childProcess = exec(runTestsWithCoverageCommand,
+      childProcess = exec(runTestsCommand,
         {
           cwd,
           env: {
@@ -3426,7 +3442,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test/ci-visibility-test' },
@@ -3453,7 +3469,7 @@ describe('jest CommonJS', () => {
       })
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
         env: {
@@ -3596,7 +3612,7 @@ describe('jest CommonJS', () => {
         })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3751,7 +3767,7 @@ describe('jest CommonJS', () => {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3803,7 +3819,7 @@ describe('jest CommonJS', () => {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3866,7 +3882,7 @@ describe('jest CommonJS', () => {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3955,7 +3971,7 @@ describe('jest CommonJS', () => {
             })
 
           childProcess = exec(
-            runTestsWithCoverageCommand,
+            runTestsCommand,
             {
               cwd,
               env: {
@@ -4042,7 +4058,7 @@ describe('jest CommonJS', () => {
         const testAssertionsPromise = getTestAssertions(isDisabling, isParallel)
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -4177,7 +4193,7 @@ describe('jest CommonJS', () => {
         const testAssertionsPromise = getTestAssertions(isQuarantining, isParallel)
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -4267,7 +4283,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -4300,7 +4316,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -4445,7 +4461,7 @@ describe('jest CommonJS', () => {
       const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -4517,7 +4533,7 @@ describe('jest CommonJS', () => {
   context('winston mocking', () => {
     it('should allow winston to be mocked and verify createLogger is called', async () => {
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -4544,7 +4560,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -4570,7 +4586,7 @@ describe('jest CommonJS', () => {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
