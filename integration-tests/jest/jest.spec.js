@@ -661,7 +661,7 @@ describe('jest CommonJS', () => {
   })
 
   context('when using off timing imports', () => {
-    it.only('reports test suite errors when using off timing import', async () => {
+    it('reports test suite errors when using off timing import', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -701,7 +701,7 @@ describe('jest CommonJS', () => {
       ])
     })
 
-    it.only('reports test suite errors when importing after environment is torn down', async () => {
+    it('reports test suite errors when importing after environment is torn down', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -715,9 +715,6 @@ describe('jest CommonJS', () => {
           assert.equal(failedTestSuites.length, 1)
           const [failedTestSuite] = failedTestSuites
 
-          // REMOVE BEFORE MERGING
-          console.log('ACTUAL ERROR MESSAGE: ', failedTestSuite.content.meta[ERROR_MESSAGE])
-
           assert.equal(failedTestSuite.content.meta[TEST_STATUS], 'fail')
           assert.include(
             failedTestSuite.content.meta[ERROR_MESSAGE],
@@ -728,7 +725,10 @@ describe('jest CommonJS', () => {
             'From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
           )
           // This is the error message that jest should show. We check that we don't mess it up.
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], "require('./off-timing-import.js')")
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'off-timing-import.js')
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'afterAll')
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'process.nextTick')
+
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
           )
