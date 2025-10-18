@@ -24,10 +24,10 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static prefix = 'tracing:datadog:azure:functions:invoke'
 
   bindStart (ctx) {
-    const childOf = extractTraceContext(this._tracer, ctx)
     const meta = getMetaForTrigger(ctx)
     const triggerType = triggerMap[ctx.methodName]
     const isMessagingService = (triggerType === 'ServiceBus' || triggerType === 'EventHubs')
+    const childOf = isMessagingService ? null : extractTraceContext(this._tracer, ctx)
     const span = this.startSpan(this.operationName(), {
       childOf,
       service: this.serviceName(),
@@ -36,7 +36,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
     }, ctx)
 
     if (isMessagingService) {
-      setSpanLinks(this.tracer, span, ctx)
+      setSpanLinks(triggerType, this.tracer, span, ctx)
     }
 
     ctx.span = span
@@ -116,28 +116,38 @@ function extractTraceContext (tracer, ctx) {
   switch (String(triggerMap[ctx.methodName])) {
     case 'Http':
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
-    case 'ServiceBus':
-      return tracer.extract('text_map', ctx.invocationContext.triggerMetadata.applicationProperties)
     default:
       null
   }
 }
 
-function setSpanLinks (tracer, span, ctx) {
+// message & messages & batch with cardinality of 1 == applicationProperties
+// messages with cardinality of many == applicationPropertiesArray
+function setSpanLinks (triggerType, tracer, span, ctx) {
   const cardinality = ctx.invocationContext.options.trigger.cardinality
   const triggerMetadata = ctx.invocationContext.triggerMetadata
-  if (cardinality === 'many' && triggerMetadata.propertiesArray.length > 0) {
-    triggerMetadata.propertiesArray.forEach(event => {
-      // Check for possible empty event when span links are disabled
-      if (Object.keys(event).length > 0) {
-        span.addLink(tracer.extract('text_map', event))
-      }
-    })
-  } else if (cardinality === 'one') {
-    const spanContext = tracer.extract('text_map', triggerMetadata.properties)
+  const isServiceBus = triggerType === 'ServiceBus'
+
+  const properties = isServiceBus
+    ? triggerMetadata.applicationProperties
+    : triggerMetadata.properties
+
+  const propertiesArray = isServiceBus
+    ? triggerMetadata.applicationPropertiesArray
+    : triggerMetadata.propertiesArray
+
+  const addLinkFromProperties = (props) => {
+    if (!props || Object.keys(props).length === 0) return
+    const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
       span.addLink(spanContext)
     }
+  }
+
+  if (cardinality === 'many' && propertiesArray?.length > 0) {
+    propertiesArray.forEach(addLinkFromProperties)
+  } else if (cardinality === 'one') {
+    addLinkFromProperties(properties)
   }
 }
 
