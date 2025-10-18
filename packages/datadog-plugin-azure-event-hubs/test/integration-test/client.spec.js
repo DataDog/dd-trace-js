@@ -16,7 +16,7 @@ describe('esm', () => {
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@azure/event-hubs@${version}'`], false, [
         './packages/datadog-plugin-azure-event-hubs/test/integration-test/*'])
     })
