@@ -231,9 +231,9 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-taint-tracking@./datadog-native-iast-taint-tracking-4.0.0.tgz":
+"@datadog/native-iast-taint-tracking@file:vendor/datadog-native-iast-taint-tracking-4.0.0.tgz":
   version "4.0.0"
-  resolved "./datadog-native-iast-taint-tracking-4.0.0.tgz#2fdd9964556d617720905b89665d39f57a2690b0"
+  resolved "file:vendor/datadog-native-iast-taint-tracking-4.0.0.tgz#2fdd9964556d617720905b89665d39f57a2690b0"
   dependencies:
     node-gyp-build "^3.9.0"
 
