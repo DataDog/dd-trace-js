@@ -43,9 +43,6 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
       return
     }
 
-    const payload = this.transformer.transformMetrics(metrics)
-    this._sendPayload(payload, resultCallback)
-
     // Count total data points across all metrics
     let dataPointCount = 0
     for (const metric of metrics) {
@@ -53,7 +50,19 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
         dataPointCount += metric.data.length
       }
     }
-    this._recordTelemetry('otel.metric_data_points', dataPointCount)
+
+    // Record export attempt with tags
+    const telemetryTags = [...this._getTelemetryTags(), `points:${dataPointCount}`]
+    this._recordTelemetry('otel.metrics_export_attempts', 1, telemetryTags)
+
+    const payload = this.transformer.transformMetrics(metrics)
+    this._sendPayload(payload, (result) => {
+      // Record success if export succeeded
+      if (result.code === 0) {
+        this._recordTelemetry('otel.metrics_export_successes', 1, telemetryTags)
+      }
+      resultCallback(result)
+    })
   }
 }
 
