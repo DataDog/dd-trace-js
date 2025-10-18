@@ -280,11 +280,13 @@ class LLMObsTagger {
         continue
       }
 
-      const { result, toolId, type } = toolResult
+      const { result, toolId, name = '', type } = toolResult
       const toolResultObj = {}
 
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      // name can be empty string, so always include it
+      toolResultObj.name = name
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -318,14 +320,12 @@ class LLMObsTagger {
       const toolCalls = message.toolCalls
       const toolResults = message.toolResults
       const toolId = message.toolId
-      const messageObj = { content }
+      const messageObj = {}
 
       const valid = typeof content === 'string'
       if (!valid) {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
-
-      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
@@ -341,6 +341,23 @@ class LLMObsTagger {
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
         }
+      }
+
+      // Include content if not empty, no tool calls/results, or explicitly provided
+      if (content !== '' || (!messageObj.tool_calls && !messageObj.tool_results) || ('content' in message)) {
+        messageObj.content = content
+      }
+
+      // For role, always include it when there are tool calls or tool results
+      // Otherwise use conditional tagging which skips empty values
+      let condition
+      if ((messageObj.tool_calls && messageObj.tool_calls.length > 0) || 
+          (messageObj.tool_results && messageObj.tool_results.length > 0)) {
+        // For tool call/result messages, always include role
+        messageObj.role = role || ''
+        condition = true
+      } else {
+        condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
       }
 
       if (toolId) {
