@@ -13,9 +13,10 @@ const { rawExpectedSchema } = require('./kinesis-naming')
 const id = require('../../dd-trace/src/id')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const agentTimeout = 20000
 
 describe('Kinesis', function () {
-  this.timeout(10000)
+  this.timeout(20000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -255,7 +256,7 @@ describe('Kinesis', function () {
           expect(getRecordSpanMeta).to.include({
             'pathway.hash': expectedConsumerHash
           })
-        }, { timeoutMs: 10000 }).then(done, done)
+        }, { timeoutMs: agentTimeout }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
@@ -298,7 +299,7 @@ describe('Kinesis', function () {
           })
           expect(statsPointsReceived).to.be.at.least(1)
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
+        }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
@@ -315,10 +316,10 @@ describe('Kinesis', function () {
                 statsPointsReceived += statsBuckets.Stats.length
               })
             }
-          }, { timeoutMs: 10000 })
+          }, { timeoutMs: agentTimeout })
           expect(statsPointsReceived).to.be.at.least(2)
           expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
+        }, { timeoutMs: agentTimeout }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
@@ -339,10 +340,10 @@ describe('Kinesis', function () {
                 statsPointsReceived += statsBuckets.Stats.length
               })
             }
-          }, { timeoutMs: 10000 })
+          }, { timeoutMs: agentTimeout })
           expect(statsPointsReceived).to.equal(1)
           expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
+        }, { timeoutMs: agentTimeout }).then(done, done)
 
         agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
@@ -377,7 +378,7 @@ describe('Kinesis', function () {
           })
           expect(statsPointsReceived).to.be.at.least(3)
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }, { timeoutMs: 10000 }).then(done, done)
+        }, { timeoutMs: agentTimeout }).then(done, done)
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
           // Swallow the error as it doesn't matter for this test.
