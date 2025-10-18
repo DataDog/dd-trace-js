@@ -37,7 +37,9 @@ for (const deprecation of Object.keys(deprecations)) {
 module.exports = {
   /**
    * Returns the environment variables that are supported by the tracer
-   * (including all non-Datadog/OTEL specific environment variables)
+   * (including all non-Datadog/OTEL specific environment variables).
+   *
+   * This should only be called once in config.js to avoid copying the object frequently.
    *
    * @returns {TracerEnv} The environment variables
    */

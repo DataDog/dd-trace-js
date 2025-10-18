@@ -95,10 +95,11 @@ function normalizeNumber (number) {
 }
 
 function getGitHubEventPayload () {
-  if (!getEnvironmentVariable('GITHUB_EVENT_PATH')) {
+  const path = getEnvironmentVariable('GITHUB_EVENT_PATH')
+  if (!path) {
     return
   }
-  return JSON.parse(readFileSync(getEnvironmentVariable('GITHUB_EVENT_PATH'), 'utf8'))
+  return JSON.parse(readFileSync(path, 'utf8'))
 }
 
 module.exports = {
