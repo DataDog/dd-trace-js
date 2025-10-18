@@ -95,8 +95,7 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        langchainOpenai = require(`../../../versions/langchain@${version}`)
-          .get('@langchain/openai')
+        langchainOpenai = require('../../../versions/@langchain/openai@0.1.0').get()
         langchainAnthropic = require(`../../../versions/@langchain/anthropic@${version}`).get()
         if (version !== '0.1.0') {
           // version mismatching otherwise
@@ -114,7 +113,7 @@ describe('Plugin', () => {
         langchainTools = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/tools')
 
-        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
+        MemoryVectorStore = require(`../../../versions/langchain@${version}`)
           .get('langchain/vectorstores/memory')
           .MemoryVectorStore
       })
