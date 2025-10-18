@@ -1,9 +1,9 @@
 'use strict'
 
 /**
- * @fileoverview Protobuf Loader for OpenTelemetry Logs
+ * @fileoverview Protobuf Loader for OpenTelemetry Logs and Metrics
  *
- * This module loads protobuf definitions for OpenTelemetry logs.
+ * This module loads protobuf definitions for OpenTelemetry logs and metrics.
  *
  * VERSION SUPPORT:
  * - OTLP Protocol: v1.7.0
@@ -20,10 +20,17 @@ const path = require('path')
 let _root = null
 let protoLogsService = null
 let protoSeverityNumber = null
+let protoMetricsService = null
+let protoAggregationTemporality = null
 
 function getProtobufTypes () {
   if (_root) {
-    return { protoLogsService, protoSeverityNumber }
+    return {
+      protoLogsService,
+      protoSeverityNumber,
+      protoMetricsService,
+      protoAggregationTemporality
+    }
   }
   // Load the proto files
   const protoDir = __dirname
@@ -31,16 +38,27 @@ function getProtobufTypes () {
     'common.proto',
     'resource.proto',
     'logs.proto',
-    'logs_service.proto'
+    'logs_service.proto',
+    'metrics.proto',
+    'metrics_service.proto'
   ].map(file => path.join(protoDir, file))
 
   _root = protobuf.loadSync(protoFiles)
 
-  // Get the message types
+  // Get the message types for logs
   protoLogsService = _root.lookupType('opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest')
   protoSeverityNumber = _root.lookupEnum('opentelemetry.proto.logs.v1.SeverityNumber')
 
-  return { protoLogsService, protoSeverityNumber }
+  // Get the message types for metrics
+  protoMetricsService = _root.lookupType('opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest')
+  protoAggregationTemporality = _root.lookupEnum('opentelemetry.proto.metrics.v1.AggregationTemporality')
+
+  return {
+    protoLogsService,
+    protoSeverityNumber,
+    protoMetricsService,
+    protoAggregationTemporality
+  }
 }
 
 module.exports = {

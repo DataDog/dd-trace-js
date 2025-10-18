@@ -60,18 +60,21 @@
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
 
-/packages/dd-trace/src/llmobs/ @DataDog/ml-observability
-/packages/dd-trace/test/llmobs/ @DataDog/ml-observability
-/packages/datadog-plugin-openai/ @DataDog/ml-observability
-/packages/datadog-plugin-langchain/ @DataDog/ml-observability
-/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
-/packages/datadog-plugin-ai/ @DataDog/ml-observability
-/packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
-/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
+# LLM Observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/langchain.js @DataDog/ml-observability
+/packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
+/packages/datadog-plugin-ai/ @DataDog/ml-observability
+/packages/datadog-plugin-anthropic/ @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
+/packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
+/packages/datadog-plugin-langchain/ @DataDog/ml-observability
+/packages/datadog-plugin-openai/ @DataDog/ml-observability
+/packages/dd-trace/src/llmobs/ @DataDog/ml-observability
+/packages/dd-trace/test/llmobs/ @DataDog/ml-observability
 
 # API SDK
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js

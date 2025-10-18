@@ -35,7 +35,6 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => {
           tracer = require('../../dd-trace')
-          tracer.init()
           return agent.load('aws-sdk')
         })
 
