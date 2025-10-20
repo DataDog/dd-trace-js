@@ -17,7 +17,7 @@ let hasCompatibleBun = env => {
     if (!semifies(version, `^${BUN_VERSION}`)) {
       return false
     }
-  } catch (e) {
+  } catch {
     return false
   }
 
