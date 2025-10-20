@@ -1,5 +1,6 @@
 'use strict'
 
+const { channel } = require('./instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const routerMountPaths = new WeakMap() // to track mount paths for router instances
@@ -7,6 +8,8 @@ const layerMatchers = new WeakMap() // to store layer matchers
 const appMountedRouters = new WeakSet() // to track routers mounted via app.use()
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
+
+const routeAddedChannel = channel('apm:express:route:added')
 
 function joinPath (base, path) {
   if (!base || base === '/') return path || '/'
@@ -18,33 +21,68 @@ function joinPath (base, path) {
 // Normalize route definitions coming from Express into a string representation
 function normalizeRoutePath (path) {
   if (path == null) return null
-  if (path instanceof RegExp) return path.toString()
   if (typeof path === 'string') return path
+  if (path instanceof RegExp) return path.toString()
 
   return String(path)
 }
 
+// Recursively publish every route reachable from the router.
+function collectRoutesFromRouter (router, prefix) {
+  if (!router?.stack?.length) return
+
+  for (const layer of router.stack) {
+    if (layer.route) {
+      // This layer has a direct route
+      const route = layer.route
+
+      const fullPaths = getRouteFullPaths(route, prefix)
+
+      for (const fullPath of fullPaths) {
+        for (const [method, enabled] of Object.entries(route.methods || {})) {
+          if (!enabled) continue
+          routeAddedChannel.publish({
+            method: normalizeMethodName(method),
+            path: fullPath
+          })
+        }
+      }
+    } else if (layer.handle?.stack?.length) {
+      // This layer contains a nested router
+      // Extract mount path from layer
+      const mountPath = typeof layer.path === 'string'
+        ? layer.path
+        : getLayerMatchers(layer)?.[0]?.path || ''
+
+      const nestedPrefix = joinPath(prefix, mountPath)
+      // Set the mount path for the nested router
+      setRouterMountPath(layer.handle, nestedPrefix)
+      markAppMounted(layer.handle)
+      // Recursively collect from nested routers
+      collectRoutesFromRouter(layer.handle, nestedPrefix)
+    }
+  }
+}
+
 // Flatten any route definition into an array of normalized path strings.
 function normalizeRoutePaths (path) {
-  const queue = Array.isArray(path) ? [...path] : [path]
-  const paths = []
+  if (path == null) return []
 
-  while (queue.length) {
-    const current = queue.shift()
+  if (Array.isArray(path) === false) {
+    const normalized = normalizeRoutePath(path)
+    return [normalized]
+  }
 
-    if (Array.isArray(current)) {
-      queue.unshift(...current)
-      continue
-    }
-
-    const normalized = normalizeRoutePath(current)
-
+  const paths = path.flat(Infinity)
+  const result = []
+  for (const _path of paths) {
+    const normalized = normalizeRoutePath(_path)
     if (normalized !== null) {
-      paths.push(normalized)
+      result.push(normalized)
     }
   }
 
-  return paths
+  return result
 }
 
 function setRouterMountPath (router, mountPath) {
@@ -98,15 +136,14 @@ function isAppMounted (router) {
  * no mount path at all; this helper returns the flattened set of paths along
  * with the index where actual middleware arguments start.
  */
-function extractMountPaths (args) {
-  const firstArg = args[0]
-  const hasMount = typeof firstArg === 'string' || firstArg instanceof RegExp || Array.isArray(firstArg)
+function extractMountPaths (path) {
+  const hasMount = typeof path === 'string' || path instanceof RegExp || Array.isArray(path)
 
   if (!hasMount) {
     return { mountPaths: ['/'], startIdx: 0 }
   }
 
-  const paths = normalizeRoutePaths(firstArg)
+  const paths = normalizeRoutePaths(path)
   return {
     mountPaths: paths.length ? paths : ['/'],
     startIdx: 1
@@ -137,18 +174,22 @@ function hasRouterCycle (router, stack = new Set()) {
 }
 
 function wrapRouteMethodsAndPublish (route, paths, publish) {
-  if (!route || !paths?.length || typeof publish !== 'function') return
+  if (!route || !paths.length) return
 
-  const uniquePaths = [...new Set(paths.filter(Boolean))]
-  if (!uniquePaths.length) return
+  const filteredPaths = paths.filter(Boolean)
+  if (!filteredPaths.length) return
+
+  const uniquePaths = [...new Set(filteredPaths)]
 
   METHODS.forEach(method => {
     if (typeof route[method] !== 'function') return
 
     shimmer.wrap(route, method, (originalMethod) => function wrappedRouteMethod () {
+      const normalizedMethod = normalizeMethodName(method)
+
       for (const path of uniquePaths) {
         publish({
-          method: normalizeMethodName(method),
+          method: normalizedMethod,
           path
         })
       }
@@ -164,7 +205,6 @@ module.exports = {
   joinPath,
   setLayerMatchers,
   getLayerMatchers,
-  normalizeMethodName,
   markAppMounted,
   isAppMounted,
   normalizeRoutePath,
@@ -172,5 +212,6 @@ module.exports = {
   getRouteFullPaths,
   wrapRouteMethodsAndPublish,
   extractMountPaths,
-  hasRouterCycle
+  hasRouterCycle,
+  collectRoutesFromRouter
 }

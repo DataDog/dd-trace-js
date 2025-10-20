@@ -5,15 +5,12 @@ const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   setRouterMountPath,
-  joinPath,
-  getLayerMatchers,
-  normalizeMethodName,
   markAppMounted,
   normalizeRoutePaths,
   wrapRouteMethodsAndPublish,
   extractMountPaths,
   hasRouterCycle,
-  getRouteFullPaths
+  collectRoutesFromRouter
 } = require('./helpers/router-helper')
 
 const handleChannel = channel('apm:express:request:handle')
@@ -103,15 +100,15 @@ function wrapAppRoute (route) {
 }
 
 function wrapAppUse (use) {
-  return function wrappedUse () {
-    if (arguments.length === 0) return use.apply(this, arguments)
+  return function wrappedUse (...args) {
+    if (!args.length) return use.call(this)
 
     // Get mount argument and use it to register each router against the exact paths Express will use.
-    const { mountPaths, startIdx } = extractMountPaths(arguments)
+    const { mountPaths, startIdx } = extractMountPaths(args[0])
     const pathsToRegister = mountPaths.length ? mountPaths : ['/']
 
-    for (let i = startIdx; i < arguments.length; i++) {
-      const router = arguments[i]
+    for (let i = startIdx; i < args.length; i++) {
+      const router = args[i]
 
       if (!router || typeof router !== 'function') continue
 
@@ -135,43 +132,6 @@ function wrapAppUse (use) {
     }
 
     return use.apply(this, arguments)
-  }
-}
-
-// Recursively publish every route reachable from the router.
-function collectRoutesFromRouter (router, prefix) {
-  if (!router?.stack?.length) return
-
-  for (const layer of router.stack) {
-    if (layer.route) {
-      // This layer has a direct route
-      const route = layer.route
-
-      const fullPaths = getRouteFullPaths(route, prefix)
-
-      for (const fullPath of fullPaths) {
-        for (const [method, enabled] of Object.entries(route.methods || {})) {
-          if (!enabled) continue
-          routeAddedChannel.publish({
-            method: normalizeMethodName(method),
-            path: fullPath
-          })
-        }
-      }
-    } else if (layer.handle?.stack?.length) {
-      // This layer contains a nested router
-      // Extract mount path from layer
-      const mountPath = typeof layer.path === 'string'
-        ? layer.path
-        : getLayerMatchers(layer)?.[0]?.path || ''
-
-      const nestedPrefix = joinPath(prefix, mountPath)
-      // Set the mount path for the nested router
-      setRouterMountPath(layer.handle, nestedPrefix)
-      markAppMounted(layer.handle)
-      // Recursively collect from nested routers
-      collectRoutesFromRouter(layer.handle, nestedPrefix)
-    }
   }
 }
 

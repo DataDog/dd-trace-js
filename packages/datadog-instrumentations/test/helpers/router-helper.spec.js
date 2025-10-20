@@ -1,7 +1,9 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const { channel } = require('../../src/helpers/instrument')
 
 const {
   joinPath,
@@ -12,10 +14,13 @@ const {
   setRouterMountPath,
   getRouterMountPaths,
   extractMountPaths,
-  hasRouterCycle
+  hasRouterCycle,
+  collectRoutesFromRouter,
+  setLayerMatchers,
+  isAppMounted
 } = require('../../src/helpers/router-helper')
 
-describe('helpers/router-helper', () => {
+describe.only('helpers/router-helper', () => {
   describe('normalizeRoutePath', () => {
     it('should return null for nullish values', () => {
       expect(normalizeRoutePath(null)).to.equal(null)
@@ -111,14 +116,14 @@ describe('helpers/router-helper', () => {
 
   describe('extractMountPaths', () => {
     it('should default to root when no mount path provided', () => {
-      const { mountPaths, startIdx } = extractMountPaths([])
+      const { mountPaths, startIdx } = extractMountPaths(() => {})
 
       expect(mountPaths).to.deep.equal(['/'])
       expect(startIdx).to.equal(0)
     })
 
     it('should normalize string mount paths', () => {
-      const { mountPaths, startIdx } = extractMountPaths(['/test'])
+      const { mountPaths, startIdx } = extractMountPaths('/test')
 
       expect(mountPaths).to.deep.equal(['/test'])
       expect(startIdx).to.equal(1)
@@ -126,9 +131,17 @@ describe('helpers/router-helper', () => {
 
     it('should flatten array mount paths including regex', () => {
       const regex = /\/foo/
-      const { mountPaths } = extractMountPaths([[['/one'], regex]])
+      const { mountPaths, startIdx } = extractMountPaths([[['/one'], regex]])
 
       expect(mountPaths).to.deep.equal(['/one', regex.toString()])
+      expect(startIdx).to.equal(1)
+    })
+
+    it('should ignore handlers as mount paths', () => {
+      const { mountPaths, startIdx } = extractMountPaths(function handler () {})
+
+      expect(mountPaths).to.deep.equal(['/'])
+      expect(startIdx).to.equal(0)
     })
   })
 
@@ -155,6 +168,101 @@ describe('helpers/router-helper', () => {
       router.stack.push({ handle: router })
 
       expect(hasRouterCycle(router)).to.be.true
+    })
+  })
+
+  describe('collectRoutesFromRouter', () => {
+    const routeAddedChannel = channel('apm:express:route:added')
+    let published
+    let subscription
+
+    beforeEach(() => {
+      published = []
+      subscription = (payload) => {
+        published.push(payload)
+      }
+      routeAddedChannel.subscribe(subscription)
+    })
+
+    afterEach(() => {
+      routeAddedChannel.unsubscribe(subscription)
+    })
+
+    it('should publish direct routes with all enabled methods', () => {
+      const router = {
+        stack: [{
+          route: {
+            path: '',
+            methods: {
+              get: true,
+              post: true,
+              delete: false
+            }
+          }
+        }]
+      }
+
+      collectRoutesFromRouter(router, '/api')
+
+      expect(published).to.deep.equal([
+        { method: 'get', path: '/api' },
+        { method: 'post', path: '/api' }
+      ])
+    })
+
+    it('should traverse nested routers and mark them mounted', () => {
+      const childRouter = {
+        stack: [{
+          route: {
+            path: '/nested',
+            methods: { get: true }
+          }
+        }]
+      }
+
+      const parentRouter = {
+        stack: [{
+          handle: childRouter,
+          path: '/sub'
+        }]
+      }
+
+      collectRoutesFromRouter(parentRouter, '/api')
+
+      expect(published).to.deep.equal([
+        { method: 'get', path: '/api/sub/nested' }
+      ])
+      expect(getRouterMountPaths(childRouter)).to.deep.equal(['/api/sub'])
+      expect(isAppMounted(childRouter)).to.be.true
+    })
+
+    it('should use layer matchers when mount path is not a string', () => {
+      const childRouter = {
+        stack: [{
+          route: {
+            path: '/details',
+            methods: { all: true }
+          }
+        }]
+      }
+
+      const layer = {
+        handle: childRouter,
+        path: undefined
+      }
+
+      setLayerMatchers(layer, [{ path: '/dynamic' }])
+
+      const parentRouter = {
+        stack: [layer]
+      }
+
+      collectRoutesFromRouter(parentRouter, '/root')
+
+      expect(published).to.deep.equal([
+        { method: '*', path: '/root/dynamic/details' }
+      ])
+      expect(getRouterMountPaths(childRouter)).to.deep.equal(['/root/dynamic'])
     })
   })
 

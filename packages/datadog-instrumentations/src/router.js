@@ -5,9 +5,10 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
-// Routes registered on routers before they are mounted must emit on the
-// express channel so telemetry treats them like top-level express routes.
+// Routes declared on a router before mounting only hit router instrumentation.
+// Publishing them to the Express channel keeps telemetry aware of full path
 const expressRouteAddedChannel = channel('apm:express:route:added')
+
 const {
   getRouterMountPaths,
   joinPath,
@@ -17,7 +18,8 @@ const {
   setRouterMountPath,
   extractMountPaths,
   getRouteFullPaths,
-  wrapRouteMethodsAndPublish
+  wrapRouteMethodsAndPublish,
+  collectRoutesFromRouter
 } = require('./helpers/router-helper')
 
 function isFastStar (layer, matchers) {
@@ -164,10 +166,10 @@ function createWrapRouterMethod (name) {
       }
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
-      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack && this.stack.length > offset) {
+      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
         if (original.name === 'use' && arguments.length >= 2) {
-          const { mountPaths, startIdx } = extractMountPaths(arguments)
+          const { mountPaths, startIdx } = extractMountPaths(fn)
 
           if (mountPaths.length) {
             const parentPaths = getRouterMountPaths(this)
@@ -177,12 +179,13 @@ function createWrapRouterMethod (name) {
 
               if (!nestedRouter || typeof nestedRouter !== 'function') continue
 
-              parentPaths.forEach(parentPath => {
-                mountPaths.forEach(normalizedMountPath => {
+              for (const parentPath of parentPaths) {
+                for (const normalizedMountPath of mountPaths) {
                   const fullMountPath = joinPath(parentPath, normalizedMountPath)
                   setRouterMountPath(nestedRouter, fullMountPath)
-                })
-              })
+                  collectRoutesFromRouter(nestedRouter, fullMountPath)
+                }
+              }
             }
           }
         }
@@ -190,7 +193,7 @@ function createWrapRouterMethod (name) {
         const mountPaths = getRouterMountPaths(this)
 
         if (mountPaths.length) {
-          const layer = this.stack[this.stack.length - 1]
+          const layer = this.stack.at(-1)
 
           if (layer?.route) {
             const route = layer.route

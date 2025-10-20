@@ -41,7 +41,7 @@ app.all('/all-methods', async (_, res) => res.send('ok'))
 app.all(['/wildcard/*name'], (_, res) => res.send('ok'))
 
 // RegExp wildcard route
-app.all(/^\/login\/.*$/i, (req, res) => {
+app.all(/^\/login\/.*$/i, (_, res) => {
   res.send('ok')
 })
 

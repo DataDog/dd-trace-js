@@ -55,14 +55,13 @@ function onExpressRoute ({ method, path }) {
   // If wildcard already recorded for this path, skip specific methods
   if (wildcardEndpoints.has(path)) return
 
+  recordEndpoint(method, path)
+
   // If this is a wildcard event, record it and mark path as wildcarded
   if (method === '*') {
     wildcardEndpoints.add(path)
-    recordEndpoint('*', path)
     return
   }
-
-  recordEndpoint(method, path)
 
   // Express automatically adds HEAD support for GET routes
   if (method.toUpperCase() === 'GET') {
