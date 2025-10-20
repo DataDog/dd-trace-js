@@ -395,9 +395,8 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: yarn add --ignore-scripts express@4 # Use older express to support old Node.js versions
-      - run: npm i -g npm@8 # Recent enough to support `--pack-destination` and old enough for old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
       - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
         if: always()
