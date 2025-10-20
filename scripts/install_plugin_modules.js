@@ -9,7 +9,7 @@ const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
-const { withBun } = require('./bun')
+const { BUN, withBun } = require('../integration-tests/helpers/bun')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -244,9 +244,7 @@ async function assertWorkspaces () {
  */
 function install (force = false, retry = true) {
   const flags = [
-    '--linker=isolated',
-    '--omit=peer',
-    '--ignore-engines'
+    '--linker=hoisted'
   ]
 
   if (force) {
@@ -254,7 +252,7 @@ function install (force = false, retry = true) {
   }
 
   try {
-    exec(`bun install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
+    exec(`${BUN} install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(force, false) // retry in case of server error from registry
