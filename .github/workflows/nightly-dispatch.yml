@@ -7,7 +7,6 @@ on:
         description: 'Node Version To Use'
         required: true
         type: number
-
       apm-integrations:
         description: 'APM Integration Tests'
         required: false
@@ -49,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger ${{matrix.workflow }} workflow
-        if: ${{format('{0}.{1}','inputs', 'workflow')}}
-        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=inputs.node-version
+        if: ${{ inputs[matrix.workflow] }}
+        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=${{ inputs.node-version }}
         env:
           GH_TOKEN: ${{ github.token }}
