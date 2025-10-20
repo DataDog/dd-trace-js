@@ -22,9 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
       - run: mkdir npm bun
       - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
-      - run: bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
+      - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
   core:

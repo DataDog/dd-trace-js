@@ -13,7 +13,7 @@ const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
 const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
-const { withBun } = require('./bun')
+const { BUN, withBun } = require('./bun')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -275,15 +275,19 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const deps = cappedDependencies.join(' ')
 
   await fs.mkdir(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`bun pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  const addFlags = ['--linker=hoisted', '--ignore-engines']
+  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv })
 
-  if (deps) {
-    execHelper(`bun add ${deps} --linker=hoisted --trust --ignore-engines${preferOfflineFlag}`, addOptions)
+  if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
+    addFlags.push('--prefer-offline')
   }
 
-  execHelper(`bun add file:${out} --linker=hoisted --ignore-scripts --ignore-engines${preferOfflineFlag}`, addOptions)
+  if (deps) {
+    execHelper(`${BUN} add ${deps} ${addFlags.concat('--trust')}`, addOptions)
+  }
+
+  execHelper(`${BUN} add file:${out} ${addFlags.concat('--ignore-scripts')}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
