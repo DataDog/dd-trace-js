@@ -284,10 +284,10 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
 
   if (deps) {
-    execHelper(`${BUN} add ${deps} ${addFlags.concat('--trust')}`, addOptions)
+    execHelper(`${BUN} add ${deps} ${addFlags.concat('--trust').join(' ')}`, addOptions)
   }
 
-  execHelper(`${BUN} add file:${out} ${addFlags.concat('--ignore-scripts')}`, addOptions)
+  execHelper(`${BUN} add file:${out} ${addFlags.concat('--ignore-scripts').join(' ')}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
