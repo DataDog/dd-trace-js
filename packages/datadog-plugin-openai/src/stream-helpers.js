@@ -115,8 +115,6 @@ function constructChatCompletionResponseFromStreamedChunks (chunks, n) {
  * @returns {Record<string, any>}
  */
 function constructResponseResponseFromStreamedChunks (chunks, n) {
-  if (chunks.length === 0) return {}
-  
   // The responses API streams events with different types:
   // - response.output_text.delta: incremental text deltas
   // - response.output_text.done: complete text for a content part
@@ -124,16 +122,13 @@ function constructResponseResponseFromStreamedChunks (chunks, n) {
   // - response.done/response.incomplete/response.completed: final response with output array and usage
   
   // Find the last chunk with a complete response object (status: done, incomplete, or completed)
-  let finalResponse
   for (let i = chunks.length - 1; i >= 0; i--) {
     const chunk = chunks[i]
     if (chunk.response && ['done', 'incomplete', 'completed'].includes(chunk.response.status)) {
-      finalResponse = chunk.response
-      return finalResponse
+      return chunk.response
     }
   }
   
-  return finalResponse
 }
 
 module.exports = {

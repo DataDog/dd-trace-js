@@ -98,7 +98,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       } else if (tokenUsage.prompt_tokens_details) {
         // Chat/Completions API - only include if > 0
         const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
-        if (cacheReadTokens !== undefined && cacheReadTokens > 0) {
+        if (cacheReadTokens) {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
@@ -206,6 +206,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagResponse (span, inputs, response, error) {
+    // Tag metadata - use allowlist approach for request parameters
+    const allowedParamKeys = [
+      'max_output_tokens',
+      'temperature',
+      'stream',
+      'reasoning'
+    ]
+    
     const { input, model, ...parameters } = inputs
 
     // Create input messages
@@ -226,7 +234,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           if (typeof parsedArgs === 'string') {
             try {
               parsedArgs = JSON.parse(parsedArgs)
-            } catch (e) {
+            } catch {
               parsedArgs = {}
             }
           }
@@ -280,7 +288,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         if (item.type === 'reasoning') {
           // Extract reasoning text from summary
           let reasoningText = ''
-          if (item.summary && Array.isArray(item.summary) && item.summary.length > 0) {
+          if (Array.isArray(item.summary) && item.summary.length > 0) {
             const summaryItem = item.summary[0]
             if (summaryItem.type === 'summary_text' && summaryItem.text) {
               reasoningText = summaryItem.text
@@ -297,7 +305,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           if (typeof args === 'string') {
             try {
               args = JSON.parse(args)
-            } catch (e) {
+            } catch {
               args = {}
             }
           }
@@ -319,7 +327,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             // Content is array of content parts
             // For responses API, text content has type 'output_text', not 'text'
             const textParts = item.content
-              .filter(c => c.type === 'text' || c.type === 'output_text')
+              .filter(c => c.type === 'output_text')
               .map(c => c.text)
             outputMsg.content = textParts.join('')
           } else if (typeof item.content === 'string') {
@@ -327,7 +335,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           }
           
           // Extract tool calls if present in message.tool_calls
-          if (item.tool_calls && Array.isArray(item.tool_calls)) {
+          if (Array.isArray(item.tool_calls)) {
             outputMsg.toolCalls = item.tool_calls.map(tc => {
               let args = tc.function?.arguments || tc.arguments
               // Parse arguments if it's a JSON string
@@ -359,14 +367,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
-    
-    // Tag metadata - use allowlist approach for request parameters
-    const allowedParamKeys = [
-      'max_output_tokens',
-      'temperature',
-      'stream',
-      'reasoning'
-    ]
     
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
       if (allowedParamKeys.includes(key)) {

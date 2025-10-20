@@ -286,7 +286,11 @@ class LLMObsTagger {
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
       // name can be empty string, so always include it
-      toolResultObj.name = name
+      if (typeof name === 'string') {
+        toolResultObj.name = name
+      } else {
+        this.#handleFailure(`[LLMObs] Expected tool result name to be a string, instead got "${typeof name}"`)
+      }
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -320,7 +324,7 @@ class LLMObsTagger {
       const toolCalls = message.toolCalls
       const toolResults = message.toolResults
       const toolId = message.toolId
-      const messageObj = {}
+      const messageObj = {content}
 
       const valid = typeof content === 'string'
       if (!valid) {
@@ -341,11 +345,6 @@ class LLMObsTagger {
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
         }
-      }
-
-      // Include content if not empty, no tool calls/results, or explicitly provided
-      if (content !== '' || (!messageObj.tool_calls && !messageObj.tool_results) || ('content' in message)) {
-        messageObj.content = content
       }
 
       // For role, always include it when there are tool calls or tool results
