@@ -120,7 +120,7 @@ function constructResponseResponseFromStreamedChunks (chunks, n) {
   // - response.output_text.done: complete text for a content part
   // - response.output_item.done: complete output item with role
   // - response.done/response.incomplete/response.completed: final response with output array and usage
-  
+
   // Find the last chunk with a complete response object (status: done, incomplete, or completed)
   for (let i = chunks.length - 1; i >= 0; i--) {
     const chunk = chunks[i]
@@ -128,7 +128,6 @@ function constructResponseResponseFromStreamedChunks (chunks, n) {
       return chunk.response
     }
   }
-  
 }
 
 module.exports = {

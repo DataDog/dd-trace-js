@@ -392,7 +392,7 @@ function createResponseRequestExtraction (tags, payload, openaiStore) {
   if (payload.model) {
     tags['openai.request.model'] = payload.model
   }
-  
+
   // Store the full payload for response extraction
   openaiStore.responseData = payload
 }
@@ -543,17 +543,17 @@ function createResponseResponseExtraction (tags, body, openaiStore) {
   if (body.id) {
     tags['openai.response.id'] = body.id
   }
-  
+
   // Extract status if available
   if (body.status) {
     tags['openai.response.status'] = body.status
   }
-  
+
   // Extract model from response if available
   if (body.model) {
     tags['openai.response.model'] = body.model
   }
-  
+
   // Store the full response for potential future use
   openaiStore.response = body
 }
