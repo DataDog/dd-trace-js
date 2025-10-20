@@ -79,20 +79,6 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
 }
 
-function validateOtelPropagators (propagators) {
-  if (!getEnvironmentVariable('PROPAGATION_STYLE_EXTRACT') &&
-    !getEnvironmentVariable('PROPAGATION_STYLE_INJECT') &&
-    !getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') &&
-    getEnvironmentVariable('OTEL_PROPAGATORS')) {
-    for (const style in propagators) {
-      if (!VALID_PROPAGATION_STYLES.has(style)) {
-        log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
-        getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
-      }
-    }
-  }
-}
-
 function validateEnvVarType (envVar) {
   const value = getEnvironmentVariable(envVar)
   switch (envVar) {
@@ -196,42 +182,33 @@ function remapify (input, mappings) {
   return output
 }
 
-function propagationStyle (key, option) {
-  // Extract by key if in object-form value
-  if (option !== null && typeof option === 'object' && !Array.isArray(option)) {
-    option = option[key]
+/**
+ * Normalizes propagation style values to a lowercase array.
+ * Handles both string (comma-separated) and array inputs.
+ */
+function normalizePropagationStyle (value) {
+  if (Array.isArray(value)) {
+    return value.map(v => v.toLowerCase())
   }
-
-  // Should be an array at this point
-  if (Array.isArray(option)) return option.map(v => v.toLowerCase())
-
-  // If it's not an array but not undefined there's something wrong with the input
-  if (option !== undefined) {
-    log.warn('Unexpected input for config.tracePropagationStyle')
-  }
-
-  // Otherwise, fallback to env var parsing
-  const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
-
-  const envVar = getEnvironmentVariable(envKey) ??
-    getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') ??
-    getEnvironmentVariable('OTEL_PROPAGATORS')
-  if (envVar !== undefined) {
-    return envVar.split(',')
+  if (typeof value === 'string') {
+    return value.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
+  }
+  if (value !== undefined) {
+    log.warn('Unexpected input for config.tracePropagationStyle')
   }
 }
 
-function validatePropagationStyles (values) {
-  if (Array.isArray(values)) return values.map(v => v.toLowerCase())
-  if (typeof values === 'string') {
-    return values.split(',')
-      .filter(v => v !== '')
-      .map(v => v.trim().toLowerCase())
-  }
-  if (values !== undefined) {
-    log.warn('Unexpected input for config.tracePropagationStyle')
+/**
+ * Warns if both DD_TRACE_PROPAGATION_STYLE and specific inject/extract vars are set.
+ */
+function warnIfPropagationStyleConflict (general, inject, extract) {
+  if (general && (inject || extract)) {
+    log.warn(
+      // eslint-disable-next-line @stylistic/max-len
+      'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
+    )
   }
 }
 
@@ -296,22 +273,6 @@ class Config {
     }
 
     checkIfBothOtelAndDdEnvVarSet()
-
-    if (getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') && (
-      getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
-      getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_EXTRACT')
-    )) {
-      log.warn(
-        // eslint-disable-next-line @stylistic/max-len
-        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-      )
-    }
-    const PROPAGATION_STYLE_INJECT = propagationStyle(
-      'inject',
-      options.tracePropagationStyle
-    )
-
-    validateOtelPropagators(PROPAGATION_STYLE_INJECT)
 
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
@@ -840,24 +801,22 @@ class Config {
     this._setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
-    // extract this out into a helper fn
-    if (DD_TRACE_PROPAGATION_STYLE && (DD_TRACE_PROPAGATION_STYLE_INJECT || DD_TRACE_PROPAGATION_STYLE_EXTRACT)) {
-      log.warn(
-        // eslint-disable-next-line @stylistic/max-len
-        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-      )
-    }
+    warnIfPropagationStyleConflict(
+      DD_TRACE_PROPAGATION_STYLE,
+      DD_TRACE_PROPAGATION_STYLE_INJECT,
+      DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    )
     if (DD_TRACE_PROPAGATION_STYLE !== undefined) {
-      this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
-      this._setArray(target, 'tracePropagationStyle.extract', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
+      this._setArray(target, 'tracePropagationStyle.inject', normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE))
+      this._setArray(target, 'tracePropagationStyle.extract', normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE))
     }
     if (DD_TRACE_PROPAGATION_STYLE_INJECT !== undefined) {
       this._setArray(target, 'tracePropagationStyle.inject',
-        validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_INJECT))
+        normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE_INJECT))
     }
     if (DD_TRACE_PROPAGATION_STYLE_EXTRACT !== undefined) {
       this._setArray(target, 'tracePropagationStyle.extract',
-        validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
+        normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
     }
     this._setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     if (DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== undefined) {
@@ -877,6 +836,24 @@ class Config {
                          DD_TRACE_PROPAGATION_STYLE_EXTRACT
       this._setBoolean(target, 'tracePropagationStyle.otelPropagators',
         useDdStyle ? false : !!OTEL_PROPAGATORS)
+
+      // Use OTEL_PROPAGATORS if no DD-specific vars are set
+      if (!useDdStyle && OTEL_PROPAGATORS) {
+        const otelStyles = normalizePropagationStyle(OTEL_PROPAGATORS)
+        // Validate OTEL propagators
+        for (const style of otelStyles || []) {
+          if (!VALID_PROPAGATION_STYLES.has(style)) {
+            log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
+            getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
+            break // Only warn once
+          }
+        }
+        // Set inject/extract from OTEL_PROPAGATORS
+        if (otelStyles) {
+          this._setArray(target, 'tracePropagationStyle.inject', otelStyles)
+          this._setArray(target, 'tracePropagationStyle.extract', otelStyles)
+        }
+      }
     }
     this._setBoolean(target, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
     this._setBoolean(target, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
@@ -1071,9 +1048,9 @@ class Config {
     this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
     if (options.tracePropagationStyle) {
       this._setArray(opts, 'tracePropagationStyle.inject',
-        validatePropagationStyles(options.tracePropagationStyle.inject ?? options.tracePropagationStyle))
+        normalizePropagationStyle(options.tracePropagationStyle.inject ?? options.tracePropagationStyle))
       this._setArray(opts, 'tracePropagationStyle.extract',
-        validatePropagationStyles(options.tracePropagationStyle.extract ?? options.tracePropagationStyle))
+        normalizePropagationStyle(options.tracePropagationStyle.extract ?? options.tracePropagationStyle))
     }
 
     // For LLMObs, we want the environment variable to take precedence over the options.
@@ -1193,18 +1170,14 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
+
+    // If b3 is enabled, update the default propagation style to include b3
     const defaultPropagationStyle = this._getDefaultPropagationStyle(this._optionsArg)
-    calc['tracePropagationStyle.inject'] = propagationStyle(
-      'inject',
-      this._optionsArg.tracePropagationStyle
-    )
-    calc['tracePropagationStyle.extract'] = propagationStyle(
-      'extract',
-      this._optionsArg.tracePropagationStyle
-    )
     if (defaultPropagationStyle.length > 2) {
-      calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
-      calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+      // b3 was added, so update defaults to include it
+      // This will only be used if no other source (options, env, stable config) set the value
+      calc['tracePropagationStyle.inject'] = defaultPropagationStyle
+      calc['tracePropagationStyle.extract'] = defaultPropagationStyle
     }
   }
 
