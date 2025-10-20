@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger ${{matrix.workflow }} workflow
-        if: ${{format({0}.{1},'inputs', 'workflow')}}
-        run: gh workflow run ${{inputs.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=inputs.node-version
+        if: ${{format('{0}.{1}','inputs', 'workflow')}}
+        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=inputs.node-version
         env:
           GH_TOKEN: ${{ github.token }}
