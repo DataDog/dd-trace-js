@@ -207,23 +207,23 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
   #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
-    const allowedParamKeys = [
+    const allowedParamKeys = new Set([
       'max_output_tokens',
       'temperature',
       'stream',
       'reasoning'
-    ]
-    
+    ])
+
     const { input, model, ...parameters } = inputs
 
     // Create input messages
     const inputMessages = []
-    
+
     // Add system message if instructions exist
     if (inputs.instructions) {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
-    
+
     // Handle input - can be string or array of mixed messages
     if (Array.isArray(input)) {
       for (const item of input) {
@@ -267,7 +267,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       // Simple string input
       inputMessages.push({ role: 'user', content: input })
     }
-    
+
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
@@ -275,7 +275,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     // Create output messages
     const outputMessages = []
-    
+
     // Handle output - can be string (streaming) or array of message objects (non-streaming)
     if (typeof response.output === 'string') {
       // Simple text output (streaming)
@@ -321,7 +321,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         } else {
           // Handle regular message objects
           const outputMsg = { role: item.role || 'assistant', content: '' }
-          
+
           // Extract content from message
           if (item.content && Array.isArray(item.content)) {
             // Content is array of content parts
@@ -333,7 +333,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           } else if (typeof item.content === 'string') {
             outputMsg.content = item.content
           }
-          
+
           // Extract tool calls if present in message.tool_calls
           if (Array.isArray(item.tool_calls)) {
             outputMsg.toolCalls = item.tool_calls.map(tc => {
@@ -342,7 +342,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               if (typeof args === 'string') {
                 try {
                   args = JSON.parse(args)
-                } catch (e) {
+                } catch {
                   args = {}
                 }
               }
@@ -354,7 +354,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               }
             })
           }
-          
+
           outputMessages.push(outputMsg)
         }
       }
@@ -367,17 +367,17 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
-    
+
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (allowedParamKeys.includes(key)) {
+      if (allowedParamKeys.has(key)) {
         obj[key] = value
       }
       return obj
     }, {})
-    
+
     // Add fields from response object (convert numbers to floats)
-    if (response.temperature !== undefined) metadata.temperature = parseFloat(response.temperature)
-    if (response.top_p !== undefined) metadata.top_p = parseFloat(response.top_p)
+    if (response.temperature !== undefined) metadata.temperature = Number.parseFloat(response.temperature)
+    if (response.top_p !== undefined) metadata.top_p = Number.parseFloat(response.top_p)
     if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) metadata.truncation = response.truncation
     if (response.text !== undefined) metadata.text = response.text
