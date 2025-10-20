@@ -564,6 +564,7 @@ module.exports = {
 
       if (BUILDKITE_PULL_REQUEST) {
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = BUILDKITE_PULL_REQUEST_BASE_BRANCH
+        tags[GIT_COMMIT_HEAD_SHA] = BUILDKITE_COMMIT
       }
     }
 
