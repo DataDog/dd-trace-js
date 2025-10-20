@@ -276,7 +276,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   await fs.mkdir(folder)
   const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--linker=hoisted', '--ignore-engines', '--trust']
+  const addFlags = ['--linker=hoisted', '--trust']
   execHelper(`${BUN} pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv })
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
