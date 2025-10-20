@@ -428,6 +428,9 @@ jobs:
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   kafkajs:
+    strategy:
+      matrix:
+        node-version: ['oldest', 'latest']
     runs-on: ubuntu-latest
     services:
       kafka:
@@ -457,7 +460,22 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/plugins/test
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   koa:
     runs-on: ubuntu-latest
@@ -633,45 +651,60 @@ jobs:
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
   # TODO: fix performance issues and test more Node versions
+
   next:
-    strategy:
-      fail-fast: false
-      matrix:
-        range:
-          - '>=10.2.0 <11'
-          - '>=11.0.0 <13'
-          - '11.1.4'
-          - '>=13.0.0 <14'
-          - '13.2.0'
-          - '>=14.0.0 <=14.2.6'
-          - '>=14.2.7 <15'
-          - '>=15.0.0 <15.4.1'
-        include:
-          - range: '>=10.2.0 <11'
-            range_clean: gte.10.2.0.and.lt.11
-          - range: '>=11.0.0 <13'
-            range_clean: gte.11.0.0.and.lt.13
-          - range: '11.1.4'
-            range_clean: 11.1.4
-          - range: '>=13.0.0 <14'
-            range_clean: gte.13.0.0.and.lt.14
-          - range: '13.2.0'
-            range_clean: 13.2.0
-          - range: '>=14.0.0 <=14.2.6'
-            range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: '>=14.2.7 <15'
-            range_clean: gte.14.2.7.and.lt.15
-          - range: '>=15.0.0 <15.4.1'
-            range_clean: gte.15.0.0
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: next
-      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/plugins/test
-        with:
-          alternativeSuffix: plugins-${{ github.job }}-${{ matrix.range_clean }}
+      strategy:
+        fail-fast: false
+        matrix:
+          version:
+            - 18
+            - latest
+          range:
+            - '>=10.2.0 <11'
+            - '>=11.0.0 <13'
+            - '11.1.4'
+            - '>=13.0.0 <14'
+            - '13.2.0'
+            - '>=14.0.0 <=14.2.6'
+            - '>=14.2.7 <15'
+            - '>=15.0.0 <15.4.1'
+          include:
+            - range: '>=10.2.0 <11'
+              range_clean: gte.10.2.0.and.lt.11
+            - range: '>=11.0.0 <13'
+              range_clean: gte.11.0.0.and.lt.13
+            - range: '11.1.4'
+              range_clean: 11.1.4
+            - range: '>=13.0.0 <14'
+              range_clean: gte.13.0.0.and.lt.14
+            - range: '13.2.0'
+              range_clean: 13.2.0
+            - range: '>=14.0.0 <=14.2.6'
+              range_clean: gte.14.0.0.and.lte.14.2.6
+            - range: '>=14.2.7 <15'
+              range_clean: gte.14.2.7.and.lt.15
+            - range: '>=15.0.0 <15.4.1'
+              range_clean: gte.15.0.0
+      runs-on: ubuntu-latest
+      env:
+        PLUGINS: next
+        PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+      steps:
+        - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        - uses: ./.github/actions/testagent/start
+        - uses: ./.github/actions/node/latest
+        - uses: ./.github/actions/install
+        - run: yarn test:plugins:ci
+        - if: always()
+          uses: ./.github/actions/testagent/logs
+          with:
+            suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
+        - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+          if: always()
+          with:
+            api_key: ${{ secrets.DD_API_KEY }}
+            service: dd-trace-js-tests
 
   opensearch:
     runs-on: ubuntu-latest

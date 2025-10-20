@@ -1,10 +1,9 @@
 name: Plugin Tests
 description: Run plugin tests
 inputs:
-  alternativeSuffix:
-    description: "Alternative suffix"
-    required: false
-
+  dd_api_key:
+    description: DD_API_KEY used to push test results
+    required: true
 runs:
   using: composite
   steps:
@@ -20,4 +19,9 @@ runs:
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-        suffix: ${{ inputs.alternativeSuffix || format('test-{0}', github.job) }}
+        suffix: test-${{ github.job }}
+    - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      if: always()
+      with:
+        api_key: ${{ inputs.dd_api_key }}
+        service: dd-trace-js-tests
