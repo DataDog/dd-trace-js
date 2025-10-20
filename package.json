@@ -135,7 +135,7 @@
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.10",
     "ignore": "^7.0.5",
-    "import-in-the-middle": "^1.14.2",
+    "import-in-the-middle": "^2.0.0",
     "istanbul-lib-coverage": "^3.2.2",
     "jest-docblock": "^29.7.0",
     "jsonpath-plus": "^10.3.0",
