@@ -445,8 +445,6 @@ class Config {
   _applyEnvironment () {
     const env = setHiddenProperty(this, '_env', {})
     setHiddenProperty(this, '_envUnprocessed', {})
-
-    // Apply all configs using shared logic
     this._applyConfigValues(getEnvironmentVariables(), env, this._envUnprocessed, 'environment')
   }
 
@@ -1207,10 +1205,6 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
-      // eslint-disable-next-line no-console
-      console.log('MTOFF: setting tracePropagationStyle.inject', calc['tracePropagationStyle.inject'])
-      // eslint-disable-next-line no-console
-      console.log('MTOFF: setting tracePropagationStyle.extract', calc['tracePropagationStyle.extract'])
     }
   }
 
