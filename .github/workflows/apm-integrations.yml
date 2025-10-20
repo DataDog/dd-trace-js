@@ -8,18 +8,18 @@ on:
     - cron: 0 4 * * *
   workflow_dispatch:
     inputs:
-      runNightly:
-        description: 'Whether to run nightly tests'
+      nightly-version:
+        description: 'Nightly node version to run'
         required: false
         default: 'false'
         type: string
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-  RUN_NIGHTLY: ${{ inputs.runNightly }}
+  RUN_NIGHTLY: ${{ inputs.nightly-version}}
 
 concurrency:
-  group: ${{ inputs.runNightly == 'true' && format('{0}-{1}', github.workflow, '-nightly') || github.workflow }}-${{ github.ref || github.run_id }}"
+  group: ${{ inputs.nightly-version == 'true' && format('{0}-{1}', github.workflow, inputs.nightly-version) || github.workflow }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 # TODO: upstream jobs

@@ -3,27 +3,32 @@ name: Nightly Testing
 on:
   workflow_dispatch:
     inputs:
-      runApmIntegrations:
+      node-version:
+        description: 'Node Version To Use'
+        required: true
+        type: number
+
+      apm-integrations:
         description: 'APM Integration Tests'
         required: false
         default: true
         type: boolean
-      runApmCapabilities:
+      apm-capabilities:
         description: 'APM Capabilities Tests'
         required: false
         default: true
         type: boolean
-      runLlmobs:
+      llmobs:
         description: 'LLM-OBS Tests'
         required: false
         default: true
         type: boolean
-      runPlatform:
+      platform:
         description: 'Platform Tests'
         required: false
         default: true
         type: boolean
-      runServerless:
+      serverless:
         description: 'Serverless Tests'
         required: false
         default: true
@@ -37,46 +42,14 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
-  apm-integrations:
+  run-nightly:
+    strategy:
+      matrix:
+        workflow: [apm-integrations, apm-capabilities, llmobs, platform, serverless]
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger apm-integrations workflow
-        if: ${{ inputs.runApmIntegrations }}
-        run: gh workflow run apm-integrations.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  apm-capabilities:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger apm-capabilities workflow
-        if: ${{ inputs.runApmCapabilities }}
-        run: gh workflow run apm-capabilities.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
-        env:
-          GH_TOKEN: ${{ github.token }}
-  llmobs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger llmobs workflow
-        if: ${{ inputs.runLlmobs }}
-        run: gh workflow run llmobs.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  platform:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger platform workflow
-        if: ${{ inputs.runPlatform }}
-        run: gh workflow run platform.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  serverless:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger serverless workflow
-        if: ${{ inputs.runServerless }}
-        run: gh workflow run serverless.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f runNightly=true
+      - name: Trigger ${{matrix.workflow }} workflow
+        if: ${{format({0}.{1},'inputs', 'workflow')}}
+        run: gh workflow run ${{inputs.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=inputs.node-version
         env:
           GH_TOKEN: ${{ github.token }}
