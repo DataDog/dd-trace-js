@@ -31,25 +31,92 @@ const {
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
-// global registry of LLMObs spans
-// maps LLMObs spans to their annotations
-const registry = new WeakMap()
+/** @typedef {import('../opentracing/span')} Span */
+
+/**
+ * @typedef {{
+ *  modelName?: string
+ *  modelProvider?: string
+ *  sessionId?: string
+ *  mlApp?: string
+ *  parent?: Span
+ *  kind: 'llm' | 'agent' | 'workflow' | 'task' | 'tool' | 'embedding' | 'retrieval'
+ *  name?: string
+ *  integration?: string
+ *  decorator?: boolean
+ * }} LLMObsSpanRegisterOptions
+ */
+
+/**
+ * @typedef {{
+ *  content?: string
+ *  role?: string
+ *  toolCalls?: ToolCall[]
+ *  toolResults?: ToolResult[]
+ *  toolId?: string
+ * }} Message
+ */
+
+/**
+ * @typedef {{
+ *  name?: string,
+ *  arguments?: string | object,
+ *  toolId?: string,
+ *  type?: string
+ * }} ToolCall
+ */
+
+/**
+ * @typedef {{
+ *  result?: string
+ *  toolId?: string
+ *  type?: string
+ * }} ToolResult
+ */
+
+/**
+ * @typedef {{
+ *  text?: string
+ *  name?: string
+ *  id?: string
+ *  score?: number
+ * }} Document
+ */
 
 class LLMObsTagger {
+  /**
+   * Global registry mapping Span objects to their LLMObs annotations
+   * @type {WeakMap<Span, Record<string, any>>}
+   */
+  static tagMap = new WeakMap()
+
+  /** @type {import('../config')} */
+  #config
+
+  /** @type {boolean} */
+  #softFail
+
   constructor (config, softFail = false) {
-    this._config = config
-
-    this.softFail = softFail
+    this.#config = config
+    this.#softFail = softFail
   }
 
-  static get tagMap () {
-    return registry
-  }
-
+  /**
+   * Gets the LLMObs span kind for the given span
+   * @param {Span} span
+   * @returns {string | undefined}
+   */
   static getSpanKind (span) {
-    return registry.get(span)?.[SPAN_KIND]
+    return LLMObsTagger.tagMap.get(span)?.[SPAN_KIND]
   }
 
+  /**
+   * Registers a Datadog Span as an LLMObs span, registering it in the global registry and
+   * validating its associated starting annotations.
+   * @param {Span} span
+   * @param {LLMObsSpanRegisterOptions} options Options for registering the LLMObs span.
+   * @returns {void}
+   */
   registerLLMObsSpan (span, {
     modelName,
     modelProvider,
@@ -59,17 +126,17 @@ class LLMObsTagger {
     kind,
     name,
     integration,
-    _decorator
+    decorator
   } = {}) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
       mlApp ||
-      registry.get(parent)?.[ML_APP] ||
+      LLMObsTagger.tagMap.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp ||
-      this._config.service // this should always have a default
+      this.#config.llmobs.mlApp ||
+      this.#config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(
@@ -78,26 +145,26 @@ class LLMObsTagger {
       )
     }
 
-    this._register(span)
+    this.#register(span)
 
-    this._setTag(span, ML_APP, spanMlApp)
+    this.#setAnnotation(span, ML_APP, spanMlApp)
 
-    if (name) this._setTag(span, NAME, name)
+    if (name) this.#setAnnotation(span, NAME, name)
 
-    this._setTag(span, SPAN_KIND, kind)
-    if (modelName) this._setTag(span, MODEL_NAME, modelName)
-    if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
+    this.#setAnnotation(span, SPAN_KIND, kind)
+    if (modelName) this.#setAnnotation(span, MODEL_NAME, modelName)
+    if (modelProvider) this.#setAnnotation(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
-    if (sessionId) this._setTag(span, SESSION_ID, sessionId)
-    if (integration) this._setTag(span, INTEGRATION, integration)
-    if (_decorator) this._setTag(span, DECORATOR, _decorator)
+    sessionId = sessionId || LLMObsTagger.tagMap.get(parent)?.[SESSION_ID]
+    if (sessionId) this.#setAnnotation(span, SESSION_ID, sessionId)
+    if (integration) this.#setAnnotation(span, INTEGRATION, integration)
+    if (decorator) this.#setAnnotation(span, DECORATOR, decorator)
 
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
-    this._setTag(span, PARENT_ID_KEY, parentId)
+    this.#setAnnotation(span, PARENT_ID_KEY, parentId)
 
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
@@ -108,40 +175,84 @@ class LLMObsTagger {
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
-    if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+    if (annotationContextName) this.#setAnnotation(span, NAME, annotationContextName)
   }
 
-  // TODO: similarly for the following `tag` methods,
-  // how can we transition from a span weakmap to core API functionality
+  /**
+   * Annotates the input and output messages for an LLM span.
+   * @param {Span} span
+   * @param {(string | Message | Message[])?} inputData
+   * @param {(string | Message | Message[])?} outputData
+   * @returns {void}
+   */
   tagLLMIO (span, inputData, outputData) {
-    this.#tagMessages(span, inputData, INPUT_MESSAGES)
-    this.#tagMessages(span, outputData, OUTPUT_MESSAGES)
+    this.#annotateMessages(span, inputData, INPUT_MESSAGES)
+    this.#annotateMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
+  /**
+   * Annotates the input and output documents for an embedding span.
+   * @param {Span} span
+   * @param {(string | Document | Document[])?} inputData
+   * @param {string?} outputData
+   * @returns {void}
+   */
   tagEmbeddingIO (span, inputData, outputData) {
-    this.#tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    this.#tagText(span, outputData, OUTPUT_VALUE)
+    this.#annotateDocuments(span, inputData, INPUT_DOCUMENTS)
+    this.#annotateText(span, outputData, OUTPUT_VALUE)
   }
 
+  /**
+   * Annotates the input and output text for a retrieval span.
+   * @param {Span} span
+   * @param {string?} inputData
+   * @param {(string | Document | Document[])?} outputData
+   * @returns {void}
+   */
   tagRetrievalIO (span, inputData, outputData) {
-    this.#tagText(span, inputData, INPUT_VALUE)
-    this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+    this.#annotateText(span, inputData, INPUT_VALUE)
+    this.#annotateDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
+  /**
+   * Annotates the input and output text for a text span.
+   * @param {*} span
+   * @param {string?} inputData
+   * @param {string?} outputData
+   * @returns {void}
+   */
   tagTextIO (span, inputData, outputData) {
-    this.#tagText(span, inputData, INPUT_VALUE)
-    this.#tagText(span, outputData, OUTPUT_VALUE)
+    this.#annotateText(span, inputData, INPUT_VALUE)
+    this.#annotateText(span, outputData, OUTPUT_VALUE)
   }
 
+  /**
+   * Annotates the metadata for a span.
+   * @param {Span} span
+   * @param {Record<string, any>} metadata
+   * @returns {void}
+   */
   tagMetadata (span, metadata) {
-    const existingMetadata = registry.get(span)?.[METADATA]
+    const existingMetadata = LLMObsTagger.tagMap.get(span)?.[METADATA]
     if (existingMetadata) {
       Object.assign(existingMetadata, metadata)
     } else {
-      this._setTag(span, METADATA, metadata)
+      this.#setAnnotation(span, METADATA, metadata)
     }
   }
 
+  /**
+   * Annotates the metrics for a span.
+   * @param {Span} span
+   * @param {{
+   *  inputTokens?: number,
+   *  outputTokens?: number,
+   *  totalTokens?: number,
+   *  cacheReadTokens?: number,
+   *  cacheWriteTokens?: number,
+   * } & Record<string, number>} metrics
+   * @returns {void}
+   */
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
@@ -173,34 +284,52 @@ class LLMObsTagger {
       }
     }
 
-    const existingMetrics = registry.get(span)?.[METRICS]
+    const existingMetrics = LLMObsTagger.tagMap.get(span)?.[METRICS]
     if (existingMetrics) {
       Object.assign(existingMetrics, filterdMetrics)
     } else {
-      this._setTag(span, METRICS, filterdMetrics)
+      this.#setAnnotation(span, METRICS, filterdMetrics)
     }
   }
 
+  /**
+   * Annotates the tags for a span.
+   * @param {Span} span
+   * @param {Record<string, any>} tags
+   * @returns {void}
+   */
   tagSpanTags (span, tags) {
-    const currentTags = registry.get(span)?.[TAGS]
+    const currentTags = LLMObsTagger.tagMap.get(span)?.[TAGS]
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      this.#setAnnotation(span, TAGS, tags)
     }
   }
 
+  /**
+   * Changes the span kind.
+   * @param {Span} span
+   * @param {'llm' | 'agent' | 'workflow' | 'task' | 'tool' | 'embedding' | 'retrieval'} newKind
+   * @returns {void}
+   */
   changeKind (span, newKind) {
-    this._setTag(span, SPAN_KIND, newKind)
+    this.#setAnnotation(span, SPAN_KIND, newKind)
   }
 
-  #tagText (span, data, key) {
+  /**
+   * Annotates the text for the span for either input or output
+   * @param {Span} span
+   * @param {(string | object)?} data
+   * @param {typeof INPUT_VALUE | typeof OUTPUT_VALUE} key
+   */
+  #annotateText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
-        this._setTag(span, key, data)
+        this.#setAnnotation(span, key, data)
       } else {
         try {
-          this._setTag(span, key, JSON.stringify(data))
+          this.#setAnnotation(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
           this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
@@ -209,7 +338,14 @@ class LLMObsTagger {
     }
   }
 
-  #tagDocuments (span, data, key) {
+  /**
+   * Annotates the documents for the span for either input or output
+   * @param {Span} span
+   * @param {(string | Document | Document[])?} data
+   * @param {typeof INPUT_DOCUMENTS | typeof OUTPUT_DOCUMENTS} key
+   * @returns {void}
+   */
+  #annotateDocuments (span, data, key) {
     if (!data) {
       return
     }
@@ -249,10 +385,15 @@ class LLMObsTagger {
     }
 
     if (documents.length) {
-      this._setTag(span, key, documents)
+      this.#setAnnotation(span, key, documents)
     }
   }
 
+  /**
+   * Filters the tool calls to a list of valid tool calls
+   * @param {ToolCall | ToolCall[]} toolCalls
+   * @returns {ToolCall[]}
+   */
   #filterToolCalls (toolCalls) {
     if (!Array.isArray(toolCalls)) {
       toolCalls = [toolCalls]
@@ -280,6 +421,11 @@ class LLMObsTagger {
     return filteredToolCalls
   }
 
+  /**
+   * Filters the tool results to a list of valid tool results
+   * @param {ToolResult | ToolResult[]} toolResults
+   * @returns {ToolResult[]}
+   */
   #filterToolResults (toolResults) {
     if (!Array.isArray(toolResults)) {
       toolResults = [toolResults]
@@ -306,7 +452,14 @@ class LLMObsTagger {
     return filteredToolResults
   }
 
-  #tagMessages (span, data, key) {
+  /**
+   * Annotates the messages for the span for either input or output
+   * @param {Span} span
+   * @param {(string | Message | Message[])?} data
+   * @param {typeof INPUT_MESSAGES | typeof OUTPUT_MESSAGES} key
+   * @returns {void}
+   */
+  #annotateMessages (span, data, key) {
     if (!data) {
       return
     }
@@ -369,10 +522,18 @@ class LLMObsTagger {
     }
 
     if (messages.length) {
-      this._setTag(span, key, messages)
+      this.#setAnnotation(span, key, messages)
     }
   }
 
+  /**
+   * Conditionally sets a string value on a carrier object
+   * @param {*} data
+   * @param {string} type description of the data to be logged in case of failure
+   * @param {Record<string, any>} carrier
+   * @param {string} key
+   * @returns {boolean}
+   */
   #tagConditionalString (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'string') {
@@ -383,6 +544,14 @@ class LLMObsTagger {
     return true
   }
 
+  /**
+ * Conditionally sets a number value on a carrier object
+ * @param {*} data
+ * @param {string} type description of the data to be logged in case of failure
+ * @param {Record<string, any>} carrier
+ * @param {string} key
+ * @returns {boolean}
+ */
   #tagConditionalNumber (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'number') {
@@ -393,6 +562,14 @@ class LLMObsTagger {
     return true
   }
 
+  /**
+   * Conditionally sets an object value on a carrier object
+   * @param {*} data
+   * @param {string} type description of the data to be logged in case of failure
+   * @param {Record<string, any>} carrier
+   * @param {string} key
+   * @returns {boolean}
+   */
   #tagConditionalObject (data, type, carrier, key) {
     if (!data) return true
     if (typeof data !== 'object') {
@@ -403,10 +580,16 @@ class LLMObsTagger {
     return true
   }
 
-  // any public-facing LLMObs APIs using this tagger should not soft fail
-  // auto-instrumentation should soft fail
+  /**
+   * Handles a failure by logging a warning or throwing an error, depending on the softFail flag.
+   * Any public-facing LLMObs APIs using this tagger should not soft fail.
+   * Auto-instrumentation should soft fail.
+   * @param {string} msg message to log in case of failure
+   * @param {string?} errorTag error tag to add to the error
+   * @returns {void}
+   */
   #handleFailure (msg, errorTag) {
-    if (this.softFail) {
+    if (this.#softFail) {
       log.warn(msg)
     } else {
       const err = new Error(msg)
@@ -417,24 +600,37 @@ class LLMObsTagger {
     }
   }
 
-  _register (span) {
-    if (!this._config.llmobs.enabled) return
-    if (registry.has(span)) {
+  /**
+   * Registers a span in the global registry, failing if the span is already registered.
+   * @param {Span} span
+   * @returns {void}
+   */
+  #register (span) {
+    if (!this.#config.llmobs.enabled) return
+    if (LLMObsTagger.tagMap.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
     }
 
-    registry.set(span, {})
+    LLMObsTagger.tagMap.set(span, {})
   }
 
-  _setTag (span, key, value) {
-    if (!this._config.llmobs.enabled) return
-    if (!registry.has(span)) {
+  /**
+   * Annotates a span for a specific annotation entry, such as
+   * METADATA, METRICS, TAGS, INPUT_MESSAGES, OUTPUT_MESSAGES, etc.
+   * @param {Span} span
+   * @param {string} key
+   * @param {*} value
+   * @returns {void}
+   */
+  #setAnnotation (span, key, value) {
+    if (!this.#config.llmobs.enabled) return
+    if (!LLMObsTagger.tagMap.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
     }
 
-    const tagsCarrier = registry.get(span)
+    const tagsCarrier = LLMObsTagger.tagMap.get(span)
     tagsCarrier[key] = value
   }
 }

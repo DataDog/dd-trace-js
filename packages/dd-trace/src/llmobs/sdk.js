@@ -511,7 +511,7 @@ class LLMObs extends NoopLLMObs {
       modelName,
       modelProvider,
       sessionId,
-      _decorator,
+      decorator: _decorator,
       spanOptions
     }
   }
