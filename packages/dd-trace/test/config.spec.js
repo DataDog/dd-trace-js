@@ -2950,8 +2950,8 @@ apm_configuration_default:
 
       // Tracing
       expect(config).to.have.nested.property('traceId128BitGenerationEnabled', true)
-      // expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
-      // expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
 
       // Appsec
       expect(config).to.have.nested.property('appsec.rateLimit', 100)

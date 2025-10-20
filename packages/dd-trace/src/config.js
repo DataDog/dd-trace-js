@@ -225,6 +225,11 @@ function propagationStyle (key, option) {
 
 function validatePropagationStyles (values) {
   if (Array.isArray(values)) return values.map(v => v.toLowerCase())
+  if (typeof values === 'string') {
+    return values.split(',')
+      .filter(v => v !== '')
+      .map(v => v.trim().toLowerCase())
+  }
   if (values !== undefined) {
     log.warn('Unexpected input for config.tracePropagationStyle')
   }
@@ -844,11 +849,18 @@ class Config {
         'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
       )
     }
-    this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
-    this._setArray(target, 'tracePropagationStyle.extract', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
-    this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_INJECT))
-    this._setArray(target, 'tracePropagationStyle.extract',
-      validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
+    if (DD_TRACE_PROPAGATION_STYLE !== undefined) {
+      this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
+      this._setArray(target, 'tracePropagationStyle.extract', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
+    }
+    if (DD_TRACE_PROPAGATION_STYLE_INJECT !== undefined) {
+      this._setArray(target, 'tracePropagationStyle.inject',
+        validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_INJECT))
+    }
+    if (DD_TRACE_PROPAGATION_STYLE_EXTRACT !== undefined) {
+      this._setArray(target, 'tracePropagationStyle.extract',
+        validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
+    }
     this._setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     if (DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== undefined) {
       const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
@@ -1059,6 +1071,12 @@ class Config {
     this._setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this._setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
     this._setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
+    if (options.tracePropagationStyle) {
+      this._setArray(opts, 'tracePropagationStyle.inject',
+        validatePropagationStyles(options.tracePropagationStyle.inject ?? options.tracePropagationStyle))
+      this._setArray(opts, 'tracePropagationStyle.extract',
+        validatePropagationStyles(options.tracePropagationStyle.extract ?? options.tracePropagationStyle))
+    }
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
