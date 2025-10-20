@@ -35,9 +35,9 @@ describe('esm', () => {
       this.timeout(60000)
       agent = await new FakeAgent().start()
       execSync(
-        './node_modules/.bin/prisma migrate reset --force && ' +
-        './node_modules/.bin/prisma db push --accept-data-loss && ' +
-        './node_modules/.bin/prisma generate',
+        'npx prisma migrate reset --force && ' +
+        'npx prisma db push --accept-data-loss && ' +
+        'npx prisma generate',
         {
           cwd: sandbox.folder, // Ensure the current working directory is where the schema is located
           stdio: 'inherit'
