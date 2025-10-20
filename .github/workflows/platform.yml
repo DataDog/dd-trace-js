@@ -24,7 +24,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - run: mkdir npm bun
       - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
-      - run: bun pm pack --filename bun.tgz && tar -zxf bun.tgz -C bun
+      - run: bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
   core:
