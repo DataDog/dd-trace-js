@@ -272,22 +272,18 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const deps = cappedDependencies.join(' ')
+  const deps = cappedDependencies.concat(`file:${out}`)
 
   await fs.mkdir(folder)
   const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--linker=hoisted', '--ignore-engines']
+  const addFlags = ['--linker=hoisted', '--ignore-engines', '--trust']
   execHelper(`${BUN} pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv })
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
   }
 
-  if (deps) {
-    execHelper(`${BUN} add ${deps} ${addFlags.concat('--trust').join(' ')}`, addOptions)
-  }
-
-  execHelper(`${BUN} add file:${out} ${addFlags.concat('--ignore-scripts').join(' ')}`, addOptions)
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
