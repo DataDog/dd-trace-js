@@ -78,7 +78,6 @@ async function checkWorkflowRuns (id, page = 1) {
 }
 
 async function checkWorkflowJobs (id, attempt, page = 1) {
-  console.log(id, attempt, page)
   if (attempt < 1) return
 
   const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
