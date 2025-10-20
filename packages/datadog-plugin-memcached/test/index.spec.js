@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
-const proxyquire = require('proxyquire').noPreserveCache()
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -27,7 +26,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load('memcached')
           tracer = require('../../dd-trace')
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = require(`../../../versions/memcached@${version}`).get()
         })
 
         withPeerService(
@@ -177,7 +176,7 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(async () => {
           await agent.load('memcached', { service: 'custom' })
-          Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+          Memcached = require(`../../../versions/memcached@${version}`).get()
           memcached = new Memcached('localhost:11211', { retries: 0 })
         })
 
@@ -199,7 +198,7 @@ describe('Plugin', () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
             tracer._initialized = false // force config read
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = require(`../../../versions/memcached@${version}`).get()
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 
@@ -226,7 +225,7 @@ describe('Plugin', () => {
             process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
             tracer._initialized = false // force config read
             await agent.load('memcached', { service: 'custom' })
-            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            Memcached = require(`../../../versions/memcached@${version}`).get()
             memcached = new Memcached('localhost:11211', { retries: 0 })
           })
 
