@@ -24,7 +24,7 @@ describe('Plugin', function () {
 
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', '>=11.1 <15.4.1', version => {
-      const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+      const pkg = require(`../../../versions/next@${version}`).get('next/package.json')
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
