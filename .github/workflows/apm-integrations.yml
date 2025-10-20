@@ -249,6 +249,14 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  cookie-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cookie-parser
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+
   couchbase:
     strategy:
       matrix:
