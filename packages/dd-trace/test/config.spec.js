@@ -2975,6 +2975,73 @@ apm_configuration_default:
       // Dynamic Instrumentation
       expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', '/tmp/probes')
     })
+
+    // Regression test for fields that were previously set directly from environment variables
+    // before they were supported by stable config as well.
+    it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
+      // Test 1: Local stable config should work
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_API_KEY: "local-api-key"
+  DD_APP_KEY: "local-app-key"
+  DD_INSTRUMENTATION_INSTALL_ID: "local-install-id"
+  DD_INSTRUMENTATION_INSTALL_TIME: "1234567890"
+  DD_INSTRUMENTATION_INSTALL_TYPE: "local_install"
+  DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
+  DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 5
+`)
+      let config = new Config()
+      expect(config).to.have.property('apiKey', 'local-api-key')
+      expect(config).to.have.property('appKey', 'local-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'local-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '1234567890')
+      expect(config).to.have.nested.property('installSignature.type', 'local_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 5)
+
+      // Test 2: Env vars should take precedence over local stable config
+      process.env.DD_API_KEY = 'env-api-key'
+      process.env.DD_APP_KEY = 'env-app-key'
+      process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'env-api-key')
+      expect(config).to.have.property('appKey', 'env-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'env-install-id')
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 7)
+
+      // Test 3: Fleet stable config should take precedence over env vars
+      fs.writeFileSync(
+        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_API_KEY: "fleet-api-key"
+      DD_APP_KEY: "fleet-app-key"
+      DD_INSTRUMENTATION_INSTALL_ID: "fleet-install-id"
+      DD_INSTRUMENTATION_INSTALL_TIME: "9999999999"
+      DD_INSTRUMENTATION_INSTALL_TYPE: "fleet_install"
+      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: ""
+      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 15
+`)
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'fleet-api-key')
+      expect(config).to.have.property('appKey', 'fleet-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'fleet-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '9999999999')
+      expect(config).to.have.nested.property('installSignature.type', 'fleet_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', false)
+      expect(config).to.have.nested.property('cloudPayloadTagging.responsesEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 15)
+    })
   })
 
   context('getOrigin', () => {

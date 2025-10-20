@@ -223,6 +223,13 @@ function propagationStyle (key, option) {
   }
 }
 
+function validatePropagationStyles (values) {
+  if (Array.isArray(values)) return values.map(v => v.toLowerCase())
+  if (values !== undefined) {
+    log.warn('Unexpected input for config.tracePropagationStyle')
+  }
+}
+
 function reformatSpanSamplingRules (rules) {
   if (!rules) return rules
   return rules.map(rule => {
@@ -285,9 +292,6 @@ class Config {
 
     checkIfBothOtelAndDdEnvVarSet()
 
-    const DD_API_KEY = getEnvironmentVariable('DD_API_KEY')
-    const DD_APP_KEY = getEnvironmentVariable('DD_APP_KEY')
-
     if (getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE') && (
       getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_INJECT') ||
       getEnvironmentVariable('DD_TRACE_PROPAGATION_STYLE_EXTRACT')
@@ -314,47 +318,6 @@ class Config {
       options.runtimeMetrics = {
         enabled: options.runtimeMetrics
       }
-    }
-
-    const DD_INSTRUMENTATION_INSTALL_ID = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_ID') ?? null
-    const DD_INSTRUMENTATION_INSTALL_TIME = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TIME') ?? null
-    const DD_INSTRUMENTATION_INSTALL_TYPE = getEnvironmentVariable('DD_INSTRUMENTATION_INSTALL_TYPE') ?? null
-
-    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
-      getEnvironmentVariable('DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING') ??
-      options.cloudPayloadTagging?.request ??
-      ''
-    )
-
-    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
-      getEnvironmentVariable('DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING') ??
-      options.cloudPayloadTagging?.response ??
-      ''
-    )
-
-    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = maybeInt(
-      getEnvironmentVariable('DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH') ??
-      options.cloudPayloadTagging?.maxDepth
-    ) ?? 10
-
-    // TODO: refactor
-    this.apiKey = DD_API_KEY
-    this.appKey = DD_APP_KEY
-
-    // sent in telemetry event app-started
-    this.installSignature = {
-      id: DD_INSTRUMENTATION_INSTALL_ID,
-      time: DD_INSTRUMENTATION_INSTALL_TIME,
-      type: DD_INSTRUMENTATION_INSTALL_TYPE
-    }
-
-    this.cloudPayloadTagging = {
-      requestsEnabled: !!DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
-      responsesEnabled: !!DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
-      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
-      rules: appendRules(
-        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
-      )
     }
 
     this._applyDefaults()
@@ -491,11 +454,13 @@ class Config {
       DD_AI_GUARD_MAX_CONTENT_SIZE,
       DD_AI_GUARD_MAX_MESSAGES_LENGTH,
       DD_AI_GUARD_TIMEOUT,
+      DD_API_KEY,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
       DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
+      DD_APP_KEY,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -562,6 +527,9 @@ class Config {
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
       DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
+      DD_INSTRUMENTATION_INSTALL_ID,
+      DD_INSTRUMENTATION_INSTALL_TIME,
+      DD_INSTRUMENTATION_INSTALL_TYPE,
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
@@ -588,6 +556,9 @@ class Config {
       DD_TRACE_BAGGAGE_TAG_KEYS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
@@ -646,12 +617,14 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setString(target, 'apiKey', DD_API_KEY)
     this._setBoolean(
       target,
       'apmTracingEnabled',
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
+    this._setString(target, 'appKey', DD_APP_KEY)
     this._setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
     target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
     this._setBoolean(target, 'appsec.apiSecurity.endpointCollectionEnabled',
@@ -696,6 +669,21 @@ class Config {
     target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
     this._setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
+    if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING || DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
+      if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING) {
+        this._setBoolean(target, 'cloudPayloadTagging.requestsEnabled', true)
+      }
+      if (DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
+        this._setBoolean(target, 'cloudPayloadTagging.responsesEnabled', true)
+      }
+      target['cloudPayloadTagging.rules'] = appendRules(
+        splitJSONPathRules(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
+        splitJSONPathRules(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING)
+      )
+    }
+    if (DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH) {
+      target['cloudPayloadTagging.maxDepth'] = maybeInt(DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH)
+    }
     this._setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this._setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this._setBoolean(
@@ -760,6 +748,9 @@ class Config {
     this._setString(target, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     this._setString(target, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(target, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
+    this._setString(target, 'installSignature.id', DD_INSTRUMENTATION_INSTALL_ID)
+    this._setString(target, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
+    this._setString(target, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
     this._setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
     this._setBoolean(target, 'injectForce', DD_INJECT_FORCE)
@@ -846,6 +837,18 @@ class Config {
     this._setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    // extract this out into a helper fn
+    if (DD_TRACE_PROPAGATION_STYLE && (DD_TRACE_PROPAGATION_STYLE_INJECT || DD_TRACE_PROPAGATION_STYLE_EXTRACT)) {
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
+      )
+    }
+    this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
+    this._setArray(target, 'tracePropagationStyle.extract', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE))
+    this._setArray(target, 'tracePropagationStyle.inject', validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_INJECT))
+    this._setArray(target, 'tracePropagationStyle.extract',
+      validatePropagationStyles(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
     this._setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     if (DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== undefined) {
       const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
@@ -930,6 +933,17 @@ class Config {
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
+    if (options.cloudPayloadTagging) {
+      this._setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', options.cloudPayloadTagging.requestsEnabled)
+      this._setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', options.cloudPayloadTagging.responsesEnabled)
+      opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging.maxDepth)
+      if (options.cloudPayloadTagging.request || options.cloudPayloadTagging.response) {
+        opts['cloudPayloadTagging.rules'] = appendRules(
+          splitJSONPathRules(options.cloudPayloadTagging.request),
+          splitJSONPathRules(options.cloudPayloadTagging.response)
+        )
+      }
+    }
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
     opts.baggageTagKeys = options.baggageTagKeys
@@ -1175,6 +1189,10 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+      // eslint-disable-next-line no-console
+      console.log('MTOFF: setting tracePropagationStyle.inject', calc['tracePropagationStyle.inject'])
+      // eslint-disable-next-line no-console
+      console.log('MTOFF: setting tracePropagationStyle.extract', calc['tracePropagationStyle.extract'])
     }
   }
 

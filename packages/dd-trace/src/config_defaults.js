@@ -26,6 +26,15 @@ const service = AWS_LAMBDA_FUNCTION_NAME ||
   'node'
 
 module.exports = {
+  apiKey: undefined,
+  appKey: undefined,
+  'installSignature.id': null,
+  'installSignature.time': null,
+  'installSignature.type': null,
+  'cloudPayloadTagging.requestsEnabled': false,
+  'cloudPayloadTagging.responsesEnabled': false,
+  'cloudPayloadTagging.maxDepth': 10,
+  'cloudPayloadTagging.rules': [],
   apmTracingEnabled: true,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
