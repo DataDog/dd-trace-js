@@ -13,6 +13,3 @@ runs:
         node-version: ${{ inputs.version == 'eol' && '16' || inputs.version == 'oldest' && '18' || inputs.version == 'maintenance' && '20' || inputs.version == 'active' && '22' || inputs.version == 'latest' && '24' || inputs.version }}
         check-latest: true
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
-    - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
-      with:
-        bun-version-file: ".bun-version"
