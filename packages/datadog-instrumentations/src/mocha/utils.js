@@ -1,12 +1,6 @@
 'use strict'
 
-const {
-  getTestSuitePath,
-  removeEfdStringFromTestName,
-  addEfdStringToTestName,
-  addAttemptToFixStringToTestName,
-  removeAttemptToFixStringFromTestName
-} = require('../../../dd-trace/src/plugins/util/test')
+const { getTestSuitePath } = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -60,17 +54,15 @@ function isNewTest (test, knownTests) {
     return false
   }
   const testSuite = getTestSuitePath(test.file, process.cwd())
-  const testName = removeEfdStringFromTestName(test.fullTitle())
+  const testName = test.fullTitle()
   const testsForSuite = knownTests.mocha?.[testSuite] || []
   return !testsForSuite.includes(testName)
 }
 
-function retryTest (test, numRetries, modifyTestName, tags) {
-  const originalTestName = test.title
+function retryTest (test, numRetries, tags) {
   const suite = test.parent
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
-    clonedTest.title = modifyTestName(originalTestName, retryIndex + 1)
     suite.addTest(clonedTest)
     tags.forEach(tag => {
       if (tag) {
@@ -113,10 +105,7 @@ function getIsLastRetry (test) {
 }
 
 function getTestFullName (test) {
-  const testName = removeEfdStringFromTestName(
-    removeAttemptToFixStringFromTestName(test.fullTitle())
-  )
-  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${testName}`
+  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
 }
 
 function getTestStatus (test) {
@@ -216,10 +205,8 @@ function getOnTestHandler (isMain) {
       _ddIsModified: isModified
     } = test
 
-    const testName = removeEfdStringFromTestName(removeAttemptToFixStringFromTestName(test.fullTitle()))
-
     const testInfo = {
-      testName,
+      testName: test.fullTitle(),
       testSuiteAbsolutePath,
       title,
       testStartLine
@@ -445,7 +432,6 @@ function getRunTestsWrapper (runTests, config) {
           retryTest(
             test,
             config.testManagementAttemptToFixRetries,
-            addAttemptToFixStringToTestName,
             ['_ddIsAttemptToFix', isDisabled && '_ddIsDisabled', isQuarantined && '_ddIsQuarantined']
           )
         } else if (isDisabled) {
@@ -460,7 +446,7 @@ function getRunTestsWrapper (runTests, config) {
     if (config.isImpactedTestsEnabled) {
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
-          modifiedTests: config.modifiedTests,
+          modifiedFiles: config.modifiedFiles,
           file: suite.file,
           onDone: (isModified) => {
             if (isModified) {
@@ -469,7 +455,6 @@ function getRunTestsWrapper (runTests, config) {
                 retryTest(
                   test,
                   config.earlyFlakeDetectionNumRetries,
-                  addEfdStringToTestName,
                   ['_ddIsModified', '_ddIsEfdRetry']
                 )
               }
@@ -488,7 +473,6 @@ function getRunTestsWrapper (runTests, config) {
             retryTest(
               test,
               config.earlyFlakeDetectionNumRetries,
-              addEfdStringToTestName,
               ['_ddIsNew', '_ddIsEfdRetry']
             )
           }

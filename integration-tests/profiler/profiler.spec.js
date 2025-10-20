@@ -749,11 +749,13 @@ describe('profiler', () => {
 
       const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
-        assert.equal(pp.namespace, 'profilers')
-        const sampleContexts = pp.series.find(s => s.metric === 'wall.sample_contexts')
-        assert.isDefined(sampleContexts)
-        assert.equal(sampleContexts.type, 'gauge')
-        assert.isAtLeast(sampleContexts.points[0][1], 1)
+        assert.equal(pp.namespace, 'profilers');
+        ['live', 'used'].forEach(metricName => {
+          const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
+          assert.isDefined(sampleContexts)
+          assert.equal(sampleContexts.type, 'gauge')
+          assert.isAtLeast(sampleContexts.points[0][1], 1)
+        })
       }, 'generate-metrics', timeout)
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])

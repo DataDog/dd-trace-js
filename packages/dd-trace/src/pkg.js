@@ -20,8 +20,10 @@ function findPkg () {
 
   const filePath = findUp('package.json', root, directory)
 
+  if (filePath === undefined) return {}
+
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+    return require(filePath)
   } catch {
     return {}
   }

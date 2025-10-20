@@ -19,7 +19,7 @@ describe('esm', () => {
   // excluding 8.16.0 for esm tests, because it is not working: https://github.com/elastic/elasticsearch-js/issues/2466
   withVersions('elasticsearch', ['@elastic/elasticsearch'], '<8.16.0 || >8.16.0', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
         './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'elasticsearch', undefined, '@elastic/elasticsearch')
