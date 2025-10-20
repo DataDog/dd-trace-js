@@ -9,7 +9,8 @@ const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse, normalizeProfilingEnabledValue } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
+  require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { isInServerlessEnvironment, getIsGCPFunction, getIsAzureFunction } = require('./serverless')
@@ -17,6 +18,7 @@ const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
+const path = require('path')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -382,30 +384,7 @@ class Config {
     }
 
     if (this.gitMetadataEnabled) {
-      this.repositoryUrl = removeUserSensitiveInfo(
-        getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
-        this.tags[GIT_REPOSITORY_URL]
-      )
-      this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
-        this.tags[GIT_COMMIT_SHA]
-      if (!this.repositoryUrl || !this.commitSHA) {
-        const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
-          `${process.cwd()}/git.properties`
-        let gitPropertiesString
-        try {
-          gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
-        } catch (e) {
-          // Only log error if the user has set a git.properties path
-          if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
-            log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
-          }
-        }
-        if (gitPropertiesString) {
-          const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-          this.commitSHA = this.commitSHA || commitSHA
-          this.repositoryUrl = this.repositoryUrl || repositoryUrl
-        }
-      }
+      this._loadGitMetadata()
     }
   }
 
@@ -640,6 +619,7 @@ class Config {
       OTEL_SERVICE_NAME,
       OTEL_TRACES_SAMPLER,
       OTEL_TRACES_SAMPLER_ARG,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
@@ -779,6 +759,7 @@ class Config {
     env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
     this._envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this._setString(env, 'env', DD_ENV || tags.env)
+    this._setBoolean(env, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
     this._setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
     this._setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this._setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
@@ -1028,6 +1009,7 @@ class Config {
     this._optsUnprocessed['experimental.aiguard.timeout'] = options.experimental?.aiguard?.timeout
     this._setBoolean(opts, 'experimental.enableGetRumData', options.experimental?.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental?.exporter)
+    this._setBoolean(opts, 'experimental.flaggingProvider.enabled', options.experimental?.flaggingProvider?.enabled)
     opts.flushInterval = maybeInt(options.flushInterval)
     this._optsUnprocessed.flushInterval = options.flushInterval
     opts.flushMinSpans = maybeInt(options.flushMinSpans)
@@ -1435,6 +1417,63 @@ class Config {
       const value = container[name]
       if (value != null || container === this._defaults) {
         return origin
+      }
+    }
+  }
+
+  _loadGitMetadata () {
+    // try to read Git metadata from the environment variables
+    this.repositoryUrl = removeUserSensitiveInfo(
+      getEnvironmentVariable('DD_GIT_REPOSITORY_URL') ??
+      this.tags[GIT_REPOSITORY_URL]
+    )
+    this.commitSHA = getEnvironmentVariable('DD_GIT_COMMIT_SHA') ??
+      this.tags[GIT_COMMIT_SHA]
+
+    // otherwise, try to read Git metadata from the git.properties file
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_PROPERTIES_FILE = getEnvironmentVariable('DD_GIT_PROPERTIES_FILE') ??
+        `${process.cwd()}/git.properties`
+      let gitPropertiesString
+      try {
+        gitPropertiesString = fs.readFileSync(DD_GIT_PROPERTIES_FILE, 'utf8')
+      } catch (e) {
+        // Only log error if the user has set a git.properties path
+        if (getEnvironmentVariable('DD_GIT_PROPERTIES_FILE')) {
+          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', DD_GIT_PROPERTIES_FILE, e)
+        }
+      }
+      if (gitPropertiesString) {
+        const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
+        this.commitSHA = this.commitSHA || commitSHA
+        this.repositoryUrl = this.repositoryUrl || repositoryUrl
+      }
+    }
+    // otherwise, try to read Git metadata from the .git/ folder
+    if (!this.repositoryUrl || !this.commitSHA) {
+      const DD_GIT_FOLDER_PATH = getEnvironmentVariable('DD_GIT_FOLDER_PATH') ??
+        path.join(process.cwd(), '.git')
+      if (!this.repositoryUrl) {
+        // try to read git config (repository URL)
+        const gitConfigPath = path.join(DD_GIT_FOLDER_PATH, 'config')
+        try {
+          const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
+          if (gitConfigContent) {
+            this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
+          }
+        } catch (e) {
+          // Only log error if the user has set a .git/ path
+          if (getEnvironmentVariable('DD_GIT_FOLDER_PATH')) {
+            log.error('Error reading git config: %s', gitConfigPath, e)
+          }
+        }
+      }
+      if (!this.commitSHA) {
+        // try to read git HEAD (commit SHA)
+        const gitHeadSha = resolveGitHeadSHA(DD_GIT_FOLDER_PATH)
+        if (gitHeadSha) {
+          this.commitSHA = gitHeadSha
+        }
       }
     }
   }

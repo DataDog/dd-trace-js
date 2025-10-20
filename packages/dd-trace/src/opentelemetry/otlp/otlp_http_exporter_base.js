@@ -10,8 +10,6 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /**
  * Base class for OTLP HTTP exporters.
  *
- * This implementation follows the OTLP HTTP specification:
- * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpExporterBase
  */

@@ -10,7 +10,7 @@ const OtlpTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpMetricExporter exports metrics via OTLP over HTTP.
  *
- * This implementation follows the OTLP HTTP specification:
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpMetricExporter

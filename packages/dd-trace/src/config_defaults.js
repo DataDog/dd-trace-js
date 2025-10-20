@@ -77,6 +77,7 @@ module.exports = {
   'experimental.aiguard.timeout': 10_000, // ms
   'experimental.enableGetRumData': false,
   'experimental.exporter': undefined,
+  'experimental.flaggingProvider.enabled': false,
   flushInterval: 2000,
   flushMinSpans: 1000,
   gitMetadataEnabled: true,
