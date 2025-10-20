@@ -277,7 +277,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   await fs.mkdir(folder)
   const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`bun pm pack --silent --destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  execHelper(`bun pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv }) // TODO: cache this
 
   if (deps) {
     execHelper(`bun add ${deps} --linker=hoisted --trust --ignore-engines${preferOfflineFlag}`, addOptions)
