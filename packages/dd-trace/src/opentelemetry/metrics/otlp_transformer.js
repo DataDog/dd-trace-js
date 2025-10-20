@@ -7,6 +7,14 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { protoAggregationTemporality } = getProtobufTypes()
 const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
 
+// Metric type constants
+const METRIC_TYPES = {
+  HISTOGRAM: 'histogram',
+  COUNTER: 'counter',
+  UPDOWNCOUNTER: 'updowncounter',
+  GAUGE: 'gauge'
+}
+
 /**
  * OtlpTransformer transforms metrics to OTLP format.
  *
@@ -116,39 +124,40 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
-    if (metric.type === 'histogram') {
-      result.histogram = {
-        dataPoints: metric.data.map(dp => ({
-          attributes: this._transformAttributes(dp.attributes),
-          startTimeUnixNano: dp.startTimeUnixNano,
-          timeUnixNano: dp.timeUnixNano,
-          count: dp.count,
-          sum: dp.sum,
-          bucketCounts: dp.bucketCounts || [],
-          explicitBounds: dp.explicitBounds || [],
-          exemplars: [],
-          flags: 0,
-          min: dp.min,
-          max: dp.max
-        })),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA
-      }
-    } else if (metric.type === 'counter') {
-      result.sum = {
-        dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
-        isMonotonic: true
-      }
-    } else if (metric.type === 'updowncounter') {
-      result.sum = {
-        dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
-        aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
-        isMonotonic: false
-      }
-    } else if (metric.type === 'gauge') {
-      result.gauge = {
-        dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp))
-      }
+    switch (metric.type) {
+      case METRIC_TYPES.HISTOGRAM:
+        result.histogram = {
+          dataPoints: metric.data.map(dp => ({
+            attributes: this._transformAttributes(dp.attributes),
+            startTimeUnixNano: dp.startTimeUnixNano,
+            timeUnixNano: dp.timeUnixNano,
+            count: dp.count,
+            sum: dp.sum,
+            bucketCounts: dp.bucketCounts || [],
+            explicitBounds: dp.explicitBounds || [],
+            exemplars: [],
+            flags: 0,
+            min: dp.min,
+            max: dp.max
+          })),
+          aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA
+        }
+        break
+
+      case METRIC_TYPES.COUNTER:
+      case METRIC_TYPES.UPDOWNCOUNTER:
+        result.sum = {
+          dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
+          aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
+          isMonotonic: metric.type === METRIC_TYPES.COUNTER
+        }
+        break
+
+      case METRIC_TYPES.GAUGE:
+        result.gauge = {
+          dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp))
+        }
+        break
     }
 
     return result
@@ -165,37 +174,38 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
-    if (metric.type === 'histogram') {
-      result.histogram = {
-        dataPoints: metric.data.map(dp => ({
-          attributes: this._attributesToJson(dp.attributes),
-          startTimeUnixNano: String(dp.startTimeUnixNano),
-          timeUnixNano: String(dp.timeUnixNano),
-          count: dp.count,
-          sum: dp.sum,
-          bucketCounts: dp.bucketCounts || [],
-          explicitBounds: dp.explicitBounds || [],
-          min: dp.min,
-          max: dp.max
-        })),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA'
-      }
-    } else if (metric.type === 'counter') {
-      result.sum = {
-        dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA',
-        isMonotonic: true
-      }
-    } else if (metric.type === 'updowncounter') {
-      result.sum = {
-        dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
-        aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA',
-        isMonotonic: false
-      }
-    } else if (metric.type === 'gauge') {
-      result.gauge = {
-        dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp))
-      }
+    switch (metric.type) {
+      case METRIC_TYPES.HISTOGRAM:
+        result.histogram = {
+          dataPoints: metric.data.map(dp => ({
+            attributes: this._attributesToJson(dp.attributes),
+            startTimeUnixNano: String(dp.startTimeUnixNano),
+            timeUnixNano: String(dp.timeUnixNano),
+            count: dp.count,
+            sum: dp.sum,
+            bucketCounts: dp.bucketCounts || [],
+            explicitBounds: dp.explicitBounds || [],
+            min: dp.min,
+            max: dp.max
+          })),
+          aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA'
+        }
+        break
+
+      case METRIC_TYPES.COUNTER:
+      case METRIC_TYPES.UPDOWNCOUNTER:
+        result.sum = {
+          dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
+          aggregationTemporality: 'AGGREGATION_TEMPORALITY_DELTA',
+          isMonotonic: metric.type === METRIC_TYPES.COUNTER
+        }
+        break
+
+      case METRIC_TYPES.GAUGE:
+        result.gauge = {
+          dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp))
+        }
+        break
     }
 
     return result
@@ -241,7 +251,6 @@ class OtlpTransformer extends OtlpTransformerBase {
       result.startTimeUnixNano = String(dataPoint.startTimeUnixNano)
     }
 
-    // Determine if value is int or double
     if (Number.isInteger(dataPoint.value)) {
       result.asInt = dataPoint.value
     } else {
