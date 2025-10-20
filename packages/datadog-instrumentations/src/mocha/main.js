@@ -68,7 +68,7 @@ const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 const mochaGlobalRunCh = channel('ci:mocha:global:run')
 
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
-const impactedTestsCh = channel('ci:mocha:modified-tests')
+const modifiedFilesCh = channel('ci:mocha:modified-files')
 const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
@@ -233,12 +233,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     })
   }
 
-  const onReceivedImpactedTests = ({ err, modifiedTests: receivedModifiedTests }) => {
+  const onReceivedImpactedTests = ({ err, modifiedFiles: receivedModifiedFiles }) => {
     if (err) {
-      config.modifiedTests = []
+      config.modifiedFiles = []
       config.isImpactedTestsEnabled = false
     } else {
-      config.modifiedTests = receivedModifiedTests
+      config.modifiedFiles = receivedModifiedFiles
     }
     if (config.isSuitesSkippingEnabled) {
       ctx.onDone = onReceivedSkippableSuites
@@ -260,7 +260,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
     if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
-      impactedTestsCh.runStores(ctx, () => {})
+      modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
       ctx.onDone = onReceivedSkippableSuites
       skippableSuitesCh.runStores(ctx, () => {})
@@ -284,7 +284,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       testManagementTestsCh.runStores(ctx, () => {})
     } if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
-      impactedTestsCh.runStores(ctx, () => {})
+      modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
       ctx.onDone = onReceivedSkippableSuites
       skippableSuitesCh.runStores(ctx, () => {})
@@ -321,7 +321,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
       testManagementTestsCh.runStores(ctx, () => {})
     } else if (config.isImpactedTestsEnabled) {
       ctx.onDone = onReceivedImpactedTests
-      impactedTestsCh.runStores(ctx, () => {})
+      modifiedFilesCh.runStores(ctx, () => {})
     } else if (config.isSuitesSkippingEnabled) {
       ctx.onDone = onReceivedSkippableSuites
       skippableSuitesCh.runStores(ctx, () => {})
@@ -696,9 +696,8 @@ addHook({
     }
 
     if (config.isImpactedTestsEnabled) {
-      const testSuiteImpactedTests = config.modifiedTests || {}
       newWorkerArgs._ddIsImpactedTestsEnabled = true
-      newWorkerArgs._ddModifiedTests = testSuiteImpactedTests
+      newWorkerArgs._ddModifiedFiles = config.modifiedFiles || {}
     }
 
     // We pass the known tests for the test file to the worker
