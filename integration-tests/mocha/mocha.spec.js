@@ -4107,7 +4107,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.include(stdout, 'afterEach in context')
     })
 
-    it('works when tests are retried', async () => {
+    onlyLatestIt('works when tests are retried', async () => {
       let stdout = ''
       const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4384,6 +4384,27 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('preserves test function on retries', () => {
+    const getTestAssertions = () =>
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        if (MOCHA_VERSION === 'latest') {
+          assert.equal(tests.length, 3)
+          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedTests.length, 2)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+          const [passedTest] = passedTests
+          assert.equal(passedTest.meta[TEST_IS_RETRY], 'true')
+        } else {
+          // there's no `retry` handled so it's just reported as a single passed test event
+          // because the test ends up passing after retries
+          assert.equal(tests.length, 1)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+        }
+      })
+
     it('respects "done" callback', async () => {
       childProcess = exec(
         runTestsCommand,
@@ -4400,17 +4421,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.equal(tests.length, 3)
-          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-          assert.equal(failedTests.length, 2)
-          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-          assert.equal(passedTests.length, 1)
-          const [passedTest] = passedTests
-          assert.equal(passedTest.meta[TEST_IS_RETRY], 'true')
-        })
+        getTestAssertions()
       ])
     })
     it('respects async/await', async () => {
@@ -4429,17 +4440,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.equal(tests.length, 3)
-          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-          assert.equal(failedTests.length, 2)
-          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-          assert.equal(passedTests.length, 1)
-          const [passedTest] = passedTests
-          assert.equal(passedTest.meta[TEST_IS_RETRY], 'true')
-        })
+        getTestAssertions()
       ])
     })
     it('respects promises', async () => {
@@ -4458,15 +4459,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.equal(tests.length, 3)
-          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-          assert.equal(failedTests.length, 2)
-          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-          assert.equal(passedTests.length, 1)
-        })
+        getTestAssertions()
       ])
     })
     it('respects sync functions', async () => {
@@ -4485,15 +4478,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([
         once(childProcess, 'exit'),
-        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.equal(tests.length, 3)
-          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-          assert.equal(failedTests.length, 2)
-          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-          assert.equal(passedTests.length, 1)
-        })
+        getTestAssertions()
       ])
     })
   })
