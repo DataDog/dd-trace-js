@@ -2,6 +2,13 @@
 
 const LLMObsPlugin = require('./base')
 
+const allowedParamKeys = new Set([
+  'max_output_tokens',
+  'temperature',
+  'stream',
+  'reasoning'
+])
+
 function isIterable (obj) {
   if (obj == null) {
     return false
@@ -207,12 +214,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
   #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
-    const allowedParamKeys = new Set([
-      'max_output_tokens',
-      'temperature',
-      'stream',
-      'reasoning'
-    ])
 
     const { input, model, ...parameters } = inputs
 
