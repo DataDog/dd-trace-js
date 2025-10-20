@@ -109,6 +109,8 @@ typings/
 /versions
 .bun
 .next
+bun.lock
+bun.lockb
 package-lock.json
 out
 build
