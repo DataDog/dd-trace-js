@@ -61,7 +61,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
       } else if (methodName === 'createChatCompletion') {
         response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
       } else if (methodName === 'createResponse') {
-        response = constructResponseResponseFromStreamedChunks(chunks, n)
+        response = constructResponseResponseFromStreamedChunks(chunks)
       }
 
       ctx.result = { data: response }
