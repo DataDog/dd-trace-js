@@ -13,6 +13,7 @@ const {
   MOCK_NUMBER,
   MOCK_OBJECT
 } = require('../../util')
+const assert = require('node:assert')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
