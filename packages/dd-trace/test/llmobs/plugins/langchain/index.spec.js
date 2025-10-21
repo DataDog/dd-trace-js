@@ -486,7 +486,9 @@ describe('integrations', () => {
               secondChain
             ])
 
-            const result = await completeChain.invoke({ person: 'Abraham Lincoln', language: 'Spanish' })
+            const result = await llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
+              return completeChain.invoke({ person: 'Abraham Lincoln', language: 'Spanish' })
+            })
             assert.ok(result)
 
             const { apmSpans, llmobsSpans } = await getEvents()
@@ -506,7 +508,7 @@ describe('integrations', () => {
               name: 'langchain_core.runnables.RunnableSequence',
               inputData: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputData: expectedOutput,
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -517,7 +519,7 @@ describe('integrations', () => {
               inputData: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputData: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
             assertLlmObsSpanEvent(llmobsSpans[2], {
@@ -537,7 +539,7 @@ describe('integrations', () => {
               }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 16, output_tokens: 30, total_tokens: 46 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
             assertLlmObsSpanEvent(llmobsSpans[3], {
@@ -551,7 +553,7 @@ describe('integrations', () => {
                 'Springfield, Illinois, which is often associated with him as his home city.'
               }),
               outputData: expectedOutput,
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
             assertLlmObsSpanEvent(llmobsSpans[4], {
@@ -572,7 +574,7 @@ describe('integrations', () => {
               outputData: [{ content: expectedOutput, role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
           })
 

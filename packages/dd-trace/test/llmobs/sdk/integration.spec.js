@@ -344,4 +344,43 @@ describe('end to end sdk integration tests', () => {
       })
     })
   })
+
+  describe('with annotation context', () => {
+    it('applies the annotation context only to the scoped block', () => {
+      payloadGenerator = function () {
+        llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'beforeAnnotationContext' }, () => {})
+
+          llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
+            llmobs.trace({ kind: 'workflow', name: 'inner' }, () => {
+              llmobs.trace({ kind: 'workflow', name: 'innerInner' }, () => {})
+            })
+            llmobs.trace({ kind: 'workflow', name: 'inner2' }, () => {})
+          })
+
+          llmobs.trace({ kind: 'workflow', name: 'afterAnnotationContext' }, () => {})
+        })
+      }
+
+      const { llmobsSpans } = run(payloadGenerator)
+      expect(llmobsSpans).to.have.lengthOf(6)
+
+      expect(llmobsSpans[0].tags).to.not.include('foo:bar')
+
+      expect(llmobsSpans[1].tags).to.not.include('foo:bar')
+      expect(llmobsSpans[1].parent_id).to.equal(llmobsSpans[0].span_id)
+
+      expect(llmobsSpans[2].tags).to.include('foo:bar')
+      expect(llmobsSpans[2].parent_id).to.equal(llmobsSpans[0].span_id)
+
+      expect(llmobsSpans[3].tags).to.include('foo:bar')
+      expect(llmobsSpans[3].parent_id).to.equal(llmobsSpans[2].span_id)
+
+      expect(llmobsSpans[4].tags).to.include('foo:bar')
+      expect(llmobsSpans[4].parent_id).to.equal(llmobsSpans[0].span_id)
+
+      expect(llmobsSpans[5].tags).to.not.include('foo:bar')
+      expect(llmobsSpans[5].parent_id).to.equal(llmobsSpans[0].span_id)
+    })
+  })
 })
