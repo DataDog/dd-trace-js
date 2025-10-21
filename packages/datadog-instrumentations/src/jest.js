@@ -811,11 +811,15 @@ function getCliWrapper (isNewJestVersion) {
 
         try {
           const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
-          if (!err) {
+          if (err) {
+            isTestManagementTestsEnabled = false
+            testManagementTests = {}
+          } else {
             testManagementTests = receivedTestManagementTests
           }
         } catch (err) {
           log.error('Jest test management tests error', err)
+          isTestManagementTestsEnabled = false
         }
       }
 

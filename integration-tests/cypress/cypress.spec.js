@@ -2342,6 +2342,50 @@ moduleTypes.forEach(({
           await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
+
+      it('does not crash if the request to get test management tests fails', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false
+        })
+        receiver.setTestManagementTestsResponseCode(500)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // it is not retried
+            assert.equal(tests.length, 1)
+          })
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: '1'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+      })
     })
 
     context('libraries capabilities', () => {
