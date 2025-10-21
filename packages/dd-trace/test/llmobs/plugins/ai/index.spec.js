@@ -24,7 +24,7 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
 
 describe('Plugin', () => {
   useEnv({
-    OPENAI_API_KEY: '<not-a-real-key>'
+    // OPENAI_API_KEY: '<not-a-real-key>'
   })
 
   const getEvents = useLlmObs({ plugin: 'ai' })
@@ -230,15 +230,20 @@ describe('Plugin', () => {
       })
     })
 
-    // TODO(sabrenner): re-enable this test once #6707 lands
-    it.skip('creates a span for streamText', async () => { // eslint-disable-line mocha/no-pending-tests
-      const result = await ai.streamText({
+    it('creates a span for streamText', async () => {
+      const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
         temperature: 0.5
-      })
+      }
+      if (semifies(realVersion, '>=5.0.0')) {
+        options.maxOutputTokens = 100
+      } else {
+        options.maxTokens = 100
+      }
+      const result = await ai.streamText(options)
 
       const textStream = result.textStream
 
@@ -248,7 +253,7 @@ describe('Plugin', () => {
 
       const expectedMetadata =
         semifies(realVersion, '>=5.0.0')
-          ? { maxRetries: MOCK_NUMBER }
+          ? { maxRetries: MOCK_NUMBER, maxOutputTokens: 100 }
           : { maxSteps: MOCK_NUMBER }
 
       assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -282,8 +287,7 @@ describe('Plugin', () => {
       })
     })
 
-    // TODO(sabrenner): re-enable this test once #6707 lands
-    it.skip('creates a span for streamObject', async () => { // eslint-disable-line mocha/no-pending-tests
+    it('creates a span for streamObject', async () => {
       const schema = ai.jsonSchema({
         type: 'object',
         properties: {
