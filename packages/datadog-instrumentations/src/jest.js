@@ -29,6 +29,7 @@ const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
 const testSuiteStartCh = channel('ci:jest:test-suite:start')
 const testSuiteFinishCh = channel('ci:jest:test-suite:finish')
+const testSuiteErrorCh = channel('ci:jest:test-suite:error')
 
 const workerReportTraceCh = channel('ci:jest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:jest:worker-report:coverage')
@@ -397,7 +398,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isJestRetry,
           isDisabled,
           isQuarantined,
-          isModified
+          isModified,
+          testSuiteAbsolutePath: this.testSuiteAbsolutePath
         }
         testContexts.set(event.test, ctx)
 
@@ -809,11 +811,15 @@ function getCliWrapper (isNewJestVersion) {
 
         try {
           const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
-          if (!err) {
+          if (err) {
+            isTestManagementTestsEnabled = false
+            testManagementTests = {}
+          } else {
             testManagementTests = receivedTestManagementTests
           }
         } catch (err) {
           log.error('Jest test management tests error', err)
+          isTestManagementTestsEnabled = false
         }
       }
 
@@ -1092,7 +1098,8 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testEnvironmentOptions: environment.testEnvironmentOptions,
       testSourceFile: environment.testSourceFile,
       displayName: environment.displayName,
-      frameworkVersion: jestVersion
+      frameworkVersion: jestVersion,
+      testSuiteAbsolutePath: environment.testSuiteAbsolutePath
     })
     return adapter.apply(this, arguments).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
@@ -1116,12 +1123,17 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
         const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
         const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
 
-        testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSourceFile, mockedFiles })
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          testSuite: environment.testSourceFile,
+          mockedFiles,
+          testSuiteAbsolutePath: environment.testSuiteAbsolutePath
+        })
       }
-      testSuiteFinishCh.publish({ status, errorMessage })
+      testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
       return suiteResults
     }).catch(error => {
-      testSuiteFinishCh.publish({ status: 'fail', error })
+      testSuiteFinishCh.publish({ status: 'fail', error, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
       throw error
     })
   })
@@ -1301,16 +1313,49 @@ addHook({
   })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
-    // TODO: do this for every library that we instrument
-    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-      // To bypass jest's own require engine
-      return this._requireCoreModule(moduleName)
+    // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
+    // from the stack trace, the user might see a useless stack trace rather than the error
+    // that `jest` tries to show.
+    const originalPrepareStackTrace = Error.prepareStackTrace
+    Error.prepareStackTrace = function (error, structuredStackTrace) {
+      const filteredStackTrace = structuredStackTrace
+        .filter(callSite => !callSite.getFileName()?.includes('datadog-instrumentations/src/jest.js'))
+
+      return originalPrepareStackTrace(error, filteredStackTrace)
     }
-    // This means that `@fast-check/jest` is used in the test file.
-    if (moduleName === '@fast-check/jest') {
-      testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
+    try {
+      // TODO: do this for every library that we instrument
+      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+        // To bypass jest's own require engine
+        return this._requireCoreModule(moduleName)
+      }
+      // This means that `@fast-check/jest` is used in the test file.
+      if (moduleName === '@fast-check/jest') {
+        testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
+      }
+      const returnedValue = requireModuleOrMock.apply(this, arguments)
+      if (process.exitCode === 1) {
+        if (this.loggedReferenceErrors.size > 0) {
+          const errorMessage = [...this.loggedReferenceErrors][0]
+          testSuiteErrorCh.publish({
+            errorMessage,
+            testSuiteAbsolutePath: this._testPath
+          })
+        } else {
+          testSuiteErrorCh.publish({
+            errorMessage: 'An error occurred while importing a module',
+            testSuiteAbsolutePath: this._testPath
+          })
+        }
+      }
+      return returnedValue
+    } catch (error) {
+      testSuiteErrorCh.publish({ error, testSuiteAbsolutePath: this._testPath })
+      throw error
+    } finally {
+      // Restore original prepareStackTrace
+      Error.prepareStackTrace = originalPrepareStackTrace
     }
-    return requireModuleOrMock.apply(this, arguments)
   })
 
   return runtimePackage

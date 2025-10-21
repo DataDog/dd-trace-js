@@ -45,19 +45,24 @@ function getOperation (span) {
 
 /**
  * Get the LLM token usage from the span tags
+ * Supports both AI SDK v4 (promptTokens/completionTokens) and v5 (inputTokens/outputTokens)
  * @template T extends {inputTokens: number, outputTokens: number, totalTokens: number}
  * @param {T} tags
  * @returns {Pick<T, 'inputTokens' | 'outputTokens' | 'totalTokens'>}
  */
 function getUsage (tags) {
   const usage = {}
-  const inputTokens = tags['ai.usage.promptTokens']
-  const outputTokens = tags['ai.usage.completionTokens']
+
+  // AI SDK v5 uses inputTokens/outputTokens, v4 uses promptTokens/completionTokens
+  // Check v5 properties first, fall back to v4
+  const inputTokens = tags['ai.usage.inputTokens'] ?? tags['ai.usage.promptTokens']
+  const outputTokens = tags['ai.usage.outputTokens'] ?? tags['ai.usage.completionTokens']
 
   if (inputTokens != null) usage.inputTokens = inputTokens
   if (outputTokens != null) usage.outputTokens = outputTokens
 
-  const totalTokens = inputTokens + outputTokens
+  // v5 provides totalTokens directly, v4 requires computation
+  const totalTokens = tags['ai.usage.totalTokens'] ?? (inputTokens + outputTokens)
   if (!Number.isNaN(totalTokens)) usage.totalTokens = totalTokens
 
   return usage

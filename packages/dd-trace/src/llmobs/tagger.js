@@ -29,6 +29,7 @@ const {
   DECORATOR,
   PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
+const { storage } = require('./storage')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -97,6 +98,17 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    // apply annotation context
+    const annotationContext = storage.getStore()?.annotationContext
+
+    // apply annotation context tags
+    const tags = annotationContext?.tags
+    if (tags) this.tagSpanTags(span, tags)
+
+    // apply annotation context name
+    const annotationContextName = annotationContext?.name
+    if (annotationContextName) this._setTag(span, NAME, annotationContextName)
   }
 
   // TODO: similarly for the following `tag` methods,

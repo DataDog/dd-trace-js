@@ -3999,6 +3999,55 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
     })
+
+    it('does not crash if the request to get test management tests fails', async () => {
+      let testOutput = ''
+      receiver.setSettings({
+        test_management: { enabled: true },
+        flaky_test_retries_enabled: false
+      })
+      receiver.setTestManagementTestsResponseCode(500)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // it is not retried
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-management/test-attempt-to-fix-1.js'
+            ]),
+            DD_TRACE_DEBUG: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        eventsPromise
+      ])
+      assert.include(testOutput, 'Test management tests could not be fetched')
+    })
   })
 
   context('libraries capabilities', () => {
@@ -4057,7 +4106,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('retry and hooks', () => {
-    it('works when tests are not retried', (done) => {
+    it('works when tests are not retried', async () => {
       let stdout = ''
       const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4094,19 +4143,20 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         stdout += data
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          assert.include(stdout, 'beforeEach')
-          assert.include(stdout, 'beforeEach in context')
-          assert.include(stdout, 'test')
-          assert.include(stdout, 'afterEach')
-          assert.include(stdout, 'afterEach in context')
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        eventsPromise
+      ])
+
+      assert.include(stdout, 'beforeEach')
+      assert.include(stdout, 'beforeEach in context')
+      assert.include(stdout, 'test')
+      assert.include(stdout, 'afterEach')
+      assert.include(stdout, 'afterEach in context')
     })
 
-    onlyLatestIt('works when tests are retried', (done) => {
+    onlyLatestIt('works when tests are retried', async () => {
       let stdout = ''
       const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4128,6 +4178,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
         assert.equal(retriedTests.length, 1)
         assert.equal(retriedTests[0].meta[TEST_STATUS], 'pass')
+
+        const notNestedTests = tests.filter(test => test.resource ===
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        )
+
+        assert.equal(notNestedTests.length, 2)
+        const failedAttempts = notNestedTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+        assert.equal(failedAttempts.length, 1)
+        const passedAttempts = notNestedTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+        assert.equal(passedAttempts.length, 1)
       })
 
       childProcess = exec(
@@ -4149,16 +4209,17 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         stdout += data
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          assert.include(stdout, 'beforeEach')
-          assert.include(stdout, 'beforeEach in context')
-          assert.include(stdout, 'test')
-          assert.include(stdout, 'afterEach')
-          assert.include(stdout, 'afterEach in context')
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        eventsPromise
+      ])
+
+      assert.include(stdout, 'beforeEach')
+      assert.include(stdout, 'beforeEach in context')
+      assert.include(stdout, 'test')
+      assert.include(stdout, 'afterEach')
+      assert.include(stdout, 'afterEach in context')
     })
   })
 
@@ -4368,6 +4429,106 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           )
         })
       })
+    })
+  })
+
+  context('preserves test function on retries', () => {
+    const getTestAssertions = () =>
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        if (MOCHA_VERSION === 'latest') {
+          assert.equal(tests.length, 3)
+          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedTests.length, 2)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+          const [passedTest] = passedTests
+          assert.equal(passedTest.meta[TEST_IS_RETRY], 'true')
+        } else {
+          // there's no `retry` handled so it's just reported as a single passed test event
+          // because the test ends up passing after retries
+          assert.equal(tests.length, 1)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+        }
+      })
+
+    it('respects "done" callback', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-done.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects async/await', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-async.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects promises', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-promise.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects sync functions', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-sync.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
     })
   })
 })
