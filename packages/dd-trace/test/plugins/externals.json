@@ -195,12 +195,6 @@
       "versions": [">=3"]
     }
   ],
-  "google-cloud-pubsub": [
-    {
-      "name": "google-gax",
-      "versions": ["3.5.7"]
-    }
-  ],
   "graphql": [
     {
       "name": "apollo-server-core",

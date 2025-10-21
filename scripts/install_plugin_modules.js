@@ -32,9 +32,7 @@ run()
 
 async function run () {
   await assertPrerequisites()
-  install(process.env.BUN_FORCE_INSTALL === 'true')
-  await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  install()
+  await assertVersions(join(__dirname, '..', 'versions'))
 }
 
 async function assertPrerequisites () {
@@ -61,7 +59,7 @@ async function assertPrerequisites () {
     }
   }
 
-  await assertWorkspaces()
+  await assertFolder()
 }
 
 /**
@@ -138,7 +136,7 @@ async function assertPackage (name, version, dependencyVersionRange) {
  * @param {object} rootFolder
  * @param {string} parent
  */
-async function assertPeerDependencies (rootFolder, parent = '') {
+async function assertVersions (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
 
   for (const entry of entries) {
@@ -147,9 +145,11 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     if (!(await lstat(folder)).isDirectory()) continue
     if (entry === 'node_modules') continue
     if (entry.startsWith('@')) {
-      await assertPeerDependencies(folder, entry)
+      await assertVersions(folder, entry)
       continue
     }
+
+    install(folder)
 
     const externalName = join(parent, entry.split('@')[0])
 
@@ -225,37 +225,20 @@ module.exports = {
   await writeFile(filename(name, version, 'index.js'), index)
 }
 
-async function assertWorkspaces () {
-  await assertFolder()
-  await writeFile(filename(null, null, 'package.json'), JSON.stringify({
-    name: 'versions',
-    version: '1.0.0',
-    license: 'BSD-3-Clause',
-    private: true,
-    workspaces: {
-      packages: Array.from(workspaces)
-    }
-  }, null, 2) + '\n')
-}
-
 /**
- * @param {boolean} [force=false]
+ * @param {string} cwd
  * @param {boolean} [retry=true]
  */
-function install (force = false, retry = true) {
+function install (cwd, retry = true) {
   const flags = [
     '--linker=hoisted'
   ]
 
-  if (force) {
-    flags.push('--force')
-  }
-
   try {
-    exec(`${BUN} install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
+    exec(`${BUN} install ${flags.join(' ')}`, { cwd, env: withBun() })
   } catch (err) {
     if (!retry) throw err
-    install(force, false) // retry in case of server error from registry
+    install(cwd, false) // retry in case of server error from registry
   }
 }
 
