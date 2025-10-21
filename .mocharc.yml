@@ -1,3 +1,0 @@
-color: true
-exit: true # TODO: Fix tests so that this is not needed.
-timeout: '5000'
