@@ -7,40 +7,33 @@ const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const {
   useLlmObs,
-  expectedLLMObsLLMSpanEvent,
-  deepEqualWithMockValues,
   MOCK_STRING,
-  MOCK_NUMBER
+  MOCK_NUMBER,
+  assertLlmObsSpanEvent
 } = require('../../util')
-const chai = require('chai')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
-const { expect } = chai
 
 function assertLLMObsSpan (apmSpans, llmobsSpans) {
-  const expectedWorkflowSpan = expectedLLMObsLLMSpanEvent({
+  assertLlmObsSpanEvent(llmobsSpans[0], {
     span: apmSpans[0],
-    name: 'anthropic.request',
     spanKind: 'llm',
+    name: 'anthropic.request',
     modelName: 'claude-3-7-sonnet-20250219',
     modelProvider: 'anthropic',
-    inputMessages: [{ role: 'user', content: 'Hello, world!' }],
-    outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+    inputData: [{ role: 'user', content: 'Hello, world!' }],
+    outputData: [{ role: 'assistant', content: MOCK_STRING }],
     metadata: {
       max_tokens: 100,
       temperature: 0.5,
     },
-    tokenMetrics: {
+    metrics: {
       input_tokens: MOCK_NUMBER,
       output_tokens: MOCK_NUMBER,
       total_tokens: MOCK_NUMBER,
       cache_write_input_tokens: MOCK_NUMBER,
       cache_read_input_tokens: MOCK_NUMBER
     },
-    tags: { ml_app: 'test', language: 'javascript', integration: 'anthropic' },
+    tags: { ml_app: 'test', integration: 'anthropic' },
   })
-
-  expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
 }
 
 describe('Plugin', () => {
