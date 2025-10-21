@@ -22,6 +22,10 @@ import {
   getSource as origGetSource,
 } from 'import-in-the-middle/hook.mjs'
 
+// Set global flag to indicate ESM loader is active
+// This is checked by rewriter.js to enable ESM rewriting for IAST
+globalThis.__DD_ESM_LOADER_ACTIVE__ = true
+
 let hasInsertedInit = false
 function insertInit (result) {
   if (!hasInsertedInit) {
