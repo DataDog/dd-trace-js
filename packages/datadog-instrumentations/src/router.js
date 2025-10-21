@@ -150,12 +150,12 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (fn, ...otherArgs) {
       let offset = 0
       if (this.stack) {
         offset = Array.isArray(this.stack) ? this.stack.length : 1
       }
-      const router = original.apply(this, arguments)
+      const router = original.call(this, fn, ...otherArgs)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
@@ -168,20 +168,23 @@ function createWrapRouterMethod (name) {
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
       if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
-        if (original.name === 'use' && arguments.length >= 2) {
+        if (original.name === 'use' && otherArgs.length >= 1) {
           const { mountPaths, startIdx } = extractMountPaths(fn)
 
           if (mountPaths.length) {
             const parentPaths = getRouterMountPaths(this)
+            const callArgs = [fn, ...otherArgs]
 
-            for (let i = startIdx; i < arguments.length; i++) {
-              const nestedRouter = arguments[i]
+            for (let i = startIdx; i < callArgs.length; i++) {
+              const nestedRouter = callArgs[i]
 
               if (!nestedRouter || typeof nestedRouter !== 'function') continue
 
               for (const parentPath of parentPaths) {
                 for (const normalizedMountPath of mountPaths) {
                   const fullMountPath = joinPath(parentPath, normalizedMountPath)
+                  if (fullMountPath === null) continue
+
                   setRouterMountPath(nestedRouter, fullMountPath)
                   collectRoutesFromRouter(nestedRouter, fullMountPath)
                 }

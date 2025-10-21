@@ -116,6 +116,11 @@ const cycleRouter = express.Router()
 cycleRouter.use('/cycle', cycleRouter)
 app.use('/cycle', cycleRouter)
 
+// Invalid route path - should not be collected
+const invalidRouter = express.Router()
+app.use('/invalid', invalidRouter)
+invalidRouter.get('nested', (_, res) => res.send('ok'))
+
 const server = app.listen(0, '127.0.0.1', () => {
   const port = server.address().port
   process.send({ port })

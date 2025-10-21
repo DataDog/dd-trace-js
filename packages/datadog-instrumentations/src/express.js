@@ -67,8 +67,8 @@ function wrapResponseRender (render) {
 }
 
 function wrapAppAll (all) {
-  return function wrappedAll (path) {
-    if (!routeAddedChannel.hasSubscribers) return all.apply(this, arguments)
+  return function wrappedAll (path, ...otherArgs) {
+    if (!routeAddedChannel.hasSubscribers) return all.call(this, path, ...otherArgs)
 
     const paths = normalizeRoutePaths(path)
 
@@ -76,14 +76,14 @@ function wrapAppAll (all) {
       routeAddedChannel.publish({ method: '*', path: p })
     }
 
-    return all.apply(this, arguments)
+    return all.call(this, path, ...otherArgs)
   }
 }
 
 // Wrap app.route() to instrument Route object
 function wrapAppRoute (route) {
-  return function wrappedRoute (path) {
-    const routeObj = route.apply(this, arguments)
+  return function wrappedRoute (path, ...otherArgs) {
+    const routeObj = route.call(this, path, ...otherArgs)
 
     if (!routeAddedChannel.hasSubscribers) return routeObj
 
@@ -131,7 +131,7 @@ function wrapAppUse (use) {
       }
     }
 
-    return use.apply(this, arguments)
+    return use.apply(this, args)
   }
 }
 

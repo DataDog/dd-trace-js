@@ -20,7 +20,7 @@ const {
   isAppMounted
 } = require('../../src/helpers/router-helper')
 
-describe.only('helpers/router-helper', () => {
+describe('helpers/router-helper', () => {
   describe('normalizeRoutePath', () => {
     it('should return null for nullish values', () => {
       expect(normalizeRoutePath(null)).to.equal(null)
@@ -91,6 +91,26 @@ describe.only('helpers/router-helper', () => {
 
     it('should avoid duplicate slashes when base ends with slash', () => {
       expect(joinPath('/^\\/regex(?:\\/|$)/', '/mounted')).to.equal('/^\\/regex(?:\\/|$)/mounted')
+    })
+
+    it('should return null for path without leading slash (not accessible in Express)', () => {
+      expect(joinPath('/v1', 'nested')).to.equal(null)
+    })
+
+    it('should return null for base without leading slash (not accessible in Express)', () => {
+      expect(joinPath('v1', '/nested')).to.equal(null)
+    })
+
+    it('should return null for both base and path without leading slashes', () => {
+      expect(joinPath('v1', 'nested')).to.equal(null)
+    })
+
+    it('should handle empty string path (used for routes without explicit path)', () => {
+      expect(joinPath('/v1', '')).to.equal('/v1')
+    })
+
+    it('should handle base with trailing slash and path with leading slash correctly', () => {
+      expect(joinPath('/v1/', '/nested')).to.equal('/v1/nested')
     })
   })
 
@@ -271,8 +291,8 @@ describe.only('helpers/router-helper', () => {
       const calls = []
       const published = []
       const route = {
-        get () {
-          calls.push({ args: Array.from(arguments), context: this })
+        get (...args) {
+          calls.push({ args, context: this })
           return 'result'
         }
       }

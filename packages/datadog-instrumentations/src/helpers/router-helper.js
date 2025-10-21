@@ -11,10 +11,28 @@ const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 
 const routeAddedChannel = channel('apm:express:route:added')
 
+/**
+ * Joins two URL path segments into a single path
+ *
+ * @param {string} base - The base path
+ * @param {string} path - The path to append
+ * @returns {string|null} The joined path  or null if the combination would create an invalid route in Express
+ */
 function joinPath (base, path) {
   if (!base || base === '/') return path || '/'
   if (!path || path === '/') return base
-  if (base.endsWith('/') && path.startsWith('/')) return base + path.slice(1)
+
+  // Express does not normalize paths without leading slashes.
+  // If either path doesn't start with '/', we should skip this combination.
+  // Allow only empty string for path
+  if (path !== '' && !path.startsWith('/')) return null
+  if (!base.startsWith('/')) return null
+
+  // Handle duplicate slashes when base ends with / and path starts with /
+  if (base.endsWith('/') && path.startsWith('/')) {
+    return base + path.slice(1)
+  }
+
   return base + path
 }
 
@@ -55,6 +73,8 @@ function collectRoutesFromRouter (router, prefix) {
         : getLayerMatchers(layer)?.[0]?.path || ''
 
       const nestedPrefix = joinPath(prefix, mountPath)
+      if (nestedPrefix === null) continue
+
       // Set the mount path for the nested router
       setRouterMountPath(layer.handle, nestedPrefix)
       markAppMounted(layer.handle)
@@ -119,7 +139,9 @@ function getRouteFullPaths (route, prefix) {
   const routePaths = normalizeRoutePaths(route.path)
   const pathsToPublish = routePaths.length ? routePaths : ['']
 
-  return pathsToPublish.map(routePath => joinPath(prefix, routePath))
+  return pathsToPublish
+    .map(routePath => joinPath(prefix, routePath))
+    .filter(path => path !== null) // Filter out invalid path combinations
 }
 
 function markAppMounted (router) {
@@ -184,7 +206,7 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
   METHODS.forEach(method => {
     if (typeof route[method] !== 'function') return
 
-    shimmer.wrap(route, method, (originalMethod) => function wrappedRouteMethod () {
+    shimmer.wrap(route, method, (originalMethod) => function wrappedRouteMethod (...args) {
       const normalizedMethod = normalizeMethodName(method)
 
       for (const path of uniquePaths) {
@@ -194,7 +216,7 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
         })
       }
 
-      return originalMethod.apply(this, arguments)
+      return originalMethod.apply(this, args)
     })
   })
 }

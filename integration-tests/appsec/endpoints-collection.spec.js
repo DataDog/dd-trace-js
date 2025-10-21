@@ -189,6 +189,15 @@ describe('Endpoints collection', () => {
 
       // check that no additional endpoints were found
       expect(endpointsFound.length).to.equal(expectedEndpoints.length)
+
+      // Explicitly verify invalid endpoints are NOT reported
+      if (framework === 'express') {
+        const cycleEndpoints = endpointsFound.filter(e => e.path.includes('cycle'))
+        expect(cycleEndpoints).to.have.lengthOf(0, 'Cycle router endpoints should not be collected')
+
+        const invalidEndpoints = endpointsFound.filter(e => e.path.includes('invalid'))
+        expect(invalidEndpoints).to.have.lengthOf(0, 'Invalid router paths should not be collected')
+      }
     } finally {
       proc?.kill()
       await agent?.stop()
