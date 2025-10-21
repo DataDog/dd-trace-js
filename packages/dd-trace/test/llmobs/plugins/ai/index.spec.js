@@ -17,6 +17,7 @@ const {
   MOCK_NUMBER,
   MOCK_OBJECT
 } = require('../../util')
+const assert = require('node:assert')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -279,6 +280,15 @@ describe('Plugin', () => {
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
       expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmobsSpans[1].metrics.input_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.input_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.output_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.output_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.total_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.total_tokens > 0)
     })
 
     it('creates a span for streamObject', async () => {
@@ -338,6 +348,15 @@ describe('Plugin', () => {
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
       expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmobsSpans[1].metrics.input_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.input_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.output_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.output_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.total_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.total_tokens > 0)
     })
 
     it('creates a span for a tool call', async () => {
@@ -692,6 +711,22 @@ describe('Plugin', () => {
       expect(llmSpan).to.deepEqualWithMockValues(expectedLlmSpan)
       expect(toolCallSpan).to.deepEqualWithMockValues(expectedToolCallSpan)
       expect(llmSpan2).to.deepEqualWithMockValues(expectedLlmSpan2)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmSpan.metrics.input_tokens === 'number')
+      assert.ok(llmSpan.metrics.input_tokens > 0)
+      assert.ok(typeof llmSpan.metrics.output_tokens === 'number')
+      assert.ok(llmSpan.metrics.output_tokens > 0)
+      assert.ok(typeof llmSpan.metrics.total_tokens === 'number')
+      assert.ok(llmSpan.metrics.total_tokens > 0)
+
+      assert.ok(typeof llmSpan2.metrics.input_tokens === 'number')
+      assert.ok(llmSpan2.metrics.input_tokens > 0)
+      assert.ok(typeof llmSpan2.metrics.output_tokens === 'number')
+      assert.ok(llmSpan2.metrics.output_tokens > 0)
+      assert.ok(typeof llmSpan2.metrics.total_tokens === 'number')
+      assert.ok(llmSpan2.metrics.total_tokens > 0)
     })
 
     it('creates a span that respects the functionId', async () => {
