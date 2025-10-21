@@ -20,6 +20,8 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_TYPE,
+  TEST_FRAMEWORK,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
@@ -59,17 +61,32 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
+  CI_APP_ORIGIN,
+  TEST_FRAMEWORK_VERSION,
+  LIBRARY_VERSION,
+  TEST_PARAMETERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const {
+  ERROR_MESSAGE,
+  ORIGIN_KEY,
+  COMPONENT,
+  ERROR_STACK,
+  ERROR_TYPE
+} = require('../../packages/dd-trace/src/constants')
+const { VERSION: ddTraceVersion } = require('../../version')
 
-const runTestsWithCoverageCommand = './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js'
+const runTestsCommand = 'node ./ci-visibility/run-mocha.js'
+const runTestsWithCoverageCommand = `./node_modules/nyc/bin/nyc.js -r=text-summary ${runTestsCommand}`
 const testFile = 'ci-visibility/run-mocha.js'
 const expectedStdout = '2 passing'
 const extraStdout = 'end event: can add event listeners to mocha'
 
-describe('mocha CommonJS', function () {
+const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
+const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+
+describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
   let childProcess
   let sandbox
@@ -78,7 +95,16 @@ describe('mocha CommonJS', function () {
   let testOutput = ''
 
   before(async function () {
-    sandbox = await createSandbox(['mocha', 'chai@v4', 'nyc', 'mocha-each', 'workerpool'], true)
+    sandbox = await createSandbox(
+      [
+        `mocha@${MOCHA_VERSION}`,
+        'chai@v4',
+        'nyc',
+        'mocha-each',
+        'workerpool'
+      ],
+      true
+    )
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, testFile)
   })
@@ -149,80 +175,892 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  const nonLegacyReportingOptions = ['agentless', 'evp proxy']
+  const nonLegacyReportingOptions = ['evp proxy', 'agentless']
 
   nonLegacyReportingOptions.forEach((reportingOption) => {
-    it(`can run and report tests with ${reportingOption}`, (done) => {
-      const envVars = reportingOption === 'agentless'
-        ? getCiVisAgentlessConfig(receiver.port)
-        : getCiVisEvpProxyConfig(receiver.port)
-      if (reportingOption === 'evp proxy') {
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      }
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
-        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+    let envVars = {}
+    context(`(${reportingOption}) can run and report`, () => {
+      beforeEach(() => {
+        if (reportingOption === 'agentless') {
+          envVars = getCiVisAgentlessConfig(receiver.port)
+        } else {
+          envVars = getCiVisEvpProxyConfig(receiver.port)
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+      })
 
-        metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
+      it('tests with custom tags', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+            metadataDicts.forEach(metadata => {
+              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+              }
+            })
+
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+            const moduleEventContent = events.find(event => event.type === 'test_module_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const resourceNames = tests.map(span => span.resource)
+
+            assert.includeMembers(resourceNames,
+              [
+                'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+                'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+              ]
+            )
+            assert.equal(suites.length, 2)
+            assert.exists(sessionEventContent)
+            assert.exists(moduleEventContent)
+
+            tests.forEach(testEvent => {
+              assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+              assert.exists(testEvent.metrics[TEST_SOURCE_START])
+              assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              // Can read DD_TAGS
+              assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
+              assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+              assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
+            })
+
+            suites.forEach(testSuite => {
+              assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+              assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+              assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
+            })
+          })
+
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: {
+            ...envVars,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
+          },
+          stdio: 'pipe'
         })
 
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-        const moduleEventContent = events.find(event => event.type === 'test_module_end').content
-        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
 
-        const resourceNames = tests.map(span => span.resource)
-
-        assert.includeMembers(resourceNames,
-          [
-            'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-            'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-          ]
-        )
-        assert.equal(suites.length, 2)
-        assert.exists(sessionEventContent)
-        assert.exists(moduleEventContent)
-
+        await Promise.all([
+          eventsPromise,
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+          once(childProcess, 'exit')
+        ])
         assert.include(testOutput, expectedStdout)
         assert.include(testOutput, extraStdout)
-
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
-          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-          // Can read DD_TAGS
-          assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
-          assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
-          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
-        })
-
-        suites.forEach(testSuite => {
-          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
-          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
-          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
-        })
-
-        done()
       })
 
-      childProcess = fork(startupTestFile, {
-        cwd,
-        env: {
-          ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session',
-          DD_SERVICE: undefined
-        },
-        stdio: 'pipe'
+      it('passing tests', async () => {
+        const testNames = [
+          'mocha-test-pass can pass',
+          'mocha-test-pass can pass two',
+          'mocha-test-pass-two can pass',
+          'mocha-test-pass-two can pass two'
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.equal(tests.length, 4)
+            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+
+            tests.forEach(test => {
+              assert.equal(test.parent_id.toString(), '0')
+              assert.equal(test.meta[TEST_STATUS], 'pass')
+              assert.equal(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
+              assert.exists(test.meta[TEST_FRAMEWORK_VERSION])
+              assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+              assert.equal(test.meta[LIBRARY_VERSION], ddTraceVersion)
+              assert.equal(test.meta[COMPONENT], 'mocha')
+            })
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/passing.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
       })
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
+
+      it('failing tests', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, 'language', 'javascript')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-fail can fail')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/failing.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/failing.js')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'AssertionError')
+            assert.propertyVal(test.meta, ERROR_MESSAGE, 'expected true to equal false')
+            assert.exists(test.metrics[TEST_SOURCE_START])
+            assert.exists(test.meta[ERROR_STACK])
+            assert.equal(test.parent_id.toString(), '0')
+            assert.equal(test.type, 'test')
+            assert.equal(test.name, 'mocha.test')
+            assert.equal(test.resource, 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/failing.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
       })
-      childProcess.stderr.on('data', (chunk) => {
-        testOutput += chunk.toString()
+
+      it('skipping tests', async () => {
+        const testNames = [
+          'mocha-test-skip can skip',
+          'mocha-test-skip-different can skip too',
+          'mocha-test-skip-different can skip twice',
+          'mocha-test-programmatic-skip can skip too'
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 4)
+            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+
+            tests.forEach(test => {
+              assert.equal(test.parent_id.toString(), '0')
+              assert.equal(test.meta[TEST_STATUS], 'skip')
+              assert.equal(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
+              assert.equal(test.meta[COMPONENT], 'mocha')
+              assert.equal(test.meta[TEST_TYPE], 'test')
+              assert.equal(test.meta[TEST_FRAMEWORK], 'mocha')
+              assert.equal(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/skipping.js')
+              assert.equal(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/skipping.js')
+            })
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/skipping.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('passing tests using done()', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-done-pass can do passed tests with done')
+            assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/done-pass.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/done-pass.js')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/done-pass.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('failing tests using done()', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-done-fail can do failed tests with done')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/done-fail.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/done-fail.js')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'AssertionError')
+            assert.propertyVal(test.meta, ERROR_MESSAGE, 'expected true to equal false')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/done-fail.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('passing tests using promises', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-promise-pass can do passed promise tests')
+            assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/promise-pass.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/promise-pass.js')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/promise-pass.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('failing tests using promises', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-promise-fail can do failed promise tests')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/promise-fail.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/promise-fail.js')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'AssertionError')
+            assert.propertyVal(test.meta, ERROR_MESSAGE, 'expected true to equal false')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/promise-fail.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('passing tests using async/await', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-async-pass can do passed async tests')
+            assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/async-pass.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/async-pass.js')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/async-pass.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('failing tests using async/await', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-async-fail can do failed async tests')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/async-fail.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/async-fail.js')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'AssertionError')
+            assert.propertyVal(test.meta, ERROR_MESSAGE, 'expected true to equal false')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/async-fail.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests that time out', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-timeout-fail times out')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/timeout-fail.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/timeout-fail.js')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'Error')
+            assert.include(test.meta[ERROR_MESSAGE], 'Timeout')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/timeout-fail.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('passing tests that use setTimeout', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-timeout-pass does not timeout')
+            assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/timeout-pass.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/timeout-pass.js')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/timeout-pass.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('parameterized tests', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-parameterized can do parameterized')
+            assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/parameterized.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/parameterized.js')
+            assert.propertyVal(test.meta, TEST_PARAMETERS, JSON.stringify({ arguments: [1, 2, 3], metadata: {} }))
+            assert.exists(test.metrics[TEST_SOURCE_START])
+            assert.equal(test.parent_id.toString(), '0')
+            assert.equal(test.type, 'test')
+            assert.equal(test.name, 'mocha.test')
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/parameterized.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('integration tests with http', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const spans = events.filter(event => event.type === 'span').map(event => event.content)
+
+            assert.equal(tests.length, 1)
+            const [testSpan] = tests
+
+            const httpSpan = spans.find(span => span.name === 'http.request')
+            assert.exists(httpSpan, 'HTTP span should exist')
+
+            // Test span assertions
+            assert.propertyVal(testSpan.meta, COMPONENT, 'mocha')
+            assert.propertyVal(testSpan.meta, TEST_NAME, 'mocha-test-integration-http can do integration http')
+            assert.propertyVal(testSpan.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'mocha')
+            assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/mocha-plugin-tests/integration.js')
+            assert.propertyVal(testSpan.meta, TEST_SOURCE_FILE, 'ci-visibility/mocha-plugin-tests/integration.js')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.exists(testSpan.metrics[TEST_SOURCE_START])
+            assert.equal(testSpan.parent_id.toString(), '0')
+
+            // HTTP span assertions
+            assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            const endpointUrl = envVars.DD_CIVISIBILITY_AGENTLESS_URL ||
+              `http://127.0.0.1:${envVars.DD_TRACE_AGENT_PORT}`
+            assert.propertyVal(httpSpan.meta, 'http.url', `${endpointUrl}/info`)
+            assert.equal(
+              httpSpan.parent_id.toString(),
+              testSpan.span_id.toString(),
+              'HTTP span should be child of test span'
+            )
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/integration.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests with sync errors in hooks', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'TypeError')
+            assert.include(
+              test.meta[ERROR_MESSAGE],
+              'mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":'
+            )
+            assert.include(test.meta[ERROR_MESSAGE], 'Cannot set ')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/hook-sync-error.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests using active span in hooks', async () => {
+        const testNames = [
+          'mocha-active-span-in-hooks first test',
+          'mocha-active-span-in-hooks second test'
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+
+            tests.forEach(test => {
+              assert.equal(test.meta[TEST_STATUS], 'pass')
+              assert.equal(test.meta[COMPONENT], 'mocha')
+            })
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/active-span-hooks.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests with async errors in hooks', async () => {
+        const testNames = [
+          {
+            name: 'mocha-fail-hook-async will run but be reported as failed',
+            status: 'fail',
+            errorMsg: 'mocha-fail-hook-async "after each" hook for "will run but be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-hook-async-other will run and be reported as passed',
+            status: 'pass'
+          },
+          {
+            name: 'mocha-fail-hook-async-other-before will not run and be reported as failed',
+            status: 'fail',
+            errorMsg: 'mocha-fail-hook-async-other-before ' +
+              '"before each" hook for "will not run and be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-hook-async-other-second-after will run and be reported as failed',
+            status: 'fail',
+            errorMsg: 'mocha-fail-hook-async-other-second-after ' +
+              '"after each" hook for "will run and be reported as failed": yeah error'
+          },
+          {
+            name: 'mocha-fail-test-after-each-passes will fail and be reported as failed',
+            status: 'fail'
+          }
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 5)
+
+            testNames.forEach(({ name, status, errorMsg }) => {
+              const test = tests.find(t => t.meta[TEST_NAME] === name)
+              assert.exists(test, `Test ${name} should exist`)
+              assert.equal(test.meta[TEST_STATUS], status)
+              assert.equal(test.meta[COMPONENT], 'mocha')
+              if (errorMsg) {
+                assert.equal(test.meta[ERROR_MESSAGE].startsWith(errorMsg), true)
+                assert.equal(test.meta[ERROR_TYPE], 'Error')
+                assert.exists(test.meta[ERROR_STACK])
+              }
+            })
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/hook-async-error.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests with done callback fail', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+            const [test] = tests
+            assert.propertyVal(test.meta, COMPONENT, 'mocha')
+            assert.propertyVal(test.meta, TEST_NAME, 'mocha-test-done-fail can do badly setup failed tests with done')
+            assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(test.meta, ERROR_TYPE, 'AssertionError')
+            assert.propertyVal(test.meta, ERROR_MESSAGE, 'expected true to equal false')
+            assert.exists(test.meta[ERROR_STACK])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/done-fail-badly.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests with retries', async () => {
+        // retry handler was released in mocha@6.0.0
+        // so the reported data changes between mocha versions
+        const isLatestMocha = MOCHA_VERSION === 'latest'
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            if (isLatestMocha) {
+              assert.equal(tests.length, 8)
+            } else {
+              assert.equal(tests.length, 2)
+            }
+
+            const eventuallyPassingTests = tests.filter(t =>
+              t.meta[TEST_NAME] === 'mocha-test-retries will be retried and pass'
+            )
+            if (isLatestMocha) {
+              assert.equal(eventuallyPassingTests.length, 3)
+            } else {
+              assert.equal(eventuallyPassingTests.length, 1)
+            }
+
+            const failedTests = tests.filter(t =>
+              t.meta[TEST_NAME] === 'mocha-test-retries will be retried and fail' &&
+              t.meta[TEST_STATUS] === 'fail'
+            )
+            if (isLatestMocha) {
+              assert.equal(failedTests.length, 5)
+            } else {
+              assert.equal(failedTests.length, 1)
+            }
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/retries.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('tests when skipping "describe"', async () => {
+        const testNames = [
+          { name: 'mocha-test-skip-describe will be skipped', status: 'skip' },
+          { name: 'mocha-test-skip-describe-pass will pass', status: 'pass' }
+        ]
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            testNames.forEach(({ name, status }) => {
+              const test = tests.find(t => t.meta[TEST_NAME] === name)
+              assert.exists(test, `Test ${name} should exist`)
+              assert.equal(test.meta[TEST_STATUS], status)
+              assert.equal(test.meta[COMPONENT], 'mocha')
+            })
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/skip-describe.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
+      })
+
+      it('should create events for session, modules, suites and test', async () => {
+        const suites = [
+          'ci-visibility/mocha-plugin-tests/suite-level-fail-after-each.js',
+          'ci-visibility/mocha-plugin-tests/suite-level-fail-skip-describe.js',
+          'ci-visibility/mocha-plugin-tests/suite-level-fail-test.js',
+          'ci-visibility/mocha-plugin-tests/suite-level-pass.js'
+        ]
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+            if (reportingOption === 'evp proxy') {
+              const headers = payloads.map(({ headers }) => headers)
+              headers.forEach(header => {
+                assert.equal(header['x-datadog-evp-subdomain'], 'citestcycle-intake')
+              })
+              const urls = payloads.map(({ url }) => url)
+              urls.forEach(url => {
+                assert.equal(url, '/evp_proxy/v4/api/v2/citestcycle')
+              })
+            }
+
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSessionEvent = events.find(event => event.type === 'test_session_end')?.content
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')?.content
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+            assert.exists(testSessionEvent, 'test_session_end event should exist')
+            assert.exists(testModuleEvent, 'test_module_end event should exist')
+            assert.equal(testSuiteEvents.length, 4, 'Should have 4 test suite events')
+
+            assert.equal(testSessionEvent.meta[TEST_STATUS], 'fail')
+            assert.equal(testModuleEvent.meta[TEST_STATUS], 'fail')
+
+            // Check that all suites have the same session ID
+            assert.isTrue(
+              testSuiteEvents.every(
+                suite => suite.test_session_id.toString() === testSessionEvent.test_session_id.toString()
+              ),
+              'All suites should have the same test_session_id'
+            )
+
+            // Check that all suites have the same module ID
+            assert.isTrue(
+              testSuiteEvents.every(
+                suite => suite.test_module_id.toString() === testModuleEvent.test_module_id.toString()
+              ),
+              'All suites should have the same test_module_id'
+            )
+
+            // Check that all suites have a test_suite_id
+            assert.isTrue(
+              testSuiteEvents.every(suite => suite.test_suite_id !== undefined),
+              'All suites should have a test_suite_id'
+            )
+
+            // Check that all suites match expected suite names
+            assert.isTrue(
+              testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE])),
+              'All suites should match expected suite names'
+            )
+
+            const failedSuites = testSuiteEvents.filter(suite => suite.meta[TEST_STATUS] === 'fail')
+            const passedSuites = testSuiteEvents.filter(suite => suite.meta[TEST_STATUS] === 'pass')
+
+            assert.equal(passedSuites.length, 1, 'Should have 1 passing suite')
+            assert.equal(failedSuites.length, 3, 'Should have 3 failing suites')
+            assert.isTrue(
+              failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined),
+              'All failed suites should have an error message'
+            )
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/suite-level-*.js',
+          {
+            cwd,
+            env: envVars,
+            stdio: 'inherit',
+            shell: true
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
       })
     })
   })
@@ -273,7 +1111,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -360,7 +1198,7 @@ describe('mocha CommonJS', function () {
 
     // `runMocha` is only executed when using the CLI, which is where we modify mocha config
     // if CI Visibility is init
-    childProcess = exec('mocha ./ci-visibility/test/ci-visibility-test.js', {
+    childProcess = exec('node node_modules/mocha/bin/mocha ./ci-visibility/test/ci-visibility-test.js', {
       cwd,
       env: {
         ...restEnvVars,
@@ -384,7 +1222,7 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  it('works with parallel mode', (done) => {
+  onlyLatestIt('works with parallel mode', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
@@ -461,7 +1299,7 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  it('works with parallel mode when run with the cli', (done) => {
+  onlyLatestIt('works with parallel mode when run with the cli', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -474,11 +1312,12 @@ describe('mocha CommonJS', function () {
         assert.equal(tests.length, 2)
       })
 
-    childProcess = exec('mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
-      cwd,
-      env: getCiVisAgentlessConfig(receiver.port),
-      stdio: 'pipe'
-    })
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'pipe'
+      })
     childProcess.stdout.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
@@ -523,7 +1362,7 @@ describe('mocha CommonJS', function () {
       })
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
         env: {
@@ -1203,7 +2042,6 @@ describe('mocha CommonJS', function () {
       })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          // TODO: maybe check in stdout for the "Retried by Datadog"
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
@@ -1243,7 +2081,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1320,7 +2158,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1377,7 +2215,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1446,7 +2284,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1503,7 +2341,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1568,7 +2406,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1619,7 +2457,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1751,7 +2589,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -1773,7 +2611,7 @@ describe('mocha CommonJS', function () {
     })
 
     context('parallel mode', () => {
-      it('retries new tests', (done) => {
+      onlyLatestIt('retries new tests', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({
           mocha: {}
@@ -1825,7 +2663,8 @@ describe('mocha CommonJS', function () {
           })
 
         childProcess = exec(
-          'mocha --parallel ./ci-visibility/test-early-flake-detection/occasionally-failing-test.js', {
+          'node node_modules/mocha/bin/mocha ' +
+          '--parallel ./ci-visibility/test-early-flake-detection/occasionally-failing-test.js', {
             cwd,
             env: getCiVisAgentlessConfig(receiver.port),
             stdio: 'inherit'
@@ -1839,7 +2678,7 @@ describe('mocha CommonJS', function () {
         })
       })
 
-      it('retries new tests when using the programmatic API', (done) => {
+      onlyLatestIt('retries new tests when using the programmatic API', (done) => {
         // Tests from ci-visibility/test/occasionally-failing-test will be considered new
         receiver.setKnownTests({
           mocha: {}
@@ -1887,7 +2726,7 @@ describe('mocha CommonJS', function () {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -1908,7 +2747,7 @@ describe('mocha CommonJS', function () {
         })
       })
 
-      it('bails out of EFD if the percentage of new tests is too high', (done) => {
+      onlyLatestIt('bails out of EFD if the percentage of new tests is too high', (done) => {
         const NUM_RETRIES_EFD = 5
 
         receiver.setSettings({
@@ -1946,7 +2785,7 @@ describe('mocha CommonJS', function () {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -1968,7 +2807,7 @@ describe('mocha CommonJS', function () {
         })
       })
 
-      it('does not detect new tests if the response is invalid', async () => {
+      onlyLatestIt('does not detect new tests if the response is invalid', async () => {
         const NUM_RETRIES_EFD = 5
 
         receiver.setSettings({
@@ -2005,7 +2844,7 @@ describe('mocha CommonJS', function () {
           })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -2071,7 +2910,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2094,7 +2933,8 @@ describe('mocha CommonJS', function () {
   })
 
   context('auto test retries', () => {
-    it('retries failed tests automatically', (done) => {
+    // retry listener was released in mocha@6.0.0
+    onlyLatestIt('retries failed tests automatically', (done) => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -2106,7 +2946,7 @@ describe('mocha CommonJS', function () {
       })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2151,7 +2991,7 @@ describe('mocha CommonJS', function () {
       })
     })
 
-    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+    onlyLatestIt('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -2174,7 +3014,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2195,7 +3035,7 @@ describe('mocha CommonJS', function () {
       })
     })
 
-    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+    onlyLatestIt('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -2223,7 +3063,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2259,7 +3099,7 @@ describe('mocha CommonJS', function () {
 
     childProcess = exec(
       './node_modules/nyc/bin/nyc.js -r=text-summary --all --nycrc-path ./my-nyc.config.js ' +
-      'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+      'node node_modules/mocha/bin/mocha ./ci-visibility/test/ci-visibility-test.js',
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
@@ -2289,7 +3129,7 @@ describe('mocha CommonJS', function () {
       // we run the same tests without the all flag
       childProcess = exec(
         './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
-        'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+        'node node_modules/mocha/bin/mocha ./ci-visibility/test/ci-visibility-test.js',
         {
           cwd,
           env: getCiVisAgentlessConfig(receiver.port),
@@ -2330,62 +3170,64 @@ describe('mocha CommonJS', function () {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
-      receiver.setSettings({
-        flaky_test_retries_enabled: true,
-        di_enabled: true
-      })
-
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          const retriedTests = tests.filter(
-            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
-          )
-
-          assert.equal(retriedTests.length, 1)
-          const [retriedTest] = retriedTests
-
-          const hasDebugTags = Object.keys(retriedTest.meta)
-            .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
-
-          assert.isFalse(hasDebugTags)
+    // retry listener was released in mocha@6.0.0
+    onlyLatestIt('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false',
+      (done) => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: true,
+          di_enabled: true
         })
 
-      const logsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
-          if (payloads.length > 0) {
-            throw new Error('Unexpected logs')
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+            )
+
+            assert.equal(retriedTests.length, 1)
+            const [retriedTest] = retriedTests
+
+            const hasDebugTags = Object.keys(retriedTest.meta)
+              .some(property => property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED)
+
+            assert.isFalse(hasDebugTags)
+          })
+
+        const logsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+            if (payloads.length > 0) {
+              throw new Error('Unexpected logs')
+            }
+          }, 5000)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './dynamic-instrumentation/test-hit-breakpoint'
+              ]),
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+            },
+            stdio: 'inherit'
           }
-        }, 5000)
+        )
 
-      childProcess = exec(
-        runTestsWithCoverageCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: JSON.stringify([
-              './dynamic-instrumentation/test-hit-breakpoint'
-            ]),
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-            DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
-          },
-          stdio: 'inherit'
-        }
-      )
-
-      childProcess.on('exit', (code) => {
-        Promise.all([eventsPromise, logsPromise]).then(() => {
-          assert.equal(code, 0)
-          done()
-        }).catch(done)
+        childProcess.on('exit', (code) => {
+          Promise.all([eventsPromise, logsPromise]).then(() => {
+            assert.equal(code, 0)
+            done()
+          }).catch(done)
+        })
       })
-    })
 
-    it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+    onlyLatestIt('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: false
@@ -2417,7 +3259,7 @@ describe('mocha CommonJS', function () {
         }, 5000)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2439,7 +3281,7 @@ describe('mocha CommonJS', function () {
       })
     })
 
-    it('runs retries with dynamic instrumentation', (done) => {
+    onlyLatestIt('runs retries with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2532,7 +3374,7 @@ describe('mocha CommonJS', function () {
       })
     })
 
-    it('does not crash if the retry does not hit the breakpoint', (done) => {
+    onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -2631,7 +3473,7 @@ describe('mocha CommonJS', function () {
         })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -2665,7 +3507,7 @@ describe('mocha CommonJS', function () {
       })
 
     childProcess = exec(
-      runTestsWithCoverageCommand,
+      runTestsCommand,
       {
         cwd,
         env: {
@@ -2799,7 +3641,7 @@ describe('mocha CommonJS', function () {
         })
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -2834,37 +3676,37 @@ describe('mocha CommonJS', function () {
         })
       }
 
-      it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
+      onlyLatestIt('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, { isAttemptToFix: true })
       })
 
-      it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
+      onlyLatestIt('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, { isAttemptToFix: true, shouldAlwaysPass: true })
       })
 
-      it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
+      onlyLatestIt('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, { isAttemptToFix: true, shouldFailSometimes: true })
       })
 
-      it('does not attempt to fix tests if test management is not enabled', (done) => {
+      onlyLatestIt('does not attempt to fix tests if test management is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done)
       })
 
-      it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      onlyLatestIt('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
       })
 
-      it('does not fail retry if a test is quarantined', (done) => {
+      onlyLatestIt('does not fail retry if a test is quarantined', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -2886,7 +3728,7 @@ describe('mocha CommonJS', function () {
         runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
       })
 
-      it('does not fail retry if a test is disabled', (done) => {
+      onlyLatestIt('does not fail retry if a test is disabled', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
           mocha: {
@@ -2967,7 +3809,7 @@ describe('mocha CommonJS', function () {
         const testAssertionsPromise = getTestAssertions(isDisabling)
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3006,7 +3848,7 @@ describe('mocha CommonJS', function () {
         runDisableTest(done, true)
       })
 
-      it('can disable tests in parallel mode', (done) => {
+      onlyLatestIt('can disable tests in parallel mode', (done) => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runDisableTest(done, true,
@@ -3020,13 +3862,13 @@ describe('mocha CommonJS', function () {
         )
       })
 
-      it('fails if disable is not enabled', (done) => {
+      onlyLatestIt('fails if disable is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 
         runDisableTest(done, false)
       })
 
-      it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      onlyLatestIt('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
@@ -3092,7 +3934,7 @@ describe('mocha CommonJS', function () {
         const testAssertionsPromise = getTestAssertions(isQuarantining)
 
         childProcess = exec(
-          runTestsWithCoverageCommand,
+          runTestsCommand,
           {
             cwd,
             env: {
@@ -3131,7 +3973,7 @@ describe('mocha CommonJS', function () {
         runQuarantineTest(done, true)
       })
 
-      it('can disable tests in parallel mode', (done) => {
+      onlyLatestIt('can disable tests in parallel mode', (done) => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runQuarantineTest(done, true,
@@ -3145,17 +3987,66 @@ describe('mocha CommonJS', function () {
         )
       })
 
-      it('fails if quarantine is not enabled', (done) => {
+      onlyLatestIt('fails if quarantine is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 
         runQuarantineTest(done, false)
       })
 
-      it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+      onlyLatestIt('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
+    })
+
+    it('does not crash if the request to get test management tests fails', async () => {
+      let testOutput = ''
+      receiver.setSettings({
+        test_management: { enabled: true },
+        flaky_test_retries_enabled: false
+      })
+      receiver.setTestManagementTestsResponseCode(500)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // it is not retried
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-management/test-attempt-to-fix-1.js'
+            ]),
+            DD_TRACE_DEBUG: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        eventsPromise
+      ])
+      assert.include(testOutput, 'Test management tests could not be fetched')
     })
   })
 
@@ -3187,7 +4078,7 @@ describe('mocha CommonJS', function () {
       const testAssertionsPromise = getTestAssertions(isParallel)
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -3207,7 +4098,7 @@ describe('mocha CommonJS', function () {
       runTest(done, false)
     })
 
-    it('adds capabilities to tests (parallel)', (done) => {
+    onlyLatestIt('adds capabilities to tests (parallel)', (done) => {
       runTest(done, true, {
         RUN_IN_PARALLEL: '1'
       })
@@ -3215,7 +4106,7 @@ describe('mocha CommonJS', function () {
   })
 
   context('retry and hooks', () => {
-    it('works when tests are not retried', (done) => {
+    it('works when tests are not retried', async () => {
       let stdout = ''
       const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3235,7 +4126,7 @@ describe('mocha CommonJS', function () {
       })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -3252,19 +4143,20 @@ describe('mocha CommonJS', function () {
         stdout += data
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          assert.include(stdout, 'beforeEach')
-          assert.include(stdout, 'beforeEach in context')
-          assert.include(stdout, 'test')
-          assert.include(stdout, 'afterEach')
-          assert.include(stdout, 'afterEach in context')
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        eventsPromise
+      ])
+
+      assert.include(stdout, 'beforeEach')
+      assert.include(stdout, 'beforeEach in context')
+      assert.include(stdout, 'test')
+      assert.include(stdout, 'afterEach')
+      assert.include(stdout, 'afterEach in context')
     })
 
-    it('works when tests are retried', (done) => {
+    onlyLatestIt('works when tests are retried', async () => {
       let stdout = ''
       const eventsPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -3286,10 +4178,20 @@ describe('mocha CommonJS', function () {
         const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
         assert.equal(retriedTests.length, 1)
         assert.equal(retriedTests[0].meta[TEST_STATUS], 'pass')
+
+        const notNestedTests = tests.filter(test => test.resource ===
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
+        )
+
+        assert.equal(notNestedTests.length, 2)
+        const failedAttempts = notNestedTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+        assert.equal(failedAttempts.length, 1)
+        const passedAttempts = notNestedTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+        assert.equal(passedAttempts.length, 1)
       })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -3307,16 +4209,17 @@ describe('mocha CommonJS', function () {
         stdout += data
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          assert.include(stdout, 'beforeEach')
-          assert.include(stdout, 'beforeEach in context')
-          assert.include(stdout, 'test')
-          assert.include(stdout, 'afterEach')
-          assert.include(stdout, 'afterEach in context')
-          done()
-        }).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        eventsPromise
+      ])
+
+      assert.include(stdout, 'beforeEach')
+      assert.include(stdout, 'beforeEach in context')
+      assert.include(stdout, 'test')
+      assert.include(stdout, 'afterEach')
+      assert.include(stdout, 'afterEach in context')
     })
   })
 
@@ -3437,15 +4340,14 @@ describe('mocha CommonJS', function () {
           }
         })
 
-    const runImpactedTest = (
-      done,
+    const runImpactedTest = async (
       { isModified, isEfd = false, isParallel = false, isNew = false },
       extraEnvVars = {}
     ) => {
       const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
 
       childProcess = exec(
-        runTestsWithCoverageCommand,
+        runTestsCommand,
         {
           cwd,
           env: {
@@ -3462,38 +4364,39 @@ describe('mocha CommonJS', function () {
         }
       )
 
-      childProcess.on('exit', () => {
-        testAssertionsPromise.then(done).catch(done)
-      })
+      await Promise.all([
+        once(childProcess, 'exit'),
+        testAssertionsPromise
+      ])
     }
 
     context('test is not new', () => {
-      it('should be detected as impacted', (done) => {
+      it('should be detected as impacted', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(done, { isModified: true })
+        await runImpactedTest({ isModified: true })
       })
 
-      it('should not be detected as impacted if disabled', (done) => {
+      it('should not be detected as impacted if disabled', async () => {
         receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done, { isModified: false })
+        await runImpactedTest({ isModified: false })
       })
 
-      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false', (done) => {
-        receiver.setSettings({ impacted_tests_enabled: false })
+      it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
+        async () => {
+          receiver.setSettings({ impacted_tests_enabled: false })
 
-        runImpactedTest(done,
-          { isModified: false },
-          { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
-        )
-      })
+          await runImpactedTest(
+            { isModified: false },
+            { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
+          )
+        })
 
-      it('should be detected as impacted in parallel mode', (done) => {
+      onlyLatestIt('should be detected as impacted in parallel mode', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
-        runImpactedTest(
-          done,
+        await runImpactedTest(
           { isModified: true, isParallel: true },
           {
             // we need to run more than 1 suite for parallel mode to kick in
@@ -3507,7 +4410,7 @@ describe('mocha CommonJS', function () {
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
+        it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
             mocha: {}
           })
@@ -3521,11 +4424,111 @@ describe('mocha CommonJS', function () {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(done,
+          await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
           )
         })
       })
+    })
+  })
+
+  context('preserves test function on retries', () => {
+    const getTestAssertions = () =>
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        if (MOCHA_VERSION === 'latest') {
+          assert.equal(tests.length, 3)
+          const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedTests.length, 2)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+          const [passedTest] = passedTests
+          assert.equal(passedTest.meta[TEST_IS_RETRY], 'true')
+        } else {
+          // there's no `retry` handled so it's just reported as a single passed test event
+          // because the test ends up passing after retries
+          assert.equal(tests.length, 1)
+          const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedTests.length, 1)
+        }
+      })
+
+    it('respects "done" callback', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-done.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects async/await', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-async.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects promises', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-promise.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
+    })
+    it('respects sync functions', async () => {
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-retries-test-fn/mocha-sync.js'
+            ])
+          }
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        getTestAssertions()
+      ])
     })
   })
 })

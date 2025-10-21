@@ -7,6 +7,7 @@ const {
   BRANCH,
   CI,
   DAYS = '1',
+  MERGE = 'true',
   OCCURRENCES = '1',
   UNTIL
 } = process.env
@@ -94,7 +95,8 @@ async function checkWorkflowJobs (id, page = 1) {
     if (job.conclusion !== 'failure') continue
 
     const workflow = job.workflow_name
-    const name = job.name.split(' ')[0] // Merge matrix runs of same job together.
+    // Merge matrix runs of same job together.
+    const name = MERGE === 'true' ? job.name.split(' ')[0] : job.name
 
     flaky[workflow] ??= {}
     flaky[workflow][name] ??= []

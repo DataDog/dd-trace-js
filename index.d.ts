@@ -140,6 +140,16 @@ interface Tracer extends opentracing.Tracer {
   llmobs: tracer.llmobs.LLMObs;
 
   /**
+   * OpenFeature Provider with Remote Config integration.
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  openfeature: tracer.OpenFeatureProvider;
+
+  /**
    * AI Guard SDK
    */
   aiguard: tracer.aiguard.AIGuard;
@@ -172,6 +182,7 @@ interface Plugins {
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
@@ -199,7 +210,7 @@ interface Plugins {
   "ioredis": tracer.plugins.ioredis;
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
-  "kafkajs": tracer.plugins.kafkajs
+  "kafkajs": tracer.plugins.kafkajs;
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
@@ -622,6 +633,21 @@ declare namespace tracer {
          * Max size of the content property set in the meta-struct
          */
         maxContentSize?: number
+      }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
       }
     };
 
@@ -1096,6 +1122,65 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Flagging Provider (OpenFeature-compatible).
+   *
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface OpenFeatureProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string; [key: string]: any };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
   }
 
   export namespace aiguard {
@@ -1620,6 +1705,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * @azure/event-hubs module
+     */
+    interface azure_event_hubs extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * @azure/functions module.
     */
     interface azure_functions extends Instrumentation {}
@@ -1629,6 +1720,7 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
@@ -2846,6 +2938,15 @@ declare namespace tracer {
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
+
+      /**
+       * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
+       * @param options The annotation context options.
+       * @param fn The callback over which to apply the annotation context options.
+       * @returns The result of the function.
+       */
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
+
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
@@ -3005,6 +3106,18 @@ declare namespace tracer {
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
       tags?: { [key: string]: any }
+    }
+
+    interface AnnotationContextOptions {
+      /**
+       * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * Set to override the span name for any spans annotated within the returned context.
+       */
+      name?: string,
     }
 
     /**
