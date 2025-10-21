@@ -5,7 +5,7 @@ const { describe, it } = require('mocha')
 
 const { exec } = require('node:child_process')
 
-describe('check-require-cache', () => {
+describe.only('check-require-cache', () => {
   const opts = {
     cwd: __dirname,
     env: {

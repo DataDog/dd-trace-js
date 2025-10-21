@@ -11,7 +11,7 @@ const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('body-parser', 'body-parser', version => {
-  describe.only('Suspicious request blocking - body-parser', () => {
+  describe('Suspicious request blocking - body-parser', () => {
     let port, server, requestBody
 
     before(() => {
