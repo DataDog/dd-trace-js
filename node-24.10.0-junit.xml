@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="266.908" tests="103" failures="7" skipped="7">
+  <testsuite name="Root Suite" timestamp="2025-10-21T18:10:44" tests="0" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="Code Origin for Spans" timestamp="2025-10-21T18:10:44" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/code-origin.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="source map support" timestamp="2025-10-21T18:10:48" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/code-origin.spec.js" time="2.997" failures="0">
+    <testcase name="Code Origin for Spans source map support should support source maps" time="2.003" classname="should support source maps">
+    </testcase>
+  </testsuite>
+  <testsuite name="init.js" timestamp="2025-10-21T18:10:51" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T18:10:55" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T18:10:55" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:10:55" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.313" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.110" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.106" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.097" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:10:55" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.128" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.030" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.044" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.052" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T18:10:55" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:10:55" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.573" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.351" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.124" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.098" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:10:56" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.406" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.195" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.108" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.101" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T18:10:56" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T18:10:56" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="init.js runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.088" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:10:56" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T18:10:56" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.393" failures="0">
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.192" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.201" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T18:10:57" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.827" failures="0">
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.201" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.194" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="initialize.mjs" timestamp="2025-10-21T18:10:58" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="as --loader" timestamp="2025-10-21T18:11:01" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T18:11:01" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T18:11:01" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:01" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.509" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.174" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.166" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.168" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:02" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.199" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.055" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.065" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.078" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T18:11:02" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:02" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.765" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.436" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.164" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.165" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:02" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.595" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.257" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.169" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.168" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T18:11:03" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T18:11:03" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.155" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:03" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T18:11:03" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.516" failures="0">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.256" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.259" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T18:11:04" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.518" failures="0">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.256" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.259" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="as --import" timestamp="2025-10-21T18:11:04" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T18:11:04" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T18:11:04" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:04" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.480" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.153" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.159" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.167" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:05" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.224" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.063" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.072" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.087" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T18:11:05" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:05" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.503" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.152" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.166" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.183" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:05" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.617" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.257" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.174" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.185" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T18:11:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T18:11:06" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.156" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:11:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T18:11:06" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.526" failures="0">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.256" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.269" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T18:11:07" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.983" failures="0">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.268" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.267" classname="should initialize the tracer, if DD_INJECT_FORCE">
+    </testcase>
+  </testsuite>
+  <testsuite name="Log Injection" timestamp="2025-10-21T18:11:08" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/log_injection.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="log injection with rule based sampling" timestamp="2025-10-21T18:11:13" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/log_injection.spec.js" time="5.118" failures="0">
+    <testcase name="Log Injection log injection with rule based sampling should correctly apply rule based sampling when log injection is enabled" time="2.407" classname="should correctly apply rule based sampling when log injection is enabled">
+    </testcase>
+    <testcase name="Log Injection log injection with rule based sampling should correctly apply rule based sampling when log injection is disabled" time="2.176" classname="should correctly apply rule based sampling when log injection is disabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="OpenTelemetry Logs Integration" timestamp="2025-10-21T18:11:18" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry-logs.spec.js" time="7.763" failures="2">
+    <testcase name="OpenTelemetry Logs Integration should send OTLP logs to test agent and receive 200" time="0.001" classname="should send OTLP logs to test agent and receive 200">
+      <failure message="connect ECONNREFUSED 127.0.0.1:4318" type="Error"><![CDATA[Error: connect ECONNREFUSED 127.0.0.1:4318
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)]]></failure>
+    </testcase>
+    <testcase name="OpenTelemetry Logs Integration should receive 400 when sending protobuf to JSON endpoint" time="0.001" classname="should receive 400 when sending protobuf to JSON endpoint">
+      <failure message="connect ECONNREFUSED 127.0.0.1:4318" type="Error"><![CDATA[Error: connect ECONNREFUSED 127.0.0.1:4318
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="opentelemetry" timestamp="2025-10-21T18:11:25" tests="9" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js" time="31.619" failures="1">
+    <testcase name="opentelemetry should not capture telemetry DD and OTEL vars don&apos;t conflict" time="2.008" classname="should not capture telemetry DD and OTEL vars don&apos;t conflict">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry if both DD and OTEL env vars are set" time="1.646" classname="should capture telemetry if both DD and OTEL env vars are set">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry when OTEL env vars are invalid" time="1.649" classname="should capture telemetry when OTEL env vars are invalid">
+    </testcase>
+    <testcase name="opentelemetry should start a trace in isolation" time="0.139" classname="should start a trace in isolation">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry" time="1.632" classname="should capture telemetry">
+    </testcase>
+    <testcase name="opentelemetry should capture auto-instrumentation telemetry" time="5.030" classname="should capture auto-instrumentation telemetry">
+    </testcase>
+    <testcase name="opentelemetry should work within existing datadog-traced http request" time="0.143" classname="should work within existing datadog-traced http request">
+    </testcase>
+    <testcase name="opentelemetry should work with otel express &amp; http auto instrumentation" time="5.037" classname="should work with otel express &amp; http auto instrumentation">
+    </testcase>
+    <testcase name="opentelemetry should auto-instrument @opentelemetry/sdk-node" time="5.002" classname="should auto-instrument @opentelemetry/sdk-node">
+      <failure message="timeout, additionally:
+AssertionError: expected 2 to equal 1
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js:464:14
+    at FakeAgent.messageHandler (/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:152:9)
+    at FakeAgent.emit (node:events:508:28)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:289:11
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/route.js:117:3)
+    at handle (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:295:15
+    at processParams (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:582:12)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:291:5)
+    at jsonParser (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/types/json.js:89:7)
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:342:13)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:297:9
+    at processParams (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:582:12)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:291:5)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/read.js:132:5
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:238:16)
+    at done (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+===
+" type="Error"><![CDATA[Error: timeout, additionally:
+AssertionError: expected 2 to equal 1
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js:464:14
+    at FakeAgent.messageHandler (integration-tests/helpers/fake-agent.js:152:9)
+    at FakeAgent.emit (node:events:508:28)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:289:11
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at next (node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (node_modules/router/lib/route.js:117:3)
+    at handle (node_modules/router/index.js:435:11)
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:295:15
+    at processParams (node_modules/router/index.js:582:12)
+    at next (node_modules/router/index.js:291:5)
+    at jsonParser (node_modules/body-parser/lib/types/json.js:89:7)
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (node_modules/router/index.js:342:13)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:297:9
+    at processParams (node_modules/router/index.js:582:12)
+    at next (node_modules/router/index.js:291:5)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/read.js:132:5
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (node_modules/raw-body/index.js:238:16)
+    at done (node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+===
+
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="package guardrails" timestamp="2025-10-21T18:11:57" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when package is out of range" timestamp="2025-10-21T18:11:57" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:12:01" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.472" failures="0">
+    <testcase name="package guardrails when package is out of range with DD_INJECTION_ENABLED should not instrument the package, and send telemetry" time="0.472" classname="should not instrument the package, and send telemetry">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging disabled" timestamp="2025-10-21T18:12:01" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="1.012" failures="0">
+    <testcase name="package guardrails when package is out of range with logging disabled should not instrument the package" time="1.012" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging enabled" timestamp="2025-10-21T18:12:02" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="1.442" failures="0">
+    <testcase name="package guardrails when package is out of range with logging enabled should not instrument the package" time="1.015" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package is in range" timestamp="2025-10-21T18:12:04" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when bluebird is 2.9.0" timestamp="2025-10-21T18:12:04" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="4.607" failures="0">
+    <testcase name="package guardrails when package is in range when bluebird is 2.9.0 should instrument the package" time="0.423" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when bluebird is 3.7.2" timestamp="2025-10-21T18:12:08" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="4.255" failures="0">
+    <testcase name="package guardrails when package is in range when bluebird is 3.7.2 should instrument the package" time="0.431" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package is in range (fastify)" timestamp="2025-10-21T18:12:12" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when fastify is latest" timestamp="2025-10-21T18:12:12" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="5.145" failures="0">
+    <testcase name="package guardrails when package is in range (fastify) when fastify is latest should instrument the package" time="0.401" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when fastify is latest and logging enabled" timestamp="2025-10-21T18:12:18" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="5.106" failures="0">
+    <testcase name="package guardrails when package is in range (fastify) when fastify is latest and logging enabled should instrument the package" time="0.408" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package errors out" timestamp="2025-10-21T18:12:23" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T18:12:26" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.387" failures="0">
+    <testcase name="package guardrails when package errors out with DD_INJECTION_ENABLED should not instrument the package, and send telemetry" time="0.387" classname="should not instrument the package, and send telemetry">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging disabled" timestamp="2025-10-21T18:12:27" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.117" failures="0">
+    <testcase name="package guardrails when package errors out with logging disabled should not instrument the package" time="0.117" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging enabled" timestamp="2025-10-21T18:12:27" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.512" failures="0">
+    <testcase name="package guardrails when package errors out with logging enabled should not instrument the package" time="0.122" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="pino test" timestamp="2025-10-21T18:12:27" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/pino.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="Log injection" timestamp="2025-10-21T18:12:31" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/pino.spec.js" time="1.026" failures="0">
+    <testcase name="pino test Log injection Log injection enabled by default" time="0.364" classname="Log injection enabled by default">
+    </testcase>
+    <testcase name="pino test Log injection Log injection enabled" time="0.111" classname="Log injection enabled">
+    </testcase>
+    <testcase name="pino test Log injection Log injection disabled" time="0.105" classname="Log injection disabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="Remote config client id" timestamp="2025-10-21T18:12:32" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="enabled" timestamp="2025-10-21T18:12:36" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.406" failures="0">
+    <testcase name="Remote config client id enabled should add client_id tag when remote config is enabled" time="0.009" classname="should add client_id tag when remote config is enabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="disabled" timestamp="2025-10-21T18:12:37" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.547" failures="0">
+    <testcase name="Remote config client id disabled should not add client_id tag when remote config is disbaled" time="0.008" classname="should not add client_id tag when remote config is disbaled">
+    </testcase>
+  </testsuite>
+  <testsuite name="startup " timestamp="2025-10-21T18:12:37" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T18:12:41" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.493" failures="0">
+    <testcase name="startup  programmatic works for options.port" time="2.359" classname="works for options.port">
+    </testcase>
+    <testcase name="startup  programmatic saves tracer configuration on disk" time="0.000" classname="saves tracer configuration on disk">
+    </testcase>
+    <testcase name="startup  programmatic works for options.url" time="2.128" classname="works for options.url">
+    </testcase>
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T18:12:45" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.257" failures="0">
+    <testcase name="startup  env var works for DD_TRACE_AGENT_PORT" time="2.124" classname="works for DD_TRACE_AGENT_PORT">
+    </testcase>
+    <testcase name="startup  env var works for DD_TRACE_AGENT_URL" time="2.128" classname="works for DD_TRACE_AGENT_URL">
+    </testcase>
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T18:12:49" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="61.123" failures="2">
+    <testcase name="startup  default works for hostname and port" time="30.104" classname="works for hostname and port">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+    <testcase name="startup  default works with stealthy-require" time="30.122" classname="works with stealthy-require">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="startup --import dd-trace/register.js" timestamp="2025-10-21T18:13:50" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T18:13:56" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.595" failures="0">
+    <testcase name="startup --import dd-trace/register.js programmatic works for options.port" time="2.417" classname="works for options.port">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js programmatic saves tracer configuration on disk" time="0.000" classname="saves tracer configuration on disk">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js programmatic works for options.url" time="2.168" classname="works for options.url">
+    </testcase>
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T18:14:01" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.337" failures="0">
+    <testcase name="startup --import dd-trace/register.js env var works for DD_TRACE_AGENT_PORT" time="2.172" classname="works for DD_TRACE_AGENT_PORT">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js env var works for DD_TRACE_AGENT_URL" time="2.157" classname="works for DD_TRACE_AGENT_URL">
+    </testcase>
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T18:14:05" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="60.868" failures="2">
+    <testcase name="startup --import dd-trace/register.js default works for hostname and port" time="30.159" classname="works for hostname and port">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js default works with stealthy-require" time="30.170" classname="works with stealthy-require">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="startup --loader dd-trace/loader-hook.mjs" timestamp="2025-10-21T18:15:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T18:15:06" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T18:15:06" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T18:15:06" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="telemetry" timestamp="2025-10-21T18:15:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/telemetry.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="dependencies" timestamp="2025-10-21T18:15:06" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/telemetry.spec.js" time="4.658" failures="0">
+    <testcase name="telemetry dependencies Test that tracer and iitm are sent as dependencies" time="0.005" classname="Test that tracer and iitm are sent as dependencies">
+    </testcase>
+    <testcase name="telemetry dependencies Assert configuration chaining data is sent" time="0.001" classname="Assert configuration chaining data is sent">
+    </testcase>
+  </testsuite>
+</testsuites>

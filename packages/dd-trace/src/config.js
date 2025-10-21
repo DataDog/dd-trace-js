@@ -727,7 +727,9 @@ class Config {
     this._setString(target, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
     this._setString(target, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
     this._setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
-    this._setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
+    if (DD_INJECTION_ENABLED !== undefined) {
+      this._setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
+    }
     this._setBoolean(target, 'injectForce', DD_INJECT_FORCE)
     this._setBoolean(target, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(target, 'isGCPFunction', getIsGCPFunction())
