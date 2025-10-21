@@ -428,7 +428,7 @@ describe('Plugin', () => {
 
             describe('exception in message handler', () => {
               it('should produce an error in span metadata', (done) => {
-                const Session = require(`../../../versions/rhea@${version}/node_modules/rhea/lib/session.js`)
+                const Session = require(`../../../versions/rhea@${version}`).get('rhea/lib/session')
                 const onTransfer = Session.prototype.on_transfer
                 const error = new Error('this is an error')
                 Session.prototype.on_transfer = function onTransferWrapped () {

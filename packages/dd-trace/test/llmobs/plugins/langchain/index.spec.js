@@ -98,8 +98,7 @@ describe('integrations', () => {
     withVersions('langchain', ['@langchain/core'], version => {
       describe('langchain', () => {
         beforeEach(() => {
-          langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
-            .get('@langchain/openai')
+          langchainOpenai = require('../../../../../../versions/@langchain/openai@0.1.0').get()
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
           langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
 
@@ -117,7 +116,7 @@ describe('integrations', () => {
             .get('@langchain/core/tools')
             .tool
 
-          MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
+          MemoryVectorStore = require(`../../../../../../versions/langchain@${version}`)
             .get('langchain/vectorstores/memory')
             .MemoryVectorStore
         })

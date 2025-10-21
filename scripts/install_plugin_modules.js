@@ -1,6 +1,6 @@
 'use strict'
 
-const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
@@ -9,13 +9,15 @@ const exec = require('./helpers/exec')
 const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const { BUN, withBun } = require('../integration-tests/helpers/bun')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
-const workspaces = new Set()
+// List of trusted transitive dependencies to execute scripts for.
+const trustedList = ['libpq']
 const externalDeps = new Map()
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
@@ -28,13 +30,10 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
 run()
 
 async function run () {
-  await assertPrerequisites()
-  install()
-  await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  install()
+  await assertVersions()
 }
 
-async function assertPrerequisites () {
+async function assertVersions () {
   const filter = process.env.PLUGINS?.split('|')
 
   const moduleNames = (await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src')))
@@ -58,7 +57,7 @@ async function assertPrerequisites () {
     }
   }
 
-  await assertWorkspaces()
+  await assertFolder()
 }
 
 /**
@@ -76,24 +75,24 @@ async function assertInstrumentation (instrumentation, external) {
     if (version !== '*') {
       const result = semver.coerce(version)
       if (!result) throw new Error(`Invalid version: ${version}`)
-      await assertModules(instrumentation.name, result.version, external)
+      await assertModules(instrumentation.name, result.version)
     }
 
-    await assertModules(instrumentation.name, version, external)
+    await assertModules(instrumentation.name, version)
   }
 }
 
 /**
  * @param {string} name
  * @param {string} version
- * @param {boolean} external
+ * @param {string?} parent
  */
-async function assertModules (name, version, external) {
+async function assertModules (name, version) {
   const range = process.env.RANGE
   if (range && !semver.subset(version, range)) return
   await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external)
+    assertPackage(name, null, version),
+    assertPackage(name, version, version)
   ])
 }
 
@@ -109,9 +108,8 @@ async function assertFolder (name, version) {
  * @param {string} name
  * @param {string|null} version
  * @param {string} dependencyVersionRange
- * @param {boolean} external
  */
-async function assertPackage (name, version, dependencyVersionRange, external) {
+async function assertPackage (name, version, dependencyVersionRange) {
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange)
   }
@@ -120,75 +118,79 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
-    dependencies
+    dependencies,
+    trustedDependencies: [name, ...trustedList]
   }
 
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces'
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**']
-      }
-    }
-  }
+  if (excludeList.includes(name)) return
 
-  addFolderToWorkspaces(name, version)
+  const versionFolder = folder(name, version)
+
   await assertFolder(name, version)
   await Promise.all([
     writeFile(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n'),
     assertIndex(name, version)
   ])
+
+  install(versionFolder)
+
+  await assertPeerDependencies(versionFolder, name)
 }
 
 /**
- * @param {object} rootFolder
- * @param {string} parent
+ * @param {object} folder
+ * @param {string} externalName
  */
-async function assertPeerDependencies (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
+async function assertPeerDependencies (folder, externalName) {
+  if (!externalDeps.has(externalName)) return
 
-  for (const entry of entries) {
-    const folder = join(rootFolder, entry)
+  const versionPkgJsonPath = join(folder, 'package.json')
+  const versionPkgJson = require(versionPkgJsonPath)
 
-    if (!(await lstat(folder)).isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (entry.startsWith('@')) {
-      await assertPeerDependencies(folder, entry)
+  let hasPeer = false
+
+  for (const { dep, name } of externalDeps.get(externalName)) {
+    const pkgJsonPath = join(folder, 'node_modules', externalName, 'package.json')
+    const pkgJson = require(pkgJsonPath)
+
+    // Add missing dependency to the module. While this technically means the
+    // module is broken, a user could add the dependency manually as well, so we
+    // need to do the same thing in order to test that scenario.
+    if (dep !== name && typeof dep === 'string') {
+      versionPkgJson.dependencies[name] = dep
+
+      hasPeer = true
+
+      await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
       continue
     }
 
-    const externalName = join(parent, entry.split('@')[0])
-
-    if (!externalDeps.has(externalName)) continue
-
-    const versionPkgJsonPath = join(folder, 'package.json')
-    const versionPkgJson = require(versionPkgJsonPath)
-
-    for (const { dep, name } of externalDeps.get(externalName)) {
-      const pkgJsonPath = require(folder).pkgJsonPath()
-      const pkgJson = require(pkgJsonPath)
-
-      for (const section of ['devDependencies', 'peerDependencies']) {
-        if (pkgJson[section]?.[name]) {
-          if (dep === externalName) {
-            versionPkgJson.dependencies[name] = pkgJson.version
-          } else {
-            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
-              // Use the first version in the list (as npm does by default)
-              ? pkgJson[section][name].split('||')[0].trim()
-              // Only one version available so use that.
-              : pkgJson[section][name]
-          }
-
-          await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
-
-          break
+    // Actual peer dependencies are installed automatically by Bun, so we only
+    // need to manually install dev dependencies.
+    for (const section of ['devDependencies']) {
+      if (pkgJson[section]?.[name]) {
+        if (dep === externalName) {
+          versionPkgJson.dependencies[name] = pkgJson.version
+        } else {
+          versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+            // Use the first version in the list (as npm does by default)
+            ? pkgJson[section][name].split('||')[0].trim()
+            // Only one version available so use that.
+            : pkgJson[section][name]
         }
+
+        hasPeer = true
+
+        await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+        break
       }
     }
+  }
+
+  if (hasPeer) {
+    install(folder)
   }
 }
 
@@ -234,37 +236,21 @@ module.exports = {
   await writeFile(filename(name, version, 'index.js'), index)
 }
 
-async function assertWorkspaces () {
-  await assertFolder()
-  await writeFile(filename(null, null, 'package.json'), JSON.stringify({
-    name: 'versions',
-    version: '1.0.0',
-    license: 'BSD-3-Clause',
-    private: true,
-    workspaces: {
-      packages: Array.from(workspaces)
-    }
-  }, null, 2) + '\n')
-}
-
 /**
+ * @param {string} cwd
  * @param {boolean} [retry=true]
  */
-function install (retry = true) {
+function install (cwd, retry = true) {
+  const flags = [
+    '--linker=hoisted'
+  ]
+
   try {
-    exec('yarn --ignore-engines', { cwd: folder() })
+    exec(`${BUN} install ${flags.join(' ')}`, { cwd, env: withBun() })
   } catch (err) {
     if (!retry) throw err
-    install(false) // retry in case of server error from registry
+    install(cwd, false) // retry in case of server error from registry
   }
-}
-
-/**
- * @param {string} name
- * @param {string|null} [version]
- */
-function addFolderToWorkspaces (name, version) {
-  if (!excludeList.includes(name)) workspaces.add(basename(name, version))
 }
 
 /**

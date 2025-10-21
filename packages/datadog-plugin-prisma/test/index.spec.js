@@ -28,7 +28,7 @@ describe('Plugin', () => {
             cwd + '/schema.prisma',
           )
           await agent.load('prisma')
-          execSync('./node_modules/.bin/prisma generate', {
+          execSync('npx prisma generate', {
             cwd, // Ensure the current working directory is where the schema is located
             stdio: 'inherit'
           })

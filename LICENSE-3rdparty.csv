@@ -50,6 +50,7 @@ dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contribut
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
+dev,bun,MIT,Copyright contributors
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io

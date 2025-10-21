@@ -195,12 +195,6 @@
       "versions": [">=3"]
     }
   ],
-  "google-cloud-pubsub": [
-    {
-      "name": "google-gax",
-      "versions": ["3.5.7"]
-    }
-  ],
   "graphql": [
     {
       "name": "apollo-server-core",
@@ -345,6 +339,10 @@
       "versions": [">=0.1"]
     },
     {
+      "name": "@langchain/openai",
+      "versions": [">=0.1"]
+    },
+    {
       "name": "langchain",
       "versions": [">=0.1"]
     }
@@ -384,7 +382,7 @@
   "moleculer": [
     {
       "name": "bluebird",
-      "versions": ["3.7.2"]
+      "dep": "3.7.2"
     }
   ],
   "mongodb-core": [
