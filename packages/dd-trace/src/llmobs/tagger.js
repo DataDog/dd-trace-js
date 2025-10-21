@@ -326,6 +326,8 @@ class LLMObsTagger {
       const toolId = message.toolId
       const messageObj = { content }
 
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+
       const valid = typeof content === 'string'
       if (!valid) {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
@@ -345,18 +347,6 @@ class LLMObsTagger {
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
         }
-      }
-
-      // For role, always include it when there are tool calls or tool results
-      // Otherwise use conditional tagging which skips empty values
-      let condition
-      if ((messageObj.tool_calls && messageObj.tool_calls.length > 0) ||
-          (messageObj.tool_results && messageObj.tool_results.length > 0)) {
-        // For tool call/result messages, always include role
-        messageObj.role = role || ''
-        condition = true
-      } else {
-        condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
       }
 
       if (toolId) {

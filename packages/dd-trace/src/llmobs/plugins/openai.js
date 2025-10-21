@@ -324,7 +324,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           const outputMsg = { role: item.role || 'assistant', content: '' }
 
           // Extract content from message
-          if (item.content && Array.isArray(item.content)) {
+          if (Array.isArray(item.content)) {
             // Content is array of content parts
             // For responses API, text content has type 'output_text', not 'text'
             const textParts = item.content
