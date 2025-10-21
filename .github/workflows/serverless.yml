@@ -34,11 +34,31 @@ jobs:
         with:
           suffix: lambda
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   aws-sdk:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
+        spec:
+          - client
+          - aws-sdk
+          - bedrockruntime
+          - dynamodb
+          - eventbridge
+          - kinesis
+          - lambda
+          - s3
+          - serverless-peer-service
+          - sns
+          - sqs
+          - stepfunctions
+          - util
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -72,6 +92,7 @@ jobs:
           EDGE_PORT_HTTP: 4567
     env:
       PLUGINS: aws-sdk
+      SPEC: ${{ matrix.spec }}
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -86,8 +107,14 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
+
   azure-event-hubs:
     runs-on: ubuntu-latest
     services:
@@ -112,6 +139,9 @@ jobs:
     steps:
         - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         - uses: ./.github/actions/plugins/test
+          with:
+            dd_api_key: ${{ secrets.DD_API_KEY }}
+
   azure-functions:
     runs-on: ubuntu-latest
     services:
@@ -170,6 +200,11 @@ jobs:
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -196,6 +231,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -210,3 +247,5 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
