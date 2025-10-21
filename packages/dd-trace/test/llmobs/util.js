@@ -1,7 +1,7 @@
 'use strict'
 
 const { before, beforeEach, after } = require('mocha')
-const chai = require('chai')
+const util = require('node:util')
 
 const tracerVersion = require('../../../../package.json').version
 
@@ -10,144 +10,167 @@ const MOCK_NUMBER = Symbol('number')
 const MOCK_OBJECT = Symbol('object')
 const MOCK_ANY = Symbol('any')
 
-function deepEqualWithMockValues (expected) {
-  const actual = this._obj
+const MODEL_SPAN_KINDS = ['llm', 'embedding']
 
-  for (const key of Object.keys(actual)) {
-    if (expected[key] === MOCK_STRING) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('string')
-    } else if (expected[key] === MOCK_NUMBER) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('number')
-    } else if (expected[key] === MOCK_OBJECT) {
-      new chai.Assertion(typeof actual[key], `key ${key}`).to.equal('object')
-    } else if (expected[key] === MOCK_ANY) {
-      new chai.Assertion(actual[key], `key ${key}`).to.exist
-    } else if (Array.isArray(expected[key])) {
-      assert.ok(Array.isArray(actual[key]), `key "${key}" is not an array`)
-      const sortedExpected = [...expected[key].sort()]
-      const sortedActual = [...actual[key].sort()]
-      new chai.Assertion(sortedActual, `key: ${key}`).to.deepEqualWithMockValues(sortedExpected)
-    } else if (typeof expected[key] === 'object') {
-      new chai.Assertion(actual[key], `key: ${key}`).to.deepEqualWithMockValues(expected[key])
-    } else {
-      new chai.Assertion(actual[key], `key: ${key}`).to.equal(expected[key])
+/**
+ * @typedef {{
+ *   spanKind: 'llm' | 'embedding' | 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval',
+ *   name: string,
+ *   inputData: { [key: string]: any },
+ *   outputData: { [key: string]: any },
+ *   metrics: { [key: string]: number },
+ *   metadata: { [key: string]: any },
+ *   modelName?: string,
+ *   modelProvider?: string,
+ *   parentId?: string,
+ *   error?: { message: string, type: string, stack: string },
+ *   span: unknown,
+ *   sessionId?: string,
+ *   tags: { [key: string]: any },
+ *   traceId?: string,
+ * }} ExpectedLLMObsSpanEvent
+ */
+
+/**
+ *
+ * @param {ExpectedLLMObsSpanEvent} expected
+ * @param {*} actual
+ * @param {string} key name to associate with the assertion
+ */
+function assertWithMockValues (actual, expected, key) {
+  const actualWithName = key ? `Actual (${key})` : 'Actual'
+
+  if (expected === MOCK_STRING) {
+    assert.equal(typeof actual, 'string', `${actualWithName} (${util.inspect(actual)}) is not a string`)
+  } else if (expected === MOCK_NUMBER) {
+    assert.equal(typeof actual, 'number', `${actualWithName} (${util.inspect(actual)}) is not a number`)
+  } else if (expected === MOCK_OBJECT) {
+    assert.equal(typeof actual, 'object', `${actualWithName} (${util.inspect(actual)}) is not an object`)
+  } else if (expected === MOCK_ANY) {
+    assert.ok(actual !== undefined || actual !== null, `${actualWithName} does not exist`)
+  } else if (Array.isArray(expected)) {
+    assert.ok(Array.isArray(actual), `${actualWithName} (${util.inspect(actual)}) is not an array`)
+    assert.equal(
+      actual.length,
+      expected.length,
+      `${actualWithName} has different length than expected (${actual.length} !== ${expected.length})`
+    )
+
+    const sortedExpected = [...expected.sort()]
+    const sortedActual = [...actual.sort()]
+
+    for (let i = 0; i < sortedExpected.length; i++) {
+      assertWithMockValues(sortedActual[i], sortedExpected[i], `${key}.${i}`)
     }
+  } else if (typeof expected === 'object') {
+    if (typeof actual !== 'object') {
+      assert.fail(`${actualWithName} is not an object`)
+    }
+
+    const actualKeys = new Set(Object.keys(actual))
+    const expectedKeys = new Set(Object.keys(expected))
+    const unexpectedKeys = [...actualKeys.difference(expectedKeys)]
+    const missingKeys = [...expectedKeys.difference(actualKeys)]
+
+    if (unexpectedKeys.length > 0) {
+      assert.fail(`${actualWithName} has unexpected keys: ${unexpectedKeys.join(', ')}`)
+    }
+    if (missingKeys.length > 0) {
+      assert.fail(`${actualWithName} is missing expected keys: ${missingKeys.join(', ')}`)
+    }
+
+    for (const objKey of Object.keys(expected)) {
+      assertWithMockValues(actual[objKey], expected[objKey], `${key}.${objKey}`)
+    }
+  } else {
+    assert.equal(
+      actual,
+      expected,
+      `${actualWithName} does not match expected (${util.inspect(expected)} !== ${util.inspect(actual)})`
+    )
   }
 }
 
-function expectedLLMObsLLMSpanEvent (options) {
-  const spanEvent = expectedLLMObsBaseEvent(options)
-
-  const meta = { input: {}, output: {} }
+/**
+ *
+ * @param {ExpectedLLMObsSpanEvent} expected
+ * @param {*} actual
+ */
+function assertLlmObsSpanEvent (actual, expected = {}) {
   const {
     spanKind,
+    name,
+    inputData,
+    outputData,
+    metrics,
+    metadata,
     modelName,
     modelProvider,
-    inputMessages,
-    inputDocuments,
-    outputMessages,
-    outputValue,
-    metadata,
-    tokenMetrics
-  } = options
+    parentId,
+    error,
+    span,
+    sessionId,
+    tags,
+    traceId = MOCK_STRING // used for future custom LLMObs trace IDs
+  } = expected
 
-  if (spanKind === 'llm') {
-    if (inputMessages) meta.input.messages = inputMessages
-    if (outputMessages) meta.output.messages = outputMessages
-  } else if (spanKind === 'embedding') {
-    if (inputDocuments) meta.input.documents = inputDocuments
-    if (outputValue) meta.output.value = outputValue
+  // assert model name and provider configuration
+  if ((modelName || modelProvider) && !MODEL_SPAN_KINDS.includes(spanKind)) {
+    assert.fail('Model name and provider are only supported for llm and embedding spans')
+  } else if (MODEL_SPAN_KINDS.includes(spanKind) && !(modelName || modelProvider)) {
+    assert.fail('Model name and provider are required for llm and embedding spans')
   }
 
-  if (!spanEvent.meta.input) delete spanEvent.meta.input
-  if (!spanEvent.meta.output) delete spanEvent.meta.output
+  if (modelName) assert.equal(actual.meta.model_name, modelName, 'Model name does not match')
+  if (modelProvider) assert.equal(actual.meta.model_provider, modelProvider, 'Model provider does not match')
 
-  if (modelName) meta.model_name = modelName
-  if (modelProvider) meta.model_provider = modelProvider
-  if (metadata) meta.metadata = metadata
+  // assert span kind and name
+  assert.equal(actual.meta['span.kind'], spanKind, 'Span event kind does not match')
+  assert.equal(actual.name, name, 'Span event name does not match')
 
-  Object.assign(spanEvent.meta, meta)
+  const inputMetaKey =
+    spanKind === 'llm'
+      ? 'messages'
+      : spanKind === 'embedding'
+        ? 'documents'
+        : 'value'
 
-  if (tokenMetrics) spanEvent.metrics = tokenMetrics
+  const outputMetaKey =
+    spanKind === 'llm'
+      ? 'messages'
+      : spanKind === 'retrieval'
+        ? 'documents'
+        : 'value'
 
-  return spanEvent
-}
+  // assert input and output data
+  assertWithMockValues(actual.meta.input[inputMetaKey], inputData, `input.${inputMetaKey}`)
+  assertWithMockValues(actual.meta.output[outputMetaKey], outputData, `output.${outputMetaKey}`)
 
-function expectedLLMObsNonLLMSpanEvent (options) {
-  const spanEvent = expectedLLMObsBaseEvent(options)
-  const {
-    spanKind,
-    inputValue,
-    outputValue,
-    outputDocuments,
-    metadata,
-    tokenMetrics
-  } = options
+  // assert metrics
+  assertWithMockValues(actual.metrics, metrics ?? {}, 'metrics')
 
-  const meta = { input: {}, output: {} }
-  if (spanKind === 'retrieval') {
-    if (inputValue) meta.input.value = inputValue
-    if (outputDocuments) meta.output.documents = outputDocuments
-    if (outputValue) meta.output.value = outputValue
-  }
-  if (inputValue) meta.input.value = inputValue
-  if (metadata) meta.metadata = metadata
-  if (outputValue) meta.output.value = outputValue
+  // assert metadata
+  assertWithMockValues(actual.meta.metadata, metadata, 'metadata')
 
-  if (!spanEvent.meta.input) delete spanEvent.meta.input
-  if (!spanEvent.meta.output) delete spanEvent.meta.output
-
-  Object.assign(spanEvent.meta, meta)
-
-  if (tokenMetrics) spanEvent.metrics = tokenMetrics
-
-  return spanEvent
-}
-
-function expectedLLMObsBaseEvent ({
-  span,
-  parentId,
-  name,
-  spanKind,
-  tags,
-  sessionId,
-  error,
-  errorType,
-  errorMessage,
-  errorStack
-} = {}) {
-  // the `span` could be a raw DatadogSpan or formatted span
-  const spanName = name || span.name || span._name
-  const spanId = span.span_id ? fromBuffer(span.span_id) : span.context().toSpanId()
-  const startNs = span.start ? fromBuffer(span.start, true) : Math.round(span._startTime * 1e6)
-  const duration = span.duration ? fromBuffer(span.duration, true) : Math.round(span._duration * 1e6)
-
-  const spanEvent = {
-    trace_id: MOCK_STRING,
-    span_id: spanId,
-    parent_id: typeof parentId === 'bigint' ? fromBuffer(parentId) : (parentId || 'undefined'),
-    name: spanName,
-    tags: expectedLLMObsTags({ span, tags, error, errorType, sessionId }),
-    start_ns: startNs,
-    duration,
-    status: error ? 'error' : 'ok',
-    meta: { 'span.kind': spanKind },
-    metrics: {},
-    _dd: {
-      trace_id: MOCK_STRING,
-      span_id: spanId
-    }
-  }
-
-  if (sessionId) spanEvent.session_id = sessionId
-
+  // assert status and error
+  assert.ok(actual.status === (error ? 'error' : 'ok'), 'Status does not match')
   if (error) {
-    spanEvent.meta['error.type'] = errorType
-    spanEvent.meta['error.message'] = errorMessage
-    spanEvent.meta['error.stack'] = errorStack
+    assertWithMockValues(actual.meta['error.message'], error.message, 'error.message')
+    assertWithMockValues(actual.meta['error.type'], error.type, 'error.type')
+    assertWithMockValues(actual.meta['error.stack'], error.stack, 'error.stack')
   }
 
-  return spanEvent
+  // assert tags
+  if (!tags.ml_app) assert.fail('`mlApp` should be specified in the span event tags for assertion')
+  const baseExpectedTags = expectedLLMObsTags({ span, tags, error, errorType: error?.type, sessionId })
+  assertWithMockValues(actual.tags, baseExpectedTags, 'tags')
+
+  // assert span information
+  assertWithMockValues(actual.trace_id, traceId, 'traceId')
+  assert.equal(actual.span_id, fromBuffer(span.span_id))
+  assert.equal(actual.parent_id, parentId ?? 'undefined')
+  assert.equal(actual.start_ns, fromBuffer(span.start, true), 'Start timestamp does not match')
+  assert.equal(actual.duration, fromBuffer(span.duration, true), 'Duration does not match')
 }
 
 function expectedLLMObsTags ({
@@ -157,19 +180,18 @@ function expectedLLMObsTags ({
   tags,
   sessionId
 }) {
-  tags = tags || {}
-
-  const version = span.meta?.version || span._parentTracer?._version
-  const env = span.meta?.env || span._parentTracer?._env
-  const service = span.meta?.service || span._parentTracer?._service
+  const version = span.meta?.version ?? ''
+  const env = span.meta?.env ?? ''
+  const service = span.meta?.service ?? ''
 
   const spanTags = [
-    `version:${version ?? ''}`,
-    `env:${env ?? ''}`,
-    `service:${service ?? ''}`,
+    `version:${version}`,
+    `env:${env}`,
+    `service:${service}`,
     'source:integration',
     `ml_app:${tags.ml_app}`,
-    `ddtrace.version:${tracerVersion}`
+    `ddtrace.version:${tracerVersion}`,
+    'language:javascript'
   ]
 
   if (sessionId) spanTags.push(`session_id:${sessionId}`)
@@ -210,13 +232,7 @@ function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
   closeOptions = {}
-}) {
-  if (!plugin) {
-    throw new TypeError(
-      '`plugin` is required when using `useLlmobs`'
-    )
-  }
-
+} = {}) {
   /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
 
@@ -267,9 +283,7 @@ function useLlmObs ({
 }
 
 module.exports = {
-  expectedLLMObsLLMSpanEvent,
-  expectedLLMObsNonLLMSpanEvent,
-  deepEqualWithMockValues,
+  assertLlmObsSpanEvent,
   useLlmObs,
   MOCK_ANY,
   MOCK_NUMBER,
