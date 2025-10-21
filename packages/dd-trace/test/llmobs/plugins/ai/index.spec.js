@@ -230,7 +230,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): re-enable this test once #6707 lands
-    it.skip('creates a span for streamText', async () => {
+    it.skip('creates a span for streamText', async () => { // eslint-disable-line mocha/no-pending-tests
       const result = await ai.streamText({
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
@@ -282,7 +282,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): re-enable this test once #6707 lands
-    it.skip('creates a span for streamObject', async () => {
+    it.skip('creates a span for streamObject', async () => { // eslint-disable-line mocha/no-pending-tests
       const schema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -343,7 +343,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments"
-    it.skip('creates a span for a tool call', async () => {
+    it.skip('creates a span for a tool call', async () => { // eslint-disable-line mocha/no-pending-tests
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
@@ -498,8 +498,8 @@ describe('Plugin', () => {
       })
     })
 
-    it.skip('created a span for a tool call from a stream', async () => {
-      // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments" & parsing, streaming
+    // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments" & parsing, streaming
+    it.skip('created a span for a tool call from a stream', async () => { // eslint-disable-line mocha/no-pending-tests
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({

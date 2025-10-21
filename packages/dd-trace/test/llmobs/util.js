@@ -67,10 +67,10 @@ function assertWithMockValues (actual, expected, key) {
       assert.fail(`${actualWithName} is not an object`)
     }
 
-    const actualKeys = new Set(Object.keys(actual))
-    const expectedKeys = new Set(Object.keys(expected))
-    const unexpectedKeys = [...actualKeys.difference(expectedKeys)]
-    const missingKeys = [...expectedKeys.difference(actualKeys)]
+    const actualKeys = Object.keys(actual)
+    const expectedKeys = Object.keys(expected)
+    const unexpectedKeys = actualKeys.filter(key => !expectedKeys.includes(key))
+    const missingKeys = expectedKeys.filter(key => !actualKeys.includes(key))
 
     if (unexpectedKeys.length > 0) {
       assert.fail(`${actualWithName} has unexpected keys: ${unexpectedKeys.join(', ')}`)
