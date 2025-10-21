@@ -575,7 +575,7 @@ class Config {
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
     this._setString(target, 'apiKey', DD_API_KEY)
-    this._setBoolean(target, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    this._setBoolean(target, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT) {
       // Only set if there's a custom URL, otherwise let calc phase handle the default

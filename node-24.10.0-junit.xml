@@ -1,0 +1,748 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="273.630" tests="103" failures="28" skipped="7">
+  <testsuite name="Root Suite" timestamp="2025-10-21T17:08:45" tests="0" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="Code Origin for Spans" timestamp="2025-10-21T17:08:45" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/code-origin.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="source map support" timestamp="2025-10-21T17:08:50" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/code-origin.spec.js" time="3.124" failures="0">
+    <testcase name="Code Origin for Spans source map support should support source maps" time="2.007" classname="should support source maps">
+    </testcase>
+  </testsuite>
+  <testsuite name="init.js" timestamp="2025-10-21T17:08:53" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T17:08:57" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T17:08:57" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:08:57" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.352" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.119" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.119" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.114" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:08:57" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.135" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.031" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.044" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.057" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T17:08:58" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:08:58" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.629" failures="0">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.375" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.124" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.128" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:08:58" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.354" failures="3">
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.107" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.125" classname="should initialize instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Inject into carrier: {&quot;x-datadog-trace-id&quot;:&quot;7640141521442347560&quot;,&quot;x-datadog-parent-id&quot;:&quot;7640141521442347560&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be2a000000006a073c3c0b489a28-6a073c3c0b489a28-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be2a00000000;s:1;p:6a073c3c0b489a28&quot;}.
+Extract from carrier (datadog, tracecontext, baggage): {&quot;x-datadog-trace-id&quot;:&quot;7640141521442347560&quot;,&quot;x-datadog-parent-id&quot;:&quot;7640141521442347560&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be2a000000006a073c3c0b489a28-6a073c3c0b489a28-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be2a00000000;s:1;p:6a073c3c0b489a28&quot;}.
+Encoding payload: [{&quot;trace_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;span_id&quot;:&quot;03b41ad34448179f&quot;,&quot;parent_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;name&quot;:&quot;web.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be2a00000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;d1fb4a78-edc4-46eb-a865-a426da969262&quot;,&quot;_dd.rc.client_id&quot;:&quot;6b79b4a9-ee2d-4260-aae2-b0134497f2ff&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;server&quot;,&quot;http.url&quot;:&quot;http://localhost:54985/&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92514,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066538900002300,&quot;duration&quot;:1229736,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;web&quot;}]
+Encoding payload: [{&quot;trace_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;span_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;http.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be2a00000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;d1fb4a78-edc4-46eb-a865-a426da969262&quot;,&quot;_dd.rc.client_id&quot;:&quot;6b79b4a9-ee2d-4260-aae2-b0134497f2ff&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.url&quot;:&quot;http://localhost:54985/&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;network.destination.port&quot;:54985,&quot;process_id&quot;:92514,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066538893011000,&quot;duration&quot;:10297607,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;http&quot;},{&quot;trace_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;span_id&quot;:&quot;185518f4e53dabaf&quot;,&quot;parent_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:54985&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;d1fb4a78-edc4-46eb-a865-a426da969262&quot;,&quot;_dd.rc.client_id&quot;:&quot;6b79b4a9-ee2d-4260-aae2-b0134497f2ff&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:54985,&quot;tcp.local.port&quot;:54987,&quot;network.destination.port&quot;:54985,&quot;process_id&quot;:92514,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066538895153700,&quot;duration&quot;:3841064,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;6a073c3c0b489a28&quot;,&quot;span_id&quot;:&quot;3208d25ac2d358c8&quot;,&quot;parent_id&quot;:&quot;185518f4e53dabaf&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;d1fb4a78-edc4-46eb-a865-a426da969262&quot;,&quot;_dd.rc.client_id&quot;:&quot;6b79b4a9-ee2d-4260-aae2-b0134497f2ff&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92514,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066538895480800,&quot;duration&quot;:2483154,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Inject into carrier: {"x-datadog-trace-id":"7640141521442347560","x-datadog-parent-id":"7640141521442347560","x-datadog-sampling-priority":"1","traceparent":"00-68f7be2a000000006a073c3c0b489a28-6a073c3c0b489a28-01","tracestate":"dd=t.dm:-0;t.tid:68f7be2a00000000;s:1;p:6a073c3c0b489a28"}.
+Extract from carrier (datadog, tracecontext, baggage): {"x-datadog-trace-id":"7640141521442347560","x-datadog-parent-id":"7640141521442347560","x-datadog-sampling-priority":"1","traceparent":"00-68f7be2a000000006a073c3c0b489a28-6a073c3c0b489a28-01","tracestate":"dd=t.dm:-0;t.tid:68f7be2a00000000;s:1;p:6a073c3c0b489a28"}.
+Encoding payload: [{"trace_id":"6a073c3c0b489a28","span_id":"03b41ad34448179f","parent_id":"6a073c3c0b489a28","name":"web.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be2a00000000","_dd.p.dm":"-0","service":"node","runtime-id":"d1fb4a78-edc4-46eb-a865-a426da969262","_dd.rc.client_id":"6b79b4a9-ee2d-4260-aae2-b0134497f2ff","component":"http","span.kind":"server","http.url":"http://localhost:54985/","http.method":"GET","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92514,"_sampling_priority_v1":1},"start":1761066538900002300,"duration":1229736,"links":[],"service":"node","type":"web"}]
+Encoding payload: [{"trace_id":"6a073c3c0b489a28","span_id":"6a073c3c0b489a28","parent_id":"0000000000000000","name":"http.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be2a00000000","_dd.p.dm":"-0","service":"node","runtime-id":"d1fb4a78-edc4-46eb-a865-a426da969262","_dd.rc.client_id":"6b79b4a9-ee2d-4260-aae2-b0134497f2ff","component":"http","span.kind":"client","http.method":"GET","http.url":"http://localhost:54985/","out.host":"localhost","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"network.destination.port":54985,"process_id":92514,"_sampling_priority_v1":1},"start":1761066538893011000,"duration":10297607,"links":[],"service":"node","type":"http"},{"trace_id":"6a073c3c0b489a28","span_id":"185518f4e53dabaf","parent_id":"6a073c3c0b489a28","name":"tcp.connect","resource":"localhost:54985","error":0,"meta":{"service":"node","runtime-id":"d1fb4a78-edc4-46eb-a865-a426da969262","_dd.rc.client_id":"6b79b4a9-ee2d-4260-aae2-b0134497f2ff","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.measured":1,"tcp.remote.port":54985,"tcp.local.port":54987,"network.destination.port":54985,"process_id":92514,"_sampling_priority_v1":1},"start":1761066538895153700,"duration":3841064,"links":[],"service":"node"},{"trace_id":"6a073c3c0b489a28","span_id":"3208d25ac2d358c8","parent_id":"185518f4e53dabaf","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"d1fb4a78-edc4-46eb-a865-a426da969262","_dd.rc.client_id":"6b79b4a9-ee2d-4260-aae2-b0134497f2ff","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92514,"_sampling_priority_v1":1},"start":1761066538895480800,"duration":2483154,"links":[],"service":"node"}]
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="init.js preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.120" classname="should not initialize ESM instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Encoding payload: [{&quot;trace_id&quot;:&quot;1ccffb2b9b35f267&quot;,&quot;span_id&quot;:&quot;1ccffb2b9b35f267&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:54988&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be2b00000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;a8f48b55-60cb-45e2-afcb-a57b86bcc890&quot;,&quot;_dd.rc.client_id&quot;:&quot;5c7692fb-8da5-45b0-8c0e-c3537b1ecb36&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:54988,&quot;tcp.local.port&quot;:54990,&quot;network.destination.port&quot;:54988,&quot;process_id&quot;:92526,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066539016009500,&quot;duration&quot;:3909424,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;1ccffb2b9b35f267&quot;,&quot;span_id&quot;:&quot;76c13b2571a177d3&quot;,&quot;parent_id&quot;:&quot;1ccffb2b9b35f267&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;a8f48b55-60cb-45e2-afcb-a57b86bcc890&quot;,&quot;_dd.rc.client_id&quot;:&quot;5c7692fb-8da5-45b0-8c0e-c3537b1ecb36&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92526,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066539016438800,&quot;duration&quot;:2212891,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+false
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Encoding payload: [{"trace_id":"1ccffb2b9b35f267","span_id":"1ccffb2b9b35f267","parent_id":"0000000000000000","name":"tcp.connect","resource":"localhost:54988","error":0,"meta":{"_dd.p.tid":"68f7be2b00000000","_dd.p.dm":"-0","service":"node","runtime-id":"a8f48b55-60cb-45e2-afcb-a57b86bcc890","_dd.rc.client_id":"5c7692fb-8da5-45b0-8c0e-c3537b1ecb36","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"tcp.remote.port":54988,"tcp.local.port":54990,"network.destination.port":54988,"process_id":92526,"_sampling_priority_v1":1},"start":1761066539016009500,"duration":3909424,"links":[],"service":"node"},{"trace_id":"1ccffb2b9b35f267","span_id":"76c13b2571a177d3","parent_id":"1ccffb2b9b35f267","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"a8f48b55-60cb-45e2-afcb-a57b86bcc890","_dd.rc.client_id":"5c7692fb-8da5-45b0-8c0e-c3537b1ecb36","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92526,"_sampling_priority_v1":1},"start":1761066539016438800,"duration":2212891,"links":[],"service":"node"}]
+false
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T17:08:59" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T17:08:59" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="init.js runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.104" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:08:59" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T17:08:59" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.213" failures="2">
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.106" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.106" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T17:08:59" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.666" failures="2">
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.105" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="init.js runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.106" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="initialize.mjs" timestamp="2025-10-21T17:09:00" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="as --loader" timestamp="2025-10-21T17:09:03" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T17:09:03" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T17:09:03" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:03" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.554" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.191" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.179" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.183" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:04" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.226" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.061" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.075" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.089" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T17:09:04" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:04" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.820" failures="0">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.448" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.183" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.188" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:05" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.559" failures="3">
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.174" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.192" classname="should initialize instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Inject into carrier: {&quot;x-datadog-trace-id&quot;:&quot;1182981757236367945&quot;,&quot;x-datadog-parent-id&quot;:&quot;1182981757236367945&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be3100000000106acba3f7d75249-106acba3f7d75249-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:106acba3f7d75249&quot;}.
+Extract from carrier (datadog, tracecontext, baggage): {&quot;x-datadog-trace-id&quot;:&quot;1182981757236367945&quot;,&quot;x-datadog-parent-id&quot;:&quot;1182981757236367945&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be3100000000106acba3f7d75249-106acba3f7d75249-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:106acba3f7d75249&quot;}.
+Encoding payload: [{&quot;trace_id&quot;:&quot;106acba3f7d75249&quot;,&quot;span_id&quot;:&quot;1f647c6c3b9eec2f&quot;,&quot;parent_id&quot;:&quot;106acba3f7d75249&quot;,&quot;name&quot;:&quot;web.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3100000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;94b16995-7297-4988-90ae-26a5293225aa&quot;,&quot;_dd.rc.client_id&quot;:&quot;bfccea31-3ef3-462e-9bb1-8eb4f8981c02&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;server&quot;,&quot;http.url&quot;:&quot;http://localhost:55015/&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92714,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545607002400,&quot;duration&quot;:1064453,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;web&quot;}]
+Encoding payload: [{&quot;trace_id&quot;:&quot;106acba3f7d75249&quot;,&quot;span_id&quot;:&quot;106acba3f7d75249&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;http.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3100000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;94b16995-7297-4988-90ae-26a5293225aa&quot;,&quot;_dd.rc.client_id&quot;:&quot;bfccea31-3ef3-462e-9bb1-8eb4f8981c02&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.url&quot;:&quot;http://localhost:55015/&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;network.destination.port&quot;:55015,&quot;process_id&quot;:92714,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545599009500,&quot;duration&quot;:9783203,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;http&quot;},{&quot;trace_id&quot;:&quot;106acba3f7d75249&quot;,&quot;span_id&quot;:&quot;0da732f77c72a0b0&quot;,&quot;parent_id&quot;:&quot;106acba3f7d75249&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:55015&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;94b16995-7297-4988-90ae-26a5293225aa&quot;,&quot;_dd.rc.client_id&quot;:&quot;bfccea31-3ef3-462e-9bb1-8eb4f8981c02&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:55015,&quot;tcp.local.port&quot;:55017,&quot;network.destination.port&quot;:55015,&quot;process_id&quot;:92714,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545600757200,&quot;duration&quot;:3468262,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;106acba3f7d75249&quot;,&quot;span_id&quot;:&quot;34a49aed88bcc497&quot;,&quot;parent_id&quot;:&quot;0da732f77c72a0b0&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;94b16995-7297-4988-90ae-26a5293225aa&quot;,&quot;_dd.rc.client_id&quot;:&quot;bfccea31-3ef3-462e-9bb1-8eb4f8981c02&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92714,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545601026300,&quot;duration&quot;:2134766,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Inject into carrier: {"x-datadog-trace-id":"1182981757236367945","x-datadog-parent-id":"1182981757236367945","x-datadog-sampling-priority":"1","traceparent":"00-68f7be3100000000106acba3f7d75249-106acba3f7d75249-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:106acba3f7d75249"}.
+Extract from carrier (datadog, tracecontext, baggage): {"x-datadog-trace-id":"1182981757236367945","x-datadog-parent-id":"1182981757236367945","x-datadog-sampling-priority":"1","traceparent":"00-68f7be3100000000106acba3f7d75249-106acba3f7d75249-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:106acba3f7d75249"}.
+Encoding payload: [{"trace_id":"106acba3f7d75249","span_id":"1f647c6c3b9eec2f","parent_id":"106acba3f7d75249","name":"web.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3100000000","_dd.p.dm":"-0","service":"node","runtime-id":"94b16995-7297-4988-90ae-26a5293225aa","_dd.rc.client_id":"bfccea31-3ef3-462e-9bb1-8eb4f8981c02","component":"http","span.kind":"server","http.url":"http://localhost:55015/","http.method":"GET","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92714,"_sampling_priority_v1":1},"start":1761066545607002400,"duration":1064453,"links":[],"service":"node","type":"web"}]
+Encoding payload: [{"trace_id":"106acba3f7d75249","span_id":"106acba3f7d75249","parent_id":"0000000000000000","name":"http.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3100000000","_dd.p.dm":"-0","service":"node","runtime-id":"94b16995-7297-4988-90ae-26a5293225aa","_dd.rc.client_id":"bfccea31-3ef3-462e-9bb1-8eb4f8981c02","component":"http","span.kind":"client","http.method":"GET","http.url":"http://localhost:55015/","out.host":"localhost","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"network.destination.port":55015,"process_id":92714,"_sampling_priority_v1":1},"start":1761066545599009500,"duration":9783203,"links":[],"service":"node","type":"http"},{"trace_id":"106acba3f7d75249","span_id":"0da732f77c72a0b0","parent_id":"106acba3f7d75249","name":"tcp.connect","resource":"localhost:55015","error":0,"meta":{"service":"node","runtime-id":"94b16995-7297-4988-90ae-26a5293225aa","_dd.rc.client_id":"bfccea31-3ef3-462e-9bb1-8eb4f8981c02","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.measured":1,"tcp.remote.port":55015,"tcp.local.port":55017,"network.destination.port":55015,"process_id":92714,"_sampling_priority_v1":1},"start":1761066545600757200,"duration":3468262,"links":[],"service":"node"},{"trace_id":"106acba3f7d75249","span_id":"34a49aed88bcc497","parent_id":"0da732f77c72a0b0","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"94b16995-7297-4988-90ae-26a5293225aa","_dd.rc.client_id":"bfccea31-3ef3-462e-9bb1-8eb4f8981c02","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92714,"_sampling_priority_v1":1},"start":1761066545601026300,"duration":2134766,"links":[],"service":"node"}]
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --loader preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.192" classname="should initialize ESM instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Inject into carrier: {&quot;x-datadog-trace-id&quot;:&quot;6389039557119000261&quot;,&quot;x-datadog-parent-id&quot;:&quot;6389039557119000261&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be310000000058aa6da069ff3ec5-58aa6da069ff3ec5-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:58aa6da069ff3ec5&quot;}.
+Extract from carrier (datadog, tracecontext, baggage): {&quot;x-datadog-trace-id&quot;:&quot;6389039557119000261&quot;,&quot;x-datadog-parent-id&quot;:&quot;6389039557119000261&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be310000000058aa6da069ff3ec5-58aa6da069ff3ec5-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:58aa6da069ff3ec5&quot;}.
+Encoding payload: [{&quot;trace_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;span_id&quot;:&quot;70ec796b957c8231&quot;,&quot;parent_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;name&quot;:&quot;web.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3100000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;ba48b35f-ecbf-45ea-a3d5-0fe806a61f42&quot;,&quot;_dd.rc.client_id&quot;:&quot;2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;server&quot;,&quot;http.url&quot;:&quot;http://localhost:55018/&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92728,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545800002300,&quot;duration&quot;:1024902,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;web&quot;}]
+Encoding payload: [{&quot;trace_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;span_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;http.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3100000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;ba48b35f-ecbf-45ea-a3d5-0fe806a61f42&quot;,&quot;_dd.rc.client_id&quot;:&quot;2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.url&quot;:&quot;http://localhost:55018/&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;network.destination.port&quot;:55018,&quot;process_id&quot;:92728,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545791009300,&quot;duration&quot;:10884521,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;http&quot;},{&quot;trace_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;span_id&quot;:&quot;7b0620724d0dec2f&quot;,&quot;parent_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:55018&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;ba48b35f-ecbf-45ea-a3d5-0fe806a61f42&quot;,&quot;_dd.rc.client_id&quot;:&quot;2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:55018,&quot;tcp.local.port&quot;:55020,&quot;network.destination.port&quot;:55018,&quot;process_id&quot;:92728,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545793233700,&quot;duration&quot;:4746338,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;58aa6da069ff3ec5&quot;,&quot;span_id&quot;:&quot;4145fc0a592544ce&quot;,&quot;parent_id&quot;:&quot;7b0620724d0dec2f&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;ba48b35f-ecbf-45ea-a3d5-0fe806a61f42&quot;,&quot;_dd.rc.client_id&quot;:&quot;2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92728,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066545793581300,&quot;duration&quot;:3259277,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Inject into carrier: {"x-datadog-trace-id":"6389039557119000261","x-datadog-parent-id":"6389039557119000261","x-datadog-sampling-priority":"1","traceparent":"00-68f7be310000000058aa6da069ff3ec5-58aa6da069ff3ec5-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:58aa6da069ff3ec5"}.
+Extract from carrier (datadog, tracecontext, baggage): {"x-datadog-trace-id":"6389039557119000261","x-datadog-parent-id":"6389039557119000261","x-datadog-sampling-priority":"1","traceparent":"00-68f7be310000000058aa6da069ff3ec5-58aa6da069ff3ec5-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3100000000;s:1;p:58aa6da069ff3ec5"}.
+Encoding payload: [{"trace_id":"58aa6da069ff3ec5","span_id":"70ec796b957c8231","parent_id":"58aa6da069ff3ec5","name":"web.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3100000000","_dd.p.dm":"-0","service":"node","runtime-id":"ba48b35f-ecbf-45ea-a3d5-0fe806a61f42","_dd.rc.client_id":"2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4","component":"http","span.kind":"server","http.url":"http://localhost:55018/","http.method":"GET","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92728,"_sampling_priority_v1":1},"start":1761066545800002300,"duration":1024902,"links":[],"service":"node","type":"web"}]
+Encoding payload: [{"trace_id":"58aa6da069ff3ec5","span_id":"58aa6da069ff3ec5","parent_id":"0000000000000000","name":"http.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3100000000","_dd.p.dm":"-0","service":"node","runtime-id":"ba48b35f-ecbf-45ea-a3d5-0fe806a61f42","_dd.rc.client_id":"2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4","component":"http","span.kind":"client","http.method":"GET","http.url":"http://localhost:55018/","out.host":"localhost","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"network.destination.port":55018,"process_id":92728,"_sampling_priority_v1":1},"start":1761066545791009300,"duration":10884521,"links":[],"service":"node","type":"http"},{"trace_id":"58aa6da069ff3ec5","span_id":"7b0620724d0dec2f","parent_id":"58aa6da069ff3ec5","name":"tcp.connect","resource":"localhost:55018","error":0,"meta":{"service":"node","runtime-id":"ba48b35f-ecbf-45ea-a3d5-0fe806a61f42","_dd.rc.client_id":"2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.measured":1,"tcp.remote.port":55018,"tcp.local.port":55020,"network.destination.port":55018,"process_id":92728,"_sampling_priority_v1":1},"start":1761066545793233700,"duration":4746338,"links":[],"service":"node"},{"trace_id":"58aa6da069ff3ec5","span_id":"4145fc0a592544ce","parent_id":"7b0620724d0dec2f","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"ba48b35f-ecbf-45ea-a3d5-0fe806a61f42","_dd.rc.client_id":"2bf68e51-5ca8-4192-bad5-eb63aa0fc3f4","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92728,"_sampling_priority_v1":1},"start":1761066545793581300,"duration":3259277,"links":[],"service":"node"}]
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T17:09:05" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T17:09:05" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.179" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:05" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T17:09:05" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.377" failures="2">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.197" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.178" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T17:09:06" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.351" failures="2">
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.175" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --loader runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.175" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="as --import" timestamp="2025-10-21T17:09:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="preferring app-dir dd-trace" timestamp="2025-10-21T17:09:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when dd-trace is not in the app dir" timestamp="2025-10-21T17:09:06" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:06" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.558" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.169" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.186" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.203" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:07" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.249" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize the tracer" time="0.069" classname="should not initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize instrumentation" time="0.081" classname="should not initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace is not in the app dir with DD_INJECTION_ENABLED should not initialize ESM instrumentation" time="0.098" classname="should not initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="when dd-trace in the app dir" timestamp="2025-10-21T17:09:07" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:07" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.569" failures="0">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize the tracer" time="0.176" classname="should initialize the tracer">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize instrumentation" time="0.191" classname="should initialize instrumentation">
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir without DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.202" classname="should initialize ESM instrumentation">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:08" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.573" failures="3">
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize the tracer" time="0.176" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize instrumentation" time="0.192" classname="should initialize instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Inject into carrier: {&quot;x-datadog-trace-id&quot;:&quot;9138080485709194870&quot;,&quot;x-datadog-parent-id&quot;:&quot;9138080485709194870&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be34000000007ed0fbc93fa02676-7ed0fbc93fa02676-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:7ed0fbc93fa02676&quot;}.
+Extract from carrier (datadog, tracecontext, baggage): {&quot;x-datadog-trace-id&quot;:&quot;9138080485709194870&quot;,&quot;x-datadog-parent-id&quot;:&quot;9138080485709194870&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be34000000007ed0fbc93fa02676-7ed0fbc93fa02676-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:7ed0fbc93fa02676&quot;}.
+Encoding payload: [{&quot;trace_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;span_id&quot;:&quot;511b141867262fb6&quot;,&quot;parent_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;name&quot;:&quot;web.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3400000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;83c21d00-061b-423c-b2ed-e3aeb4fb10d7&quot;,&quot;_dd.rc.client_id&quot;:&quot;6d573e29-2c63-4b09-b377-e20044159a4e&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;server&quot;,&quot;http.url&quot;:&quot;http://localhost:55041/&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92808,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548451002400,&quot;duration&quot;:1274170,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;web&quot;}]
+Encoding payload: [{&quot;trace_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;span_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;http.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3400000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;83c21d00-061b-423c-b2ed-e3aeb4fb10d7&quot;,&quot;_dd.rc.client_id&quot;:&quot;6d573e29-2c63-4b09-b377-e20044159a4e&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.url&quot;:&quot;http://localhost:55041/&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;network.destination.port&quot;:55041,&quot;process_id&quot;:92808,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548445009400,&quot;duration&quot;:8853027,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;http&quot;},{&quot;trace_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;span_id&quot;:&quot;3d6839c4e8bcf8bb&quot;,&quot;parent_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:55041&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;83c21d00-061b-423c-b2ed-e3aeb4fb10d7&quot;,&quot;_dd.rc.client_id&quot;:&quot;6d573e29-2c63-4b09-b377-e20044159a4e&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:55041,&quot;tcp.local.port&quot;:55042,&quot;network.destination.port&quot;:55041,&quot;process_id&quot;:92808,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548446218500,&quot;duration&quot;:2693359,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;7ed0fbc93fa02676&quot;,&quot;span_id&quot;:&quot;5cc7dd305ac9f73c&quot;,&quot;parent_id&quot;:&quot;3d6839c4e8bcf8bb&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;83c21d00-061b-423c-b2ed-e3aeb4fb10d7&quot;,&quot;_dd.rc.client_id&quot;:&quot;6d573e29-2c63-4b09-b377-e20044159a4e&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92808,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548446382800,&quot;duration&quot;:1972412,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Inject into carrier: {"x-datadog-trace-id":"9138080485709194870","x-datadog-parent-id":"9138080485709194870","x-datadog-sampling-priority":"1","traceparent":"00-68f7be34000000007ed0fbc93fa02676-7ed0fbc93fa02676-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:7ed0fbc93fa02676"}.
+Extract from carrier (datadog, tracecontext, baggage): {"x-datadog-trace-id":"9138080485709194870","x-datadog-parent-id":"9138080485709194870","x-datadog-sampling-priority":"1","traceparent":"00-68f7be34000000007ed0fbc93fa02676-7ed0fbc93fa02676-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:7ed0fbc93fa02676"}.
+Encoding payload: [{"trace_id":"7ed0fbc93fa02676","span_id":"511b141867262fb6","parent_id":"7ed0fbc93fa02676","name":"web.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3400000000","_dd.p.dm":"-0","service":"node","runtime-id":"83c21d00-061b-423c-b2ed-e3aeb4fb10d7","_dd.rc.client_id":"6d573e29-2c63-4b09-b377-e20044159a4e","component":"http","span.kind":"server","http.url":"http://localhost:55041/","http.method":"GET","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92808,"_sampling_priority_v1":1},"start":1761066548451002400,"duration":1274170,"links":[],"service":"node","type":"web"}]
+Encoding payload: [{"trace_id":"7ed0fbc93fa02676","span_id":"7ed0fbc93fa02676","parent_id":"0000000000000000","name":"http.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3400000000","_dd.p.dm":"-0","service":"node","runtime-id":"83c21d00-061b-423c-b2ed-e3aeb4fb10d7","_dd.rc.client_id":"6d573e29-2c63-4b09-b377-e20044159a4e","component":"http","span.kind":"client","http.method":"GET","http.url":"http://localhost:55041/","out.host":"localhost","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"network.destination.port":55041,"process_id":92808,"_sampling_priority_v1":1},"start":1761066548445009400,"duration":8853027,"links":[],"service":"node","type":"http"},{"trace_id":"7ed0fbc93fa02676","span_id":"3d6839c4e8bcf8bb","parent_id":"7ed0fbc93fa02676","name":"tcp.connect","resource":"localhost:55041","error":0,"meta":{"service":"node","runtime-id":"83c21d00-061b-423c-b2ed-e3aeb4fb10d7","_dd.rc.client_id":"6d573e29-2c63-4b09-b377-e20044159a4e","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.measured":1,"tcp.remote.port":55041,"tcp.local.port":55042,"network.destination.port":55041,"process_id":92808,"_sampling_priority_v1":1},"start":1761066548446218500,"duration":2693359,"links":[],"service":"node"},{"trace_id":"7ed0fbc93fa02676","span_id":"5cc7dd305ac9f73c","parent_id":"3d6839c4e8bcf8bb","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"83c21d00-061b-423c-b2ed-e3aeb4fb10d7","_dd.rc.client_id":"6d573e29-2c63-4b09-b377-e20044159a4e","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92808,"_sampling_priority_v1":1},"start":1761066548446382800,"duration":1972412,"links":[],"service":"node"}]
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --import preferring app-dir dd-trace when dd-trace in the app dir with DD_INJECTION_ENABLED should initialize ESM instrumentation" time="0.204" classname="should initialize ESM instrumentation">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+Inject into carrier: {&quot;x-datadog-trace-id&quot;:&quot;5073278073685093561&quot;,&quot;x-datadog-parent-id&quot;:&quot;5073278073685093561&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be34000000004667e78754c72cb9-4667e78754c72cb9-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:4667e78754c72cb9&quot;}.
+Extract from carrier (datadog, tracecontext, baggage): {&quot;x-datadog-trace-id&quot;:&quot;5073278073685093561&quot;,&quot;x-datadog-parent-id&quot;:&quot;5073278073685093561&quot;,&quot;x-datadog-sampling-priority&quot;:&quot;1&quot;,&quot;traceparent&quot;:&quot;00-68f7be34000000004667e78754c72cb9-4667e78754c72cb9-01&quot;,&quot;tracestate&quot;:&quot;dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:4667e78754c72cb9&quot;}.
+Encoding payload: [{&quot;trace_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;span_id&quot;:&quot;0a95275c5356ec53&quot;,&quot;parent_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;name&quot;:&quot;web.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3400000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;b9571240-f6ae-4602-a411-29676351fed0&quot;,&quot;_dd.rc.client_id&quot;:&quot;39bd5118-6b70-4ace-bdcf-6815bdbcfec3&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;server&quot;,&quot;http.url&quot;:&quot;http://localhost:55044/&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92814,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548656002300,&quot;duration&quot;:1090820,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;web&quot;}]
+Encoding payload: [{&quot;trace_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;span_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;parent_id&quot;:&quot;0000000000000000&quot;,&quot;name&quot;:&quot;http.request&quot;,&quot;resource&quot;:&quot;GET&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;_dd.p.tid&quot;:&quot;68f7be3400000000&quot;,&quot;_dd.p.dm&quot;:&quot;-0&quot;,&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;b9571240-f6ae-4602-a411-29676351fed0&quot;,&quot;_dd.rc.client_id&quot;:&quot;39bd5118-6b70-4ace-bdcf-6815bdbcfec3&quot;,&quot;component&quot;:&quot;http&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;http.method&quot;:&quot;GET&quot;,&quot;http.url&quot;:&quot;http://localhost:55044/&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;http.status_code&quot;:&quot;200&quot;,&quot;_dd.integration&quot;:&quot;http&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.agent_psr&quot;:1,&quot;_dd.top_level&quot;:1,&quot;_dd.measured&quot;:1,&quot;network.destination.port&quot;:55044,&quot;process_id&quot;:92814,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548651009500,&quot;duration&quot;:7600586,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;,&quot;type&quot;:&quot;http&quot;},{&quot;trace_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;span_id&quot;:&quot;554d7b675cc23dcb&quot;,&quot;parent_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;name&quot;:&quot;tcp.connect&quot;,&quot;resource&quot;:&quot;localhost:55044&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;b9571240-f6ae-4602-a411-29676351fed0&quot;,&quot;_dd.rc.client_id&quot;:&quot;39bd5118-6b70-4ace-bdcf-6815bdbcfec3&quot;,&quot;component&quot;:&quot;net&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;tcp.remote.host&quot;:&quot;localhost&quot;,&quot;tcp.family&quot;:&quot;IPv4&quot;,&quot;tcp.local.address&quot;:&quot;127.0.0.1&quot;,&quot;out.host&quot;:&quot;localhost&quot;,&quot;_dd.integration&quot;:&quot;net&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;tcp.remote.port&quot;:55044,&quot;tcp.local.port&quot;:55045,&quot;network.destination.port&quot;:55044,&quot;process_id&quot;:92814,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548652017400,&quot;duration&quot;:2282227,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;},{&quot;trace_id&quot;:&quot;4667e78754c72cb9&quot;,&quot;span_id&quot;:&quot;2d97f7ab411ee242&quot;,&quot;parent_id&quot;:&quot;554d7b675cc23dcb&quot;,&quot;name&quot;:&quot;dns.lookup&quot;,&quot;resource&quot;:&quot;localhost&quot;,&quot;error&quot;:0,&quot;meta&quot;:{&quot;service&quot;:&quot;node&quot;,&quot;runtime-id&quot;:&quot;b9571240-f6ae-4602-a411-29676351fed0&quot;,&quot;_dd.rc.client_id&quot;:&quot;39bd5118-6b70-4ace-bdcf-6815bdbcfec3&quot;,&quot;component&quot;:&quot;dns&quot;,&quot;span.kind&quot;:&quot;client&quot;,&quot;dns.hostname&quot;:&quot;localhost&quot;,&quot;dns.address&quot;:&quot;127.0.0.1&quot;,&quot;dns.addresses&quot;:&quot;127.0.0.1,::1&quot;,&quot;_dd.integration&quot;:&quot;dns&quot;,&quot;language&quot;:&quot;javascript&quot;},&quot;metrics&quot;:{&quot;_dd.measured&quot;:1,&quot;process_id&quot;:92814,&quot;_sampling_priority_v1&quot;:1},&quot;start&quot;:1761066548652160300,&quot;duration&quot;:1496582,&quot;links&quot;:[],&quot;service&quot;:&quot;node&quot;}]
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+Inject into carrier: {"x-datadog-trace-id":"5073278073685093561","x-datadog-parent-id":"5073278073685093561","x-datadog-sampling-priority":"1","traceparent":"00-68f7be34000000004667e78754c72cb9-4667e78754c72cb9-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:4667e78754c72cb9"}.
+Extract from carrier (datadog, tracecontext, baggage): {"x-datadog-trace-id":"5073278073685093561","x-datadog-parent-id":"5073278073685093561","x-datadog-sampling-priority":"1","traceparent":"00-68f7be34000000004667e78754c72cb9-4667e78754c72cb9-01","tracestate":"dd=t.dm:-0;t.tid:68f7be3400000000;s:1;p:4667e78754c72cb9"}.
+Encoding payload: [{"trace_id":"4667e78754c72cb9","span_id":"0a95275c5356ec53","parent_id":"4667e78754c72cb9","name":"web.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3400000000","_dd.p.dm":"-0","service":"node","runtime-id":"b9571240-f6ae-4602-a411-29676351fed0","_dd.rc.client_id":"39bd5118-6b70-4ace-bdcf-6815bdbcfec3","component":"http","span.kind":"server","http.url":"http://localhost:55044/","http.method":"GET","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92814,"_sampling_priority_v1":1},"start":1761066548656002300,"duration":1090820,"links":[],"service":"node","type":"web"}]
+Encoding payload: [{"trace_id":"4667e78754c72cb9","span_id":"4667e78754c72cb9","parent_id":"0000000000000000","name":"http.request","resource":"GET","error":0,"meta":{"_dd.p.tid":"68f7be3400000000","_dd.p.dm":"-0","service":"node","runtime-id":"b9571240-f6ae-4602-a411-29676351fed0","_dd.rc.client_id":"39bd5118-6b70-4ace-bdcf-6815bdbcfec3","component":"http","span.kind":"client","http.method":"GET","http.url":"http://localhost:55044/","out.host":"localhost","http.status_code":"200","_dd.integration":"http","language":"javascript"},"metrics":{"_dd.agent_psr":1,"_dd.top_level":1,"_dd.measured":1,"network.destination.port":55044,"process_id":92814,"_sampling_priority_v1":1},"start":1761066548651009500,"duration":7600586,"links":[],"service":"node","type":"http"},{"trace_id":"4667e78754c72cb9","span_id":"554d7b675cc23dcb","parent_id":"4667e78754c72cb9","name":"tcp.connect","resource":"localhost:55044","error":0,"meta":{"service":"node","runtime-id":"b9571240-f6ae-4602-a411-29676351fed0","_dd.rc.client_id":"39bd5118-6b70-4ace-bdcf-6815bdbcfec3","component":"net","span.kind":"client","tcp.remote.host":"localhost","tcp.family":"IPv4","tcp.local.address":"127.0.0.1","out.host":"localhost","_dd.integration":"net","language":"javascript"},"metrics":{"_dd.measured":1,"tcp.remote.port":55044,"tcp.local.port":55045,"network.destination.port":55044,"process_id":92814,"_sampling_priority_v1":1},"start":1761066548652017400,"duration":2282227,"links":[],"service":"node"},{"trace_id":"4667e78754c72cb9","span_id":"2d97f7ab411ee242","parent_id":"554d7b675cc23dcb","name":"dns.lookup","resource":"localhost","error":0,"meta":{"service":"node","runtime-id":"b9571240-f6ae-4602-a411-29676351fed0","_dd.rc.client_id":"39bd5118-6b70-4ace-bdcf-6815bdbcfec3","component":"dns","span.kind":"client","dns.hostname":"localhost","dns.address":"127.0.0.1","dns.addresses":"127.0.0.1,::1","_dd.integration":"dns","language":"javascript"},"metrics":{"_dd.measured":1,"process_id":92814,"_sampling_priority_v1":1},"start":1761066548652160300,"duration":1496582,"links":[],"service":"node"}]
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="runtime version check" timestamp="2025-10-21T17:09:08" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when node version is more than engines field" timestamp="2025-10-21T17:09:08" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field should initialize the tracer, if no DD_INJECTION_ENABLED" time="0.175" classname="should initialize the tracer, if no DD_INJECTION_ENABLED">
+    </testcase>
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:09:08" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="without debug" timestamp="2025-10-21T17:09:08" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.355" failures="2">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer" time="0.176" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED without debug should initialize the tracer, if DD_INJECT_FORCE" time="0.179" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="with debug" timestamp="2025-10-21T17:09:09" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/init.spec.js" time="0.812" failures="2">
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer" time="0.183" classname="should initialize the tracer">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+    <testcase name="initialize.mjs as --import runtime version check when node version is more than engines field with DD_INJECTION_ENABLED with debug should initialize the tracer, if DD_INJECT_FORCE" time="0.178" classname="should initialize the tracer, if DD_INJECT_FORCE">
+      <failure message="Expected the process to output &quot;ssi&quot;, but logs only contain: &quot;Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+&quot;" type="AssertionError"><![CDATA[AssertionError [ERR_ASSERTION]: Expected the process to output "ssi", but logs only contain: "Application instrumentation bootstrapping complete
+true
+instrumentation source: manual
+"
+    at runAndCheckOutput (integration-tests/helpers/index.js:56:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runAndCheckWithTelemetry (integration-tests/helpers/index.js:76:15)
+    at async doTestForced (integration-tests/init.spec.js:96:9)
+
+      + expected - actual:  failed to generate Mocha diff
+]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Log Injection" timestamp="2025-10-21T17:09:10" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/log_injection.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="log injection with rule based sampling" timestamp="2025-10-21T17:09:15" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/log_injection.spec.js" time="5.236" failures="0">
+    <testcase name="Log Injection log injection with rule based sampling should correctly apply rule based sampling when log injection is enabled" time="2.453" classname="should correctly apply rule based sampling when log injection is enabled">
+    </testcase>
+    <testcase name="Log Injection log injection with rule based sampling should correctly apply rule based sampling when log injection is disabled" time="2.185" classname="should correctly apply rule based sampling when log injection is disabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="OpenTelemetry Logs Integration" timestamp="2025-10-21T17:09:20" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry-logs.spec.js" time="8.201" failures="2">
+    <testcase name="OpenTelemetry Logs Integration should send OTLP logs to test agent and receive 200" time="0.002" classname="should send OTLP logs to test agent and receive 200">
+      <failure message="connect ECONNREFUSED 127.0.0.1:4318" type="Error"><![CDATA[Error: connect ECONNREFUSED 127.0.0.1:4318
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)]]></failure>
+    </testcase>
+    <testcase name="OpenTelemetry Logs Integration should receive 400 when sending protobuf to JSON endpoint" time="0.000" classname="should receive 400 when sending protobuf to JSON endpoint">
+      <failure message="connect ECONNREFUSED 127.0.0.1:4318" type="Error"><![CDATA[Error: connect ECONNREFUSED 127.0.0.1:4318
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="opentelemetry" timestamp="2025-10-21T17:09:28" tests="9" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js" time="32.408" failures="1">
+    <testcase name="opentelemetry should not capture telemetry DD and OTEL vars don&apos;t conflict" time="2.038" classname="should not capture telemetry DD and OTEL vars don&apos;t conflict">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry if both DD and OTEL env vars are set" time="1.667" classname="should capture telemetry if both DD and OTEL env vars are set">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry when OTEL env vars are invalid" time="1.662" classname="should capture telemetry when OTEL env vars are invalid">
+    </testcase>
+    <testcase name="opentelemetry should start a trace in isolation" time="0.153" classname="should start a trace in isolation">
+    </testcase>
+    <testcase name="opentelemetry should capture telemetry" time="1.646" classname="should capture telemetry">
+    </testcase>
+    <testcase name="opentelemetry should capture auto-instrumentation telemetry" time="5.041" classname="should capture auto-instrumentation telemetry">
+    </testcase>
+    <testcase name="opentelemetry should work within existing datadog-traced http request" time="0.168" classname="should work within existing datadog-traced http request">
+    </testcase>
+    <testcase name="opentelemetry should work with otel express &amp; http auto instrumentation" time="5.041" classname="should work with otel express &amp; http auto instrumentation">
+    </testcase>
+    <testcase name="opentelemetry should auto-instrument @opentelemetry/sdk-node" time="5.003" classname="should auto-instrument @opentelemetry/sdk-node">
+      <failure message="timeout, additionally:
+AssertionError: expected 2 to equal 1
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js:464:14
+    at FakeAgent.messageHandler (/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:152:9)
+    at FakeAgent.emit (node:events:508:28)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:289:11
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/route.js:117:3)
+    at handle (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:435:11)
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:295:15
+    at processParams (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:582:12)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:291:5)
+    at jsonParser (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/types/json.js:89:7)
+    at Layer.handleRequest (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:342:13)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:297:9
+    at processParams (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:582:12)
+    at next (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:291:5)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/read.js:132:5
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:238:16)
+    at done (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (/Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+===
+" type="Error"><![CDATA[Error: timeout, additionally:
+AssertionError: expected 2 to equal 1
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/opentelemetry.spec.js:464:14
+    at FakeAgent.messageHandler (integration-tests/helpers/fake-agent.js:152:9)
+    at FakeAgent.emit (node:events:508:28)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/helpers/fake-agent.js:289:11
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at next (node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (node_modules/router/lib/route.js:117:3)
+    at handle (node_modules/router/index.js:435:11)
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:295:15
+    at processParams (node_modules/router/index.js:582:12)
+    at next (node_modules/router/index.js:291:5)
+    at jsonParser (node_modules/body-parser/lib/types/json.js:89:7)
+    at Layer.handleRequest (node_modules/router/lib/layer.js:152:17)
+    at trimPrefix (node_modules/router/index.js:342:13)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/router/index.js:297:9
+    at processParams (node_modules/router/index.js:582:12)
+    at next (node_modules/router/index.js:291:5)
+    at /Users/mikayla.toffler/datadogrepos/dd-trace-js/node_modules/body-parser/lib/read.js:132:5
+    at AsyncResource.runInAsyncScope (node:async_hooks:214:14)
+    at invokeCallback (node_modules/raw-body/index.js:238:16)
+    at done (node_modules/raw-body/index.js:227:7)
+    at IncomingMessage.onEnd (node_modules/raw-body/index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+===
+
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="package guardrails" timestamp="2025-10-21T17:10:01" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when package is out of range" timestamp="2025-10-21T17:10:01" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:10:05" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.559" failures="0">
+    <testcase name="package guardrails when package is out of range with DD_INJECTION_ENABLED should not instrument the package, and send telemetry" time="0.559" classname="should not instrument the package, and send telemetry">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging disabled" timestamp="2025-10-21T17:10:05" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="1.010" failures="0">
+    <testcase name="package guardrails when package is out of range with logging disabled should not instrument the package" time="1.009" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging enabled" timestamp="2025-10-21T17:10:06" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="1.549" failures="0">
+    <testcase name="package guardrails when package is out of range with logging enabled should not instrument the package" time="1.009" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package is in range" timestamp="2025-10-21T17:10:08" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when bluebird is 2.9.0" timestamp="2025-10-21T17:10:08" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="4.725" failures="0">
+    <testcase name="package guardrails when package is in range when bluebird is 2.9.0 should instrument the package" time="0.475" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when bluebird is 3.7.2" timestamp="2025-10-21T17:10:13" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="4.847" failures="0">
+    <testcase name="package guardrails when package is in range when bluebird is 3.7.2 should instrument the package" time="0.544" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package is in range (fastify)" timestamp="2025-10-21T17:10:17" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="when fastify is latest" timestamp="2025-10-21T17:10:17" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="5.435" failures="0">
+    <testcase name="package guardrails when package is in range (fastify) when fastify is latest should instrument the package" time="0.449" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when fastify is latest and logging enabled" timestamp="2025-10-21T17:10:23" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="5.571" failures="0">
+    <testcase name="package guardrails when package is in range (fastify) when fastify is latest and logging enabled should instrument the package" time="0.448" classname="should instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="when package errors out" timestamp="2025-10-21T17:10:28" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="with DD_INJECTION_ENABLED" timestamp="2025-10-21T17:10:32" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.401" failures="0">
+    <testcase name="package guardrails when package errors out with DD_INJECTION_ENABLED should not instrument the package, and send telemetry" time="0.401" classname="should not instrument the package, and send telemetry">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging disabled" timestamp="2025-10-21T17:10:33" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.124" failures="0">
+    <testcase name="package guardrails when package errors out with logging disabled should not instrument the package" time="0.124" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="with logging enabled" timestamp="2025-10-21T17:10:33" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/package-guardrails.spec.js" time="0.604" failures="0">
+    <testcase name="package guardrails when package errors out with logging enabled should not instrument the package" time="0.124" classname="should not instrument the package">
+    </testcase>
+  </testsuite>
+  <testsuite name="pino test" timestamp="2025-10-21T17:10:33" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/pino.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="Log injection" timestamp="2025-10-21T17:10:37" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/pino.spec.js" time="1.153" failures="0">
+    <testcase name="pino test Log injection Log injection enabled by default" time="0.393" classname="Log injection enabled by default">
+    </testcase>
+    <testcase name="pino test Log injection Log injection enabled" time="0.123" classname="Log injection enabled">
+    </testcase>
+    <testcase name="pino test Log injection Log injection disabled" time="0.120" classname="Log injection disabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="Remote config client id" timestamp="2025-10-21T17:10:38" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="enabled" timestamp="2025-10-21T17:10:43" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.405" failures="0">
+    <testcase name="Remote config client id enabled should add client_id tag when remote config is enabled" time="0.009" classname="should add client_id tag when remote config is enabled">
+    </testcase>
+  </testsuite>
+  <testsuite name="disabled" timestamp="2025-10-21T17:10:43" tests="1" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/remote_config.spec.js" time="0.635" failures="0">
+    <testcase name="Remote config client id disabled should not add client_id tag when remote config is disbaled" time="0.008" classname="should not add client_id tag when remote config is disbaled">
+    </testcase>
+  </testsuite>
+  <testsuite name="startup " timestamp="2025-10-21T17:10:44" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T17:10:47" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.489" failures="0">
+    <testcase name="startup  programmatic works for options.port" time="2.367" classname="works for options.port">
+    </testcase>
+    <testcase name="startup  programmatic saves tracer configuration on disk" time="0.000" classname="saves tracer configuration on disk">
+    </testcase>
+    <testcase name="startup  programmatic works for options.url" time="2.118" classname="works for options.url">
+    </testcase>
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T17:10:52" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.240" failures="0">
+    <testcase name="startup  env var works for DD_TRACE_AGENT_PORT" time="2.121" classname="works for DD_TRACE_AGENT_PORT">
+    </testcase>
+    <testcase name="startup  env var works for DD_TRACE_AGENT_URL" time="2.115" classname="works for DD_TRACE_AGENT_URL">
+    </testcase>
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T17:10:56" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="60.872" failures="2">
+    <testcase name="startup  default works for hostname and port" time="30.110" classname="works for hostname and port">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+    <testcase name="startup  default works with stealthy-require" time="30.117" classname="works with stealthy-require">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="startup --import dd-trace/register.js" timestamp="2025-10-21T17:11:57" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T17:12:02" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.681" failures="0">
+    <testcase name="startup --import dd-trace/register.js programmatic works for options.port" time="2.498" classname="works for options.port">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js programmatic saves tracer configuration on disk" time="0.000" classname="saves tracer configuration on disk">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js programmatic works for options.url" time="2.179" classname="works for options.url">
+    </testcase>
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T17:12:07" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="4.345" failures="0">
+    <testcase name="startup --import dd-trace/register.js env var works for DD_TRACE_AGENT_PORT" time="2.175" classname="works for DD_TRACE_AGENT_PORT">
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js env var works for DD_TRACE_AGENT_URL" time="2.166" classname="works for DD_TRACE_AGENT_URL">
+    </testcase>
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T17:12:11" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="61.239" failures="2">
+    <testcase name="startup --import dd-trace/register.js default works for hostname and port" time="30.168" classname="works for hostname and port">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+    <testcase name="startup --import dd-trace/register.js default works with stealthy-require" time="30.445" classname="works with stealthy-require">
+      <failure message="timeout" type="Error"><![CDATA[Error: timeout
+    at Timeout.<anonymous> (integration-tests/helpers/fake-agent.js:135:20)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)]]></failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="startup --loader dd-trace/loader-hook.mjs" timestamp="2025-10-21T17:13:13" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="programmatic" timestamp="2025-10-21T17:13:13" tests="3" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="env var" timestamp="2025-10-21T17:13:13" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="default" timestamp="2025-10-21T17:13:13" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/startup.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="telemetry" timestamp="2025-10-21T17:13:13" tests="0" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/telemetry.spec.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="dependencies" timestamp="2025-10-21T17:13:13" tests="2" file="/Users/mikayla.toffler/datadogrepos/dd-trace-js/integration-tests/telemetry.spec.js" time="5.549" failures="0">
+    <testcase name="telemetry dependencies Test that tracer and iitm are sent as dependencies" time="0.005" classname="Test that tracer and iitm are sent as dependencies">
+    </testcase>
+    <testcase name="telemetry dependencies Assert configuration chaining data is sent" time="0.002" classname="Assert configuration chaining data is sent">
+    </testcase>
+  </testsuite>
+</testsuites>

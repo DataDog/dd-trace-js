@@ -1,0 +1,1 @@
+library_entrypoint	{"metadata":{"language_name":"nodejs","language_version":"24.10.0","runtime_name":"nodejs","runtime_version":"24.10.0","tracer_version":"6.0.0-pre","pid":92537,"result":"success","result_reason":"Successfully configured ddtrace package","result_class":"success"},"points":[{"name":"library_entrypoint.complete","tags":["injection_forced:false"]}]}
