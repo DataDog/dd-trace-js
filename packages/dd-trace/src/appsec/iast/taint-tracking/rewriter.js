@@ -189,7 +189,6 @@ function isEsmConfigured () {
 
   // Check if import-in-the-middle loader has been set up via a global flag
   // This is set by loader-hook.mjs when ESM loader is active
-  console.log('__DD_ESM_LOADER_ACTIVE__', globalThis.__DD_ESM_LOADER_ACTIVE__)
   if (globalThis.__DD_ESM_LOADER_ACTIVE__) {
     return true
   }
