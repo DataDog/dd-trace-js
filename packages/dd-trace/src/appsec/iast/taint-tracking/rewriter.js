@@ -187,11 +187,13 @@ function isEsmConfigured () {
   const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
   if (hasLoaderArg) return true
 
-  // Fast path for common case when enabled
-  if (require.cache[`${process.cwd()}/node_modules/import-in-the-middle/hook.js`]) {
+  // Check if import-in-the-middle loader has been set up via a global flag
+  // This is set by loader-hook.mjs when ESM loader is active
+  if (globalThis.__DD_ESM_LOADER_ACTIVE__) {
     return true
   }
-  return Object.keys(require.cache).some(file => file.endsWith('import-in-the-middle/hook.js'))
+
+  return false
 }
 
 let enableEsmRewriter = function (telemetryVerbosity) {
