@@ -150,34 +150,40 @@ async function assertVersions (rootFolder, parent = '') {
     }
 
     install(folder)
+    await assertPeerDependencies(folder, join(parent, entry.split('@')[0]))
+    install(folder)
+  }
+}
 
-    const externalName = join(parent, entry.split('@')[0])
+/**
+ * @param {object} folder
+ * @param {string} externalName
+ */
+async function assertPeerDependencies (folder, externalName) {
+  if (!externalDeps.has(externalName)) return
 
-    if (!externalDeps.has(externalName)) continue
+  const versionPkgJsonPath = join(folder, 'package.json')
+  const versionPkgJson = require(versionPkgJsonPath)
 
-    const versionPkgJsonPath = join(folder, 'package.json')
-    const versionPkgJson = require(versionPkgJsonPath)
+  for (const { dep, name } of externalDeps.get(externalName)) {
+    const pkgJsonPath = require(folder).pkgJsonPath()
+    const pkgJson = require(pkgJsonPath)
 
-    for (const { dep, name } of externalDeps.get(externalName)) {
-      const pkgJsonPath = require(folder).pkgJsonPath()
-      const pkgJson = require(pkgJsonPath)
-
-      for (const section of ['devDependencies', 'peerDependencies']) {
-        if (pkgJson[section]?.[name]) {
-          if (dep === externalName) {
-            versionPkgJson.dependencies[name] = pkgJson.version
-          } else {
-            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
-              // Use the first version in the list (as npm does by default)
-              ? pkgJson[section][name].split('||')[0].trim()
-              // Only one version available so use that.
-              : pkgJson[section][name]
-          }
-
-          await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
-
-          break
+    for (const section of ['devDependencies', 'peerDependencies']) {
+      if (pkgJson[section]?.[name]) {
+        if (dep === externalName) {
+          versionPkgJson.dependencies[name] = pkgJson.version
+        } else {
+          versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+            // Use the first version in the list (as npm does by default)
+            ? pkgJson[section][name].split('||')[0].trim()
+            // Only one version available so use that.
+            : pkgJson[section][name]
         }
+
+        await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+        break
       }
     }
   }
