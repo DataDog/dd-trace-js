@@ -1,6 +1,6 @@
 'use strict'
 
-const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
@@ -18,7 +18,6 @@ const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require
 const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 // List of trusted transitive dependencies to execute scripts for.
 const trustedList = ['libpq']
-const workspaces = new Set()
 const externalDeps = new Map()
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
@@ -31,11 +30,10 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
 run()
 
 async function run () {
-  await assertPrerequisites()
-  await assertVersions(join(__dirname, '..', 'versions'))
+  await assertVersions()
 }
 
-async function assertPrerequisites () {
+async function assertVersions () {
   const filter = process.env.PLUGINS?.split('|')
 
   const moduleNames = (await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src')))
@@ -124,35 +122,19 @@ async function assertPackage (name, version, dependencyVersionRange) {
     trustedDependencies: [name, ...trustedList]
   }
 
-  addFolderToWorkspaces(name, version)
+  if (excludeList.includes(name)) return
+
+  const versionFolder = folder(name, version)
+
   await assertFolder(name, version)
   await Promise.all([
     writeFile(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n'),
     assertIndex(name, version)
   ])
-}
 
-/**
- * @param {object} rootFolder
- * @param {string} parent
- */
-async function assertVersions (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
+  install(versionFolder)
 
-  for (const entry of entries) {
-    const folder = join(rootFolder, entry)
-
-    if (!(await lstat(folder)).isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (entry.startsWith('@')) {
-      await assertVersions(folder, entry)
-      continue
-    }
-
-    install(folder)
-    await assertPeerDependencies(folder, join(parent, entry.split('@')[0]))
-    install(folder)
-  }
+  await assertPeerDependencies(versionFolder, name)
 }
 
 /**
@@ -165,11 +147,28 @@ async function assertPeerDependencies (folder, externalName) {
   const versionPkgJsonPath = join(folder, 'package.json')
   const versionPkgJson = require(versionPkgJsonPath)
 
+  let hasPeer = false
+
   for (const { dep, name } of externalDeps.get(externalName)) {
-    const pkgJsonPath = require(folder).pkgJsonPath()
+    const pkgJsonPath = join(folder, 'node_modules', externalName, 'package.json')
     const pkgJson = require(pkgJsonPath)
 
-    for (const section of ['devDependencies', 'peerDependencies']) {
+    // Add missing dependency to the module. While this technically means the
+    // module is broken, a user could add the dependency manually as well, so we
+    // need to do the same thing in order to test that scenario.
+    if (dep !== name && typeof dep === 'string') {
+      versionPkgJson.dependencies[name] = dep
+
+      hasPeer = true
+
+      await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+      continue
+    }
+
+    // Actual peer dependencies are installed automatically by Bun, so we only
+    // need to manually install dev dependencies.
+    for (const section of ['devDependencies']) {
       if (pkgJson[section]?.[name]) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
@@ -181,11 +180,17 @@ async function assertPeerDependencies (folder, externalName) {
             : pkgJson[section][name]
         }
 
+        hasPeer = true
+
         await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
 
         break
       }
     }
+  }
+
+  if (hasPeer) {
+    install(folder)
   }
 }
 
@@ -246,14 +251,6 @@ function install (cwd, retry = true) {
     if (!retry) throw err
     install(cwd, false) // retry in case of server error from registry
   }
-}
-
-/**
- * @param {string} name
- * @param {string|null} [version]
- */
-function addFolderToWorkspaces (name, version) {
-  if (!excludeList.includes(name)) workspaces.add(basename(name, version))
 }
 
 /**

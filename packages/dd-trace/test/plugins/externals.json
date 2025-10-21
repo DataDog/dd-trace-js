@@ -382,7 +382,7 @@
   "moleculer": [
     {
       "name": "bluebird",
-      "versions": ["3.7.2"]
+      "dep": "3.7.2"
     }
   ],
   "mongodb-core": [
