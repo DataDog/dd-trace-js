@@ -175,6 +175,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords.length, 1)
         assert.strictEqual(decoded.resourceLogs[0].scopeLogs[0].logRecords[0].body.stringValue, 'before shutdown')
       })
+
       const { logs, loggerProvider } = setupTracer(true, '2')
       const logger1 = logs.getLogger('test-logger')
 
