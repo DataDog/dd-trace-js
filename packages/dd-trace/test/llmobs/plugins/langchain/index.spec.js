@@ -629,6 +629,7 @@ describe('integrations', () => {
             expect(secondLLMSpanEvent).to.deepEqualWithMockValues(expectedSecondLLM)
           })
 
+          // flaky test, skipping for now and will follow up in a different PR
           it.skip('submits workflow and llm spans for a batched chain', async () => {
             const prompt = langchainPrompts.ChatPromptTemplate.fromTemplate(
               'Tell me a joke about {topic}'
