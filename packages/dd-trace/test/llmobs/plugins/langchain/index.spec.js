@@ -456,7 +456,6 @@ describe('integrations', () => {
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
               inputData: 'Hello!',
-              metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
