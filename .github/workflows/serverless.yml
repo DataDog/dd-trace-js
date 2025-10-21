@@ -167,7 +167,7 @@ jobs:
           docker restart ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: npm install -g azure-functions-core-tools@4.1.0
+      - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
 
