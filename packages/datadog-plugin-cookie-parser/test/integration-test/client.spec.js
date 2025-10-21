@@ -15,7 +15,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       this.timeout(50000)
       sandbox = await createSandbox([`'cookie-parser@${version}'`, 'express'], false,
         ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'cookie-parser', undefined, 'cookieParser')
+      variants = varySandbox(sandbox, 'server.mjs', 'cookie-parser', 'cookieParser')
     })
 
     after(async function () {
@@ -28,7 +28,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
 
@@ -36,8 +36,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
         const response = await curl(proc)
-        const counterValue = response.headers['x-counter']
-        assert.equal(counterValue, '1')
+        assert.equal(response.headers['x-counter'], '1')
       })
     }
   })
