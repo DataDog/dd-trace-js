@@ -224,10 +224,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.7.0.tgz#81e07d3040c628892db697ccd01ae3c4d2a76315"
   integrity sha512-VVZLspzQcfEU47gmGCVoRkngn7RgFRR4CHjw4YaX8eWT+xz4Q4l6PvA45b7CMk9nlt3MNN5MtGdYttYMIpo6Sg==
 
-"@datadog/native-appsec@10.2.1":
-  version "10.2.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-10.2.1.tgz#1f62ceefb8e1686b202703ee6c3f245f4dff2d70"
-  integrity sha512-FwRVo+otgNaz6vN74XVrBT8GdLwxPwAqOjH4Y9VQJaC1RiHmzRCMr77AhHFme1xi7zPG2LQqQN/cmOzG+sbrtQ==
+"@datadog/native-appsec@10.3.0":
+  version "10.3.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-10.3.0.tgz#f13b0c7bf8850e439ac4f9ddeaa4eee777da38c1"
+  integrity sha512-FjNhxKetbBVGiq+dl8NYoi/95IAYU+W7PjBceNP7Qkvbt8uhy+KTlQVW1A2X67mK0CKHahDTesBMaPwY9zhflw==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -718,7 +718,14 @@
   resolved "https://registry.yarnpkg.com/@opentelemetry/api/-/api-1.9.0.tgz#d03eba68273dc0f7509e2a3d5cba21eae10379fe"
   integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==
 
-"@opentelemetry/core@1.30.1", "@opentelemetry/core@>=1.14.0 <1.31.0":
+"@opentelemetry/core@1.9.1":
+  version "1.9.1"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/core/-/core-1.9.1.tgz#e343337e1a7bf30e9a6aef3ef659b9b76379762a"
+  integrity sha512-6/qon6tw2I8ZaJnHAQUUn4BqhTbTNRS0WP8/bA0ynaX+Uzp/DDbd0NS0Cq6TMlh8+mrlsyqDE7mO50nmv2Yvlg==
+  dependencies:
+    "@opentelemetry/semantic-conventions" "1.9.1"
+
+"@opentelemetry/core@>=1.14.0 <1.31.0":
   version "1.30.1"
   resolved "https://registry.yarnpkg.com/@opentelemetry/core/-/core-1.30.1.tgz#a0b468bb396358df801881709ea38299fc30ab27"
   integrity sha512-OOCM2C/QIURhJMuKaekP3TRBxBKxG/TWWA0TL2J6nXUtDnuCtccy49LUJF8xPFXMX+0LMcxFpCo8M9cGY1W6rQ==
@@ -737,6 +744,11 @@
   version "1.28.0"
   resolved "https://registry.yarnpkg.com/@opentelemetry/semantic-conventions/-/semantic-conventions-1.28.0.tgz#337fb2bca0453d0726696e745f50064411f646d6"
   integrity sha512-lp4qAiMTD4sNWW4DbKLBkfiMZ4jbAboJIGOQr5DvciMRI494OapieI9qiODpOt0XBr1LjIDy1xAGAnVs5supTA==
+
+"@opentelemetry/semantic-conventions@1.9.1":
+  version "1.9.1"
+  resolved "https://registry.yarnpkg.com/@opentelemetry/semantic-conventions/-/semantic-conventions-1.9.1.tgz#ad3367684a57879392513479e0a436cb2ac46dad"
+  integrity sha512-oPQdbFDmZvjXk5ZDoBGXG8B4tSB/qW5vQunJWQMFUBp7Xe8O1ByPANueJ+Jzg58esEBegyyxZ7LRmfJr7kFcFg==
 
 "@pkgjs/parseargs@^0.11.0":
   version "0.11.0"
