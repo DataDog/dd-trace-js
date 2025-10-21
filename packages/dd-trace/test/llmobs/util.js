@@ -47,7 +47,7 @@ function assertWithMockValues (actual, expected, key) {
   } else if (expected === MOCK_OBJECT) {
     assert.equal(typeof actual, 'object', `${actualWithName} (${util.inspect(actual)}) is not an object`)
   } else if (expected === MOCK_ANY) {
-    assert.ok(actual !== undefined || actual !== null, `${actualWithName} does not exist`)
+    assert.ok(actual != null, `${actualWithName} does not exist`)
   } else if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `${actualWithName} (${util.inspect(actual)}) is not an array`)
     assert.equal(
