@@ -2,6 +2,7 @@
 
 const reporterEnabled = ['spec']
 
+// eslint-disable-next-line eslint-rules/eslint-process-env
 if (process.env.CI) {
   reporterEnabled.push('mocha-junit-reporter')
 }
