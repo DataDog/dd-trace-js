@@ -144,6 +144,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   bunyan:
     runs-on: ubuntu-latest
     env:
@@ -249,6 +259,16 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  connect:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: connect
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   cookie-parser:
     runs-on: ubuntu-latest
     env:
@@ -298,16 +318,6 @@ jobs:
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
-
-  connect:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: connect
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   dns:
     runs-on: ubuntu-latest
