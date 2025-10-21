@@ -3999,6 +3999,55 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
       })
     })
+
+    it('does not crash if the request to get test management tests fails', async () => {
+      let testOutput = ''
+      receiver.setSettings({
+        test_management: { enabled: true },
+        flaky_test_retries_enabled: false
+      })
+      receiver.setTestManagementTestsResponseCode(500)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // it is not retried
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-management/test-attempt-to-fix-1.js'
+            ]),
+            DD_TRACE_DEBUG: '1'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        eventsPromise
+      ])
+      assert.include(testOutput, 'Test management tests could not be fetched')
+    })
   })
 
   context('libraries capabilities', () => {
