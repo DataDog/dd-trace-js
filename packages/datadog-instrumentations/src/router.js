@@ -5,10 +5,6 @@ const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
-// Routes declared on a router before mounting only hit router instrumentation.
-// Publishing them to the Express channel keeps telemetry aware of full path
-const expressRouteAddedChannel = channel('apm:express:route:added')
-
 const {
   getRouterMountPaths,
   joinPath,
@@ -166,7 +162,7 @@ function createWrapRouterMethod (name) {
       }
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
-      if (expressRouteAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
+      if (routeAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
         if (original.name === 'use' && otherArgs.length >= 1) {
           const { mountPaths, startIdx } = extractMountPaths(fn)
@@ -204,7 +200,7 @@ function createWrapRouterMethod (name) {
             const fullPaths = mountPaths.flatMap(mountPath => getRouteFullPaths(route, mountPath))
 
             wrapRouteMethodsAndPublish(route, fullPaths, (payload) => {
-              expressRouteAddedChannel.publish(payload)
+              routeAddedChannel.publish(payload)
             })
           }
         }

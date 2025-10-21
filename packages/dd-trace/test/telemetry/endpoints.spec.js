@@ -13,6 +13,7 @@ const originalSetImmediate = global.setImmediate
 describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
   const expressRouteCh = dc.channel('apm:express:route:added')
+  const routerRouteCh = dc.channel('apm:router:route:added')
   const application = 'test'
   const host = 'host'
 
@@ -31,7 +32,7 @@ describe('endpoints telemetry', () => {
       const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
       endpoints.start(config)
 
-      expect(subscribe).to.have.been.calledTwice
+      expect(subscribe).to.have.been.calledThrice
     })
 
     it('should not subscribe', () => {
@@ -178,6 +179,18 @@ describe('endpoints telemetry', () => {
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
       expect(resources).to.deep.equal(['* /all'])
+    })
+
+    it('should handle router routes the same way as express routes', () => {
+      routerRouteCh.publish({ method: 'GET', path: '/router-test' })
+
+      scheduledCallbacks.forEach(cb => cb())
+
+      expect(sendData).to.have.been.calledOnce
+      const payload = sendData.firstCall.args[4]
+      const resources = payload.endpoints.map(e => e.resource_name)
+      expect(resources).to.include('GET /router-test')
+      expect(resources).to.include('HEAD /router-test')
     })
 
     describe('on failed request', () => {

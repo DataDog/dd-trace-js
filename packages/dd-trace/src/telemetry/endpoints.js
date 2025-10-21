@@ -5,6 +5,7 @@ const { sendData } = require('./send-data')
 
 const fastifyRouteCh = dc.channel('apm:fastify:route:added')
 const expressRouteCh = dc.channel('apm:express:route:added')
+const routerRouteCh = dc.channel('apm:router:route:added')
 
 let config
 let application
@@ -130,11 +131,13 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
 
   fastifyRouteCh.subscribe(onFastifyRoute)
   expressRouteCh.subscribe(onExpressRoute)
+  routerRouteCh.subscribe(onExpressRoute)
 }
 
 function stop () {
   fastifyRouteCh.unsubscribe(onFastifyRoute)
   expressRouteCh.unsubscribe(onExpressRoute)
+  routerRouteCh.unsubscribe(onExpressRoute)
 
   pendingEndpoints.clear()
   flushScheduled = false
