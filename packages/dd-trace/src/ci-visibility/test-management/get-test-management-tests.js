@@ -54,7 +54,7 @@ function getTestManagementTests ({
     }
   })
 
-  log.debug('Requesting test management tests: %j', data)
+  log.debug('Requesting test management tests: %s', data)
 
   request(data, options, (err, res) => {
     if (err) {
@@ -63,7 +63,7 @@ function getTestManagementTests ({
       try {
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
 
-        lo
+        log.debug('Test management tests received: %j', testManagementTests)
 
         done(null, testManagementTests)
       } catch (err) {
