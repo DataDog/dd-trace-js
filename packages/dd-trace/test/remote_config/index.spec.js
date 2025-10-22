@@ -99,6 +99,13 @@ describe('Remote Config index', () => {
       expect(rc.setProductHandler).to.not.have.been.called
     })
 
+    it('should always enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
+      remoteConfig.enable(config)
+
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
+    })
+
     describe('ASM_FEATURES remote config listener', () => {
       let listener
 

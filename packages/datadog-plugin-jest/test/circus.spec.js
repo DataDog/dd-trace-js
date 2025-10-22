@@ -80,7 +80,9 @@ describe('Plugin', function () {
   this.timeout(testTimeout)
   this.retries(2)
 
-  withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
+  const versions = ['jest-environment-node', 'jest-environment-jsdom']
+
+  withVersions('jest', versions, (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_API_KEY
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))

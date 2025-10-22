@@ -34,6 +34,7 @@ describe('Plugin', function () {
     beforeEach(() => {
       return agent.load()
     })
+
     beforeEach(function (done) {
       // This test does not check test optimization agentless protocol,
       // so we'll make the tracer default to reporting to v0.4/traces
@@ -46,7 +47,9 @@ describe('Plugin', function () {
         done()
       })
     })
+
     afterEach(() => agent.close({ ritmReset: false }))
+
     afterEach(done => {
       appServer.close(done)
     })

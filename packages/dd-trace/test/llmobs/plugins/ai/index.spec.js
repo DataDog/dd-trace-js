@@ -17,6 +17,7 @@ const {
   MOCK_NUMBER,
   MOCK_OBJECT
 } = require('../../util')
+const assert = require('node:assert')
 
 chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
@@ -37,11 +38,14 @@ describe('Plugin', () => {
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
+    let openaiVersion
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
+      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      openaiVersion = OpenAIModule.version()
+      const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
@@ -276,6 +280,15 @@ describe('Plugin', () => {
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
       expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmobsSpans[1].metrics.input_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.input_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.output_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.output_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.total_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.total_tokens > 0)
     })
 
     it('creates a span for streamObject', async () => {
@@ -335,11 +348,20 @@ describe('Plugin', () => {
 
       expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
       expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmobsSpans[1].metrics.input_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.input_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.output_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.output_tokens > 0)
+      assert.ok(typeof llmobsSpans[1].metrics.total_tokens === 'number')
+      assert.ok(llmobsSpans[1].metrics.total_tokens > 0)
     })
 
     it('creates a span for a tool call', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -360,7 +382,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -372,7 +394,15 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
+      }
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
       }
 
       await ai.generateText({
@@ -380,7 +410,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -390,9 +420,16 @@ describe('Plugin', () => {
       const toolCallSpan = llmobsSpans[2]
       const llmSpan2 = llmobsSpans[3]
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
-        : 'The current weather in Tokyo is 72°F.'
+      let expectedFinalOutput
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput = 'The current temperature in Tokyo is 72°F.'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -494,7 +531,7 @@ describe('Plugin', () => {
 
     it('created a span for a tool call from a stream', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -515,7 +552,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -527,7 +564,15 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
+      }
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
       }
 
       const result = await ai.streamText({
@@ -535,7 +580,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
 
       const textStream = result.textStream
@@ -549,9 +594,17 @@ describe('Plugin', () => {
       const toolCallSpan = llmobsSpans[2]
       const llmSpan2 = llmobsSpans[3]
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
-        : 'The current weather in Tokyo is 72°F.'
+      let expectedFinalOutput
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput =
+        'The current temperature in Tokyo is 72°F. If you need more detailed weather information, feel free to ask!'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
       const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
         span: apmSpans[0],
@@ -658,6 +711,76 @@ describe('Plugin', () => {
       expect(llmSpan).to.deepEqualWithMockValues(expectedLlmSpan)
       expect(toolCallSpan).to.deepEqualWithMockValues(expectedToolCallSpan)
       expect(llmSpan2).to.deepEqualWithMockValues(expectedLlmSpan2)
+
+      // manually asserting the token metrics are set correctly
+      // TODO(MLOB-4234): the llmobs span event assertions are slightly buggy and need to be re-worked
+      assert.ok(typeof llmSpan.metrics.input_tokens === 'number')
+      assert.ok(llmSpan.metrics.input_tokens > 0)
+      assert.ok(typeof llmSpan.metrics.output_tokens === 'number')
+      assert.ok(llmSpan.metrics.output_tokens > 0)
+      assert.ok(typeof llmSpan.metrics.total_tokens === 'number')
+      assert.ok(llmSpan.metrics.total_tokens > 0)
+
+      assert.ok(typeof llmSpan2.metrics.input_tokens === 'number')
+      assert.ok(llmSpan2.metrics.input_tokens > 0)
+      assert.ok(typeof llmSpan2.metrics.output_tokens === 'number')
+      assert.ok(llmSpan2.metrics.output_tokens > 0)
+      assert.ok(typeof llmSpan2.metrics.total_tokens === 'number')
+      assert.ok(llmSpan2.metrics.total_tokens > 0)
+    })
+
+    it('creates a span that respects the functionId', async () => {
+      await ai.generateText({
+        model: openai('gpt-4o-mini'),
+        system: 'You are a helpful assistant',
+        prompt: 'Hello, OpenAI!',
+        maxTokens: 100,
+        temperature: 0.5,
+        experimental_telemetry: {
+          functionId: 'test'
+        }
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents()
+
+      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+        span: apmSpans[0],
+        name: 'test.generateText',
+        spanKind: 'workflow',
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
+        metadata: {
+          maxTokens: 100,
+          temperature: 0.5,
+          maxSteps: MOCK_NUMBER,
+          maxRetries: MOCK_NUMBER,
+        },
+        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+      })
+
+      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        name: 'test.doGenerate',
+        inputMessages: [
+          { content: 'You are a helpful assistant', role: 'system' },
+          { content: 'Hello, OpenAI!', role: 'user' }
+        ],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+        metadata: {
+          max_tokens: 100,
+          temperature: 0.5,
+        },
+        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+      })
+
+      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
+      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
   })
 })

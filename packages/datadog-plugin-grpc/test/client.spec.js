@@ -1,9 +1,8 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, afterEach } = require('mocha')
 const semver = require('semver')
-const getPort = require('get-port')
 
 const path = require('node:path')
 const Readable = require('node:stream').Readable
@@ -19,7 +18,7 @@ const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   let grpc
-  let port
+  let port = 0
   let server
   let tracer
 
@@ -42,8 +41,9 @@ describe('Plugin', () => {
       ClientService = ClientService || TestService
 
       if (server.bindAsync) {
-        server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+        server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
           if (err) return reject(err)
+          port = boundPort
 
           server.addService(TestService.service, service)
           server.start()
@@ -51,7 +51,7 @@ describe('Plugin', () => {
           resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
         })
       } else {
-        server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
+        port = server.bind('127.0.0.1:0', grpc.ServerCredentials.createInsecure())
         server.addService(TestService.service, service)
         server.start()
 
@@ -74,12 +74,6 @@ describe('Plugin', () => {
   }
 
   describe('grpc/client', () => {
-    beforeEach(() => {
-      return getPort().then(newPort => {
-        port = newPort
-      })
-    })
-
     afterEach(() => {
       server.forceShutdown()
     })

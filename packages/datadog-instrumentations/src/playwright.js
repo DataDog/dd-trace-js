@@ -21,7 +21,7 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
 const testManagementTestsCh = channel('ci:playwright:test-management-tests')
-const impactedTestsCh = channel('ci:playwright:modified-tests')
+const modifiedFilesCh = channel('ci:playwright:modified-files')
 const isModifiedCh = channel('ci:playwright:test:is-modified')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
@@ -59,7 +59,7 @@ let isTestManagementTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
-let modifiedTests = {}
+let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
@@ -593,11 +593,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
-        const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+        const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
         if (err) {
           isImpactedTestsEnabled = false
         } else {
-          modifiedTests = receivedModifiedTests
+          modifiedFiles = receivedModifiedFiles
         }
       } catch (err) {
         isImpactedTestsEnabled = false
@@ -772,7 +772,10 @@ addHook({
     if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
       return oldCreateRootSuite.apply(this, arguments)
     }
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+
+    const createRootSuiteReturnValue = await oldCreateRootSuite.apply(this, arguments)
+    // From v1.56.0 on, createRootSuite returns `{ rootSuite, topLevelProjects }`
+    const rootSuite = createRootSuiteReturnValue.rootSuite || createRootSuiteReturnValue
 
     const allTests = rootSuite.allTests()
 
@@ -816,7 +819,7 @@ addHook({
       await Promise.all(allTests.map(async (test) => {
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
-          modifiedTests
+          modifiedFiles
         })
         if (isModified) {
           test._ddIsModified = true
@@ -861,7 +864,7 @@ addHook({
       }
     }
 
-    return rootSuite
+    return createRootSuiteReturnValue
   }
 
   // We need to proxy the createRootSuite function because the function is not configurable

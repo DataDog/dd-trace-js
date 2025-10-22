@@ -20,9 +20,9 @@ const ddTraceInit = path.resolve(__dirname, '../../../../init')
 function exec (cmd, opts = {}) {
   const date = new Date()
   const time = [
-    String(date.getHours()).padStart(2, 0),
-    String(date.getMinutes()).padStart(2, 0),
-    String(date.getSeconds()).padStart(2, 0)
+    String(date.getHours()).padStart(2, '0'),
+    String(date.getMinutes()).padStart(2, '0'),
+    String(date.getSeconds()).padStart(2, '0')
   ].join(':')
   console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
@@ -184,7 +184,7 @@ module.exports = async function runWithOptions (options) {
 }
 
 if (require.main === module) {
-  const { PLUGINS } = process.env
+  const { PLUGINS = '' } = process.env
   const plugins = PLUGINS.split('|')
   ;(async () => {
     for (const plugin of plugins) {

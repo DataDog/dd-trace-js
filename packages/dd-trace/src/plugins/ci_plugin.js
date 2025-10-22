@@ -33,7 +33,7 @@ const {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getLibraryCapabilitiesTags,
   getPullRequestDiff,
-  getModifiedTestsFromDiff,
+  getModifiedFilesFromDiff,
   getPullRequestBaseBranch
 } = require('./util/test')
 const { getRepositoryRoot } = require('./util/git')
@@ -62,6 +62,7 @@ const {
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
+const id = require('../id')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -80,8 +81,27 @@ const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
 }
 
 const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
-  'vitest'
+  'vitest',
+  'jest',
+  'mocha',
+  'cucumber',
 ])
+
+function getTestSuiteLevelVisibilityTags (testSuiteSpan, testFramework) {
+  const testSuiteSpanContext = testSuiteSpan.context()
+
+  const suiteTags = {
+    [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
+    [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
+    [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
+    [TEST_MODULE]: testFramework
+  }
+
+  if (testSuiteSpanContext._parentId) {
+    suiteTags[TEST_MODULE_ID] = testSuiteSpanContext._parentId.toString(10)
+  }
+  return suiteTags
+}
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -89,6 +109,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
+    this._testSuiteSpansByTestSuite = new Map()
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
       const { onDone, isParallel, frameworkVersion } = ctx
@@ -254,11 +275,11 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+    this.addBind(`ci:${this.constructor.id}:modified-files`, (ctx) => {
       return ctx.currentStore
     })
 
-    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:modified-files`, ({ onDone }) => {
       const {
         [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
@@ -269,14 +290,62 @@ module.exports = class CiPlugin extends Plugin {
 
       if (baseBranchSha) {
         const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
-        const modifiedTests = getModifiedTestsFromDiff(diff)
-        if (modifiedTests) {
-          return onDone({ err: null, modifiedTests })
+        const modifiedFiles = getModifiedFilesFromDiff(diff)
+
+        if (modifiedFiles) {
+          return onDone({ err: null, modifiedFiles })
         }
       }
 
       // TODO: Add telemetry for this type of error
       return onDone({ err: new Error('No modified tests could have been retrieved') })
+    })
+
+    this.addSub(`ci:${this.constructor.id}:worker-report:trace`, traces => {
+      const formattedTraces = JSON.parse(traces)
+
+      for (const trace of formattedTraces) {
+        for (const span of trace) {
+          span.span_id = id(span.span_id)
+          span.trace_id = id(span.trace_id)
+          span.parent_id = id(span.parent_id)
+
+          if (span.name?.startsWith(`${this.constructor.id}.`)) {
+            // augment with git information (since it will not be available in the worker)
+            for (const key in this.testEnvironmentMetadata) {
+              // CAREFUL: this bypasses the metadata/metrics distinction
+              // Be careful not to pass numbers in `meta`
+              if (key.startsWith('git.')) {
+                span.meta[key] = this.testEnvironmentMetadata[key]
+              }
+            }
+          }
+
+          // Only test hooks run in the cucumber worker, so the test events do not have the
+          // test session, test module and test suite ids. We have to update them here.
+          if (span.name === 'cucumber.test' || span.name === 'mocha.test') {
+            const testSuite = span.meta[TEST_SUITE]
+            const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
+            if (!testSuiteSpan) {
+              log.warn(`Test suite span not found for test span with test suite ${testSuite}`)
+              continue
+            }
+
+            const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
+            span.meta = {
+              ...span.meta,
+              ...testSuiteTags
+            }
+          }
+        }
+        this.tracer._exporter.export(trace)
+      }
+    })
+
+    this.addSub(`ci:${this.constructor.id}:worker-report:logs`, (logsPayloads) => {
+      JSON.parse(logsPayloads).forEach(({ logMessage }) => {
+        this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, logMessage)
+      })
     })
   }
 

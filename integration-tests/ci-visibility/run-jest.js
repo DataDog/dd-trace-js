@@ -7,7 +7,7 @@ const options = {
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
-  coverage: !process.env.DISABLE_CODE_COVERAGE,
+  coverage: !!process.env.ENABLE_CODE_COVERAGE,
   runInBand: true,
   shard: process.env.TEST_SHARD || undefined
 }
@@ -23,6 +23,10 @@ if (process.env.OLD_RUNNER) {
 
 if (process.env.ENABLE_JSDOM) {
   options.testEnvironment = 'jsdom'
+}
+
+if (process.env.ENABLE_HAPPY_DOM) {
+  options.testEnvironment = '@happy-dom/jest-environment'
 }
 
 if (process.env.COLLECT_COVERAGE_FROM) {
