@@ -2,7 +2,8 @@
 
 const pkg = require('./pkg')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
-const { getEnvironmentVariables } = require('./config-helper')
+const { getEnvironmentVariable: getEnv } = require('./config-helper')
+const { isInServerlessEnvironment } = require('./serverless')
 
 // eslint-disable-next-line @stylistic/max-len
 const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
@@ -11,17 +12,10 @@ const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:ap
 // eslint-disable-next-line @stylistic/max-len
 const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
 
-const {
-  AWS_LAMBDA_FUNCTION_NAME,
-  FUNCTION_NAME,
-  K_SERVICE,
-  WEBSITE_SITE_NAME
-} = getEnvironmentVariables()
-
-const service = AWS_LAMBDA_FUNCTION_NAME ||
-  FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
-  K_SERVICE || // Google Cloud Function Name set by newer runtimes
-  WEBSITE_SITE_NAME || // set by Azure Functions
+const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
+  getEnv('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
+  getEnv('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
+  getEnv('WEBSITE_SITE_NAME') || // set by Azure Functions
   pkg.name ||
   'node'
 
@@ -66,7 +60,7 @@ module.exports = {
   baggageTagKeys: 'user.id,session.id,account.id',
   clientIpEnabled: false,
   clientIpHeader: null,
-  'crashtracking.enabled': true,
+  'crashtracking.enabled': !isInServerlessEnvironment(),
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
   dbmPropagationMode: 'disabled',
@@ -156,7 +150,7 @@ module.exports = {
   peerServiceMapping: {},
   plugins: true,
   port: '8126',
-  'profiling.enabled': undefined,
+  'profiling.enabled': isInServerlessEnvironment() ? false : undefined,
   'profiling.exporters': 'agent',
   'profiling.sourceMap': true,
   'profiling.longLivedThreshold': undefined,
