@@ -123,7 +123,7 @@ module.exports = class FakeAgent extends EventEmitter {
   // where multiple payloads are generated, and only one is expected to have the proper span (ie next.request),
   // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
   // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
-  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess = 1) {
     timeout = timeout || 30000
     let resultResolve
     let resultReject
