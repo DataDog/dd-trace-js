@@ -96,7 +96,7 @@ describe('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         expect(payload[2][0]).to.not.have.property('_dd.span_links')
       })
-      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false, DD_TRACE_FLUSH_INTERVAL: '2000' }
+      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false, ...spawnEnv }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, envVar)
       await res
     }).timeout(60000)
