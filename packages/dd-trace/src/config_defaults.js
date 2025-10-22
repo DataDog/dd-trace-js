@@ -3,6 +3,7 @@
 const pkg = require('./pkg')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
 const { getEnvironmentVariable: getEnv } = require('./config-helper')
+const { isInServerlessEnvironment } = require('./serverless')
 
 // eslint-disable-next-line @stylistic/max-len
 const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
@@ -19,6 +20,15 @@ const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
   'node'
 
 module.exports = {
+  apiKey: undefined,
+  appKey: undefined,
+  'installSignature.id': null,
+  'installSignature.time': null,
+  'installSignature.type': null,
+  'cloudPayloadTagging.requestsEnabled': false,
+  'cloudPayloadTagging.responsesEnabled': false,
+  'cloudPayloadTagging.maxDepth': 10,
+  'cloudPayloadTagging.rules': [],
   apmTracingEnabled: true,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
@@ -50,7 +60,7 @@ module.exports = {
   baggageTagKeys: 'user.id,session.id,account.id',
   clientIpEnabled: false,
   clientIpHeader: null,
-  'crashtracking.enabled': true,
+  'crashtracking.enabled': !isInServerlessEnvironment(),
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
   dbmPropagationMode: 'disabled',
@@ -140,7 +150,7 @@ module.exports = {
   peerServiceMapping: {},
   plugins: true,
   port: '8126',
-  'profiling.enabled': undefined,
+  'profiling.enabled': isInServerlessEnvironment() ? false : undefined,
   'profiling.exporters': 'agent',
   'profiling.sourceMap': true,
   'profiling.longLivedThreshold': undefined,
