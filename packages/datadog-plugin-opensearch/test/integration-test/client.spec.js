@@ -1,25 +1,29 @@
 'use strict'
 
-const { join } = require('node:path')
-
-const { assert } = require('chai')
-
 const {
   FakeAgent,
+  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { assert } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  const env = {
-    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
-  }
+  let sandbox
 
   withVersions('opensearch', '@opensearch-project/opensearch', version => {
-    insertVersionDep(__dirname, '@opensearch-project/opensearch', version)
+    before(async function () {
+      this.timeout(60000)
+      sandbox = await createSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
+        './packages/datadog-plugin-opensearch/test/integration-test/*'])
+    })
+
+    after(async () => {
+      await sandbox.remove()
+    })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -37,7 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'opensearch.query'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

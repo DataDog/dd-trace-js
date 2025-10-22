@@ -1,3 +1,4 @@
+import 'dd-trace/init.js'
 import mysql from 'mysql2'
 
 const conn = {
