@@ -236,6 +236,10 @@ async function assertWorkspaces () {
       packages: Array.from(workspaces)
     }
   }, null, 2) + '\n')
+  await writeFile(filename(null, null, 'bunfig.toml'), `[install]
+hoistPattern = []
+publicHoistPattern = []
+`)
 }
 
 /**
