@@ -13,6 +13,7 @@ const {
   MOCK_STRING,
   useLlmObs
 } = require('../../util')
+const semifies = require('semifies')
 
 const isDdTrace = iastFilter.isDdTrace
 
@@ -90,7 +91,7 @@ describe('integrations', () => {
       iastFilter.isDdTrace = isDdTrace
     })
 
-    withVersions('langchain', ['@langchain/core'], version => {
+    withVersions('langchain', ['@langchain/core'], (version, _, realVersion) => {
       describe('langchain', () => {
         beforeEach(() => {
           langchainOpenai = require(`../../../../../../versions/langchain@${version}`)
@@ -112,9 +113,15 @@ describe('integrations', () => {
             .get('@langchain/core/tools')
             .tool
 
-          MemoryVectorStore = require(`../../../../../../versions/@langchain/core@${version}`)
-            .get('langchain/vectorstores/memory')
-            .MemoryVectorStore
+          if (semifies(realVersion, '>=1.0')) {
+            MemoryVectorStore = require('../../../../../../versions/@langchain/classic@>=1.0')
+              .get('@langchain/classic/vectorstores/memory')
+              .MemoryVectorStore
+          } else {
+            MemoryVectorStore = require(`../../../../../../versions/langchain@${version}`)
+              .get('langchain/vectorstores/memory')
+              .MemoryVectorStore
+          }
         })
 
         describe('llm', () => {
