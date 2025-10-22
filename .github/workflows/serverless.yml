@@ -16,7 +16,7 @@ on:
 
 
 concurrency:
-  group: ${{ inputs.nightly-version && env.NIGHTLY_VERSION || github.workflow }}-${{ github.ref || github.run_id }}"
+  group: ${{ inputs.nightly-version && format('{0}-{1}', github.workflow, inputs.nightly-version) || github.workflow }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
