@@ -46,7 +46,7 @@
     "test:llmobs:sdk:ci": "nyc --no-clean --include \"packages/dd-trace/src/llmobs/**/*.js\" -- npm run test:llmobs:sdk",
     "test:llmobs:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/llmobs/plugins/@($(echo $PLUGINS))/*.spec.js\"",
     "test:llmobs:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/llmobs/**/*.js\" -- npm run test:llmobs:plugins",
-    "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
+    "test:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/@($(echo ${SPEC:-'*'})).spec.js\"",
     "test:plugins:ci": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
     "test:plugins:ci:flaky": "yarn services && nyc --no-clean --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins -- --bail --retries 2",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
@@ -122,10 +122,10 @@
   ],
   "dependencies": {
     "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "10.2.1",
+    "@datadog/native-appsec": "10.3.0",
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
-    "@datadog/openfeature-node-server": "0.1.0-preview.10",
+    "@datadog/openfeature-node-server": "0.1.0-preview.12",
     "@datadog/pprof": "5.11.1",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "4.0.1",
@@ -160,7 +160,7 @@
   },
   "peerDependencies": {
     "@openfeature/core": "^1.9.0",
-    "@openfeature/server-sdk": "~1.18.0"
+    "@openfeature/server-sdk": "~1.19.0"
   },
   "peerDependenciesMeta": {
     "@openfeature/core": {
@@ -176,7 +176,7 @@
     "@eslint/js": "^9.29.0",
     "@msgpack/msgpack": "^3.1.2",
     "@openfeature/core": "^1.8.1",
-    "@openfeature/server-sdk": "~1.18.0",
+    "@openfeature/server-sdk": "~1.19.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.10",
@@ -200,6 +200,8 @@
     "graphql": "*",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
+    "mocha-junit-reporter": "^2.2.1",
+    "mocha-multi-reporters": "^1.5.1",
     "multer": "^2.0.2",
     "nock": "^13.5.6",
     "nyc": "^15.1.0",

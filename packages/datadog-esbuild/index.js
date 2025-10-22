@@ -112,6 +112,14 @@ module.exports.setup = function (build) {
       ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
 ${build.initialOptions.banner.js}`
   }
+
+  try {
+    require.resolve('@openfeature/core')
+  } catch (error) {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@openfeature/core')
+  }
+
   const esmBuild = isESMBuild(build)
   if (esmBuild) {
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
