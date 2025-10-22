@@ -135,8 +135,6 @@ class OtlpTransformer extends OtlpTransformerBase {
             sum: dp.sum,
             bucketCounts: dp.bucketCounts || [],
             explicitBounds: dp.explicitBounds || [],
-            exemplars: [],
-            flags: 0,
             min: dp.min,
             max: dp.max
           })),
@@ -181,7 +179,7 @@ class OtlpTransformer extends OtlpTransformerBase {
             attributes: this._attributesToJson(dp.attributes),
             startTimeUnixNano: String(dp.startTimeUnixNano),
             timeUnixNano: String(dp.timeUnixNano),
-            count: dp.count,
+            count: dp.count || 0,
             sum: dp.sum,
             bucketCounts: dp.bucketCounts || [],
             explicitBounds: dp.explicitBounds || [],
@@ -219,21 +217,13 @@ class OtlpTransformer extends OtlpTransformerBase {
     const result = {
       attributes: this._transformAttributes(dataPoint.attributes),
       timeUnixNano: dataPoint.timeUnixNano,
-      exemplars: [],
-      flags: 0
     }
 
     if (dataPoint.startTimeUnixNano) {
       result.startTimeUnixNano = dataPoint.startTimeUnixNano
     }
 
-    // Determine if value is int or double
-    if (Number.isInteger(dataPoint.value)) {
-      result.asInt = dataPoint.value
-    } else {
-      result.asDouble = dataPoint.value
-    }
-
+    this.#assignNumberValue(result, dataPoint.value)
     return result
   }
 
@@ -251,13 +241,20 @@ class OtlpTransformer extends OtlpTransformerBase {
       result.startTimeUnixNano = String(dataPoint.startTimeUnixNano)
     }
 
-    if (Number.isInteger(dataPoint.value)) {
-      result.asInt = dataPoint.value
-    } else {
-      result.asDouble = dataPoint.value
-    }
-
+    this.#assignNumberValue(result, dataPoint.value)
     return result
+  }
+
+  /**
+   * Assigns the appropriate value field (asInt or asDouble) based on the value type.
+   * @private
+   */
+  #assignNumberValue (dataPoint, value) {
+    if (Number.isInteger(value)) {
+      dataPoint.asInt = value
+    } else {
+      dataPoint.asDouble = value
+    }
   }
 }
 
