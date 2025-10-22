@@ -21,7 +21,7 @@ concurrency:
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-  NIGHTLY_VERSION: ${{ inputs.nightly-version && format('{0}-{1}', inputs.nightly-version, 'nightly')
+  NIGHTLY_VERSION: ${{ inputs.nightly-version && format('{0}-{1}', inputs.nightly-version, 'nightly') }}
 
 jobs:
   tracing-macos:
