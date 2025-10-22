@@ -178,6 +178,121 @@ describe('path-line', function () {
         expect(results[1].column).to.be.equals(15)
       })
     })
+
+    describe('when dd-trace is bundled', () => {
+      let previousDDBasePath
+      const PROJECT_PATH = path.join(tmpdir, 'project-path')
+      const OUT_BUILD_PATH = path.join(tmpdir, 'build-path')
+
+      describe('with esbuild sourcemap', () => {
+        const DD_BASE_PATH = path.join(tmpdir, 'dd-tracer-path')
+
+        beforeEach(() => {
+          pathLine = proxyquire('../../../src/appsec/iast/path-line', {
+            process: mockProcess,
+            './taint-tracking/rewriter': {
+              getOriginalPathAndLineFromSourceMap: ({ path: filePath, line, column }) => {
+                return {
+                  path: path.join(line % 2 ? DD_BASE_PATH : PROJECT_PATH, 'file.js'),
+                  line,
+                  column
+                }
+              }
+            }
+          })
+
+          previousDDBasePath = pathLine.ddBasePath
+          pathLine.ddBasePath = DD_BASE_PATH
+          mockProcess.cwd = () => PROJECT_PATH
+        })
+
+        afterEach(() => {
+          pathLine.ddBasePath = previousDDBasePath
+        })
+
+        before(() => {
+          globalThis.__DD_ESBUILD_IAST_WITH_SM = true
+          globalThis.__DD_ESBUILD_IAST_WITH_NO_SM = false
+        })
+
+        after(() => {
+          delete globalThis.__DD_ESBUILD_IAST_WITH_SM
+          delete globalThis.__DD_ESBUILD_IAST_WITH_NO_SM
+        })
+
+        it('should return all non-DD entries', () => {
+          const callsites = []
+          const bundleOutFile = 'out.js'
+
+          callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 1))
+          callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 2, 14))
+          callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 3))
+          callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 4, 71))
+
+          const results = pathLine.getNonDDCallSiteFrames(callsites)
+          expect(results).to.have.lengthOf(2)
+
+          expect(results[0].path).to.be.equals('file.js')
+          expect(results[0].line).to.be.equals(2)
+          expect(results[0].column).to.be.equals(14)
+
+          expect(results[1].path).to.be.equals('file.js')
+          expect(results[1].line).to.be.equals(4)
+          expect(results[1].column).to.be.equals(71)
+        })
+      })
+
+      describe('no esbuild sourcemap', () => {
+        const DD_BASE_PATH = OUT_BUILD_PATH
+
+        beforeEach(() => {
+          previousDDBasePath = pathLine.ddBasePath
+          pathLine.ddBasePath = DD_BASE_PATH
+          mockProcess.cwd = () => OUT_BUILD_PATH
+        })
+
+        afterEach(() => {
+          pathLine.ddBasePath = previousDDBasePath
+        })
+
+        before(() => {
+          globalThis.__DD_ESBUILD_IAST_WITH_SM = false
+          globalThis.__DD_ESBUILD_IAST_WITH_NO_SM = true
+        })
+
+        after(() => {
+          delete globalThis.__DD_ESBUILD_IAST_WITH_SM
+          delete globalThis.__DD_ESBUILD_IAST_WITH_NO_SM
+        })
+
+        it('should return all entries', () => {
+          const callsites = []
+          const bundleOutFile = 'out.js'
+
+          callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 11))
+          callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 42))
+          callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 3, 14))
+          callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 2, 71))
+
+          const results = pathLine.getNonDDCallSiteFrames(callsites)
+          expect(results).to.have.lengthOf(4)
+
+          expect(results[0].path).to.be.equals(bundleOutFile)
+          expect(results[0].line).to.be.equals(11)
+
+          expect(results[1].path).to.be.equals(bundleOutFile)
+          expect(results[1].line).to.be.equals(42)
+
+          expect(results[2].path).to.be.equals(bundleOutFile)
+          expect(results[2].line).to.be.equals(3)
+          expect(results[2].column).to.be.equals(14)
+
+          expect(results[3].path).to.be.equals(bundleOutFile)
+          expect(results[3].line).to.be.equals(2)
+          expect(results[3].column).to.be.equals(71)
+        })
+      })
+    })
   })
 
   describe('getNodeModulesPaths', () => {

@@ -1,17 +1,26 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('./setup/core')
 
 describe('TracerProxy', () => {
   let Proxy
   let proxy
   let DatadogTracer
   let NoopTracer
+  let AIGuardSdk
+  let NoopAIGuardSdk
   let AppsecSdk
   let NoopAppsecSdk
   let tracer
   let NoopProxy
   let noop
+  let aiguardSdk
+  let noopAiguardSdk
   let appsecSdk
   let noopAppsecSdk
   let Config
@@ -22,6 +31,7 @@ describe('TracerProxy', () => {
   let appsec
   let telemetry
   let iast
+  let openfeature
   let PluginManager
   let pluginManager
   let flare
@@ -31,9 +41,15 @@ describe('TracerProxy', () => {
   let dogStatsD
   let noopDogStatsDClient
   let NoopDogStatsDClient
+  let OpenFeatureProvider
+  let openfeatureProvider
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
+
+    aiguardSdk = {
+      evaluate: sinon.stub(),
+    }
 
     appsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
@@ -65,6 +81,10 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy()
+    }
+
+    noopAiguardSdk = {
+      evaluate: sinon.stub(),
     }
 
     noopAppsecSdk = {
@@ -115,6 +135,8 @@ describe('TracerProxy', () => {
 
     DatadogTracer = sinon.stub().returns(tracer)
     NoopTracer = sinon.stub().returns(noop)
+    AIGuardSdk = sinon.stub().returns(aiguardSdk)
+    NoopAIGuardSdk = sinon.stub().returns(noopAiguardSdk)
     AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
     PluginManager = sinon.stub().returns(pluginManager)
@@ -122,7 +144,12 @@ describe('TracerProxy', () => {
 
     config = {
       tracing: true,
-      experimental: {},
+      experimental: {
+        flaggingProvider: {},
+        aiguard: {
+          enabled: true
+        }
+      },
       injectionEnabled: [],
       logger: 'logger',
       debug: true,
@@ -166,6 +193,17 @@ describe('TracerProxy', () => {
       disable: sinon.spy()
     }
 
+    openfeature = {
+      enable: sinon.spy(),
+      disable: sinon.spy()
+    }
+
+    openfeatureProvider = {
+      _setConfiguration: sinon.spy()
+    }
+
+    OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
+
     flare = {
       enable: sinon.spy(),
       disable: sinon.spy(),
@@ -188,6 +226,7 @@ describe('TracerProxy', () => {
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
+      '../aiguard/noop': NoopAIGuardSdk,
       '../appsec/sdk/noop': NoopAppsecSdk,
       './dogstatsd': NoopDogStatsDClient
     })
@@ -204,10 +243,13 @@ describe('TracerProxy', () => {
       './appsec/iast': iast,
       './telemetry': telemetry,
       './remote_config': remoteConfig,
+      './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
-      './flare': flare
+      './flare': flare,
+      './openfeature': openfeature,
+      './openfeature/flagging_provider': OpenFeatureProvider
     })
 
     proxy = new Proxy()
@@ -321,6 +363,30 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_CONFIG')('unapply', conf)
 
         expect(flare.disable).to.have.been.called
+      })
+
+      it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {
+        config.experimental.flaggingProvider.enabled = true
+
+        proxy.init()
+        proxy.openfeature // Trigger lazy loading
+
+        const flagConfig = { flags: { 'test-flag': {} } }
+        handlers.get('FFE_FLAGS')('apply', { flag_configuration: flagConfig })
+
+        expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
+      })
+
+      it('should handle FFE_FLAGS modify action', () => {
+        config.experimental.flaggingProvider.enabled = true
+
+        proxy.init()
+        proxy.openfeature // Trigger lazy loading
+
+        const flagConfig = { flags: { 'modified-flag': {} } }
+        handlers.get('FFE_FLAGS')('modify', { flag_configuration: flagConfig })
+
+        expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
       })
 
       it('should support applying remote config', () => {
@@ -740,6 +806,16 @@ describe('TracerProxy', () => {
     })
   })
 
+  describe('aiguard', () => {
+    describe('evaluate', () => {
+      it('should call the underlying NoopAIGuardSdk method', () => {
+        const messages = [{ role: 'user', content: 'What day is today?' }]
+        proxy.aiguard.evaluate(messages)
+        expect(noopAiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
+      })
+    })
+  })
+
   describe('initialized', () => {
     beforeEach(() => {
       proxy.init()
@@ -843,6 +919,16 @@ describe('TracerProxy', () => {
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+        })
+      })
+    })
+
+    describe('aiguard', () => {
+      describe('evaluate', () => {
+        it('should call the underlying NoopAIGuardSdk method', () => {
+          const messages = [{ role: 'user', content: 'What day is today?' }]
+          proxy.aiguard.evaluate(messages)
+          expect(aiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
         })
       })
     })

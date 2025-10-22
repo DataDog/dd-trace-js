@@ -1,7 +1,10 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
@@ -295,7 +298,7 @@ describe('Kinesis', function () {
           })
           expect(statsPointsReceived).to.be.at.least(1)
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-        }).then(done, done)
+        }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)

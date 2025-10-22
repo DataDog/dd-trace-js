@@ -41,14 +41,9 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
-function getSamplingIntervalMillis (options) {
-  return (options.samplingInterval || 1e3 / 99) // 99Hz
-}
-
 function getMaxSamples (options) {
-  const cpuSamplingInterval = getSamplingIntervalMillis(options)
-  const flushInterval = options.flushInterval || 65 * 1e3 // 60 seconds
-  const maxCpuSamples = flushInterval / cpuSamplingInterval
+  const flushInterval = options.flushInterval || 65 * 1e3 // 65 seconds
+  const maxCpuSamples = flushInterval / options.samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -388,18 +383,21 @@ function createPoissonProcessSamplingFilter (samplingIntervalMillis) {
  * source with a sampling event filter and an event serializer.
  */
 class EventsProfiler {
-  type = 'events'
-  #maxSamples
+  #maxSamples = 0
+  #timelineSamplingEnabled = false
   #eventSerializer
   #eventSources
 
+  get type () { return 'events' }
+
   constructor (options = {}) {
     this.#maxSamples = getMaxSamples(options)
+    this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
-    const eventFilter = options.timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(getSamplingIntervalMillis(options))
+    const eventFilter = this.#timelineSamplingEnabled
+      ? createPoissonProcessSamplingFilter(options.samplingInterval)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
@@ -435,6 +433,12 @@ class EventsProfiler {
     const thatEventSerializer = this.#eventSerializer
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
     return () => thatEventSerializer.createProfile(startDate, endDate)
+  }
+
+  getInfo () {
+    return {
+      maxSamples: this.#maxSamples
+    }
   }
 
   encode (profile) {

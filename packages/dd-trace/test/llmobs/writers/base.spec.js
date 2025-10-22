@@ -1,6 +1,10 @@
 'use strict'
+
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+
 const { useEnv } = require('../../../../../integration-tests/helpers')
 
 describe('BaseLLMObsWriter', () => {
@@ -26,7 +30,9 @@ describe('BaseLLMObsWriter', () => {
       })
     })
 
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
 
     options = {
       endpoint: '/endpoint',

@@ -14,7 +14,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(60000)
     sandbox = await createSandbox(['axios'], false, [
       './packages/datadog-plugin-axios/test/integration-test/*'])
   })

@@ -36,9 +36,9 @@ addHook({
     }
     if (this.options._ddIsImpactedTestsEnabled) {
       config.isImpactedTestsEnabled = true
-      config.modifiedTests = this.options._ddModifiedTests
+      config.modifiedFiles = this.options._ddModifiedFiles
       delete this.options._ddIsImpactedTestsEnabled
-      delete this.options._ddModifiedTests
+      delete this.options._ddModifiedFiles
     }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true

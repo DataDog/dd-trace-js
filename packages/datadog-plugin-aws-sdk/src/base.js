@@ -4,7 +4,6 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
-const coalesce = require('koalas')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
@@ -59,6 +58,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
+        'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk'
@@ -114,6 +114,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
+
+      const partition = getPartition(region)
+      if (partition) {
+        span.setTag('aws.partition', partition)
+      }
 
       if (!this._tracerConfig?._isInServerlessEnvironment()) return
 
@@ -267,13 +272,10 @@ function normalizeConfig (config, serviceIdentifier) {
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
   const batchPropagationEnabled = isTrue(
-    coalesce(
-      specificConfig.batchPropagationEnabled,
-      getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`),
-      config.batchPropagationEnabled,
-      getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED'),
-      false
-    )
+    specificConfig.batchPropagationEnabled ??
+    getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
+    config.batchPropagationEnabled ??
+    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
   // Merge the specific config back into the main config
@@ -315,6 +317,19 @@ function getHostname (store, region) {
         ? `${awsParams.Bucket}.s3.${region}.amazonaws.com`
         : `s3.${region}.amazonaws.com`
   }
+}
+
+function getPartition (region) {
+  if (!region) return
+
+  let partition = 'aws'
+  if (region.startsWith('cn-')) {
+    partition = 'aws-cn'
+  } else if (region.startsWith('us-gov-')) {
+    partition = 'aws-us-gov'
+  }
+
+  return partition
 }
 
 module.exports = BaseAwsSdkPlugin

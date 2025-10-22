@@ -42,7 +42,7 @@ class Writer extends BaseWriter {
       startupLog({ agentError: err })
 
       if (err) {
-        log.error('Error sending payload to the agent (status code: %s)', err.status, err)
+        log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
         done()
         return
       }

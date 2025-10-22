@@ -135,7 +135,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -144,7 +144,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       try {
@@ -199,7 +199,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -208,7 +208,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       if (msg.payload.request_type !== requestType) return
@@ -242,7 +242,7 @@ module.exports = class FakeAgent extends EventEmitter {
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
-    const resultPromise = new Promise((resolve, reject) => {
+    const resultPromise = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       resultResolve = () => {
         clearTimeout(timeoutObj)
         resolve()
@@ -251,7 +251,7 @@ module.exports = class FakeAgent extends EventEmitter {
         clearTimeout(timeoutObj)
         reject(e)
       }
-    })
+    }))
 
     const messageHandler = msg => {
       try {
@@ -276,6 +276,12 @@ function buildExpressServer (agent) {
 
   app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
+
+  app.get('/info', (req, res) => {
+    res.json({
+      endpoints: ['/evp_proxy/v2']
+    })
+  })
 
   app.put('/v0.4/traces', (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
@@ -400,6 +406,14 @@ function buildExpressServer (agent) {
   app.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
     res.status(200).send()
     agent.emit('llmobs', {
+      headers: req.headers,
+      payload: req.body
+    })
+  })
+
+  app.post('/evp_proxy/v2/api/v2/exposures', (req, res) => {
+    res.status(200).send()
+    agent.emit('exposures', {
       headers: req.headers,
       payload: req.body
     })

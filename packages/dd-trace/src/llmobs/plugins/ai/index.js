@@ -17,7 +17,8 @@ const {
   getModelMetadata,
   getGenerationMetadata,
   getToolNameFromTags,
-  getToolCallResultContent
+  getToolCallResultContent,
+  getLlmObsSpanName
 } = require('./util')
 
 const SPAN_NAME_TO_KIND_MAPPING = {
@@ -79,26 +80,32 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    * We use the tool description as the next best identifier for a tool.
    *
    * @param {string} toolDescription
-   * @returns {string}
+   * @returns {string | undefined}
    */
   findToolName (toolDescription) {
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
-      if (description === toolDescription) {
+      if (description === toolDescription && availableTool.id) {
         return availableTool.id
       }
     }
   }
 
+  /**
+   * @override
+   */
   getLLMObsSpanRegisterOptions (ctx) {
     const span = ctx.currentStore?.span
     const operation = getOperation(span)
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    return { kind, name: operation }
+    return { kind, name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']) }
   }
 
+  /**
+   * @override
+   */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -211,6 +218,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     this._tagger.tagMetadata(span, metadata)
   }
 
+  /**
+   * @param {import('../../../opentracing/span')} span
+   * @param {Record<string, unknown>} tags
+   */
   setLLMOperationTags (span, tags) {
     const toolsForModel = tags['ai.prompt.tools']?.map(getJsonStringValue)
 

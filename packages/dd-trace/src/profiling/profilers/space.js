@@ -7,44 +7,56 @@ function strategiesToCallbackMode (strategies, callbackMode) {
   return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
 }
 
+const STACK_DEPTH = 64
+
 class NativeSpaceProfiler {
-  type = 'space'
-  _pprof
-  _started = false
+  #mapper
+  #oomMonitoring
+  #pprof
+  #samplingInterval = 512 * 1024
+  #started = false
 
   constructor (options = {}) {
-    this._samplingInterval = options.heapSamplingInterval || 512 * 1024
-    this._stackDepth = options.stackDepth || 64
-    this._oomMonitoring = options.oomMonitoring || {}
+    // TODO: Remove default value. It is only used in testing.
+    this.#samplingInterval = options.heapSamplingInterval || 512 * 1024
+    this.#oomMonitoring = options.oomMonitoring || {}
+  }
+
+  get type () {
+    return 'space'
   }
 
   start ({ mapper, nearOOMCallback } = {}) {
-    if (this._started) return
+    if (this.#started) return
 
-    this._mapper = mapper
-    this._pprof = require('@datadog/pprof')
-    this._pprof.heap.start(this._samplingInterval, this._stackDepth)
-    if (this._oomMonitoring.enabled) {
-      const strategies = this._oomMonitoring.exportStrategies
-      this._pprof.heap.monitorOutOfMemory(
-        this._oomMonitoring.heapLimitExtensionSize,
-        this._oomMonitoring.maxHeapExtensionCount,
+    this.#mapper = mapper
+    this.#pprof = require('@datadog/pprof')
+    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH)
+    if (this.#oomMonitoring.enabled) {
+      const strategies = this.#oomMonitoring.exportStrategies
+      this.#pprof.heap.monitorOutOfMemory(
+        this.#oomMonitoring.heapLimitExtensionSize,
+        this.#oomMonitoring.maxHeapExtensionCount,
         strategies.includes(oomExportStrategies.LOGS),
-        strategies.includes(oomExportStrategies.PROCESS) ? this._oomMonitoring.exportCommand : [],
-        (profile) => nearOOMCallback(this.type, this._pprof.encodeSync(profile)),
-        strategiesToCallbackMode(strategies, this._pprof.heap.CallbackMode)
+        strategies.includes(oomExportStrategies.PROCESS) ? this.#oomMonitoring.exportCommand : [],
+        (profile) => nearOOMCallback(this.type, this.#pprof.encodeSync(profile), this.getInfo()),
+        strategiesToCallbackMode(strategies, this.#pprof.heap.CallbackMode)
       )
     }
 
-    this._started = true
+    this.#started = true
   }
 
   profile (restart) {
-    const profile = this._pprof.heap.profile(undefined, this._mapper, getThreadLabels)
+    const profile = this.#pprof.heap.profile(undefined, this.#mapper, getThreadLabels)
     if (!restart) {
       this.stop()
     }
     return profile
+  }
+
+  getInfo () {
+    return {}
   }
 
   encode (profile) {
@@ -52,13 +64,13 @@ class NativeSpaceProfiler {
   }
 
   stop () {
-    if (!this._started) return
-    this._pprof.heap.stop()
-    this._started = false
+    if (!this.#started) return
+    this.#pprof.heap.stop()
+    this.#started = false
   }
 
   isStarted () {
-    return this._started
+    return this.#started
   }
 }
 

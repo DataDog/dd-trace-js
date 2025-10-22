@@ -1,11 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, before } = require('tap').mocha
+const fs = require('node:fs')
+const path = require('node:path')
 
-const fs = require('fs')
-const path = require('path')
+require('../setup/core')
 
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 
@@ -18,7 +18,8 @@ const abstractPlugins = [
 const missingPlugins = [
   'datadog-plugin-axios', // we test axios to ensure our functionality works with axios, see: https://github.com/DataDog/dd-trace-js/pull/1469
   'datadog-plugin-limitd-client', // limitd-client instrumentation handles trace context propagation, no tracing is done
-  'datadog-plugin-mongoose' // mongoose tracing is done through mongodb-core instrumentation
+  'datadog-plugin-mongoose', // mongoose tracing is done through mongodb-core instrumentation
+  'datadog-plugin-cookie-parser' // cookie-parser does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented

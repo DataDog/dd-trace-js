@@ -1,6 +1,10 @@
 'use strict'
 
-require('./setup/tap')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('./setup/core')
 
 const RateLimiter = require('../src/rate_limiter')
 
@@ -9,7 +13,9 @@ describe('RateLimiter', () => {
   let rateLimiter
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
+    })
   })
 
   afterEach(() => {

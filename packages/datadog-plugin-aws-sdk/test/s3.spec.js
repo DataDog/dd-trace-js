@@ -1,5 +1,8 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
@@ -32,7 +35,6 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => {
           tracer = require('../../dd-trace')
-          tracer.init()
           return agent.load('aws-sdk')
         })
 

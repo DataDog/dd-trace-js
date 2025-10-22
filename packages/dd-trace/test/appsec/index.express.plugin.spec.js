@@ -1,11 +1,15 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../version')
-const semver = require('semver')
 const Axios = require('axios')
-const { assert } = require('chai')
-const path = require('path')
+const semver = require('semver')
+const sinon = require('sinon')
+const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
+
+const assert = require('node:assert/strict')
+const path = require('node:path')
 const zlib = require('node:zlib')
+
+const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -19,7 +23,9 @@ withVersions('express', 'express', version => {
   }
 
   describe('Suspicious request blocking - path parameters', () => {
-    let server, paramCallbackSpy, axios
+    let axios /** @type {AxiosInstance} */
+    let server
+    let paramCallbackSpy /** @type {SinonSpy} */
 
     before(() => {
       return agent.load(['express', 'http'], { client: false })
@@ -324,8 +330,8 @@ withVersions('express', 'express', version => {
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.property(span.meta, '_dd.appsec.s.req.body')
-          assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+          assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 
@@ -382,8 +388,8 @@ withVersions('express', 'express', version => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert.notProperty(span.meta, '_dd.appsec.s.req.body')
-        assert.notProperty(span.meta, '_dd.appsec.s.res.body')
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
       })
 
       assert.equal(res.status, 200)

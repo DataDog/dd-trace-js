@@ -1,0 +1,74 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "test-rule-id-1",
+      "name": "test-rule-name-1",
+      "tags": {
+        "type": "a",
+        "category": "custom"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "list": [
+              "collect-standard"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": ["lowercase"],
+      "on_match": ["extended_data_collection_standard"]
+    },
+    {
+      "id": "test-rule-id-2",
+      "name": "test-rule-name-2",
+      "tags": {
+        "type": "a",
+        "category": "custom"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "list": [
+              "collect-few-headers"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": ["lowercase"],
+      "on_match": ["extended_data_collection_few_headers"]
+    }
+  ],
+  "actions": [
+    {
+      "id": "extended_data_collection_standard",
+      "parameters": {
+        "max_collected_headers": 50
+      },
+      "type": "extended_data_collection"
+    },
+    {
+      "id": "extended_data_collection_few_headers",
+      "parameters": {
+        "max_collected_headers": 8
+      },
+      "type": "extended_data_collection"
+    }
+  ]
+}

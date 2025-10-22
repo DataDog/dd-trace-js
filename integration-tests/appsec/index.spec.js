@@ -35,10 +35,10 @@ describe('RASP', () => {
         execArgv,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_APPSEC_ENABLED: true,
-          DD_APPSEC_RASP_ENABLED: true,
+          DD_APPSEC_ENABLED: 'true',
+          DD_APPSEC_RASP_ENABLED: 'true',
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
-          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: collectRequestBody
+          DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody)
         }
       }, stdOutputHandler, stdOutputHandler)
       axios = Axios.create({ baseURL: proc.url })
@@ -90,7 +90,7 @@ describe('RASP', () => {
         await assertExploitDetected()
       }
 
-      return new Promise((resolve, reject) => {
+      return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
         setTimeout(() => {
           if (hasOutput) {
             reject(new Error('Unexpected output in stdout/stderr after blocking request'))
@@ -98,7 +98,7 @@ describe('RASP', () => {
             resolve()
           }
         }, 50)
-      })
+      }))
     }
 
     async function testCustomErrorHandlerIsNotExecuted (path) {
@@ -119,7 +119,7 @@ describe('RASP', () => {
         assert.strictEqual(e.response.status, 403)
         await assertExploitDetected()
 
-        return new Promise((resolve, reject) => {
+        return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           setTimeout(() => {
             if (hasOutput) {
               reject(new Error('uncaughtExceptionCaptureCallback executed'))
@@ -127,7 +127,7 @@ describe('RASP', () => {
               resolve()
             }
           }, 10)
-        })
+        }))
       }
     }
 
@@ -140,7 +140,7 @@ describe('RASP', () => {
       try {
         await axios.get('/crash')
       } catch (e) {
-        return new Promise((resolve, reject) => {
+        return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
           setTimeout(() => {
             if (hasOutput) {
               resolve()
@@ -148,7 +148,7 @@ describe('RASP', () => {
               reject(new Error('Output expected after crash'))
             }
           }, 50)
-        })
+        }))
       }
 
       assert.fail('Request should have failed')
@@ -168,7 +168,7 @@ describe('RASP', () => {
         try {
           await axios.get('/crash-and-recovery-A')
         } catch (e) {
-          return new Promise((resolve, reject) => {
+          return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
                 reject(new Error('Unexpected output in stdout/stderr after blocking request'))
@@ -176,7 +176,7 @@ describe('RASP', () => {
                 resolve()
               }
             }, 50)
-          })
+          }))
         }
 
         assert.fail('Request should have failed')
@@ -191,7 +191,7 @@ describe('RASP', () => {
         try {
           await axios.get('/crash-and-recovery-B')
         } catch (e) {
-          return new Promise((resolve, reject) => {
+          return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
                 reject(new Error('Unexpected output in stdout/stderr after blocking request'))
@@ -199,7 +199,7 @@ describe('RASP', () => {
                 resolve()
               }
             }, 50)
-          })
+          }))
         }
 
         assert.fail('Request should have failed')

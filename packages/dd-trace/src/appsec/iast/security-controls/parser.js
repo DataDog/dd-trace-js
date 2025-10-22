@@ -15,7 +15,7 @@ const validTypes = new Set([INPUT_VALIDATOR_TYPE, SANITIZER_TYPE])
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
-  securityControlsConfiguration?.replace(/[\r\n\t\v\f]*/g, '')
+  securityControlsConfiguration?.replaceAll(/[\r\n\t\v\f]*/g, '')
     .split(SECURITY_CONTROL_DELIMITER)
     .map(parseControl)
     .filter(control => !!control)

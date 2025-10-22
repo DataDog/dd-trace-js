@@ -27,7 +27,7 @@ jobs:
         with:
           scope: DataDog/test-environment
           policy: dd-trace-js
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -42,7 +42,7 @@ jobs:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -65,7 +65,7 @@ jobs:
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -74,11 +74,32 @@ jobs:
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
+  integration-mocha:
+    strategy:
+      matrix:
+        version: [oldest, latest]
+        mocha-version: [5.2.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:mocha
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+          MOCHA_VERSION: ${{ matrix.mocha-version }}
+
   integration-ci:
     strategy:
       matrix:
         version: [oldest, latest]
-        framework: [cucumber, selenium, jest, mocha]
+        framework: [cucumber, selenium, jest]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -86,7 +107,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -120,8 +141,9 @@ jobs:
         version: [eol, oldest, latest]
         # 6.7.0 is the minimum version we support in <=5
         # 10.2.0 is the minimum version we support in >=6
+        # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
-        cypress-version: [6.7.0, 10.2.0, latest]
+        cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
@@ -129,7 +151,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -153,7 +175,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -167,8 +189,10 @@ jobs:
     env:
       PLUGINS: cucumber
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: fix performance issues and test more Node versions
   plugin-cypress:
@@ -176,7 +200,7 @@ jobs:
     env:
       PLUGINS: cypress
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -185,7 +209,12 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   # TODO: fix performance issues and test more Node versions
   plugin-jest:
@@ -193,7 +222,7 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -202,12 +231,9 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
-
-  plugin-mocha:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: mocha
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/plugins/test
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests

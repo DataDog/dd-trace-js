@@ -3,11 +3,23 @@
 const { USER_KEEP, AUTO_KEEP } = require('../../../ext').priority
 const SamplingRule = require('./sampling_rule')
 
+/**
+ * Samples individual spans within a trace using span-level rules.
+ */
 class SpanSampler {
+  /**
+   * @param {{ spanSamplingRules?: Array<import('./sampling_rule')>|Array<Record<string, unknown>> }} [config]
+   */
   constructor ({ spanSamplingRules = [] } = {}) {
     this._rules = spanSamplingRules.map(SamplingRule.from)
   }
 
+  /**
+   * Finds the first matching span sampling rule for the given span.
+   *
+   * @param {import('./opentracing/span')} context
+   * @returns {import('./sampling_rule')|undefined}
+   */
   findRule (context) {
     for (const rule of this._rules) {
       // Rule is a special object with a .match() property.
@@ -19,6 +31,13 @@ class SpanSampler {
     }
   }
 
+  /**
+   * Applies span sampling to spans in the trace, tagging matching spans with
+   * span sampling metadata when appropriate.
+   *
+   * @param {import('./opentracing/span_context')} spanContext
+   * @returns {void}
+   */
   sample (spanContext) {
     const decision = spanContext._sampling.priority
     if (decision === USER_KEEP || decision === AUTO_KEEP) return

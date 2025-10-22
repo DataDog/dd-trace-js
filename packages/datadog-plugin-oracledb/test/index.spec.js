@@ -1,12 +1,16 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, before, after } = require('mocha')
+
+const assert = require('node:assert')
+
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const assert = require('node:assert')
 
-const hostname = process.env.CI ? 'oracledb' : 'localhost'
+const hostname = 'localhost'
 // TODO: Use another port or db instance to differentiate it better from defaults
 const port = '1521'
 const dbInstance = 'xepdb1'

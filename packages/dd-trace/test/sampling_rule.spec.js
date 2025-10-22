@@ -1,8 +1,11 @@
 'use strict'
 
-require('./setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const sinon = require('sinon')
+
+require('./setup/core')
+
 const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
 
@@ -426,7 +429,10 @@ describe('sampling rule', () => {
         maxPerSecond: 1
       })
 
-      const clock = sinon.useFakeTimers(new Date())
+      const clock = sinon.useFakeTimers({
+        now: new Date(),
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
+      })
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
       expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
       clock.tick(1000)

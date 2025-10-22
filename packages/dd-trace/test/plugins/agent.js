@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('assert')
+const util = require('util')
 const http = require('http')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
@@ -16,7 +18,9 @@ const llmobsHandlers = new Set()
 let sockets = []
 let agent = null
 let listener = null
+/** @type {import('../../src/index') | null} */
 let tracer = null
+/** @type {string[]} */
 let plugins = []
 const testedPlugins = []
 let dsmStats = []
@@ -40,38 +44,45 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
+/**
+ * Checks if a DSM stats object exists with a given hash and edge tags.
+ *
+ * @param {import('../../src/index')} agent
+ * @param {string} expectedHash
+ * @param {string[]} expectedEdgeTags
+ * @returns {boolean}
+ */
 function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
-  let hashFound = false
+  const foundHashes = new Set()
   if (dsmStats.length !== 0) {
     for (const statsTimeBucket of dsmStats) {
       for (const statsBucket of statsTimeBucket.Stats) {
         for (const stats of statsBucket.Stats) {
-          if (stats.Hash.toString() === expectedHash) {
+          const currentHash = stats.Hash.toString()
+          foundHashes.add(currentHash)
+          if (currentHash === expectedHash) {
             if (expectedEdgeTags) {
-              if (expectedEdgeTags.length !== stats.EdgeTags.length) {
-                return false
-              }
-
               const expected = expectedEdgeTags.slice().sort()
               const actual = stats.EdgeTags.slice().sort()
-
-              for (let i = 0; i < expected.length; i++) {
-                if (expected[i] !== actual[i]) {
-                  return false
-                }
-              }
+              assert.deepStrictEqual(actual, expected, 'EdgeTags mismatch')
             }
-            hashFound = true
-            return hashFound
+            return true
           }
         }
       }
     }
   }
-  return hashFound
+  throw new Error(`Hash not found. Expected: ${expectedHash}, Found hashes: ${util.inspect(foundHashes)}`)
 }
 
+/**
+ * Checks if a DSM stats object exists with a given parent hash.
+ *
+ * @param {import('../../src/index')} agent
+ * @param {string} expectedParentHash
+ * @returns {boolean}
+ */
 function dsmStatsExistWithParentHash (agent, expectedParentHash) {
   const dsmStats = agent.getDsmStats()
   let hashFound = false
@@ -90,6 +101,12 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
   return hashFound
 }
 
+/**
+ * Unformats span events.
+ *
+ * @param {import('../../src/opentracing/span')} span
+ * @returns {import('../../src/opentracing/span')[]}
+ */
 function unformatSpanEvents (span) {
   if (span.meta && span.meta.events) {
     // Parse the JSON string back into an object
@@ -111,6 +128,11 @@ function unformatSpanEvents (span) {
   return [] // Return an empty array if no events are found
 }
 
+/**
+ * Adds environment variables to headers.
+ *
+ * @param {http.IncomingHttpHeaders} headers
+ */
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
@@ -128,9 +150,10 @@ function addEnvironmentVariablesToHeaders (headers) {
 
   // add the DD environment variables to the header if any exist
   // to send with trace to final agent destination
-  if (ddEnvVars.length > 0) {
-    headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
-  }
+  // if (ddEnvVars.size > 0) {
+  //   // TODO: Should we still do this? It has never worked until now.
+  //   headers['X-Datadog-Trace-Env-Variables'] = [...ddEnvVars].map(([key, value]) => `${key}=${value}`).join(',')
+  // }
 
   // serialize the DD environment variables into a string of k=v pairs separated by comma
   const serializedEnvVars = Array.from(ddEnvVars.entries())
@@ -142,6 +165,13 @@ function addEnvironmentVariablesToHeaders (headers) {
   headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
 }
 
+/**
+ * Handles the received trace request and sends trace to Test Agent if bool enabled.
+ *
+ * @param {express.Request} req
+ * @param {express.Response} res
+ * @param {boolean} sendToTestAgent
+ */
 function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
@@ -202,11 +232,7 @@ function checkAgentStatus () {
 
   return new Promise((resolve) => {
     const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
-      if (response.statusCode === 200) {
-        resolve(true)
-      } else {
-        resolve(false)
-      }
+      resolve(response.statusCode === 200)
     })
 
     request.on('error', (_error_) => {
@@ -227,26 +253,29 @@ function getCurrentIntegrationName () {
   const stack = new Error().stack
   // The regex looks for /packages/datadog-plugin-NAME/test/ in the stack trace
   const pluginTestRegex = /packages\/datadog-plugin-([^/]+)\/test/
-  const match = stack.match(pluginTestRegex)
+  const match = stack?.match(pluginTestRegex)
 
   return match ? match[1] : null
 }
 
-function assertIntegrationName (args) {
+/**
+ * @param {import('../../src/opentracing/span')[][]} traces
+ */
+function assertIntegrationName (traces) {
   // we want to assert that all spans generated by an instrumentation have the right `_dd.integration` tag set
   if (currentIntegrationName) {
-    const traces = args[0]
-    if (traces && Array.isArray(traces)) {
+    // TODO(BridgeAR): Should we just fail, if we do not receive an array of traces?
+    if (Array.isArray(traces)) {
       traces.forEach(trace => {
         if (Array.isArray(trace)) {
           trace.forEach(span => {
             // ignore everything that has no component (i.e. manual span)
             // ignore everything that has already the component == _dd.integration
-            if (span && span.meta && span.meta.component && span.meta.component !== span.meta['_dd.integration']) {
+            if (span?.meta?.component && span.meta.component !== span.meta['_dd.integration']) {
               expect(span.meta['_dd.integration']).to.equal(
                 currentIntegrationName,
-                 `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
-                 but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
+                  `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
+                  but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
               )
             }
           })
@@ -260,22 +289,39 @@ const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 /**
+ * The options for the runCallbackAgainstTraces function.
+ *
+ * If a number is provided, it will be used as the timeoutMs.
+ *
+ * Defaults:
+ * - timeoutMs: 1000
+ * - rejectFirst: false
+ * - spanResourceMatch: undefined
+ *
+ * @typedef {Object} RunCallbackAgainstTracesOptions
+ * @property {number} [timeoutMs=1000] - The timeout in ms.
+ * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
+ * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
+ * @typedef {import('../../src/opentracing/span')} Span
+ * For a given payload, an array of traces, each trace is an array of spans.
+ * @typedef {(traces: Span[][]) => void} TracesCallback
+ * @typedef {(agentlessPayload: {events: Event[]}, request: Request) => void} AgentlessCallback
+ * @typedef {TracesCallback | AgentlessCallback} RunCallbackAgainstTracesCallback
+ */
+/**
  * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
  * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
  * then the agent will wait for additional payloads up until the timeout
  * (default 1000 ms) and if any of them succeed, the promise will resolve.
  * Otherwise, it will reject.
  *
- * @param {(traces: Array<Array<object>>) => void} callback - A function that tests a payload as it's received.
- * @param {Object} [options] - An options object
- * @param {number} [options.timeoutMs=1000] - The timeout in ms.
- * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
- * @param {Set} [handlers] - Set of handlers to add the callback to.
+ * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
+ * @param {RunCallbackAgainstTracesOptions} options={} - An options object
+ * @param {Set} handlers - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
-function runCallbackAgainstTraces (callback, options, handlers) {
+function runCallbackAgainstTraces (callback, options = {}, handlers) {
   let error
-
   let resolve
   let reject
   const promise = new Promise((_resolve, _reject) => {
@@ -285,24 +331,27 @@ function runCallbackAgainstTraces (callback, options, handlers) {
 
   const rejectionTimeout = setTimeout(() => {
     if (error) reject(error)
-  }, options?.timeoutMs || 1000)
+  }, options.timeoutMs || 1000)
 
   const handlerPayload = {
     handler,
-    spanResourceMatch: options?.spanResourceMatch
+    spanResourceMatch: options.spanResourceMatch
   }
 
-  function handler () {
+  /**
+   * @type {TracesCallback | AgentlessCallback}
+  */
+  function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
-    assertIntegrationName(arguments)
+    assertIntegrationName(args[0])
 
     try {
-      const result = callback.apply(null, arguments)
+      const result = callback(...args)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
-      if (options?.rejectFirst) {
+      if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)
       } else {
@@ -321,12 +370,29 @@ module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
-   * @param {String|Array<String>} pluginName - Name or list of names of plugins to load
+   * @param {String|String[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
    */
-  async load (pluginName, config, tracerConfig = {}) {
+  /**
+   * Load the plugin on the tracer with an optional config and start a mock agent.
+   *
+   * @overload
+   * @param {String[]} pluginNames - Name or list of names of plugins to load
+   * @param {Record<string, unknown>[]} config
+   * @param {Record<string, unknown>} [tracerConfig={}]
+   * @returns Promise<void>
+   */
+  async load (pluginNames, config, tracerConfig = {}) {
+    if (!Array.isArray(pluginNames)) {
+      pluginNames = [pluginNames]
+    }
+
+    if (!Array.isArray(config)) {
+      config = [config]
+    }
+
     currentIntegrationName = getCurrentIntegrationName()
 
     tracer = require('../..')
@@ -390,14 +456,16 @@ module.exports = {
     const server = this.server = http.createServer(agent)
     const emit = server.emit
 
-    server.emit = function () {
+    /** @type {(this: server, event: string, ...args: unknown[]) => boolean} */
+    const originalEmit = emit
+    server.emit = function (event, ...args) {
       storage('legacy').enterWith({ noop: true })
-      return emit.apply(this, arguments)
+      return originalEmit.call(this, event, ...args)
     }
 
     server.on('connection', socket => sockets.push(socket))
 
-    const promise = new Promise((resolve, _reject) => {
+    const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
@@ -411,17 +479,15 @@ module.exports = {
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
-        for (let i = 0, l = pluginName.length; i < l; i++) {
-          tracer.use(pluginName[i], config[i])
+        for (let i = 0, l = pluginNames.length; i < l; i++) {
+          tracer.use(pluginNames[i], config[i])
         }
 
         resolve()
       })
-    })
+    }))
 
-    pluginName = [].concat(pluginName)
-    plugins = pluginName
-    config = [].concat(config)
+    plugins = pluginNames
 
     server.on('close', () => {
       tracer = null
@@ -432,15 +498,15 @@ module.exports = {
     return promise
   },
 
+  /**
+   * @param {string} pluginName
+   * @param {Record<string, unknown>} [config]
+   */
   reload (pluginName, config) {
-    pluginName = [].concat(pluginName)
-    plugins = pluginName
-    config = [].concat(config)
+    plugins = [pluginName]
     dsmStats = []
 
-    for (let i = 0, l = pluginName.length; i < l; i++) {
-      tracer.use(pluginName[i], config[i])
-    }
+    tracer.use(pluginName, config)
   },
 
   /**
@@ -460,17 +526,10 @@ module.exports = {
   },
 
   /**
-   * Callback for running test assertions against traces.
-   *
-   * @callback testAssertionTracesCallback
-   * @param {Array.<Array.<span>>} traces - For a given payload, an array of traces, each trace is an array of spans.
-   */
-
-  /**
    * Callback for running test assertions against a span.
    *
    * @callback testAssertionSpanCallback
-   * @param {span} span - For a given payload, the first span of the first trace.
+   * @param {Span} span - For a given payload, the first span of the first trace.
    */
 
   /**
@@ -478,10 +537,8 @@ module.exports = {
    * It calls the callback with a `traces` argument which is an array of traces.
    * Each of these traces is an array of spans.
    *
-   * @param {testAssertionTracesCallback} callback - runs once per agent payload
-   * @param {Object} [options] - An options object
-   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
-   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
+   * @param {RunCallbackAgainstTracesOptions} [options] - An options object
    * @returns Promise
    */
   assertSomeTraces (callback, options) {
@@ -491,11 +548,9 @@ module.exports = {
   /**
    * Same as assertSomeTraces() but only provides the first span (traces[0][0])
    * This callback gets executed once for every payload received by the agent.
-
+   *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
-   * @param {Object} [options] - An options object
-   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
-   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+   * @param {RunCallbackAgainstTracesOptions} [options] - An options object
    * @returns Promise
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
@@ -516,6 +571,10 @@ module.exports = {
 
   /**
    * Register a callback with expectations to be run on every stats payload sent to the agent.
+   *
+   * @param {RunCallbackAgainstTracesCallback} callback - runs once per agent payload
+   * @param {RunCallbackAgainstTracesOptions} [options] - An options object
+   * @returns Promise
    */
   expectPipelineStats (callback, options) {
     return runCallbackAgainstTraces(callback, options, statsHandlers)
@@ -523,8 +582,8 @@ module.exports = {
 
   /**
    * Use a callback handler for LLM Observability traces.
-   * @param {Function} callback
-   * @param {Record<string, any>} options
+   * @param {RunCallbackAgainstTracesCallback} callback
+   * @param {RunCallbackAgainstTracesOptions} [options]
    * @returns
    */
   useLlmobsTraces (callback, options) {
@@ -542,6 +601,11 @@ module.exports = {
 
   /**
    * Stop the mock agent, reset all expectations and wipe the require cache.
+   *
+   * Defaults:
+   * - ritmReset: true
+   * - wipe: false
+   *
    * @param {Object} [options]
    * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
    * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
@@ -576,13 +640,13 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
 
         resolve()
       })
-    })
+    }))
   },
 
   setAvailableEndpoints (newEndpoints) {
@@ -601,8 +665,7 @@ module.exports = {
       .map(exception => new RegExp(exception))
 
     Object.keys(require.cache)
-      .filter(name => name.indexOf(basedir) !== -1)
-      .filter(name => !exceptions.some(exception => exception.test(name)))
+      .filter(name => name.includes(basedir) && !exceptions.some(exception => exception.test(name)))
       .forEach(name => {
         delete require.cache[name]
       })

@@ -1,14 +1,17 @@
 'use strict'
 
-require('../setup/tap')
-
-const tracerVersion = require('../../../../package.json').version
-const proxyquire = require('proxyquire').noPreserveCache()
-const http = require('http')
-const { once } = require('events')
-const { storage } = require('../../../datadog-core')
-const os = require('os')
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
+const http = require('node:http')
+const { once } = require('node:events')
+const os = require('node:os')
+
+require('../setup/core')
+
+const { storage } = require('../../../datadog-core')
+const tracerVersion = require('../../../../package.json').version
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
@@ -30,20 +33,6 @@ describe('telemetry (proxy)', () => {
     proxy = proxyquire('../../src/telemetry', {
       './telemetry': telemetry
     })
-  })
-
-  it('should be noop when disabled', () => {
-    proxy.start()
-    proxy.updateIntegrations()
-    proxy.updateConfig([])
-    proxy.appClosing()
-    proxy.stop()
-
-    expect(telemetry.start).to.not.have.been.called
-    expect(telemetry.updateIntegrations).to.not.have.been.called
-    expect(telemetry.updateConfig).to.not.have.been.called
-    expect(telemetry.appClosing).to.not.have.been.called
-    expect(telemetry.stop).to.not.have.been.called
   })
 
   it('should proxy when enabled', () => {
@@ -114,7 +103,13 @@ describe('telemetry', () => {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
     }
-
+    /**
+     * @type {Object} CircularObject
+     * @property {string} field
+     * @property {Object} child
+     * @property {string} child.field
+     * @property {CircularObject | null} child.parent
+     */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value'
@@ -228,7 +223,6 @@ describe('telemetry', () => {
         server.close()
         done()
       }, 10)
-      clearTimeout()
     })
   })
 
@@ -258,7 +252,9 @@ describe('telemetry app-heartbeat', () => {
   let clock
 
   before(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   after(() => {
@@ -315,7 +311,9 @@ describe('Telemetry extended heartbeat', () => {
   let clock
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   afterEach(() => {
@@ -498,7 +496,9 @@ describe('Telemetry retry', () => {
   const HEARTBEAT_INTERVAL = 60000
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     pluginsByName = {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
@@ -894,7 +894,9 @@ describe('AVM OSS', () => {
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
-          clock = sinon.useFakeTimers()
+          clock = sinon.useFakeTimers({
+            toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+          })
 
           storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {

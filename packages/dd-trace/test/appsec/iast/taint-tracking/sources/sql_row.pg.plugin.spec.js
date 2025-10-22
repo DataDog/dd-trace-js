@@ -15,6 +15,7 @@ describe('db sources with pg', () => {
   let pg
   withVersions('pg', 'pg', '>=8.0.3', version => {
     let client
+
     beforeEach(async () => {
       pg = require(`../../../../../../../versions/pg@${version}`).get()
       client = new pg.Client(connectionData)

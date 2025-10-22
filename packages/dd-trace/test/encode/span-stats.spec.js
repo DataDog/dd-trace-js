@@ -1,9 +1,12 @@
 'use strict'
 
-require('../setup/tap')
-
 const { expect } = require('chai')
+const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
 
 const {
   MAX_NAME_LENGTH,
@@ -26,7 +29,7 @@ describe('span-stats-encode', () => {
     logger = {
       debug: sinon.stub()
     }
-    const { SpanStatsEncoder } = proxyquire('../src/encode/span-stats', {
+    const { SpanStatsEncoder } = proxyquire('../../src/encode/span-stats', {
       '../log': logger
     })
     writer = { flush: sinon.spy() }

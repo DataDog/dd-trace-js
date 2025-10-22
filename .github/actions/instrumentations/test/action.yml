@@ -1,5 +1,9 @@
 name: Instrumentation Tests
 description: Run instrumentation tests
+inputs:
+  dd_api_key:
+    description: DD_API_KEY used to push test results
+    required: true
 runs:
   using: composite
   steps:
@@ -10,4 +14,9 @@ runs:
     - uses: ./.github/actions/node/latest
     - run: yarn test:instrumentations:ci
       shell: bash
-    - uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5.4.3
+    - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+    - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      if: always()
+      with:
+        api_key: ${{ inputs.dd_api_key }}
+        service: dd-trace-js-tests

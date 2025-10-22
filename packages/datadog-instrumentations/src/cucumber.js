@@ -25,7 +25,7 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
-const impactedTestsCh = channel('ci:cucumber:modified-tests')
+const modifiedFilesCh = channel('ci:cucumber:modified-files')
 const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
@@ -80,11 +80,15 @@ let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
-let modifiedTests = {}
+let modifiedFiles = {}
 let numTestRetries = 0
-let knownTests = []
+let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+
+function isValidKnownTests (receivedKnownTests) {
+  return !!receivedKnownTests.cucumber
+}
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.includes('fail')) {
@@ -123,7 +127,10 @@ function getStatusFromResultLatest (result) {
 }
 
 function isNewTest (testSuite, testName) {
-  const testsForSuite = knownTests.cucumber?.[testSuite] || []
+  if (!isValidKnownTests(knownTests)) {
+    return false
+  }
+  const testsForSuite = knownTests.cucumber[testSuite] || []
   return !testsForSuite.includes(testName)
 }
 
@@ -508,9 +515,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     if (isKnownTestsEnabled) {
-      const isFaulty = getIsFaultyEarlyFlakeDetection(
+      const isFaulty = !isValidKnownTests(knownTests) || getIsFaultyEarlyFlakeDetection(
         Object.keys(pickleByFile),
-        knownTests.cucumber || {},
+        knownTests.cucumber,
         earlyFlakeDetectionFaultyThreshold
       )
       if (isFaulty) {
@@ -530,9 +537,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isImpactedTestsEnabled) {
-      const impactedTestsResponse = await getChannelPromise(impactedTestsCh)
+      const impactedTestsResponse = await getChannelPromise(modifiedFilesCh)
       if (!impactedTestsResponse.err) {
-        modifiedTests = impactedTestsResponse.modifiedTests
+        modifiedFiles = impactedTestsResponse.modifiedFiles
       }
     }
 
@@ -592,6 +599,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 // Handles EFD in both the main process and the worker process.
 function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = false, isWorker = false) {
   return async function () {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return runTestCaseFunction.apply(this, arguments)
+    }
     const pickle = isNewerCucumberVersion
       ? arguments[0].pickle
       : this.eventDataCollector.getPickle(arguments[0])
@@ -645,7 +655,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       isModifiedCh.publish({
         scenarios,
         testFileAbsolutePath: gherkinDocument.uri,
-        modifiedTests,
+        modifiedFiles,
         stepIds,
         stepDefinitions: this.supportCodeLibrary.stepDefinitions,
         setIsModified
@@ -747,6 +757,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
   return function (worker, message) {
+    if (!testSuiteFinishCh.hasSubscribers) {
+      return parseWorkerMessageFunction.apply(this, arguments)
+    }
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
     // or cucumber will throw an error
     // TODO: identify the message better
@@ -972,15 +985,22 @@ addHook({
   )
   // EFD in parallel mode only supported in >=11.0.0
   shimmer.wrap(adapterPackage.ChildProcessAdapter.prototype, 'startWorker', startWorker => function () {
-    if (isKnownTestsEnabled) {
+    if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
+      this.options.worldParameters._ddIsKnownTestsEnabled = true
       this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       this.options.worldParameters._ddKnownTests = knownTests
       this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    } else {
+      isEarlyFlakeDetectionEnabled = false
+      isKnownTestsEnabled = false
+      this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled = false
+      this.options.worldParameters._ddIsKnownTestsEnabled = false
+      this.options.worldParameters._ddEarlyFlakeDetectionNumRetries = 0
     }
 
     if (isImpactedTestsEnabled) {
       this.options.worldParameters._ddImpactedTestsEnabled = isImpactedTestsEnabled
-      this.options.worldParameters._ddModifiedTests = modifiedTests
+      this.options.worldParameters._ddModifiedFiles = modifiedFiles
     }
 
     return startWorker.apply(this, arguments)
@@ -1001,9 +1021,14 @@ addHook({
     'initialize',
     initialize => async function () {
       await initialize.apply(this, arguments)
-      isKnownTestsEnabled = !!this.options.worldParameters._ddKnownTests
+      isKnownTestsEnabled = !!this.options.worldParameters._ddIsKnownTestsEnabled
       if (isKnownTestsEnabled) {
         knownTests = this.options.worldParameters._ddKnownTests
+        // if for whatever reason the worker does not receive valid known tests, we disable EFD and known tests
+        if (!isValidKnownTests(knownTests)) {
+          isKnownTestsEnabled = false
+          knownTests = {}
+        }
       }
       isEarlyFlakeDetectionEnabled = !!this.options.worldParameters._ddIsEarlyFlakeDetectionEnabled
       if (isEarlyFlakeDetectionEnabled) {
@@ -1011,7 +1036,7 @@ addHook({
       }
       isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
       if (isImpactedTestsEnabled) {
-        modifiedTests = this.options.worldParameters._ddModifiedTests
+        modifiedFiles = this.options.worldParameters._ddModifiedFiles
       }
     }
   )

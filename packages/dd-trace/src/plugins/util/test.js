@@ -49,6 +49,13 @@ const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
 
+/**
+ * JSDoc types for test environment metadata helpers.
+ *
+ * @typedef {{ service?: string, isServiceUserProvided?: boolean }} TestEnvironmentConfig
+ * @typedef {Record<string, string|number|undefined>} TestEnvironmentMetadata
+ */
+
 // session tags
 const TEST_SESSION_NAME = 'test_session.name'
 
@@ -119,9 +126,9 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 // playwright worker variables
 const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 
-// Early flake detection util strings
-const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + String.raw` \(#\d+\): `, 'g')
+// vitest worker variables
+const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
+const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 
 // Library Capabilities Tagging
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
@@ -185,10 +192,6 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
-// Test Management utils strings
-const ATTEMPT_TO_FIX_STRING = "Retried by Datadog's Test Management"
-const ATTEMPT_TEST_NAME_REGEX = new RegExp(ATTEMPT_TO_FIX_STRING + String.raw` \(#\d+\): `, 'g')
-
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
@@ -218,6 +221,8 @@ module.exports = {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_LOGS_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -262,12 +267,6 @@ module.exports = {
   getTestEndLine,
   removeInvalidMetadata,
   parseAnnotations,
-  EFD_STRING,
-  EFD_TEST_NAME_REGEX,
-  removeEfdStringFromTestName,
-  removeAttemptToFixStringFromTestName,
-  addEfdStringToTestName,
-  addAttemptToFixStringToTestName,
   getIsFaultyEarlyFlakeDetection,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
@@ -302,7 +301,7 @@ module.exports = {
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
-  getModifiedTestsFromDiff,
+  getModifiedFilesFromDiff,
   isModifiedTest,
   POSSIBLE_BASE_BRANCHES
 }
@@ -325,6 +324,10 @@ function validateUrl (url) {
   }
 }
 
+/**
+ * @param {TestEnvironmentMetadata} metadata
+ * @returns {TestEnvironmentMetadata}
+ */
 function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL && !validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
@@ -438,37 +441,49 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   )
 }
 
-function getTestEnvironmentMetadata (testFramework, config) {
-  // TODO: eventually these will come from the tracer (generally available)
+/**
+ * Build environment metadata for tests by merging CI, Git, runtime/OS and user-provided metadata.
+ *
+ * @param {string=} testFramework
+ * @param {TestEnvironmentConfig=} config
+ * @returns {TestEnvironmentMetadata}
+ */
+function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadataExtraction = false) {
   const ciMetadata = getCIMetadata()
-  const {
-    [GIT_COMMIT_SHA]: commitSHA,
-    [GIT_BRANCH]: branch,
-    [GIT_REPOSITORY_URL]: repositoryUrl,
-    [GIT_TAG]: tag,
-    [GIT_COMMIT_AUTHOR_NAME]: authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
-    [GIT_COMMIT_MESSAGE]: commitMessage,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath,
-    [GIT_COMMIT_HEAD_SHA]: headCommitSha
-  } = ciMetadata
-
-  const gitMetadata = getGitMetadata({
-    commitSHA,
-    branch,
-    repositoryUrl,
-    tag,
-    authorName,
-    authorEmail,
-    commitMessage,
-    ciWorkspacePath,
-    headCommitSha
-  })
-
   const userProvidedGitMetadata = getUserProviderGitMetadata()
 
-  checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+  let gitMetadata = {}
 
+  // We don't execute git in test framework workers since the information is in the parent process
+  // and git metadata does not affect the execution of the tests
+  if (!shouldSkipGitMetadataExtraction) {
+    checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
+
+    const {
+      [GIT_COMMIT_SHA]: commitSHA,
+      [GIT_BRANCH]: branch,
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_TAG]: tag,
+      [GIT_COMMIT_AUTHOR_NAME]: authorName,
+      [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
+      [GIT_COMMIT_MESSAGE]: commitMessage,
+      [CI_WORKSPACE_PATH]: ciWorkspacePath,
+      [GIT_COMMIT_HEAD_SHA]: headCommitSha
+    } = ciMetadata
+    gitMetadata = getGitMetadata({
+      commitSHA,
+      branch,
+      repositoryUrl,
+      tag,
+      authorName,
+      authorEmail,
+      commitMessage,
+      ciWorkspacePath,
+      headCommitSha
+    })
+  }
+
+  /** @type {TestEnvironmentMetadata} */
   const runtimeAndOSMetadata = getRuntimeAndOSMetadata()
 
   const metadata = {
@@ -808,22 +823,6 @@ function parseAnnotations (annotations) {
   }, {})
 }
 
-function addEfdStringToTestName (testName, numAttempt) {
-  return `${EFD_STRING} (#${numAttempt}): ${testName}`
-}
-
-function addAttemptToFixStringToTestName (testName, numAttempt) {
-  return `${ATTEMPT_TO_FIX_STRING} (#${numAttempt}): ${testName}`
-}
-
-function removeEfdStringFromTestName (testName) {
-  return testName.replaceAll(EFD_TEST_NAME_REGEX, '')
-}
-
-function removeAttemptToFixStringFromTestName (testName) {
-  return testName.replaceAll(ATTEMPT_TEST_NAME_REGEX, '')
-}
-
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
   let newSuites = 0
   for (const suite of projectSuites) {
@@ -1070,7 +1069,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
   return getGitDiff(baseCommit, targetCommit)
 }
 
-function getModifiedTestsFromDiff (diff) {
+function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
 
@@ -1111,12 +1110,13 @@ function getModifiedTestsFromDiff (diff) {
   return result
 }
 
-function isModifiedTest (testPath, testStartLine, testEndLine, modifiedTests, testFramework) {
-  if (modifiedTests === undefined) {
+function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {
+  if (modifiedFiles === undefined) {
     return false
   }
 
-  const lines = modifiedTests[testPath]
+  const lines = modifiedFiles[testPath]
+
   if (!lines) {
     return false
   }

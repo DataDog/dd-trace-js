@@ -1,10 +1,12 @@
 'use strict'
 
 module.exports = {
+  '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
+  '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => require('../azure-functions'),
   '@azure/service-bus': () => require('../azure-service-bus'),
   '@cucumber/cucumber': () => require('../cucumber'),
@@ -16,6 +18,7 @@ module.exports = {
   '@graphql-tools/executor': () => require('../graphql'),
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
+  '@happy-dom/jest-environment': () => require('../jest'),
   '@jest/core': () => require('../jest'),
   '@jest/reporters': () => require('../jest'),
   '@jest/test-sequencer': () => require('../jest'),
@@ -130,11 +133,13 @@ module.exports = {
   sequelize: () => require('../sequelize'),
   sharedb: () => require('../sharedb'),
   tedious: () => require('../tedious'),
+  tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
   url: () => require('../url'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },
   vm: () => require('../vm'),
   when: () => require('../when'),
   winston: () => require('../winston'),
-  workerpool: () => require('../mocha')
+  workerpool: () => require('../mocha'),
+  ws: () => require('../ws')
 }

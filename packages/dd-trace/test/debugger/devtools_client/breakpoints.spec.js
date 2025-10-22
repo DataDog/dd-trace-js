@@ -1,5 +1,10 @@
 'use strict'
 
+const { expect } = require('chai')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
 require('../../setup/mocha')
 
 describe('breakpoints', function () {
@@ -37,7 +42,7 @@ describe('breakpoints', function () {
       '@noCallThru': true
     }
 
-    breakpoints = proxyquire('../src/debugger/devtools_client/breakpoints', {
+    breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
       './state': stateMock
     })
@@ -452,6 +457,16 @@ describe('breakpoints', function () {
   }
 })
 
+/**
+ * Generate a probe config
+ *
+ * @param {object} [config] Optional configuration object.
+ * @param {string} [config.id='probe-1'] The probe ID.
+ * @param {number} [config.version=1] The probe version.
+ * @param {object} [config.where={ sourceFile: 'test.js', lines: ['10'] }] The location information.
+ * @param {object} [config.when={ json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' }] The condition for the probe.
+ * @returns {{ id: string; version: number; where: object; when: object; }}
+ */
 function genProbeConfig ({ id, version, where, when } = {}) {
   return {
     id: id || 'probe-1',

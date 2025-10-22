@@ -34,7 +34,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
+const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -43,6 +43,7 @@ const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
 const storedResponseHeaders = new WeakMap()
+const storedBodies = new WeakMap()
 
 let isEnabled = false
 let config
@@ -113,6 +114,11 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  if (!req.body) {
+    // do not store body if it is in req.body
+    storedBodies.set(req, body)
+  }
 
   const results = waf.run({
     persistent: {
@@ -200,11 +206,13 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   const storedHeaders = storedResponseHeaders.get(req) || {}
 
-  Reporter.finishRequest(req, res, storedHeaders)
+  const body = req.body || storedBodies.get(req)
+  Reporter.finishRequest(req, res, storedHeaders, body)
 
   if (storedHeaders) {
     storedResponseHeaders.delete(req)
   }
+  storedBodies.delete(req)
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
@@ -306,8 +314,13 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
     storedResponseHeaders.set(req, responseHeaders)
   }
 
+  // TODO: do not call waf if inside block()
+  // if (isBlocking()) {
+  //   return
+  // }
+
   // avoid "write after end" error
-  if (isBlocked(res)) {
+  if (isBlocked(res) || callBlockDelegation(res)) {
     abortController?.abort()
     return
   }

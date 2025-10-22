@@ -66,7 +66,7 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -77,7 +77,13 @@ for (const packageName of names) {
     }
 
     const namesAndSuccesses = {}
-    for (const { name, file, versions, hook, filePattern } of instrumentations[packageName]) {
+    for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
+      if (patchDefault === false && !moduleExports.default && isIitm) {
+        return moduleExports
+      } else if (patchDefault === true && moduleExports.default && isIitm) {
+        moduleExports = moduleExports.default
+      }
+
       let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
       if (fullFilePattern) {
@@ -137,7 +143,8 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
-            moduleExports = hook(moduleExports, version, name) ?? moduleExports
+
+            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {
@@ -146,7 +153,11 @@ for (const packageName of names) {
               `error_type:${e.constructor.name}`,
               `integration:${name}`,
               `integration_version:${version}`
-            ])
+            ], {
+              result: 'error',
+              result_class: 'internal_error',
+              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
+            })
           }
           namesAndSuccesses[`${name}@${version}`] = true
         }
@@ -160,7 +171,11 @@ for (const packageName of names) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
-        ])
+        ], {
+          result: 'abort',
+          result_class: 'incompatible_library',
+          result_reason: `Incompatible integration version: ${name}@${version}`
+        })
         log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
       }

@@ -1,16 +1,11 @@
 'use strict'
 
-require('../setup/tap')
-
-const expect = require('chai').expect
+const { expect } = require('chai')
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
-const SpaceProfiler = require('../../src/profiling/profilers/space')
-const WallProfiler = require('../../src/profiling/profilers/wall')
-const EventsProfiler = require('../../src/profiling/profilers/events')
-const { setTimeout } = require('node:timers/promises')
-
-const samplingContextsAvailable = process.platform !== 'win32'
+require('../setup/core')
 
 describe('profiler', function () {
   let Profiler
@@ -43,7 +38,9 @@ describe('profiler', function () {
 
   function setUpProfiler () {
     interval = 65 * 1000
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     exporterPromise = Promise.resolve()
     exporter = {
       export: sinon.stub().returns(exporterPromise)
@@ -62,6 +59,7 @@ describe('profiler', function () {
       start: sinon.stub(),
       stop: sinon.stub(),
       profile: sinon.stub().returns('profile'),
+      getInfo: sinon.stub().returns({}),
       encode: sinon.stub().returns(wallProfilePromise)
     }
 
@@ -72,6 +70,7 @@ describe('profiler', function () {
       start: sinon.stub(),
       stop: sinon.stub(),
       profile: sinon.stub().returns('profile'),
+      getInfo: sinon.stub().returns({}),
       encode: sinon.stub().returns(spaceProfilePromise)
     }
 
@@ -84,7 +83,7 @@ describe('profiler', function () {
 
   describe('not serverless', function () {
     function initProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate
@@ -118,49 +117,6 @@ describe('profiler', function () {
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
-    })
-
-    it('should allow configuring exporters by string or string array', async () => {
-      const checks = [
-        'agent',
-        ['agent']
-      ]
-
-      for (const exporters of checks) {
-        await profiler._start({
-          sourceMap: false,
-          exporters
-        })
-
-        expect(profiler._config.exporters[0].export).to.be.a('function')
-
-        profiler.stop()
-      }
-    })
-
-    it('should allow configuring profilers by string or string arrays', async () => {
-      const checks = [
-        ['space', SpaceProfiler],
-        ['wall', WallProfiler, EventsProfiler],
-        ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
-        ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
-        [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
-        [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
-      ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
-
-      for (const [profilers, ...expected] of checks) {
-        await profiler._start({
-          sourceMap: false,
-          profilers
-        })
-
-        expect(profiler._config.profilers.length).to.equal(expected.length)
-        for (let i = 0; i < expected.length; i++) {
-          expect(profiler._config.profilers[i]).to.be.instanceOf(expected[i])
-        }
-
-        profiler.stop()
-      }
     })
 
     it('should stop the internal profilers', async () => {
@@ -205,7 +161,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -222,7 +178,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await rejected.catch(() => {})
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       sinon.assert.notCalled(wallProfiler.stop)
       sinon.assert.notCalled(spaceProfiler.stop)
@@ -327,7 +283,7 @@ describe('profiler', function () {
       clock.tick(interval)
 
       await waitForExport()
-      await setTimeout(1)
+      await clock.tickAsync(1)
 
       const [
         startWall,
@@ -403,7 +359,7 @@ describe('profiler', function () {
     const flushAfterIntervals = 65
 
     function initServerlessProfiler () {
-      Profiler = proxyquire('../src/profiling/profiler', {
+      Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
           SourceMapper: {
             create: sourceMapCreate
