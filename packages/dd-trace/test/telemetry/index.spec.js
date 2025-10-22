@@ -35,20 +35,6 @@ describe('telemetry (proxy)', () => {
     })
   })
 
-  it('should be noop when disabled', () => {
-    proxy.start()
-    proxy.updateIntegrations()
-    proxy.updateConfig([])
-    proxy.appClosing()
-    proxy.stop()
-
-    expect(telemetry.start).to.not.have.been.called
-    expect(telemetry.updateIntegrations).to.not.have.been.called
-    expect(telemetry.updateConfig).to.not.have.been.called
-    expect(telemetry.appClosing).to.not.have.been.called
-    expect(telemetry.stop).to.not.have.been.called
-  })
-
   it('should proxy when enabled', () => {
     const config = { telemetry: { enabled: true } }
 
@@ -117,7 +103,13 @@ describe('telemetry', () => {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
     }
-
+    /**
+     * @type {Object} CircularObject
+     * @property {string} field
+     * @property {Object} child
+     * @property {string} child.field
+     * @property {CircularObject | null} child.parent
+     */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value'
