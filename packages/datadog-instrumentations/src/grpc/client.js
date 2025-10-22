@@ -252,18 +252,9 @@ addHook({ name: '@grpc/grpc-js', versions: ['>=1.0.3 <1.1.4'], file: 'build/src/
   return client
 })
 
-addHook({ name: '@grpc/grpc-js', versions: ['>=1.1.4 <1.3.0'] }, patch(true))
+addHook({ name: '@grpc/grpc-js', versions: ['>=1.1.4'] }, patch(true))
 
-addHook({ name: '@grpc/grpc-js', versions: ['>=1.1.4 <1.3.0'], file: 'build/src/make-client.js' }, client => {
-  shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(true))
-  shimmer.wrap(client, 'loadPackageDefinition', createWrapLoadPackageDefinition(true))
-
-  return client
-})
-
-addHook({ name: '@grpc/grpc-js', versions: ['>=1.3.0'] }, patch(true))
-
-addHook({ name: '@grpc/grpc-js', versions: ['>=1.3.0'], file: 'build/src/make-client.js' }, client => {
+addHook({ name: '@grpc/grpc-js', versions: ['>=1.1.4'], file: 'build/src/make-client.js' }, client => {
   shimmer.wrap(client, 'makeClientConstructor', createWrapMakeClientConstructor(true))
   shimmer.wrap(client, 'loadPackageDefinition', createWrapLoadPackageDefinition(true))
 
