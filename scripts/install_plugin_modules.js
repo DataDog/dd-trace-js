@@ -1,6 +1,6 @@
 'use strict'
 
-const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { mkdir, readdir, writeFile } = require('fs/promises')
 const { arch } = require('os')
 const { join } = require('path')
 const { createHash } = require('crypto')
@@ -19,22 +19,15 @@ const excludeList = arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'ora
 // List of trusted transitive dependencies to execute scripts for.
 const trustedList = ['libpq']
 const workspaces = new Set()
-const externalDeps = new Map()
-
-Object.keys(externals).forEach(external => externals[external].forEach(thing => {
-  if (thing.dep) {
-    const depsArr = externalDeps.get(external)
-    depsArr ? depsArr.push(thing) : externalDeps.set(external, [thing])
-  }
-}))
+const externalDeps = Object.create(null)
+const plugins = Object.create(null)
 
 run()
 
 async function run () {
   await assertPrerequisites()
   install(process.env.BUN_FORCE_INSTALL === 'true')
-  await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  install()
+  await assertPeerDependencies()
 }
 
 async function assertPrerequisites () {
@@ -46,7 +39,11 @@ async function assertPrerequisites () {
     .filter(file => !filter || filter.includes(file))
 
   const internals = moduleNames.reduce((/** @type {object[]} */ internals, moduleName) => {
-    internals.push(...getInstrumentation(moduleName))
+    const instrumentations = getInstrumentation(moduleName)
+    internals.push(...instrumentations)
+    for (const { name } of instrumentations) {
+      plugins[name] = moduleName
+    }
     return internals
   }, [])
 
@@ -54,9 +51,15 @@ async function assertPrerequisites () {
     await assertInstrumentation(inst, false)
   }
 
+  // TODO: Always install as a peer dependency along the internal module instead
+  // so that we no longer need NODE_PATH.
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
   for (const name of externalNames) {
     for (const inst of [].concat(externals[name])) {
+      if (inst.dep) {
+        externalDeps[name] ??= []
+        externalDeps[name].push(inst)
+      }
       await assertInstrumentation(inst, true)
     }
   }
@@ -134,35 +137,39 @@ async function assertPackage (name, version, dependencyVersionRange) {
   ])
 }
 
-/**
- * @param {object} rootFolder
- * @param {string} parent
- */
-async function assertPeerDependencies (rootFolder, parent = '') {
-  const entries = await readdir(rootFolder)
+async function assertPeerDependencies () {
+  let hasPeers = false
 
-  for (const entry of entries) {
-    const folder = join(rootFolder, entry)
+  for (const workspace of workspaces) {
+    const folder = join(__dirname, '..', 'versions', workspace)
+    const externalName = workspace.split('@').slice(0, -1).join('@')
+    const pluginName = plugins[externalName]
 
-    if (!(await lstat(folder)).isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (entry.startsWith('@')) {
-      await assertPeerDependencies(folder, entry)
-      continue
-    }
-
-    const externalName = join(parent, entry.split('@')[0])
-
-    if (!externalDeps.has(externalName)) continue
+    if (!externalDeps[pluginName]) continue
 
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name } of externalDeps.get(externalName)) {
+    for (const { dep, name } of externalDeps[pluginName]) {
       const pkgJsonPath = require(folder).pkgJsonPath()
       const pkgJson = require(pkgJsonPath)
 
-      for (const section of ['devDependencies', 'peerDependencies']) {
+      // Add missing dependency to the module. While this technically means the
+      // module is broken, a user could add the dependency manually as well, so we
+      // need to do the same thing in order to test that scenario.
+      if (dep !== name && typeof dep === 'string') {
+        versionPkgJson.dependencies[name] = dep
+
+        hasPeers = true
+
+        await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+
+        continue
+      }
+
+      // Actual peer dependencies are installed automatically by Bun, so we only
+      // need to manually install dev dependencies.
+      for (const section of ['devDependencies']) {
         if (pkgJson[section]?.[name]) {
           if (dep === externalName) {
             versionPkgJson.dependencies[name] = pkgJson.version
@@ -174,12 +181,18 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               : pkgJson[section][name]
           }
 
+          hasPeers = true
+
           await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
 
           break
         }
       }
     }
+  }
+
+  if (hasPeers) {
+    install()
   }
 }
 
@@ -190,6 +203,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
 async function assertIndex (name, version) {
   const index = `'use strict'
 
+const { realpathSync } = require('fs')
 const requirePackageJson = require('${requirePackageJsonPath}')
 
 module.exports = {
@@ -200,6 +214,23 @@ module.exports = {
    * @returns {import('${name}') | never} The module.
    */
   get (id) { return require(id || '${name}') },
+  /**
+   * Load the module following pnpm-style symlinks.
+   *
+   * @param {...string} [ids] The names/ids of the transitive module to get.
+   * @returns {import('${name}') | never} The module.
+   */
+  follow (...ids) {
+    let prefix = __dirname + '/node_modules'
+
+    for (const [i, id] of ['${name}'].concat(ids).entries()) {
+      if (i === ids.length) return require(prefix + '/' + (id || '${name}'))
+      prefix = realpathSync(prefix + '/' + id)
+        .split('/node_modules')
+        .slice(0, -1)
+        .join('/node_modules') + '/node_modules'
+    }
+  },
   /**
    * Resolve the path for a module id.
    *
