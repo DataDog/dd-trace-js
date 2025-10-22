@@ -68,7 +68,6 @@ describe('esm', () => {
         const paths = ['./packages/datadog-plugin-prisma/test/integration-test/*', config.schema]
 
         if (isPrismaV7) paths.push(config.configFile)
-
         const deps = [`prisma@${version}`, `@prisma/client@${version}`, 'typescript']
         if (isPrismaV7) deps.push('@prisma/adapter-pg')
         useSandbox(deps, false, paths)
