@@ -2414,18 +2414,25 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
         childProcess = exec(
-          testCommand,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_TEST_SESSION_NAME: 'my-test-session-name'
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
+              SPEC_PATTERN: specToRun,
             },
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -2532,7 +2539,7 @@ moduleTypes.forEach(({
                 NUM_RETRIES_EFD
               )
             }
-          })
+          }, 25000)
 
       const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
@@ -2561,6 +2568,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
