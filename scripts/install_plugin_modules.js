@@ -179,9 +179,7 @@ async function assertPeerDependencies () {
         continue
       }
 
-      // Actual peer dependencies are installed automatically by Bun, so we only
-      // need to manually install dev dependencies.
-      for (const section of ['devDependencies']) {
+      for (const section of ['devDependencies', 'peerDependencies']) {
         if (pkgJson[section]?.[name]) {
           if (dep === externalName) {
             versionPkgJson.dependencies[name] = pkgJson.version
