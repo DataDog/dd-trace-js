@@ -171,9 +171,9 @@ class OtlpTransformer extends OtlpTransformerBase {
           attributes: this._attributesToJson(dp.attributes),
           startTimeUnixNano: String(dp.startTimeUnixNano),
           timeUnixNano: String(dp.timeUnixNano),
-          count: String(dp.count),
+          count: dp.count,
           sum: dp.sum,
-          bucketCounts: dp.bucketCounts?.map(String) || [],
+          bucketCounts: dp.bucketCounts || [],
           explicitBounds: dp.explicitBounds || [],
           min: dp.min,
           max: dp.max
@@ -243,7 +243,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
     // Determine if value is int or double
     if (Number.isInteger(dataPoint.value)) {
-      result.asInt = String(dataPoint.value)
+      result.asInt = dataPoint.value
     } else {
       result.asDouble = dataPoint.value
     }
