@@ -14,7 +14,7 @@ let hasCompatibleBun = () => {
   try {
     const version = execSync('command -v bun >/dev/null 2>&1 && bun -v')
 
-    if (!semifies(version, `^${BUN_VERSION}`)) {
+    if (!semifies(version, '^1.3.1')) {
       return false
     }
   } catch {
@@ -35,6 +35,7 @@ function withBun (env = process.env) {
   if (hasCompatibleBun()) return env
 
   execSync(`curl -fsSL https://bun.com/install | BUN_INSTALL="${BUN_INSTALL}" bash -s "bun-v${BUN_VERSION}"`)
+  execSync('bun upgrade --canary', { env })
 
   hasCompatibleBun = () => true
 
