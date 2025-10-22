@@ -12,8 +12,8 @@ const externals = require('../packages/dd-trace/test/plugins/externals.json')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
+const { BUN, withBun } = require('../integration-tests/helpers/bun')
 const exec = require('./helpers/exec')
-const { withBun } = require('./bun')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -292,7 +292,7 @@ function install (force = false, retry = true) {
   }
 
   try {
-    exec(`bun install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
+    exec(`${BUN} install ${flags.join(' ')}`, { cwd: folder(), env: withBun() })
   } catch (err) {
     if (!retry) throw err
     install(force, false) // retry in case of server error from registry
