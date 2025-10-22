@@ -8,14 +8,14 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { IS_NIGHTLY } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('grpc', '@grpc/grpc-js', IS_NIGHTLY ? '>=1.3.0' : undefined, version => {
+  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 && '>=1.3.0', version => {
     before(async function () {
       this.timeout(60000)
       sandbox = await createSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [

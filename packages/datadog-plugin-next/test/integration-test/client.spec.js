@@ -10,10 +10,10 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { IS_NIGHTLY } = require('../../../../version')
+const { NODE_MAJOR } = require('../../../../version')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-const min = IS_NIGHTLY ? '>=13' : '>=11.0'
+const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
 describe('esm', () => {
   let agent
@@ -22,7 +22,7 @@ describe('esm', () => {
   let variants
 
   // These next versions have a dependency which uses a deprecated node buffer and match versions tested with unit tests
-  withVersions('next', 'next', `${min}`, version => {
+  withVersions('next', 'next', `${min} <15.4.1`, version => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(300 * 1000)

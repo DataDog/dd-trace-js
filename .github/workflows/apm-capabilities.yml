@@ -8,20 +8,19 @@ on:
     - cron: 0 4 * * *
   workflow_dispatch:
     inputs:
-      nightly-version:
-        description: 'Nightly node version to use'
+      latest-version:
+        description: 'Node version to use'
         required: false
-        default: 'false'
         type: string
 
 
 concurrency:
-  group: ${{ inputs.nightly-version && format('{0}-{1}', github.workflow, inputs.nightly-version) || github.workflow }}-${{ github.ref || github.run_id }}"
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-  NIGHTLY_VERSION: ${{ inputs.nightly-version && format('{0}-{1}', inputs.nightly-version, 'nightly') }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
   tracing-macos:

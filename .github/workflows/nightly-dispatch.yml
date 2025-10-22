@@ -32,6 +32,16 @@ on:
         required: false
         default: true
         type: boolean
+      profiling:
+        description: 'Profiling Tests'
+        required: false
+        default: true
+        type: boolean
+      appsec:
+        description: 'AppSec Tests'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   actions: write
@@ -50,10 +60,12 @@ jobs:
           - llmobs
           - platform
           - serverless
+          - appsec
+          - profiling
     runs-on: ubuntu-latest
     steps:
       - name: Trigger ${{matrix.workflow }} workflow
         if: ${{ inputs[matrix.workflow] }}
-        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f nightly-version=${{ inputs.node-version }}
+        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f latest-version=${{ inputs.node-version }}
         env:
           GH_TOKEN: ${{ github.token }}

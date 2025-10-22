@@ -11,7 +11,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
-const { NODE_MAJOR, IS_NIGHTLY } = require('../../../version')
+const { NODE_MAJOR } = require('../../../version')
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
@@ -65,7 +65,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, IS_NIGHTLY ? '>=1.3.0' : undefined, (version, pkg) => {
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })

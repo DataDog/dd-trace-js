@@ -16,7 +16,7 @@ const {
 const sinon = require('sinon')
 const { loadMessage } = require('./helpers')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
-const { IS_NIGHTLY } = require('../../../version')
+const { NODE_MAJOR } = require('../../../version')
 
 const BASIC_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_user_schema.json'), 'utf8')
@@ -41,7 +41,7 @@ describe('Plugin', () => {
     let mockTime = 0
 
     // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-    withVersions('avsc', ['avsc'], IS_NIGHTLY ? '>5.0.0' : undefined, (version) => {
+    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : undefined, (version) => {
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas
