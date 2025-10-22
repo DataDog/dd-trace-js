@@ -85,6 +85,9 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
+# Output of tap
+.tap/*
+
 
 ### VisualStudioCode ###
 .vscode/*

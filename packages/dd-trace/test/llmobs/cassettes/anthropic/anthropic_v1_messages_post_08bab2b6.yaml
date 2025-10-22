@@ -1,0 +1,120 @@
+interactions:
+- request:
+    body: '{"model":"claude-3-5-sonnet-20241022","stream":false,"max_tokens":4096,"thinking":{"type":"disabled"},"messages":[{"role":"user","content":"Hello!"}]}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '150'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - Anthropic/JS 0.65.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 0.65.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Timeout
+      : - '600'
+      ? !!python/object/apply:multidict._multidict.istr
+      - anthropic-dangerous-direct-browser-access
+      : - 'true'
+      ? !!python/object/apply:multidict._multidict.istr
+      - anthropic-version
+      : - '2023-06-01'
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.anthropic.com/v1/messages
+  response:
+    body:
+      string: '{"model":"claude-3-5-sonnet-20241022","id":"msg_01LWSczDEYTJkFxkvGr4q1kc","type":"message","role":"assistant","content":[{"type":"text","text":"Hi
+        there! How can I help you today?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":9,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":13,"service_tier":"standard"}}'
+    headers:
+      CF-RAY:
+      - 9922ea6108b5d684-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 21 Oct 2025 18:46:04 GMT
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      X-Robots-Tag:
+      - none
+      anthropic-organization-id:
+      - 4257e925-ee99-4ee8-9c62-8e53716d5203
+      anthropic-ratelimit-input-tokens-limit:
+      - '5000000'
+      anthropic-ratelimit-input-tokens-remaining:
+      - '5000000'
+      anthropic-ratelimit-input-tokens-reset:
+      - '2025-10-21T18:46:04Z'
+      anthropic-ratelimit-output-tokens-limit:
+      - '1000000'
+      anthropic-ratelimit-output-tokens-remaining:
+      - '1000000'
+      anthropic-ratelimit-output-tokens-reset:
+      - '2025-10-21T18:46:04Z'
+      anthropic-ratelimit-requests-limit:
+      - '10000'
+      anthropic-ratelimit-requests-remaining:
+      - '9999'
+      anthropic-ratelimit-requests-reset:
+      - '2025-10-21T18:46:03Z'
+      anthropic-ratelimit-tokens-limit:
+      - '6000000'
+      anthropic-ratelimit-tokens-remaining:
+      - '6000000'
+      anthropic-ratelimit-tokens-reset:
+      - '2025-10-21T18:46:04Z'
+      cf-cache-status:
+      - DYNAMIC
+      request-id:
+      - req_011CULqgdUBEuBvMTzJvKKFM
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains; preload
+      via:
+      - 1.1 google
+      x-envoy-upstream-service-time:
+      - '1000'
+    status:
+      code: 200
+      message: OK
+version: 1
