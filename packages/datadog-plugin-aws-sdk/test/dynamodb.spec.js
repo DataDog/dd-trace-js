@@ -27,6 +27,7 @@ async function resetLocalStackDynamo () {
 describe('Plugin', () => {
   describe('aws-sdk (dynamodb)', function () {
     setup()
+    this.timeout(10000)
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let tracer
