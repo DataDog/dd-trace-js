@@ -12,9 +12,9 @@ const loader = require('../../../versions/@grpc/proto-loader').get()
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
+const { NODE_MAJOR, IS_NIGHTLY } = require('../../../version')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
-const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
+const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   let grpc
@@ -78,7 +78,7 @@ describe('Plugin', () => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, nodeMajor >= 25 ? '>=1.3.0' : undefined, (version, pkg) => {
+    withVersions('grpc', pkgs, IS_NIGHTLY ? '>=1.3.0' : undefined, (version, pkg) => {
       for (const clientName in clientBuilders) {
         const buildClient = clientBuilders[clientName]
 

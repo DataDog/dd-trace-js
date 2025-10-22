@@ -44,7 +44,12 @@ jobs:
   run-nightly:
     strategy:
       matrix:
-        workflow: [apm-integrations, apm-capabilities, llmobs, platform, serverless]
+        workflow:
+          - apm-integrations
+          - apm-capabilities
+          - llmobs
+          - platform
+          - serverless
     runs-on: ubuntu-latest
     steps:
       - name: Trigger ${{matrix.workflow }} workflow
