@@ -162,7 +162,7 @@ async function assertPeerDependencies () {
     const versionPkgJson = require(versionPkgJsonPath)
 
     for (const { dep, name } of externalDeps[pluginName]) {
-      const pkgJsonPath = require(folder).pkgJsonPath()
+      const pkgJsonPath = join(folder, 'node_modules', externalName, 'package.json')
       const pkgJson = require(pkgJsonPath)
 
       // Add missing dependency to the module. While this technically means the
