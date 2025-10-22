@@ -291,11 +291,7 @@ publicHoistPattern = []
  * @param {boolean} [retry=true]
  */
 function install (force = false, retry = true) {
-  const flags = [
-    '--linker=isolated',
-    '--omit=peer',
-    '--ignore-engines',
-  ]
+  const flags = ['--linker=isolated']
 
   if (force) {
     flags.push('--force')
