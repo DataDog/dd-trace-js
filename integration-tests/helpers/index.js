@@ -544,7 +544,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   additionalEnvArgs = additionalEnvArgs || {}
   let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: String(agentPort)
+    DD_TRACE_AGENT_PORT: String(agentPort),
+    DD_TRACE_FLUSH_INTERVAL: '0'
   })
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
