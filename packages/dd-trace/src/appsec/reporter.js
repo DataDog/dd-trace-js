@@ -483,7 +483,7 @@ function reportAttributes (attributes) {
   rootSpan.addTags(tags)
 }
 
-function finishRequest (req, res, storedResponseHeaders) {
+function finishRequest (req, res, storedResponseHeaders, requestBody) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -543,8 +543,7 @@ function finishRequest (req, res, storedResponseHeaders) {
   )
 
   if (extendedDataCollection) {
-    // TODO add support for fastify, req.body is not available in fastify
-    reportRequestBody(rootSpan, req.body)
+    reportRequestBody(rootSpan, requestBody)
   }
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
