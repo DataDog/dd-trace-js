@@ -207,8 +207,8 @@
   ],
   "google-cloud-pubsub": [
     {
-      "name": "google-gax",
-      "versions": ["3.5.7"]
+      "name": "@grpc/grpc-js",
+      "dep": "1.3.8"
     }
   ],
   "genai": [

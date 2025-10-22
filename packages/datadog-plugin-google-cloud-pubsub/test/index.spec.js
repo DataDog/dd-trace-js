@@ -48,6 +48,7 @@ describe('Plugin', () => {
       let resource
       let v1
       let gax
+      let grpc
 
       describe('without configuration', () => {
         beforeEach(() => {
@@ -55,9 +56,11 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
+          const root = `../../../versions/@google-cloud/pubsub@${version}`
           tracer = require('../../dd-trace')
-          gax = require('../../../versions/google-gax@3.5.7').get()
-          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          gax = require(root).follow('google-gax')
+          grpc = require(root).follow('google-gax', '@grpc/grpc-js')
+          const lib = require(root).get()
           project = getProjectId()
           topicName = getTopic()
           resource = `projects/${project}/topics/${topicName}`
@@ -87,11 +90,11 @@ describe('Plugin', () => {
 
           it('should be instrumented when using the internal API', async () => {
             const publisher = new v1.PublisherClient({
-              grpc: gax.grpc,
+              grpc,
               projectId: project,
               servicePath: 'localhost',
               port: 8081,
-              sslCreds: gax.grpc.credentials.createInsecure(),
+              sslCreds: grpc.credentials.createInsecure(),
             }, gax)
 
             const expectedSpanPromise = expectSpanWithDefaults({
