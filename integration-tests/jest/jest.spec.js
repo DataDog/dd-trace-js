@@ -4311,6 +4311,50 @@ describe('jest CommonJS', () => {
         )
       })
     })
+
+    it('does not crash if the request to get test management tests fails', async () => {
+      let testOutput = ''
+      receiver.setSettings({
+        test_management: { enabled: true },
+        flaky_test_retries_enabled: false
+      })
+      receiver.setTestManagementTestsResponseCode(500)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // it is not retried
+          assert.equal(tests.length, 1)
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'test-management/test-attempt-to-fix-1',
+          DD_TRACE_DEBUG: '1'
+        },
+        stdio: 'inherit'
+      })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        eventsPromise
+      ])
+      assert.include(testOutput, 'Test management tests could not be fetched')
+    })
   })
 
   context('libraries capabilities', () => {
@@ -4653,5 +4697,47 @@ describe('jest CommonJS', () => {
         eventsPromise
       ])
     })
+  })
+
+  it('does not crash with mocks that are not dependencies', async () => {
+    let testOutput = ''
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-package-mock/non-dependency-mock-test',
+          SETUP_FILES_AFTER_ENV: '<rootDir>/ci-visibility/jest-setup-files-after-env.js',
+          RUN_IN_PARALLEL: true,
+        }
+      }
+    )
+
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.equal(tests.length, 6)
+          assert.equal(testSuites.length, 6)
+          assert.equal(testSuites.every(suite => suite.meta[TEST_STATUS] === 'pass'), true)
+          assert.equal(tests.every(test => test.meta[TEST_STATUS] === 'pass'), true)
+        })
+    ])
+    assert.notInclude(testOutput, 'Cannot find module')
+    assert.include(testOutput, '6 passed')
   })
 })

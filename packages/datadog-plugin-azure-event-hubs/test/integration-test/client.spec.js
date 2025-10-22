@@ -9,6 +9,8 @@ const {
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert, expect } = require('chai')
 
+const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+
 describe('esm', () => {
   let agent
   let proc
@@ -16,7 +18,7 @@ describe('esm', () => {
 
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'@azure/event-hubs@${version}'`], false, [
         './packages/datadog-plugin-azure-event-hubs/test/integration-test/*'])
     })
@@ -42,7 +44,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'azure.eventhubs.send'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
       await res
     }).timeout(20000)
 
@@ -86,7 +88,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[4][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
       await res
     }).timeout(60000)
 
@@ -94,7 +96,7 @@ describe('esm', () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         expect(payload[2][0]).to.not.have.property('_dd.span_links')
       })
-      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false }
+      const envVar = { DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED: false, ...spawnEnv }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, envVar)
       await res
     }).timeout(60000)

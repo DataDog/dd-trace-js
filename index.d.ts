@@ -135,6 +135,11 @@ interface Tracer extends opentracing.Tracer {
   dogstatsd: tracer.DogStatsD;
 
   /**
+   * Data Streams manual checkpointer API.
+   */
+  dataStreamsCheckpointer: tracer.DataStreamsCheckpointer;
+
+  /**
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
@@ -1024,6 +1029,29 @@ declare namespace tracer {
      * @beta This method is experimental and could be removed in future versions.
      */
     flush(): void
+  }
+
+  /**
+   * Manual Data Streams Monitoring checkpointer API.
+   */
+  export interface DataStreamsCheckpointer {
+    /**
+     * Sets a produce checkpoint and injects the DSM context into the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param target The target of data (topic, exchange, stream name).
+     * @param carrier The carrier object to inject DSM context into.
+     */
+    setProduceCheckpoint (type: string, target: string, carrier: any): void;
+
+    /**
+     * Sets a consume checkpoint and extracts DSM context from the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param source The source of data (topic, exchange, stream name).
+     * @param carrier The carrier object to extract DSM context from.
+     * @param manualCheckpoint Whether this checkpoint was manually set. Defaults to true.
+     * @returns The DSM context associated with the current pathway.
+     */
+    setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
   }
 
   export interface EventTrackingV2 {
@@ -2938,6 +2966,15 @@ declare namespace tracer {
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
 
+
+      /**
+       * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
+       * @param options The annotation context options.
+       * @param fn The callback over which to apply the annotation context options.
+       * @returns The result of the function.
+       */
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
+
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
@@ -3097,6 +3134,18 @@ declare namespace tracer {
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
       tags?: { [key: string]: any }
+    }
+
+    interface AnnotationContextOptions {
+      /**
+       * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * Set to override the span name for any spans annotated within the returned context.
+       */
+      name?: string,
     }
 
     /**

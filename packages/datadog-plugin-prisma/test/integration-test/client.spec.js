@@ -72,7 +72,9 @@ describe('esm', () => {
       // TODO: Integrate the assertions into the spawn command by adding a
       // callback. It should end the process when the assertions are met. That
       // way we can remove the Promise.all and the procPromise.then().
-      const procPromise = spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      const procPromise = spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
+        DD_TRACE_FLUSH_INTERVAL: '2000'
+      })
 
       await Promise.all([
         procPromise.then((res) => {
