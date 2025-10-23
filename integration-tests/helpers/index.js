@@ -407,6 +407,11 @@ function varySandbox (sandbox, filename, variants, namedVariant, packageName = v
 }
 
 /**
+ * @type {['default', 'star', 'destructure']}
+ */
+varySandbox.VARIANTS = ['default', 'star', 'destructure']
+
+/**
  * @param {boolean} shouldExpectTelemetryPoints
  */
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
