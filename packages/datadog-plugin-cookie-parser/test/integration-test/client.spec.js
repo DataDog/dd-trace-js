@@ -13,7 +13,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
 
     before(async function () {
       this.timeout(50000)
-      sandbox = await linkedSandbox([`'cookie-parser@${version}'`, 'express'], false,
+      sandbox = await linkedSandbox([`'cookie-parser@${version}'`, 'dc-polyfill', 'express'], false,
         ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'cookie-parser', 'cookieParser')
     })
