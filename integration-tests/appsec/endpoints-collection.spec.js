@@ -61,7 +61,7 @@ describe('Endpoints collection', () => {
         // Route with regex - not supported in express5
         { method: 'DELETE', path: '/regex/:hour(^\\d{2})h:minute(^\\d{2})m' },
 
-        { method: 'OPTIONS', path: '/users/:id?' }, // Added with addHttpMethod
+        { method: 'OPTIONS', path: '/users/:id?' },
         { method: 'MKCOL', path: '/example/near/:lat-:lng/radius/:r' }, // Added with addHttpMethod
 
         // All supported methods route
