@@ -498,7 +498,7 @@
       "versions": ["8.0.0"]
     }
   ],
-  "@prisma/client": [
+  "prisma": [
     {
       "name": "prisma",
       "dep": "@prisma/client"

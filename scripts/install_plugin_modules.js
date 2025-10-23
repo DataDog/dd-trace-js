@@ -168,7 +168,7 @@ async function assertPeerDependencies () {
       // Add missing dependency to the module. While this technically means the
       // module is broken, a user could add the dependency manually as well, so we
       // need to do the same thing in order to test that scenario.
-      if (dep !== externalName && typeof dep === 'string') {
+      if (typeof dep === 'string' && semver.validRange(dep)) {
         versionPkgJson.dependencies[name] = dep
 
         hasPeers = true
