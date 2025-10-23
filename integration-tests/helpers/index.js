@@ -303,11 +303,11 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isolated) {
     execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
-    execHelper(`yarn add ${deps.concat(`file:${out}`).join(' ')}`, addOptions)
+    execHelper(`yarn add ${deps.concat(`file:${out}`).join(' ')} ${addFlags.join(' ')}`, addOptions)
   } else {
     execHelper('yarn link')
     if (deps.length > 0) {
-      execHelper(`yarn add ${deps.join(' ')}`, addOptions)
+      execHelper(`yarn add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
     }
     execHelper('yarn link dd-trace', addOptions)
   }
