@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  linkedSandbox,
+  isolatedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -20,7 +20,8 @@ describe('esm', () => {
   withVersions('pg', 'pg', (version, _, realVersion) => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await linkedSandbox([`'pg@${version}'`], false, [
+      // TODO: Why does using linkedSandbox here make unit tests fail?
+      sandbox = await isolatedSandbox([`'pg@${version}'`], false, [
         './packages/datadog-plugin-pg/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
         default: 'import pg from \'pg\'',
