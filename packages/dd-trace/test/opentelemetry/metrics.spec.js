@@ -123,10 +123,10 @@ describe('OTLP Metrics Export', () => {
       const jsonDecoded = JSON.parse(jsonBuffer.toString())
       const jsonMetrics = jsonDecoded.resourceMetrics[0].scopeMetrics[0].metrics
 
-      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, '42')
+      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, 42)
       assert.strictEqual(jsonMetrics[1].sum.dataPoints[0].asDouble, -10.5)
-      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, '5')
-      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, '75')
+      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, 5)
+      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, 75)
     })
 
     it('handles missing metric metadata and transforms complex attribute types to OTLP format', () => {
