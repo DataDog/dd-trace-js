@@ -90,7 +90,16 @@ describe('OTLP Metrics Export', () => {
       type: 'gauge',
       data: [{ attributes: { instance: 'web-01' }, timeUnixNano: '4000000000', value: 75 }]
     }
-  ].map(m => ({ ...m, instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' } }))
+  ].map(m => (
+    {
+      ...m,
+      instrumentationScope: {
+        name: 'webapp-metrics',
+        version: '1.0.0',
+        schemaUrl: 'https://opentelemetry.io/schemas/v1.28.0',
+        attributes: { 'scope.name': 'checkout' }
+      }
+    }))
 
   beforeEach(() => {
     resourceAttributes = {
