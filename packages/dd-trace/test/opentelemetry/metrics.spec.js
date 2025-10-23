@@ -18,16 +18,19 @@ describe('OTLP Metrics Export', () => {
     let capturedPayload; let capturedHeaders; let validatorCalled = false
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
+      const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
-          statusCode: 200,
-          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
-          setTimeout: () => mockRes
+          ...baseMockRes,
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
         }
 
         const mockReq = {
+          ...baseMockReq,
           write: (data) => { capturedPayload = data },
           end: () => {
             const decoded = protocol === 'json'
@@ -36,17 +39,13 @@ describe('OTLP Metrics Export', () => {
             validator(decoded, capturedHeaders)
             validatorCalled = true
             if (responseHandlers.end) responseHandlers.end()
-          },
-          on: () => {},
-          once: () => {},
-          setTimeout: () => {}
+          }
         }
         callback(mockRes)
         return mockReq
       }
-      const mockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
-      return mockReq
+      callback(baseMockRes)
+      return baseMockReq
     })
 
     return () => {
