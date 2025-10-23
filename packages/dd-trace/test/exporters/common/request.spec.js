@@ -311,7 +311,7 @@ describe('request', function () {
   })
 
   it('should calculate correct Content-Length header for multi-byte characters', (done) => {
-    const sandbox = sinon.linkedSandbox()
+    const sandbox = sinon.createSandbox()
     sandbox.spy(http, 'request')
 
     const body = 'æøå'
@@ -341,7 +341,7 @@ describe('request', function () {
   })
 
   describe('when intercepting http', () => {
-    const sandbox = sinon.linkedSandbox()
+    const sandbox = sinon.createSandbox()
 
     beforeEach(() => {
       sandbox.spy(http, 'request')
