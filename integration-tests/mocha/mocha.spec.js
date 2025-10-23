@@ -8,7 +8,7 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -95,7 +95,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   let testOutput = ''
 
   before(async function () {
-    sandbox = await createSandbox(
+    sandbox = await isolatedSandbox(
       [
         `mocha@${MOCHA_VERSION}`,
         'chai@v4',

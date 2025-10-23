@@ -5,7 +5,7 @@ const assert = require('node:assert')
 
 const Axios = require('axios')
 
-const { createSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 // A race condition exists where the tracer receives a probe via RC, before Node.js has had a chance to load all the JS
@@ -28,7 +28,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
   let sandbox
 
   before(async function () {
-    sandbox = await createSandbox(
+    sandbox = await isolatedSandbox(
       undefined,
       undefined,
       // Ensure the test scripts live in the root of the sandbox so they are always the shortest path when

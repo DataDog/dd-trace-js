@@ -5,7 +5,7 @@ const { once } = require('events')
 
 const { assert } = require('chai')
 
-const { createSandbox } = require('../helpers')
+const { isolatedSandbox } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
 const packageManagers = ['yarn', 'npm', 'pnpm']
@@ -14,7 +14,7 @@ describe('test optimization startup', () => {
   let sandbox, cwd, receiver, childProcess, processOutput
 
   before(async () => {
-    sandbox = await createSandbox(packageManagers, true)
+    sandbox = await isolatedSandbox(packageManagers, true)
     cwd = sandbox.folder
   })
 

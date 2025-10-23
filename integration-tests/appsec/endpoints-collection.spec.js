@@ -5,7 +5,7 @@ const { describe, before, after, it } = require('mocha')
 
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
   let sandbox, cwd
@@ -13,7 +13,7 @@ describe('Endpoints collection', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
-    sandbox = await createSandbox(
+    sandbox = await isolatedSandbox(
       ['fastify'],
       false
     )

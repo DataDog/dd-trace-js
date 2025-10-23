@@ -3,7 +3,7 @@
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { linkedSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - code_injection - integration', () => {
   let axios, sandbox, cwd, agent, proc
@@ -11,7 +11,7 @@ describe('IAST - code_injection - integration', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 300000 : 30000)
 
-    sandbox = await createSandbox(
+    sandbox = await linkedSandbox(
       ['express'],
       false,
       [path.join(__dirname, 'resources')]

@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { linkedSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -12,7 +12,7 @@ describe('RASP - sql_injection - integration', () => {
 
   before(async function () {
     this.timeout(60000)
-    sandbox = await createSandbox(
+    sandbox = await linkedSandbox(
       ['express', 'pg'],
       false,
       [path.join(__dirname, 'resources')])

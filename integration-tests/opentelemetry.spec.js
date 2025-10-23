@@ -1,6 +1,6 @@
 'use strict'
 
-const { FakeAgent, createSandbox } = require('./helpers')
+const { FakeAgent, isolatedSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
 const { assert } = require('chai')
@@ -67,7 +67,7 @@ describe('opentelemetry', () => {
       // Needed because sdk-node doesn't start a tracer without an exporter
       '@opentelemetry/exporter-jaeger'
     ]
-    sandbox = await createSandbox(dependencies)
+    sandbox = await isolatedSandbox(dependencies)
     cwd = sandbox.folder
     agent = await new FakeAgent().start()
   })

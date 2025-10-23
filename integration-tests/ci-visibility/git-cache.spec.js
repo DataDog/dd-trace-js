@@ -6,7 +6,7 @@ const path = require('path')
 const os = require('os')
 const { execSync } = require('child_process')
 
-const { createSandbox } = require('../helpers')
+const { isolatedSandbox } = require('../helpers')
 
 const FIXED_COMMIT_MESSAGE = 'Test commit message for caching'
 const GET_COMMIT_MESSAGE_COMMAND_ARGS = ['log', '-1', '--pretty=format:%s']
@@ -30,7 +30,7 @@ describe('git-cache integration tests', () => {
   let originalCacheEnabled, originalCacheDir
 
   before(async () => {
-    sandbox = await createSandbox([], true)
+    sandbox = await isolatedSandbox([], true)
     cwd = sandbox.folder
     testRepoPath = cwd
 

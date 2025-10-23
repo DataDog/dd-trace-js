@@ -4,7 +4,7 @@ const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const msgpack = require('@msgpack/msgpack')
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
   let axios, sandbox, cwd, appFile, agent, proc, stdioHandler
@@ -14,7 +14,7 @@ describe('RASP', () => {
   }
 
   before(async () => {
-    sandbox = await createSandbox(['express', 'axios'])
+    sandbox = await isolatedSandbox(['express', 'axios'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec/rasp/index.js')
   })

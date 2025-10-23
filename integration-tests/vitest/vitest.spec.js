@@ -8,7 +8,7 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -65,7 +65,7 @@ versions.forEach((version) => {
     let sandbox, cwd, receiver, childProcess, testOutput
 
     before(async function () {
-      sandbox = await createSandbox([
+      sandbox = await isolatedSandbox([
         `vitest@${version}`,
         `@vitest/coverage-istanbul@${version}`,
         `@vitest/coverage-v8@${version}`,

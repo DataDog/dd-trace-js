@@ -3,13 +3,13 @@
 const assert = require('node:assert')
 const path = require('node:path')
 const Axios = require('axios')
-const { FakeAgent, spawnProc, createSandbox } = require('./helpers')
+const { FakeAgent, spawnProc, isolatedSandbox } = require('./helpers')
 
 describe('Code Origin for Spans', function () {
   let sandbox, cwd, appFile, agent, proc, axios
 
   before(async () => {
-    sandbox = await createSandbox(['fastify'])
+    sandbox = await isolatedSandbox(['fastify'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'code-origin', 'typescript.js')
   })

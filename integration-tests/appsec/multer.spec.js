@@ -7,7 +7,7 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const path = require('node:path')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
@@ -18,7 +18,7 @@ describe('multer', () => {
   ['1.4.4-lts.1', '1.4.5-lts.1'].forEach((version) => {
     describe(`v${version}`, () => {
       before(async () => {
-        sandbox = await createSandbox(['express', `multer@${version}`])
+        sandbox = await isolatedSandbox(['express', `multer@${version}`])
         cwd = sandbox.folder
         startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
       })

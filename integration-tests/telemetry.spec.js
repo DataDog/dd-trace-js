@@ -5,7 +5,7 @@ const { describe, before, after, it, beforeEach, afterEach } = require('mocha')
 
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
+const { isolatedSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
 
 describe('telemetry', () => {
   describe('dependencies', () => {
@@ -16,7 +16,7 @@ describe('telemetry', () => {
     let proc
 
     before(async () => {
-      sandbox = await createSandbox()
+      sandbox = await isolatedSandbox()
       cwd = sandbox.folder
       startupTestFile = path.join(cwd, 'startup/index.js')
     })

@@ -7,7 +7,7 @@ const { execSync } = require('node:child_process')
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnProc
 } = require('../../../../../../integration-tests/helpers')
 const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
@@ -83,7 +83,7 @@ describe('typescript', () => {
     context(`with version ${version}`, () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox(
+        sandbox = await linkedSandbox(
           [`typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
         )
       })

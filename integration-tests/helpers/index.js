@@ -680,7 +680,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,

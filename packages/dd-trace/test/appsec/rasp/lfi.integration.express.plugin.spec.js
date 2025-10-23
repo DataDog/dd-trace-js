@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { linkedSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -10,7 +10,7 @@ describe('RASP - lfi - integration - sync', () => {
 
   before(async function () {
     this.timeout(60000)
-    sandbox = await createSandbox(
+    sandbox = await linkedSandbox(
       ['express', 'fs'],
       false,
       [path.join(__dirname, 'resources')])

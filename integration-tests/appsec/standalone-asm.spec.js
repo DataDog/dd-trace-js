@@ -4,7 +4,7 @@ const { assert } = require('chai')
 const path = require('path')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   FakeAgent,
   spawnProc,
   curlAndAssertMessage,
@@ -16,7 +16,7 @@ describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
 
   before(async () => {
-    sandbox = await createSandbox(['express'])
+    sandbox = await isolatedSandbox(['express'])
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, 'standalone-asm/index.js')
   })

@@ -1,14 +1,14 @@
 'use strict'
 
 const { assert } = require('chai')
-const { createSandbox } = require('./helpers')
+const { isolatedSandbox } = require('./helpers')
 const http = require('http')
 
 describe('OpenTelemetry Logs Integration', () => {
   let sandbox
 
   beforeEach(async () => {
-    sandbox = await createSandbox()
+    sandbox = await isolatedSandbox()
   })
 
   afterEach(async () => {

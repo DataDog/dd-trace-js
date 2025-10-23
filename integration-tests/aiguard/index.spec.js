@@ -2,7 +2,7 @@
 
 const { describe, it, before, after } = require('mocha')
 const path = require('path')
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { expect } = require('chai')
 const { executeRequest } = require('./util')
@@ -12,7 +12,7 @@ describe('AIGuard SDK integration tests', () => {
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox(['express'])
+    sandbox = await isolatedSandbox(['express'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'aiguard/server.js')
     api = await startApiMock()

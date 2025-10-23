@@ -3,7 +3,7 @@
 const {
   FakeAgent,
   spawnProc,
-  createSandbox,
+  isolatedSandbox,
   curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
@@ -37,7 +37,7 @@ execArgvs.forEach(({ execArgv, skip }) => {
     let startupTestFile
 
     before(async () => {
-      sandbox = await createSandbox()
+      sandbox = await isolatedSandbox()
       cwd = sandbox.folder
       startupTestFile = path.join(cwd, 'startup/index.js')
     })

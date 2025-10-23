@@ -6,7 +6,7 @@ const { once } = require('events')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -19,7 +19,7 @@ describe('test optimization automatic log submission', () => {
   let testOutput = ''
 
   before(async () => {
-    sandbox = await createSandbox([
+    sandbox = await isolatedSandbox([
       'mocha',
       '@cucumber/cucumber',
       'jest',

@@ -8,7 +8,7 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -83,7 +83,7 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   before(async function () {
-    sandbox = await createSandbox([
+    sandbox = await isolatedSandbox([
       'jest',
       'chai@v4',
       'jest-jasmine2',

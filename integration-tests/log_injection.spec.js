@@ -1,6 +1,6 @@
 'use strict'
 
-const { FakeAgent, createSandbox, spawnProc, curlAndAssertMessage, assertObjectContains } = require('./helpers')
+const { FakeAgent, isolatedSandbox, spawnProc, curlAndAssertMessage, assertObjectContains } = require('./helpers')
 const path = require('path')
 const { USER_KEEP } = require('../ext/priority')
 
@@ -13,7 +13,7 @@ describe('Log Injection', () => {
   let env
 
   before(async () => {
-    sandbox = await createSandbox(['express', 'winston'])
+    sandbox = await isolatedSandbox(['express', 'winston'])
     cwd = sandbox.folder
     app = path.join(cwd, 'log_injection/index.js')
   })

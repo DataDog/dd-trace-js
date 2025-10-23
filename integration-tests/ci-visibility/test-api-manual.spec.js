@@ -5,7 +5,7 @@ const { exec } = require('child_process')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -17,7 +17,7 @@ describe('test-api-manual', () => {
   let sandbox, cwd, receiver, childProcess
 
   before(async () => {
-    sandbox = await createSandbox([], true)
+    sandbox = await isolatedSandbox([], true)
     cwd = sandbox.folder
   })
 
