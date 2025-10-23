@@ -84,7 +84,7 @@ describe('typescript', () => {
       before(async function () {
         this.timeout(20000)
         sandbox = await linkedSandbox(
-          [`typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+          [`typescript@${version}`, '@types/node'], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
         )
       })
 
