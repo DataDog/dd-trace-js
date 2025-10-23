@@ -236,15 +236,23 @@ function execHelper (command, options) {
   /* eslint-enable no-console */
 }
 
+async function isolatedSandbox (dependencies, isGitRepo, integrationTestsPaths, followUpCommand) {
+  return createSandbox(dependencies, isGitRepo, integrationTestsPaths, followUpCommand, true)
+}
+
+async function linkedSandbox (dependencies, isGitRepo, integrationTestsPaths, followUpCommand) {
+  return createSandbox(dependencies, isGitRepo, integrationTestsPaths, followUpCommand, false)
+}
+
 /**
  * @param {string[]} dependencies
  * @param {boolean} isGitRepo
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
+ * @param {string} [isolated=true]
  */
-
 async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+  integrationTestsPaths = ['./integration-tests/*'], followUpCommand, isolated = true) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
@@ -271,15 +279,25 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
+  const deps = cappedDependencies.join(' ')
 
   await fs.mkdir(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  const addFlags = ['--ignore-engines']
 
-  execHelper(addCommand, addOptions)
+  if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
+    addFlags.push('--prefer-offline')
+  }
+
+  if (isolated) {
+    execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
+    execHelper(`yarn add ${deps} file:${out}`, addOptions)
+  } else {
+    [`file:${out}`].concat(cappedDependencies)
+    execHelper('yarn link')
+    execHelper(`yarn add ${deps}`, addOptions)
+    execHelper('yarn link dd-trace', addOptions)
+  }
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -667,6 +685,8 @@ module.exports = {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
+  isolatedSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
