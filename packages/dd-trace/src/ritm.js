@@ -7,8 +7,35 @@ const dc = require('dc-polyfill')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const origRequire = Module.prototype.require
+const fs = require('fs')
+// Save the original _compile before any hooks (like pirates) modify it
+const origCompile = Module.prototype._compile
 
 // derived from require-in-the-middle@3 with tweaks
+
+// Find dd-trace's installation path to detect internal files
+let ddTraceBasePath = null
+try {
+  // __dirname is packages/dd-trace/src, we need to go up to find the root
+  const ddTracePath = path.dirname(path.dirname(__dirname))
+  // Check if this is the dd-trace package directory
+  if (ddTracePath.includes('dd-trace')) {
+    // Go up one more level to include all packages (datadog-*, dd-trace)
+    const packagesDir = path.dirname(ddTracePath)
+    ddTraceBasePath = packagesDir.endsWith('packages')
+      ? packagesDir + path.sep
+      : ddTracePath + path.sep
+  }
+} catch {
+  // If we can't determine the path, we'll skip the optimization
+}
+
+// Create a simple, untransformed loader for dd-trace internal files
+// This bypasses any external hooks like pirates/Babel by using the original _compile
+function loadDDTraceFile (module, filename) {
+  const content = fs.readFileSync(filename, 'utf8')
+  origCompile.call(module, content, filename)
+}
 
 module.exports = Hook
 
@@ -63,6 +90,32 @@ function Hook (modules, options, onrequire) {
       filename = Module._resolveFilename(request, this)
     } catch {
       return _origRequire.apply(this, arguments)
+    }
+
+    // Check if this is a dd-trace internal file. If so, load it without external
+    // transformations (like pirates/Babel) that might introduce unwanted dependencies
+    if (ddTraceBasePath && filename.startsWith(ddTraceBasePath)) {
+      // Check if already cached
+      if (require.cache[filename]) {
+        return require.cache[filename].exports
+      }
+
+      // Create a new module and load it with the original _compile
+      const module = new Module(filename, this)
+      module.filename = filename
+      module.paths = Module._nodeModulePaths(path.dirname(filename))
+
+      require.cache[filename] = module
+
+      try {
+        loadDDTraceFile(module, filename)
+      } catch (err) {
+        delete require.cache[filename]
+        throw err
+      }
+
+      module.loaded = true
+      return module.exports
     }
 
     const core = !filename.includes(path.sep)
