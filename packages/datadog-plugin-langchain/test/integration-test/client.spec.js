@@ -20,6 +20,7 @@ describe('esm', () => {
       sandbox = await linkedSandbox([
         `@langchain/core@${version}`,
         `@langchain/openai@${version}`,
+        'dc-polyfill',
         'nock'
       ], false, [
         './packages/datadog-plugin-langchain/test/integration-test/*'
