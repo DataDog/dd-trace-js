@@ -18,6 +18,7 @@ const {
   removeBaggageItem,
   removeAllBaggageItems
 } = require('./baggage')
+const getProcessTags = require('./process-tags')
 
 class LazyModule {
   constructor (provider) {
@@ -78,6 +79,7 @@ class Tracer extends NoopProxy {
     this.getAllBaggageItems = getAllBaggageItems
     this.removeBaggageItem = removeBaggageItem
     this.removeAllBaggageItems = removeAllBaggageItems
+    this.processTags = getProcessTags()
 
     // these requires must work with esm bundler
     this._modules = {
