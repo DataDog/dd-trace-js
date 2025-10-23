@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('amqp10', 'amqp10', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'amqp10@${version}'`, 'rhea'], false, [
+      sandbox = await linkedSandbox([`'amqp10@${version}'`, 'rhea'], false, [
         './packages/datadog-plugin-amqp10/test/integration-test/*'])
     })
 

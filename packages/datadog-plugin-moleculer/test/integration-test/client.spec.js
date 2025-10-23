@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('moleculer', 'moleculer', '>0.14.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'moleculer@${version}'`], false, [
+      sandbox = await linkedSandbox([`'moleculer@${version}'`], false, [
         './packages/datadog-plugin-moleculer/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('kafkajs', 'kafkajs', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'kafkajs@${version}'`], false, [
+      sandbox = await linkedSandbox([`'kafkajs@${version}'`], false, [
         './packages/datadog-plugin-kafkajs/test/integration-test/*'])
     })
 

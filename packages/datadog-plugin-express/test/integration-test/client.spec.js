@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -20,7 +20,7 @@ describe('esm', () => {
   withVersions('express', 'express', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`'express@${version}'`], false,
+      sandbox = await linkedSandbox([`'express@${version}'`], false,
         ['./packages/datadog-plugin-express/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'express')
     })

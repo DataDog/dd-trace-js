@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc,
   varySandbox
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(50000)
-    sandbox = await createSandbox(['http2'], false, [
+    sandbox = await linkedSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', 'http2', 'createServer')
   })

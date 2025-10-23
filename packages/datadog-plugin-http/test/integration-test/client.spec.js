@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -15,7 +15,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(60000)
-    sandbox = await createSandbox([], false, [
+    sandbox = await linkedSandbox([], false, [
       './packages/datadog-plugin-http/test/integration-test/*'])
   })
 

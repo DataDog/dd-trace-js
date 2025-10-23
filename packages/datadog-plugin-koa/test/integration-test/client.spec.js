@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('koa', 'koa', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`'koa@${version}'`], false,
+      sandbox = await linkedSandbox([`'koa@${version}'`], false,
         ['./packages/datadog-plugin-koa/test/integration-test/*'])
     })
 

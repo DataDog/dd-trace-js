@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('ioredis', 'ioredis', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'ioredis@${version}'`], false, [
+      sandbox = await linkedSandbox([`'ioredis@${version}'`], false, [
         './packages/datadog-plugin-ioredis/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'ioredis')
     })

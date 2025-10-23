@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([
+      sandbox = await linkedSandbox([
         `@anthropic-ai/sdk@${version}`,
       ], false, [
         './packages/datadog-plugin-anthropic/test/integration-test/*'

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('opensearch', '@opensearch-project/opensearch', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
         './packages/datadog-plugin-opensearch/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -19,7 +19,7 @@ describe('esm', () => {
   withVersions('restify', 'restify', '>3', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'restify@${version}'`],
+      sandbox = await linkedSandbox([`'restify@${version}'`],
         false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -20,7 +20,7 @@ describe('esm', () => {
   withVersions('elasticsearch', ['@elastic/elasticsearch'], '<8.16.0 || >8.16.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@elastic/elasticsearch@${version}'`], false, [
         './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'elasticsearch', undefined, '@elastic/elasticsearch')
     })

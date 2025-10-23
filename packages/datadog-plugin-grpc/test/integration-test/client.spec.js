@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('grpc', '@grpc/grpc-js', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
+      sandbox = await linkedSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
         './packages/datadog-plugin-grpc/test/*'])
     })
 

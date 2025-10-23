@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -20,7 +20,7 @@ describe('esm', () => {
   withVersions('cassandra-driver', 'cassandra-driver', '>=4.4.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
+      sandbox = await linkedSandbox([`'cassandra-driver@${version}'`], false, [
         './packages/datadog-plugin-cassandra-driver/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'cassandra-driver', 'Client')
     })

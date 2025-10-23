@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -20,7 +20,7 @@ describe('esm', () => {
   withVersions('pg', 'pg', (version, _, realVersion) => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'pg@${version}'`], false, [
+      sandbox = await linkedSandbox([`'pg@${version}'`], false, [
         './packages/datadog-plugin-pg/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', {
         default: 'import pg from \'pg\'',

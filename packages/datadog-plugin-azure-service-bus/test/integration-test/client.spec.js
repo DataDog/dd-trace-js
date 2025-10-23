@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('azure-service-bus', '@azure/service-bus', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@azure/service-bus@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@azure/service-bus@${version}'`], false, [
         './packages/datadog-plugin-azure-service-bus/test/integration-test/*'])
     })
 

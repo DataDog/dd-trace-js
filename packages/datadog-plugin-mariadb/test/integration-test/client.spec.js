@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'mariadb@${version}'`], false, [
+      sandbox = await linkedSandbox([`'mariadb@${version}'`], false, [
         './packages/datadog-plugin-mariadb/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -17,7 +17,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(60000)
-    sandbox = await createSandbox([], false, [
+    sandbox = await linkedSandbox([], false, [
       './packages/datadog-plugin-dns/test/integration-test/*'])
     variants = varySandbox(sandbox, 'server.mjs', 'dns', 'lookup')
   })

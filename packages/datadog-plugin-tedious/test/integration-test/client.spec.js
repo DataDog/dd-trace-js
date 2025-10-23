@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -24,7 +24,7 @@ describe('esm', () => {
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'tedious@${version}'`], false, [
+      sandbox = await linkedSandbox([`'tedious@${version}'`], false, [
         './packages/datadog-plugin-tedious/test/integration-test/*'])
     })
 

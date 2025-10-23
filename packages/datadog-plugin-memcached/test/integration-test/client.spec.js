@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('memcached', 'memcached', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`'memcached@${version}'`], false, [
+      sandbox = await linkedSandbox([`'memcached@${version}'`], false, [
         './packages/datadog-plugin-memcached/test/integration-test/*'])
     })
 

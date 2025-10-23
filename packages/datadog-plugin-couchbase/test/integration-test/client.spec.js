@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('couchbase', 'couchbase', '>=4.0.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'couchbase@${version}'`], false, [
+      sandbox = await linkedSandbox([`'couchbase@${version}'`], false, [
         './packages/datadog-plugin-couchbase/test/integration-test/*'])
     })
 
