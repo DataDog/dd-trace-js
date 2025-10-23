@@ -708,6 +708,44 @@ describe('integrations', () => {
 
         expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
       })
+
+      it('submits a response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4o',
+          input: 'What is the capital of France?',
+          max_output_tokens: 100,
+          temperature: 0.5,
+          stream: false
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        const expected = expectedLLMObsLLMSpanEvent({
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What is the capital of France?' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 0.5,
+            stream: false
+          },
+          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+        })
+
+        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
+      })
     })
   })
 })
