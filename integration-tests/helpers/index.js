@@ -279,7 +279,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   }
   const folder = path.join(os.tmpdir(), id().toString())
   const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const deps = cappedDependencies.join(' ')
+  const deps = cappedDependencies
 
   await fs.mkdir(folder)
   const addOptions = { cwd: folder, env: restOfEnv }
@@ -291,11 +291,12 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isolated) {
     execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv })
-    execHelper(`yarn add ${deps} file:${out}`, addOptions)
+    execHelper(`yarn add ${deps.concat(`file:${out}`).join(' ')}`, addOptions)
   } else {
-    [`file:${out}`].concat(cappedDependencies)
     execHelper('yarn link')
-    execHelper(`yarn add ${deps}`, addOptions)
+    if (deps.length > 0) {
+      execHelper(`yarn add ${deps.join(' ')}`, addOptions)
+    }
     execHelper('yarn link dd-trace', addOptions)
   }
 
@@ -404,11 +405,6 @@ function varySandbox (sandbox, filename, variants, namedVariant, packageName = v
   }
   return variantFilenames
 }
-
-/**
- * @type {['default', 'star', 'destructure']}
- */
-varySandbox.VARIANTS = ['default', 'star', 'destructure']
 
 /**
  * @param {boolean} shouldExpectTelemetryPoints
