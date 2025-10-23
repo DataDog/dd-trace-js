@@ -26,7 +26,7 @@ describe('esbuild support for IAST', () => {
       const craftedNodeModulesDir = path.join(applicationDir, 'tmp_node_modules')
       fs.mkdirSync(craftedNodeModulesDir)
       await exec('npm init -y', { cwd: craftedNodeModulesDir })
-      await exec('npm install @datadog/native-iast-rewriter @datadog/native-iast-taint-tracking', {
+      await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
         cwd: craftedNodeModulesDir,
         timeout: 3e3
       })
