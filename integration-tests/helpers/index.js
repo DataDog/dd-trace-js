@@ -236,10 +236,22 @@ function execHelper (command, options) {
   /* eslint-enable no-console */
 }
 
+/**
+ * @param {string[]} dependencies
+ * @param {boolean} isGitRepo
+ * @param {string[]} integrationTestsPaths
+ * @param {string} [followUpCommand]
+ */
 async function isolatedSandbox (dependencies, isGitRepo, integrationTestsPaths, followUpCommand) {
   return createSandbox(dependencies, isGitRepo, integrationTestsPaths, followUpCommand, true)
 }
 
+/**
+ * @param {string[]} dependencies
+ * @param {boolean} isGitRepo
+ * @param {string[]} integrationTestsPaths
+ * @param {string} [followUpCommand]
+ */
 async function linkedSandbox (dependencies, isGitRepo, integrationTestsPaths, followUpCommand) {
   return createSandbox(dependencies, isGitRepo, integrationTestsPaths, followUpCommand, false)
 }
