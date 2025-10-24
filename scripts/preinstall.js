@@ -19,7 +19,7 @@ const min = Number(requirePackageJson(path.join(__dirname, '..')).engines.node.m
 
 // Most package managers don't support `npm_config_argv`, so we need a custom
 // flag to allow installing dd-trace on unsupported engines.
-const hasIgnoreEngines = process.env.DD_IGNORE_ENGINES === 'true' || npmArgv &&
+const hasIgnoreEngines = process.env._DD_IGNORE_ENGINES === 'true' || npmArgv &&
   npmArgv.original &&
   npmArgv.original.includes('--ignore-engines')
 

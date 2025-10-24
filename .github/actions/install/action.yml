@@ -22,7 +22,7 @@ runs:
     - run: bun install --linker=hoisted --trust || sleep 60 && bun install --linker=hoisted --trust
       shell: bash
       env:
-        DD_IGNORE_ENGINES: 'true'
+        _DD_IGNORE_ENGINES: 'true'
     - run: tar -cf node_modules.tar node_modules
       shell: bash
       if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'
