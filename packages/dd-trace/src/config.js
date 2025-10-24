@@ -380,27 +380,19 @@ class Config {
     this.#applyConfigValues(config, obj, {})
   }
 
+  // Set environment-dependent defaults that can be overridden by users
   #applyDefaults () {
     const defaults = this.#defaults
 
-    // Set environment-dependent defaults that can be overridden by users
-    // These defaults are calculated at runtime, not at module load time
-
-    // Disable crashtracking in serverless environments by default
-    this.#setBoolean(defaults, 'crashtracking.enabled', !isInServerlessEnvironment())
-
-    // Disable profiling in serverless environments by default
     if (isInServerlessEnvironment()) {
+      this.#setBoolean(defaults, 'crashtracking.enabled', false)
       this.#setString(defaults, 'profiling.enabled', 'false')
-    }
-
-    // Disable telemetry and remote config in serverless environments by default
-    if (isInServerlessEnvironment()) {
       this.#setBoolean(defaults, 'telemetry.enabled', false)
       this.#setBoolean(defaults, 'remoteConfig.enabled', false)
+    } else {
+      this.#setBoolean(defaults, 'crashtracking.enabled', true)
     }
 
-    // Disable telemetry inside Jest workers by default
     if (getEnv('JEST_WORKER_ID')) {
       this.#setBoolean(defaults, 'telemetry.enabled', false)
     }
