@@ -4698,4 +4698,46 @@ describe('jest CommonJS', () => {
       ])
     })
   })
+
+  it('does not crash with mocks that are not dependencies', async () => {
+    let testOutput = ''
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-package-mock/non-dependency-mock-test',
+          SETUP_FILES_AFTER_ENV: '<rootDir>/ci-visibility/jest-setup-files-after-env.js',
+          RUN_IN_PARALLEL: true,
+        }
+      }
+    )
+
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.equal(tests.length, 6)
+          assert.equal(testSuites.length, 6)
+          assert.equal(testSuites.every(suite => suite.meta[TEST_STATUS] === 'pass'), true)
+          assert.equal(tests.every(test => test.meta[TEST_STATUS] === 'pass'), true)
+        })
+    ])
+    assert.notInclude(testOutput, 'Cannot find module')
+    assert.include(testOutput, '6 passed')
+  })
 })
