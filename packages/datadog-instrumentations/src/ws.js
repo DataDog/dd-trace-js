@@ -41,7 +41,7 @@ function wrapSend (send) {
 
     const [data, options, cb] = arguments
 
-    const ctx = { data, socket: this._sender._socket }
+    const ctx = { data, socket: this._sender?._socket }
 
     return typeof cb === 'function'
       ? producerCh.traceCallback(send, undefined, ctx, this, data, options, cb)
@@ -70,7 +70,7 @@ function createWrappedHandler (handler) {
   return function wrappedMessageHandler (data, binary) {
     const byteLength = dataLength(data)
 
-    const ctx = { data, binary, socket: this._sender._socket, byteLength }
+    const ctx = { data, binary, socket: this._sender?._socket, byteLength }
 
     return receiverCh.traceSync(handler, ctx, this, data, binary)
   }
@@ -93,7 +93,7 @@ function wrapClose (close) {
     // if both are true then the self is sending the close event
     const isPeerClose = this._closeFrameReceived === true && this._closeFrameSent === false
 
-    const ctx = { code, data, socket: this._sender._socket, isPeerClose }
+    const ctx = { code, data, socket: this._sender?._socket, isPeerClose }
 
     return closeCh.traceSync(close, ctx, this, ...arguments)
   }
