@@ -4700,6 +4700,8 @@ describe('jest CommonJS', () => {
   })
 
   it('does not crash with mocks that are not dependencies', async () => {
+    let testOutput = ''
+
     childProcess = exec(
       runTestsCommand,
       {
@@ -4713,8 +4715,17 @@ describe('jest CommonJS', () => {
       }
     )
 
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
     await Promise.all([
       once(childProcess, 'exit'),
+      once(childProcess.stdout, 'end'),
+      once(childProcess.stderr, 'end'),
       receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4726,5 +4737,7 @@ describe('jest CommonJS', () => {
           assert.equal(tests.every(test => test.meta[TEST_STATUS] === 'pass'), true)
         })
     ])
+    assert.notInclude(testOutput, 'Cannot find module')
+    assert.include(testOutput, '6 passed')
   })
 })
