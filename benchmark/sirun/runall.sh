@@ -25,7 +25,6 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-# TODO: Remove this once the underlying package manager has been abstracted.
 (
   cd ../../ &&
   npm install --global bun || (sleep 60 && npm install --global bun) \
