@@ -242,9 +242,12 @@ function execHelper (command, options) {
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
  */
-
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+async function createSandbox (
+  dependencies = [],
+  isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'],
+  followUpCommand
+) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
