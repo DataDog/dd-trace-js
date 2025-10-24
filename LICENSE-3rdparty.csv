@@ -14,6 +14,7 @@ require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Auth
 require,@isaacs/ttlcache,ISC,Copyright (c) 2022-2023 - Isaac Z. Schlueter and Contributors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
+require,escape-string-regexp,MIT,Copyright Sindre Sorhus
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
