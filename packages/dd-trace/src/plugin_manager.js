@@ -6,6 +6,15 @@ const plugins = require('./plugins')
 const log = require('./log')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+// Test optimization plugins that should only be enabled when isCiVisibility is true
+const TEST_OPTIMIZATION_PLUGINS = new Set([
+  'jest',
+  'vitest',
+  'cucumber',
+  'mocha',
+  'playwright'
+])
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
@@ -74,6 +83,13 @@ module.exports = class PluginManager {
 
     if (!Plugin) return
     if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
+
+    // Check if this is a Test Optimization plugin and Test Optimization is not enabled
+    if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
+      log.debug('Plugin "%s" is not initialized because Test Optimization mode is not enabled.', name)
+      return
+    }
+
     if (!this._pluginsByName[name]) {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
@@ -148,7 +164,8 @@ module.exports = class PluginManager {
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
+      experimental
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -166,7 +183,8 @@ module.exports = class PluginManager {
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
+      experimental
     }
 
     if (logInjection !== undefined) {

@@ -2,6 +2,8 @@
 const { channel } = require('dc-polyfill')
 const tracer = require('dd-trace')
 
+const assert = require('assert/strict')
+
 const testStartCh = channel('dd-trace:ci:manual:test:start')
 const testFinishCh = channel('dd-trace:ci:manual:test:finish')
 const testAddTagsCh = channel('dd-trace:ci:manual:test:addTags')
@@ -22,12 +24,12 @@ describe('can run tests', () => {
     assert.equal(1, 2)
   })
   test('async test will pass', () => {
-    return new Promise((resolve) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve) => {
       setTimeout(() => {
         assert.equal(1, 1)
         resolve()
       }, 10)
-    })
+    }))
   })
   test('integration test', () => {
     // Just for testing purposes, so we don't create a custom span
@@ -38,11 +40,11 @@ describe('can run tests', () => {
     const childSpan = tracer.startSpan('custom.span', {
       childOf: testSpan
     })
-    return new Promise((resolve) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve) => {
       setTimeout(() => {
         childSpan.finish()
         resolve()
       }, 10)
-    })
+    }))
   })
 })

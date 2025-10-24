@@ -17,7 +17,7 @@ class WSClosePlugin extends TracingPlugin {
     if (!traceWebsocketMessagesEnabled) return
 
     const { code, data, socket, isPeerClose } = ctx
-    if (!socket.spanContext) return
+    if (!socket?.spanContext) return
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanContext.spanTags
@@ -58,9 +58,9 @@ class WSClosePlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result')) return
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
 
-    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext)
+    if (ctx.socket.spanContext) ctx.span.addLink({ context: ctx.socket.spanContext })
 
     ctx.span.finish()
   }

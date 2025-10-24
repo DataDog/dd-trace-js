@@ -5,7 +5,6 @@ const http = require('http')
 const tracer = require('dd-trace')
 
 describe('jest-test-suite', () => {
-  // eslint-disable-next-line
   jest.setTimeout(400)
 
   it('tracer and active span are available', () => {
@@ -48,7 +47,6 @@ describe('jest-test-suite', () => {
     req.end()
   })
   // only run for jest-circus tests
-  // eslint-disable-next-line
   if (jest.retryTimes) {
     const parameters = [[1, 2, 3], [2, 3, 5]]
     it.each(parameters)('can do parameterized test', (a, b, expected) => {
@@ -76,7 +74,6 @@ describe('jest-test-suite', () => {
       }, 50)
     )
   })
-  // eslint-disable-next-line
   jest.setTimeout(200)
 
   it('timeout', () => {
@@ -103,6 +100,7 @@ describe('jest-test-suite', () => {
       throw error
     }, 100)
   })
+
   it.skip('skips', () => {
     expect(100).toEqual(100)
   })
@@ -110,10 +108,8 @@ describe('jest-test-suite', () => {
 })
 
 // only run for jest-circus tests
-// eslint-disable-next-line
 if (jest.retryTimes) {
   describe('jest-circus-test-retry', () => {
-    // eslint-disable-next-line
     jest.retryTimes(2)
     let retryAttempt = 0
 

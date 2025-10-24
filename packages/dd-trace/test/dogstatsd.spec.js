@@ -126,7 +126,7 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
     expect(udp4.send.firstCall.args[1]).to.equal(0)
     expect(udp4.send.firstCall.args[2]).to.equal(14)
-    expect(udp4.send.firstCall.args[3]).to.equal(8125)
+    expect(udp4.send.firstCall.args[3]).to.equal('8125')
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
   })
 
@@ -140,7 +140,7 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
     expect(udp4.send.firstCall.args[1]).to.equal(0)
     expect(udp4.send.firstCall.args[2]).to.equal(20)
-    expect(udp4.send.firstCall.args[3]).to.equal(8125)
+    expect(udp4.send.firstCall.args[3]).to.equal('8125')
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
   })
 
@@ -597,7 +597,9 @@ describe('dogstatsd', () => {
     })
 
     it('should flush via interval', () => {
-      const clock = sinon.useFakeTimers()
+      const clock = sinon.useFakeTimers({
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      })
 
       client = new CustomMetrics({ dogstatsd: {} })
 

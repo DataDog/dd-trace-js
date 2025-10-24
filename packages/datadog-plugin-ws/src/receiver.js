@@ -58,9 +58,14 @@ class WSReceiverPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result')) return
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
 
-    if (ctx.socket.spanContext) ctx.span.addLink(ctx.socket.spanContext, { 'dd.kind': 'executed_by' })
+    if (ctx.socket.spanContext) {
+      ctx.span.addLink({
+        context: ctx.socket.spanContext,
+        attributes: { 'dd.kind': 'executed_by' },
+      })
+    }
 
     ctx.span.finish()
     return ctx.parentStore

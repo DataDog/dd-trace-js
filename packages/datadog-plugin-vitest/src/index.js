@@ -55,8 +55,12 @@ class VitestPlugin extends CiPlugin {
     this.taskToFinishTime = new WeakMap()
 
     this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
+      // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
+      if (!knownTests.vitest) {
+        return onDone(false)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testsForThisTestSuite = knownTests[testSuite] || []
+      const testsForThisTestSuite = knownTests.vitest[testSuite] || []
       onDone(!testsForThisTestSuite.includes(testName))
     })
 
@@ -86,9 +90,9 @@ class VitestPlugin extends CiPlugin {
       onDone(isQuarantined)
     })
 
-    this.addSub('ci:vitest:test:is-modified', ({ modifiedTests, testSuiteAbsolutePath, onDone }) => {
+    this.addSub('ci:vitest:test:is-modified', ({ modifiedFiles, testSuiteAbsolutePath, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
 
       onDone(isModified)
     })

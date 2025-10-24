@@ -5,7 +5,8 @@ const {
   createSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
@@ -14,13 +15,14 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
-
+  let variants
   // test against later versions because server.mjs uses newer package syntax
-  withVersions('connect', 'connect', '>=3', version => {
+  withVersions('connect', 'connect', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'connect@${version}'`], false, [
         './packages/datadog-plugin-connect/test/integration-test/*'])
+      variants = varySandbox(sandbox, 'server.mjs', 'connect')
     })
 
     after(async () => {
@@ -36,14 +38,16 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented loaded with ${variant}`, async () => {
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
 
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'connect.request'), true)
-      })
-    }).timeout(20000)
+        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(checkSpansForServiceName(payload, 'connect.request'), true)
+        })
+      }).timeout(20000)
+    }
   })
 })

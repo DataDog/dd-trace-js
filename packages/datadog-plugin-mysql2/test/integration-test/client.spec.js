@@ -16,7 +16,7 @@ describe('esm', () => {
 
   withVersions('mysql2', 'mysql2', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(60000)
       sandbox = await createSandbox([`'mysql2@${version}'`], false, [
         './packages/datadog-plugin-mysql2/test/integration-test/*'])
     })

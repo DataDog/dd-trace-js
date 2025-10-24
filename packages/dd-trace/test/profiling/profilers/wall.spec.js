@@ -25,7 +25,11 @@ describe('profilers/native/wall', () => {
         constants: {
           kSampleCount: 0,
           NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity'
-        }
+        },
+        getMetrics: sinon.stub().returns({
+          totalAsyncContextCount: 0,
+          usedAsyncContextCount: 0
+        })
       }
     }
 
@@ -39,18 +43,26 @@ describe('profilers/native/wall', () => {
 
     // Verify start/stop profiler idle notifiers are created if not present.
     // These functions may not exist in worker threads.
+    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     const start = process._startProfilerIdleNotifier
+    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
     const stop = process._stopProfilerIdleNotifier
 
+    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     delete process._startProfilerIdleNotifier
+    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
     delete process._stopProfilerIdleNotifier
 
     profiler.start()
 
+    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     expect(process._startProfilerIdleNotifier).to.be.a('function')
+    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
     expect(process._stopProfilerIdleNotifier).to.be.a('function')
 
+    // @ts-expect-error: _startProfilerIdleNotifier is not typed on process
     process._startProfilerIdleNotifier = start
+    // @ts-expect-error: _stopProfilerIdleNotifier is not typed on process
     process._stopProfilerIdleNotifier = stop
 
     sinon.assert.calledOnce(pprof.time.start)
@@ -62,7 +74,8 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false
+        collectCpuTime: false,
+        useCPED: false
       })
   })
 
@@ -81,7 +94,8 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false
+        collectCpuTime: false,
+        useCPED: false
       })
   })
 
@@ -110,6 +124,16 @@ describe('profilers/native/wall', () => {
     profiler.stop()
 
     sinon.assert.calledOnce(pprof.time.stop)
+  })
+
+  it('should provide info', () => {
+    const profiler = new NativeWallProfiler()
+    profiler.start()
+    const info = profiler.getInfo()
+    profiler.stop()
+
+    expect(info.totalAsyncContextCount).to.not.be.undefined
+    expect(info.usedAsyncContextCount).to.not.be.undefined
   })
 
   it('should collect profiles from the internal time profiler', () => {
@@ -177,7 +201,8 @@ describe('profilers/native/wall', () => {
         withContexts: false,
         lineNumbers: false,
         workaroundV8Bug: false,
-        collectCpuTime: false
+        collectCpuTime: false,
+        useCPED: false
       })
   })
 

@@ -1,6 +1,11 @@
 'use strict'
 
+const assert = require('node:assert')
+const { once } = require('node:events')
+
 const { expect } = require('chai')
+const { describe, before, after, it } = require('mocha')
+
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -11,10 +16,38 @@ describe('Plugin', () => {
   let clientPort = 6015
   let client
   let messageReceived
+  let route
 
   describe('ws', () => {
     withVersions('ws', 'ws', '>=8.0.0', version => {
+      describe('regression tests', () => {
+        before(async () => {
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+        })
+
+        it('should emit original error in case close is called before connection is established', async () => {
+          const socket = new WebSocket('wss://localhost:12345')
+
+          const errorPromise = once(socket, 'error')
+          socket.close()
+
+          const error = await errorPromise
+
+          // Some versions emit an array with an error, some directly emit the error
+          assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
+        })
+
+        after(async () => {
+          agent.close({ ritmReset: false, wipe: true })
+        })
+      })
+
       describe('when using WebSocket', () => {
+        route = 'test'
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'some',
@@ -24,7 +57,7 @@ describe('Plugin', () => {
 
           wsServer = new WebSocket.Server({ port: clientPort })
 
-          client = new WebSocket(`ws://localhost:${clientPort}`)
+          client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`)
         })
 
         afterEach(async () => {
@@ -99,6 +132,7 @@ describe('Plugin', () => {
           })
           agent.assertSomeTraces(traces => {
             expect(traces[0][0]).to.have.property('name', 'websocket.receive')
+            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
           })
             .then(done)
             .catch(done)
@@ -132,7 +166,7 @@ describe('Plugin', () => {
 
           wsServer = new WebSocket.Server({ port: clientPort })
 
-          client = new WebSocket(`ws://localhost:${clientPort}`)
+          client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`)
         })
 
         afterEach(async () => {
@@ -156,17 +190,16 @@ describe('Plugin', () => {
           wsServer.on('connection', (ws) => {
             ws.send('test message')
           })
-          messageReceived = false
 
           client.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
-            messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
             expect(traces[0][0]).to.have.property('name', 'websocket.send')
             expect(traces[0][0]).to.have.property('type', 'websocket')
+            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
           })
         })
 
@@ -177,7 +210,7 @@ describe('Plugin', () => {
           })
           wsServer.on('message', (data) => {
             expect(data.toString()).to.equal('test message')
-            expect(messageReceived).prototype.equal(true)
+            expect(messageReceived).to.equal(true)
           })
 
           client.on('message', (data) => {

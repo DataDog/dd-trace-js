@@ -3,6 +3,7 @@
 const { URL, format } = require('url')
 
 const request = require('./request')
+const defaults = require('../../config_defaults')
 const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = require('../../ci-visibility/telemetry')
 
 function fetchAgentInfo (url, callback) {
@@ -29,10 +30,10 @@ function fetchAgentInfo (url, callback) {
 class AgentInfoExporter {
   constructor (tracerConfig) {
     this._config = tracerConfig
-    const { url, hostname, port } = this._config
+    const { url, hostname = defaults.hostname, port } = this._config
     this._url = url || new URL(format({
       protocol: 'http:',
-      hostname: hostname || 'localhost',
+      hostname,
       port
     }))
     this._traceBuffer = []

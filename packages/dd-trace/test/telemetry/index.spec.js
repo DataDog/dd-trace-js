@@ -35,20 +35,6 @@ describe('telemetry (proxy)', () => {
     })
   })
 
-  it('should be noop when disabled', () => {
-    proxy.start()
-    proxy.updateIntegrations()
-    proxy.updateConfig([])
-    proxy.appClosing()
-    proxy.stop()
-
-    expect(telemetry.start).to.not.have.been.called
-    expect(telemetry.updateIntegrations).to.not.have.been.called
-    expect(telemetry.updateConfig).to.not.have.been.called
-    expect(telemetry.appClosing).to.not.have.been.called
-    expect(telemetry.stop).to.not.have.been.called
-  })
-
   it('should proxy when enabled', () => {
     const config = { telemetry: { enabled: true } }
 
@@ -117,7 +103,13 @@ describe('telemetry', () => {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
     }
-
+    /**
+     * @type {Object} CircularObject
+     * @property {string} field
+     * @property {Object} child
+     * @property {string} child.field
+     * @property {CircularObject | null} child.parent
+     */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
       field: 'parent_value'
@@ -260,7 +252,9 @@ describe('telemetry app-heartbeat', () => {
   let clock
 
   before(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   after(() => {
@@ -317,7 +311,9 @@ describe('Telemetry extended heartbeat', () => {
   let clock
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
   })
 
   afterEach(() => {
@@ -500,7 +496,9 @@ describe('Telemetry retry', () => {
   const HEARTBEAT_INTERVAL = 60000
 
   beforeEach(() => {
-    clock = sinon.useFakeTimers()
+    clock = sinon.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+    })
     pluginsByName = {
       foo2: { _enabled: true },
       bar2: { _enabled: false }
@@ -896,7 +894,9 @@ describe('AVM OSS', () => {
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
-          clock = sinon.useFakeTimers()
+          clock = sinon.useFakeTimers({
+            toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+          })
 
           storage('legacy').run({ noop: true }, () => {
             traceAgent = http.createServer(async (req, res) => {

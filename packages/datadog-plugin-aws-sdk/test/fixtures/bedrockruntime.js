@@ -11,6 +11,7 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+const systemPrompt = 'Please respond with one sentence.'
 const prompt = 'What is the capital of France?'
 const temperature = 0.5
 const maxTokens = 512
@@ -30,13 +31,62 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 98,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: '\nParis is the capital of France. France is a country in Western Europe, and Paris ' +
         'is its capital. Paris is one of the most populous cities in the European Union, ' +
         'with a population of more than 2 million people. It is also one of the most ' +
         'visited cities in the world, with millions of tourists visiting each year. ' +
         'Paris is known for its rich history, culture, and architecture, including ' +
         'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. '
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 78,
+      text: '\nParis is the capital of France. Paris, the capital of France, is a city ' +
+      'that has been a center of art, culture, and cuisine for centuries. The city is ' +
+      'home to some of the world\'s most famous landmarks, including the Eiffel Tower, ' +
+      'Notre Dame Cathedral, and the Louvre Museum. Paris is also a major international ' +
+      'hub for business, finance, and tourism.'
     }
+  },
+  {
+    provider: PROVIDER.AMAZON,
+    modelId: 'amazon.nova-pro-v1:0',
+    systemPrompt,
+    userPrompt: prompt,
+    requestBody: {
+      system: [{ text: systemPrompt }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              text: prompt,
+            }
+          ],
+        }
+      ],
+      inferenceConfig: {
+        maxTokens,
+        topP: 0.1,
+        topK: 20,
+        temperature
+      }
+    },
+    response: {
+      inputTokens: 13,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      text: 'The capital of France is Paris.'
+    },
+    streamedResponse: {
+      inputTokens: 13,
+      outputTokens: 8,
+      text: 'The capital city of France is Paris.'
+    },
+    outputRole: 'assistant'
   },
   {
     provider: PROVIDER.AI21,
@@ -53,6 +103,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 17,
       outputTokens: 8,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' The capital of France is Paris.'
     },
     outputRole: 'assistant'
@@ -69,6 +121,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 16,
       outputTokens: 11,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' The capital of France is Paris.'
     }
   },
@@ -95,6 +149,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 14,
       outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: 'The capital of France is Paris.'
     }
   },
@@ -110,6 +166,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 335,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
         ' is also the most populous city in the country. Paris has a rich history and' +
         ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
@@ -133,6 +191,11 @@ bedrockruntime.models = [
         ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
         ' know more about the history of France or the city of Paris, please let me' +
         ' know!'
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 7,
+      text: 'The capital of France is Paris.'
     }
   },
   {
@@ -147,6 +210,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 512,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: '**\nA) Berlin\nB) Paris\nC) London\nD) Rome\n\nAnswer: ' +
         'B) Paris\n\n**What is the largest planet in our solar system?**\nA) Earth\nB) ' +
         'Saturn\nC) Jupiter\nD) Uranus\n\nAnswer: C) Jupiter\n\n**What is the smallest ' +
@@ -169,6 +234,29 @@ bedrockruntime.models = [
         'is the chemical symbol for sulfur?**\nA) S\nB) P\nC) Cl\nD) Br\n\nAnswer: ' +
         'A) S\n\n**What is the largest species of shark?**\nA) Great white shark\nB) ' +
         'Whale shark\nC) Tiger'
+    },
+    streamedResponse: {
+      inputTokens: 7,
+      outputTokens: 459,
+      text: '**\nA. Berlin\nB. Paris\nC. London\nD. Rome\n\nAnswer: B. Paris\n#### 12. ' +
+      'Which of the following planets is known for being the largest in our solar system?\nA. ' +
+      'Earth\nB. Saturn\nC. Jupiter\nD. Uranus\n\nAnswer: C. Jupiter\n#### 13. Which of ' +
+      'the following authors wrote the novel "To Kill a Mockingbird"?\nA. F. Scott Fitzgerald\nB. ' +
+      'Harper Lee\nC. Jane Austen\nD. J.K. Rowling\n\nAnswer: B. Harper Lee\n#### 14. Which of the ' +
+      'following musical instruments is often associated with the jazz genre?\nA. Piano\nB. Guitar\nC. ' +
+      'Drums\nD. Trumpet\n\nAnswer: D. Trumpet\n#### 15. Which of the following countries is known for ' +
+      'its chocolate production?\nA. Switzerland\nB. Belgium\nC. France\nD. Italy\n\nAnswer: B. ' +
+      'Belgium\n#### 16. Which of the following ancient civilizations built the Great Pyramid of Giza?\nA. ' +
+      'Egyptians\nB. Greeks\nC. Romans\nD. Babylonians\n\nAnswer: A. Egyptians\n#### 17. Which of the ' +
+      'following chemical elements is a noble gas?\nA. Oxygen\nB. Nitrogen\nC. Helium\nD. Carbon\n\nAnswer: ' +
+      'C. Helium\n#### 18. Which of the following famous paintings is also known as "La Gioconda"?\nA. ' +
+      'The Mona Lisa\nB. The Scream\nC. Starry Night\nD. The Last Supper\n\nAnswer: A. The Mona Lisa\n#### ' +
+      '19. Which of the following countries is known for its coffee production?\nA. Brazil\nB. ' +
+      'Colombia\nC. Ethiopia\nD. Vietnam\n\nAnswer: C. Ethiopia\n#### 20. Which of the following ' +
+      'ancient philosophers is known for his concept of the "examined life"?\nA. Socrates\nB. ' +
+      'Plato\nC. Aristotle\nD. Epicurus\n\nAnswer: A. Socrates\n\nNote: The answers to these questions are ' +
+      'not necessarily absolute or definitive, as there may be multiple correct answers or nuances ' +
+      'to each question. However, the answers provided are generally accepted and accurate.'
     }
   },
   {
@@ -183,6 +271,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 8,
       outputTokens: 129,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' Paris is the capital city of France. It ' +
         'is the most populous city in France and is considered one of the cultural, ' +
         'artistic, and intellectual centers of Europe. Paris is known for its iconic ' +
@@ -191,12 +281,86 @@ bedrockruntime.models = [
         'has a rich history and is home to many world-renowned institutions, including ' +
         'the Sorbonne University and the École Normale Supérieure. It is a popular ' +
         'tourist destination and attracts millions of visitors every year.'
+    },
+    streamedResponse: {
+      inputTokens: 8,
+      outputTokens: 94,
+      text: ' Paris is the capital city of France. It is the most populous city in France, ' +
+      'and it is also one of the most visited cities in the world. Paris is known for its ' +
+      'iconic landmarks such as the Eiffel Tower, the Louvre Museum, and Notre Dame Cathedral. ' +
+      'It is also famous for its cuisine, fashion, and art scene. Paris has a rich history ' +
+      'and is considered to be the cultural center of France.'
     }
   }
 ]
 bedrockruntime.modelConfig = {
   temperature,
   maxTokens
+}
+
+bedrockruntime.cacheWriteRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  userPrompt: prompt,
+  requestBody: {
+    temperature,
+    anthropic_version: 'bedrock-2023-05-31',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'You are a geography expert'.repeat(200) + prompt,
+            cache_control: {
+              type: 'ephemeral'
+            }
+          }
+        ],
+      }
+    ],
+    max_tokens: 10,
+  },
+  response: {
+    inputTokens: 1213,
+    outputTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 1209,
+    text: 'The capital of France is Paris.\n\nParis is'
+  },
+  outputRole: 'assistant'
+}
+bedrockruntime.cacheReadRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  userPrompt: 'What is the capital of Italy?',
+  requestBody: {
+    temperature,
+    anthropic_version: 'bedrock-2023-05-31',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'You are a geography expert'.repeat(200) + 'What is the capital of Italy?',
+            cache_control: {
+              type: 'ephemeral'
+            }
+          }
+        ],
+      }
+    ],
+    max_tokens: 10,
+  },
+  response: {
+    inputTokens: 1213,
+    outputTokens: 10,
+    cacheReadTokens: 1209,
+    cacheWriteTokens: 0,
+    text: 'The capital of Italy is Rome (Roma in Italian'
+  },
+  outputRole: 'assistant'
 }
 
 module.exports = bedrockruntime

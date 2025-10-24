@@ -75,12 +75,12 @@ function onError (err) {
   // TODO: replace it with Error(message, { cause }) when cause has broad support
   if (formatted) {
     withNoop(() => {
-      const l = Error.stackTraceLimit
+      const stackTraceLimitBackup = Error.stackTraceLimit
       Error.stackTraceLimit = 0
-      const e = new Error(formatted)
-      Error.stackTraceLimit = l
-      Error.captureStackTrace(e, stackTraceLimitFunction)
-      logger.error(e)
+      const newError = new Error(formatted)
+      Error.stackTraceLimit = stackTraceLimitBackup
+      Error.captureStackTrace(newError, stackTraceLimitFunction)
+      logger.error(newError)
     })
   }
   if (cause) withNoop(() => logger.error(cause))
