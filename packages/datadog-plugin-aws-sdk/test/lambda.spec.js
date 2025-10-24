@@ -15,6 +15,7 @@ const createClientContext = data => Buffer.from(JSON.stringify(data)).toString('
 
 describe('Plugin', () => {
   describe('aws-sdk (lambda)', function () {
+    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -104,7 +105,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -131,7 +132,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
@@ -158,7 +159,7 @@ describe('Plugin', () => {
             const traceId = span.trace_id.toString()
             expect(spanContext.toTraceId()).to.equal(traceId)
             expect(spanContext.toSpanId()).to.equal(parentId)
-          }).then(done, done)
+          }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',

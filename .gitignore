@@ -85,6 +85,9 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
+# Output of tap
+.tap/*
+
 
 ### VisualStudioCode ###
 .vscode/*
@@ -104,7 +107,10 @@ typings/
 # End of https://www.gitignore.io/api/node,macos,visualstudiocode
 
 /versions
+.bun
 .next
+bun.lock
+bun.lockb
 package-lock.json
 out
 build
@@ -125,3 +131,6 @@ packages/dd-trace/test/plugins/versions/node_modules
 packages/dd-trace/test/plugins/versions/yarn.lock
 !packages/dd-trace/**/telemetry/logs
 packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
+__azurite_db_queue__.json
+__azurite_db_queue_extent__.json
+__queuestorage__/AzuriteConfig

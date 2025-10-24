@@ -6,13 +6,20 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_dispatch:
+    inputs:
+      latest-version:
+        description: 'Node version to use'
+        required: false
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
   macos:
@@ -23,6 +30,11 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   ubuntu:
     runs-on: ubuntu-latest
@@ -38,6 +50,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   windows:
     runs-on: windows-latest
@@ -49,6 +66,11 @@ jobs:
           cache: 'true'
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   ldapjs:
     runs-on: ubuntu-latest
@@ -73,6 +95,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   postgres:
     runs-on: ubuntu-latest
@@ -95,6 +122,11 @@ jobs:
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   mysql:
     runs-on: ubuntu-latest
@@ -117,6 +149,11 @@ jobs:
       - uses: ./.github/actions/node/newest-maintenance-lts
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   express:
     runs-on: ubuntu-latest
@@ -130,6 +167,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   fastify:
     runs-on: ubuntu-latest
@@ -143,6 +185,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   graphql:
     runs-on: ubuntu-latest
@@ -156,6 +203,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -175,6 +227,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   mongoose:
     runs-on: ubuntu-latest
@@ -194,6 +251,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   sourcing:
     runs-on: ubuntu-latest
@@ -211,6 +273,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   next:
     strategy:
@@ -254,6 +321,11 @@ jobs:
         with:
           suffix: appsec-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   lodash:
     runs-on: ubuntu-latest
@@ -267,6 +339,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   integration:
     strategy:
@@ -275,11 +352,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/install
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
       - run: yarn test:integration:appsec
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   passport:
     runs-on: ubuntu-latest
@@ -293,6 +375,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   template:
     runs-on: ubuntu-latest
@@ -306,6 +393,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -319,6 +411,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   kafka:
     runs-on: ubuntu-latest
@@ -351,3 +448,8 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests

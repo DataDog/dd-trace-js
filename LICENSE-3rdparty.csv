@@ -3,11 +3,14 @@ require,@datadog/libdatadog,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/native-appsec,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-metrics,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Datadog Inc.
+require,@datadog/openfeature-node-server,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
+require,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
+require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@isaacs/ttlcache,ISC,Copyright (c) 2022-2023 - Isaac Z. Schlueter and Contributors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
@@ -41,10 +44,13 @@ dev,@types/tap,MIT,Copyright (c) Microsoft Corp.
 dev,@eslint/eslintrc,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
+dev,@openfeature/core,Apache-2.0,Copyright OpenFeature Authors
+dev,@openfeature/server-sdk,Apache-2.0,Copyright OpenFeature Authors
 dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
+dev,bun,MIT,Copyright contributors
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io
@@ -59,6 +65,8 @@ dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://si
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,mocha-multi-reporters,MIT,Copyright 2015-2019 Yousaf Nabi and Stanley Ng
+dev,mocha-junit-reporter,MIT, Copyright 2015 Michael Allen
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors

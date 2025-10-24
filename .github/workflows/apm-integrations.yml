@@ -6,13 +6,21 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_dispatch:
+    inputs:
+      latest-version:
+        description: 'Node version to run'
+        required: false
+        type: string
+
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
 
 # TODO: upstream jobs
 
@@ -71,6 +79,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   amqp10:
     runs-on: ubuntu-latest
@@ -89,6 +102,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   amqplib:
     runs-on: ubuntu-latest
@@ -103,6 +118,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   apollo:
     runs-on: ubuntu-latest
@@ -111,6 +128,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   avsc:
     runs-on: ubuntu-latest
@@ -120,6 +139,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   axios:
     runs-on: ubuntu-latest
@@ -128,6 +149,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   bunyan:
     runs-on: ubuntu-latest
@@ -136,6 +159,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   cassandra:
     runs-on: ubuntu-latest
@@ -150,6 +175,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   child_process:
     runs-on: ubuntu-latest
@@ -167,6 +194,11 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   confluentinc-kafka-javascript:
     strategy:
@@ -209,9 +241,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -219,6 +251,21 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
+
+  cookie-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cookie-parser
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   couchbase:
     strategy:
@@ -254,6 +301,11 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn test:plugins:ci --ignore-engines
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   connect:
     runs-on: ubuntu-latest
@@ -262,6 +314,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   dns:
     runs-on: ubuntu-latest
@@ -284,6 +338,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -308,6 +367,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   express:
     runs-on: ubuntu-latest
@@ -327,6 +391,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fetch:
     runs-on: ubuntu-latest
@@ -335,6 +401,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fs:
     runs-on: ubuntu-latest
@@ -343,6 +411,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   graphql:
     runs-on: ubuntu-latest
@@ -351,6 +421,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   grpc:
     runs-on: ubuntu-latest
@@ -359,6 +431,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hapi:
     runs-on: ubuntu-latest
@@ -367,6 +441,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hono:
     runs-on: ubuntu-latest
@@ -375,6 +451,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   http:
     strategy:
@@ -396,6 +474,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   http2:
     runs-on: ubuntu-latest
@@ -418,6 +501,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   kafkajs:
     strategy:
@@ -463,6 +551,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   koa:
     runs-on: ubuntu-latest
@@ -471,6 +564,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   limitd-client:
     runs-on: ubuntu-latest
@@ -489,6 +584,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mariadb:
     runs-on: ubuntu-latest
@@ -506,6 +603,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   memcached:
     runs-on: ubuntu-latest
@@ -520,6 +619,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   microgateway-core:
     runs-on: ubuntu-latest
@@ -528,6 +629,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   moleculer:
     runs-on: ubuntu-latest
@@ -536,6 +639,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb:
     runs-on: ubuntu-latest
@@ -551,6 +656,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb-core:
     runs-on: ubuntu-latest
@@ -566,6 +673,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongoose:
     runs-on: ubuntu-latest
@@ -580,6 +689,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql:
     runs-on: ubuntu-latest
@@ -597,6 +708,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql2:
     runs-on: ubuntu-latest
@@ -614,6 +727,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   net:
     runs-on: ubuntu-latest
@@ -636,8 +751,14 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   # TODO: fix performance issues and test more Node versions
+
   next:
     strategy:
       fail-fast: false
@@ -686,6 +807,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}-${{ matrix.version }}-${{ matrix.range_clean }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   opensearch:
     runs-on: ubuntu-latest
@@ -703,6 +829,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
@@ -747,6 +875,11 @@ jobs:
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -767,6 +900,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   postgres:
     runs-on: ubuntu-latest
@@ -784,6 +922,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   prisma:
     runs-on: ubuntu-latest
     services:
@@ -799,6 +940,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   protobufjs:
     runs-on: ubuntu-latest
@@ -808,6 +951,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   redis:
     runs-on: ubuntu-latest
@@ -822,6 +967,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ioredis:
     runs-on: ubuntu-latest
@@ -836,6 +983,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   valkey:
     runs-on: ubuntu-latest
@@ -850,6 +999,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
@@ -883,6 +1034,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   router:
     runs-on: ubuntu-latest
@@ -891,6 +1044,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   sharedb:
     runs-on: ubuntu-latest
@@ -907,6 +1062,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   tedious:
     runs-on: ubuntu-latest
@@ -934,6 +1094,11 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   undici:
     runs-on: ubuntu-latest
@@ -942,6 +1107,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   winston:
     runs-on: ubuntu-latest
@@ -950,6 +1117,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ws:
     runs-on: ubuntu-latest
@@ -958,3 +1127,5 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}

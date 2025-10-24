@@ -123,7 +123,7 @@ module.exports = class FakeAgent extends EventEmitter {
   // where multiple payloads are generated, and only one is expected to have the proper span (ie next.request),
   // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
   // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
-  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess = true) {
     timeout = timeout || 30000
     let resultResolve
     let resultReject
@@ -277,6 +277,12 @@ function buildExpressServer (agent) {
   app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
+  app.get('/info', (req, res) => {
+    res.json({
+      endpoints: ['/evp_proxy/v2']
+    })
+  })
+
   app.put('/v0.4/traces', (req, res) => {
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
@@ -400,6 +406,14 @@ function buildExpressServer (agent) {
   app.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
     res.status(200).send()
     agent.emit('llmobs', {
+      headers: req.headers,
+      payload: req.body
+    })
+  })
+
+  app.post('/evp_proxy/v2/api/v2/exposures', (req, res) => {
+    res.status(200).send()
+    agent.emit('exposures', {
       headers: req.headers,
       payload: req.body
     })

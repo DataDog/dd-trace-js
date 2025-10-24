@@ -21,7 +21,7 @@ const testSessionFinishCh = channel('ci:playwright:session:finish')
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const knownTestsCh = channel('ci:playwright:known-tests')
 const testManagementTestsCh = channel('ci:playwright:test-management-tests')
-const impactedTestsCh = channel('ci:playwright:modified-tests')
+const modifiedFilesCh = channel('ci:playwright:modified-files')
 const isModifiedCh = channel('ci:playwright:test:is-modified')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
@@ -59,7 +59,7 @@ let isTestManagementTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
-let modifiedTests = {}
+let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
@@ -593,11 +593,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     if (isImpactedTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
       try {
-        const { err, modifiedTests: receivedModifiedTests } = await getChannelPromise(impactedTestsCh)
+        const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
         if (err) {
           isImpactedTestsEnabled = false
         } else {
-          modifiedTests = receivedModifiedTests
+          modifiedFiles = receivedModifiedFiles
         }
       } catch (err) {
         isImpactedTestsEnabled = false
@@ -819,7 +819,7 @@ addHook({
       await Promise.all(allTests.map(async (test) => {
         const { isModified } = await getChannelPromise(isModifiedCh, {
           filePath: test._requireFile,
-          modifiedTests
+          modifiedFiles
         })
         if (isModified) {
           test._ddIsModified = true
@@ -846,20 +846,40 @@ addHook({
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
-      for (const newTest of newTests) {
-        // No need to filter out attempt to fix tests here because attempt to fix tests are never new
+      /**
+       * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
+       * as playwright could change it at any time.
+       *
+       * `applyRepeatEachIndex` goes through all the tests in a suite and applies the "repeat" logic
+       * for a single repeat index.
+       *
+       * This means that the clone logic is cumbersome:
+       * - we grab the unique file suites that have new tests
+       * - we store its project suite
+       * - we clone each of these file suites for each repeat index
+       * - we execute `applyRepeatEachIndex` for each of these cloned file suites
+       * - we add the cloned file suites to the project suite
+       */
+
+      const fileSuitesWithNewTestsToProjects = new Map()
+      newTests.forEach(newTest => {
         newTest._ddIsNew = true
         if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
           const fileSuite = getSuiteType(newTest, 'file')
-          const projectSuite = getSuiteType(newTest, 'project')
-          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
-              '_ddIsNew',
-              '_ddIsEfdRetry'
-            ])
-            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-            projectSuite._addSuite(copyFileSuite)
+          if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
+            fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
           }
+        }
+      })
+
+      for (const [fileSuite, projectSuite] of fileSuitesWithNewTestsToProjects.entries()) {
+        for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
+            '_ddIsNew',
+            '_ddIsEfdRetry'
+          ])
+          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+          projectSuite._addSuite(copyFileSuite)
         }
       }
     }

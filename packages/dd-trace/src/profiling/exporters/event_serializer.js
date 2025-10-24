@@ -21,7 +21,7 @@ class EventSerializer {
     return `${type}.pprof`
   }
 
-  getEventJSON ({ profiles, start, end, tags = {}, endpointCounts }) {
+  getEventJSON ({ profiles, infos, start, end, tags = {}, endpointCounts }) {
     return JSON.stringify({
       attachments: Object.keys(profiles).map(t => this.typeToFile(t)),
       start: start.toISOString(),
@@ -58,7 +58,8 @@ class EventSerializer {
           ssi: {
             mechanism: this._libraryInjected ? 'injected_agent' : 'none'
           },
-          version
+          version,
+          ...infos
         },
         runtime: {
           available_processors: availableParallelism(),
