@@ -102,8 +102,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # TODO: Remove :flaky once flakiness is better
-      - run: yarn test:plugins:ci:flaky
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
