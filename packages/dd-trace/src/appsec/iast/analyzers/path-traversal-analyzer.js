@@ -68,6 +68,13 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       }
       this.analyze(pathArguments)
     })
+
+    this.addSub('tracing:datadog:express:response:render:start', (ctx) => {
+      const store = storage('legacy').getStore()
+      if (!store) return
+
+      this.analyze([ctx.view])
+    })
   }
 
   _isExcluded (location) {

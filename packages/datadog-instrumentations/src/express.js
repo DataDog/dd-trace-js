@@ -43,12 +43,21 @@ function wrapResponseRender (render) {
       return render.apply(this, arguments)
     }
 
+    const abortController = new AbortController()
     return responseRenderChannel.traceSync(
-      render,
+      function () {
+        if (abortController.signal.aborted) {
+          const error = abortController.signal.reason || new Error('Aborted')
+          throw error
+        }
+
+        return render.apply(this, arguments)
+      },
       {
         req: this.req,
         view,
-        options
+        options,
+        abortController
       },
       this,
       ...arguments
