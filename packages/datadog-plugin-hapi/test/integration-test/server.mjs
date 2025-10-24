@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import Hapi from '@hapi/hapi'
 
 const server = Hapi.server({ port: 0, host: 'localhost' })

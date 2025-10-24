@@ -41,7 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port,
         {
           AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
           AWS_ACCESS_KEY_ID: '00000000000000000000'

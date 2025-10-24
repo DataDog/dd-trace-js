@@ -1,5 +1,9 @@
 'use strict'
 
+const { join } = require('node:path')
+
+const { assert } = require('chai')
+
 const {
   FakeAgent,
   createSandbox,

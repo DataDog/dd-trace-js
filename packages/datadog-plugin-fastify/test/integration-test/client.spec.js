@@ -1,5 +1,9 @@
 'use strict'
 
+const { join } = require('node:path')
+
+const { assert } = require('chai')
+
 const {
   FakeAgent,
   curlAndAssertMessage,
@@ -7,8 +11,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const { join } = require('path')
 
 describe('esm', () => {
   let agent

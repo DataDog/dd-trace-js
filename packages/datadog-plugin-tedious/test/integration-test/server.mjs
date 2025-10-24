@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import tds from 'tedious'
 
 const config = {
