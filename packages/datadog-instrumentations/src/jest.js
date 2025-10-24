@@ -1427,6 +1427,7 @@ function enqueueWrapper (enqueue) {
       if (worker && !wrappedWorkers.has(worker)) {
         shimmer.wrap(worker._child, 'send', sendWrapper)
         shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+        worker._child.removeAllListeners('message')
         worker._child.on('message', worker._onMessage.bind(worker))
         wrappedWorkers.add(worker)
       }
