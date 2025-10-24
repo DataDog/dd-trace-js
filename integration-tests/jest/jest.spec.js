@@ -4698,4 +4698,33 @@ describe('jest CommonJS', () => {
       ])
     })
   })
+
+  it('does not crash with mocks that are not dependencies', async () => {
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-package-mock/non-dependency-mock-test',
+          SETUP_FILES_AFTER_ENV: '<rootDir>/ci-visibility/jest-setup-files-after-env.js',
+          RUN_IN_PARALLEL: true,
+        }
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.equal(tests.length, 6)
+          assert.equal(testSuites.length, 6)
+          assert.equal(testSuites.every(suite => suite.meta[TEST_STATUS] === 'pass'), true)
+          assert.equal(tests.every(test => test.meta[TEST_STATUS] === 'pass'), true)
+        })
+    ])
+  })
 })
