@@ -1335,7 +1335,7 @@ addHook({
       }
       const returnedValue = requireModuleOrMock.apply(this, arguments)
       if (process.exitCode === 1) {
-        if (this.loggedReferenceErrors.size > 0) {
+        if (this.loggedReferenceErrors?.size > 0) {
           const errorMessage = [...this.loggedReferenceErrors][0]
           testSuiteErrorCh.publish({
             errorMessage,
