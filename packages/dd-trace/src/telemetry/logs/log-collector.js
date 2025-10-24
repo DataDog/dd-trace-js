@@ -41,8 +41,6 @@ function sanitize (logEntry) {
 
   const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex !== -1 && stackLines[firstIndex].includes(ddBasePath)
-
   // Filter to keep only DD frames
   stackLines = stackLines
     .filter((line, index) => index >= firstIndex && line.includes(ddBasePath))

@@ -33,16 +33,46 @@ describe('telemetry log collector', () => {
       const ddFrame1 = `at T (${ddBasePath}path/to/dd/file1.js:1:2)`
       const ddFrame2 = `at T (${ddBasePath}path/to/dd/file2.js:3:4)`
       const ddFrame3 = `at T (${ddBasePath}path/to/dd/file3.js:5:6)`
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `Error: msg\n${ddFrame1}`, errorType: 'Error' })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `Error: msg\n${ddFrame2}`, errorType: 'Error' })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `Error: msg\n${ddFrame3}`, errorType: 'Error' })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame1}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame2}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame3}`,
+        errorType: 'Error'
+      })).to.be.true
     })
 
     it('should store logs with same message, same stack but different level', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `Error: msg\n${ddFrame}`, errorType: 'Error' })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'WARN', stack_trace: `Error: msg\n${ddFrame}`, errorType: 'Error' })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `Error: msg\n${ddFrame}`, errorType: 'Error' })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'WARN',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'DEBUG',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
     })
 
     it('should not store logs with empty stack and \'Generic Error\' message', () => {
@@ -109,7 +139,8 @@ describe('telemetry log collector', () => {
 
     it('should redact multi-line error messages', () => {
       const ddFrame = `at cachedExec (${ddBasePath}plugins/util/git-cache.js:96:17)`
-      const multiLineError = `Error: Command failed: git rev-parse --abbrev-ref --symbolic-full-name @{upstream}${EOL}fatal: HEAD does not point to a branch${EOL}${EOL}${ddFrame}`
+      const multiLineError = 'Error: Command failed: git rev-parse --abbrev-ref ' +
+        `--symbolic-full-name @{upstream}${EOL}fatal: HEAD does not point to a branch${EOL}${EOL}${ddFrame}`
 
       const ddFrames = multiLineError
         .split(EOL)
