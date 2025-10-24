@@ -186,6 +186,7 @@
     "axios": "^1.12.2",
     "benchmark": "^2.1.4",
     "body-parser": "^2.2.0",
+    "bun": "1.2.23",
     "chai": "^4.5.0",
     "eslint": "^9.29.0",
     "eslint-plugin-cypress": "^5.1.0",
