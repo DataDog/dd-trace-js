@@ -138,6 +138,14 @@ module.exports = {
   otelTimeout: 10_000,
   otelLogsBatchTimeout: 5000,
   otelLogsMaxExportBatchSize: 512,
+  otelMetricsEnabled: false,
+  otelMetricsUrl: undefined, // Will be computed using agent host
+  otelMetricsHeaders: '',
+  otelMetricsProtocol: 'http/protobuf',
+  otelMetricsTimeout: 10_000,
+  otelMetricsExportTimeout: 7500,
+  otelMetricsExportInterval: 10_000,
+  otelMetricsTemporalityPreference: 'DELTA', // DELTA, CUMULATIVE, or LOWMEMORY
   lookup: undefined,
   inferredProxyServicesEnabled: false,
   memcachedCommandEnabled: false,
