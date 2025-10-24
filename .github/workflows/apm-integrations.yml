@@ -6,13 +6,21 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_dispatch:
+    inputs:
+      latest-version:
+        description: 'Node version to run'
+        required: false
+        type: string
+
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
 
 # TODO: upstream jobs
 
@@ -233,9 +241,9 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: ./.github/actions/node
         with:
-          node-version: ${{ matrix.node-version }}
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - if: always()
@@ -750,6 +758,7 @@ jobs:
           service: dd-trace-js-tests
 
   # TODO: fix performance issues and test more Node versions
+
   next:
     strategy:
       fail-fast: false

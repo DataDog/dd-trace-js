@@ -1503,6 +1503,7 @@ describe('Config', () => {
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = '2000'
+    process.env.DD_TRACE_FLUSH_INTERVAL = '2000'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
@@ -1583,6 +1584,7 @@ describe('Config', () => {
         enableGetRumData: false
       },
       flushMinSpans: 500,
+      flushInterval: 500,
       hostname: 'server',
       iast: {
         dbRowsToTaint: 3,
@@ -1673,6 +1675,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('flushInterval', 500)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -2809,7 +2812,7 @@ describe('Config', () => {
 
     afterEach(() => {
       process.env = env
-      fs.rmdirSync(tempDir, { recursive: true })
+      fs.rmSync(tempDir, { recursive: true })
     })
 
     it('should apply host wide config', () => {

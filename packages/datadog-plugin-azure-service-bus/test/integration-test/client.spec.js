@@ -8,6 +8,8 @@ const {
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
+const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
+
 describe('esm', () => {
   let agent
   let proc
@@ -40,7 +42,7 @@ describe('esm', () => {
         assert.isArray(payload)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(20000)
@@ -151,7 +153,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[22][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(60000)
