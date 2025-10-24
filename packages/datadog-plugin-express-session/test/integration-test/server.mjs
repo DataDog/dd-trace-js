@@ -20,7 +20,6 @@ app.use(expressSession({
 }))
 
 app.get('/', (req, res) => {
-  process._rawDebug('Hellow')
   res.setHeader('X-Counter', counter)
   res.send('OK')
 })
