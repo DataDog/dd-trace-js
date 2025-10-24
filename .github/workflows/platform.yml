@@ -43,6 +43,17 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
 
+  esbuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:esbuild:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:esbuild:ci
+      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+
   instrumentation-bluebird:
     runs-on: ubuntu-latest
     env:

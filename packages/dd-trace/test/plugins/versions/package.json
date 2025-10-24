@@ -96,6 +96,7 @@
     "dd-trace-api": "1.0.0",
     "ejs": "3.1.10",
     "elasticsearch": "16.7.3",
+    "esbuild": "0.25.11",
     "express": "5.1.0",
     "express-mongo-sanitize": "2.2.0",
     "express-session": "1.18.2",
