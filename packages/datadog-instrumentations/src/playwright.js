@@ -846,6 +846,19 @@ addHook({
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
+      /**
+       * `applyRepeatEachIndex` goes through all the tests in a suite and applies the "repeat" logic.
+       * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
+       * as playwright could change it at any time.
+       *
+       * This means that the clone logic is cumbersome:
+       * - `applyRepeatEachIndex` receives a fileSuite, which we get with `getSuiteType(newTest, 'file')`
+       * - we clone this file suite to include _only the `newTest` in the current iteration_.
+       *   - Important: we can't use `isNewTest` as filter predicate because if a file includes multiple new tests,
+       *     they'd be duplicated multiple times (one per outer loop iteration)
+       * - we add this clone to the project suite
+       * - this is done once per `repeatEachIndex` iteration.
+       */
       for (const newTest of newTests) {
         // No need to filter out attempt to fix tests here because attempt to fix tests are never new
         newTest._ddIsNew = true
@@ -853,7 +866,9 @@ addHook({
           const fileSuite = getSuiteType(newTest, 'file')
           const projectSuite = getSuiteType(newTest, 'project')
           for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
+            // we need to copy the file suite _just with the test to retry_, not _all the new tests in the file_
+            // otherwise the number of retries explodes
+            const copyFileSuite = deepCloneSuite(fileSuite, test => test === newTest, [
               '_ddIsNew',
               '_ddIsEfdRetry'
             ])
