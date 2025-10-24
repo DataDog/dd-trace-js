@@ -1,4 +1,4 @@
-name: Nightly Testing
+name: Custom Node Version Testing
 
 on:
   workflow_dispatch:
