@@ -20,6 +20,10 @@ const messaging = {
       opName: () => 'azure.servicebus.send',
       serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`
     },
+    'bee-queue': {
+      opName: () => 'bee-queue.command',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
       serviceName: ({ tracerService }) => `${tracerService}-pubsub`
@@ -53,6 +57,10 @@ const messaging = {
     amqp10: {
       opName: () => 'amqp.receive',
       serviceName: amqpServiceName
+    },
+    'bee-queue': {
+      opName: () => 'bee-queue.process',
+      serviceName: identityService
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',

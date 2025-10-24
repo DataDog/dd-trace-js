@@ -119,6 +119,7 @@ module.exports = {
   'pino-pretty': () => require('../pino'),
   playwright: () => require('../playwright'),
   'playwright-core': () => require('../playwright'),
+  polka: () => require('../polka'),
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),

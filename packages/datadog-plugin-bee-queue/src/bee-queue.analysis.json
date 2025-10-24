@@ -1,0 +1,68 @@
+{
+  "package": {
+    "name": "bee-queue",
+    "version": "1.7.1"
+  },
+  "category": "messaging",
+  "orchestrion_config": {
+    "instrumentations": [
+      {
+        "module_name": "bee-queue",
+        "version_range": ">=1.0.0",
+        "file_path": "lib/queue.js",
+        "function_query": {
+          "name": "process",
+          "type": "method",
+          "kind": "sync",
+          "class": "Queue"
+        },
+        "role": "consumer",
+        "operator": "traceHandler",
+        "channel_name": "apm:bee-queue:queue:process",
+        "context_capture": {
+          "messaging.system": "this.client.server_info.redis_mode",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "methodName"
+        }
+      },
+      {
+        "module_name": "bee-queue",
+        "version_range": ">=1.0.0",
+        "file_path": "lib/queue.js",
+        "function_query": {
+          "name": "close",
+          "type": "method",
+          "kind": "sync",
+          "class": "Queue"
+        },
+        "role": "producer",
+        "operator": "traceSync",
+        "channel_name": "apm:bee-queue:queue:close",
+        "context_capture": {
+          "messaging.system": "this.client.server_info.redis_mode",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "methodName"
+        }
+      },
+      {
+        "module_name": "bee-queue",
+        "version_range": ">=1.0.0",
+        "file_path": "lib/queue.js",
+        "function_query": {
+          "name": "connect",
+          "type": "method",
+          "kind": "sync",
+          "class": "Queue"
+        },
+        "role": "producer",
+        "operator": "tracePromise",
+        "channel_name": "apm:bee-queue:queue:connect",
+        "context_capture": {
+          "messaging.system": "\"redis\"",
+          "messaging.destination.name": "this.name",
+          "messaging.operation": "\"connect\""
+        }
+      }
+    ]
+  }
+}

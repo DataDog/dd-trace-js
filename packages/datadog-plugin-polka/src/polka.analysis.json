@@ -1,0 +1,51 @@
+{
+  "package": {
+    "name": "polka",
+    "version": "0.5.2"
+  },
+  "category": "web-server",
+  "analysis_metadata": {
+    "total_methods_analyzed": 1,
+    "methods_selected": 1,
+    "selection_threshold": 0,
+    "selection_reasoning": "Methods selected based on agent analysis and APM semantics"
+  },
+  "orchestrion_config": {
+    "instrumentations": [
+      {
+        "module_name": "polka",
+        "version_range": ">=0.0.0",
+        "function_query": {
+          "name": "handler",
+          "type": "method",
+          "kind": "sync",
+          "class": "Polka"
+        },
+        "operator": "traceSync",
+        "channel_name": "apm:polka:polka:handler",
+        "operation": "handle_request",
+        "role": "server",
+        "priority": "critical",
+        "tags": {},
+        "context_capture": {},
+        "analysis_score": 100,
+        "selection_reasoning": "Core internal method that processes ALL incoming HTTP requests. This is the entry point called per-request by the HTTP server's 'request' event. It orchestrates URL parsing, routing, middleware execution, and handler invocation for every incoming request.",
+        "file_path": "index.js",
+        "line_number": 70,
+        "factory": {
+          "type": "module_export",
+          "name": "default",
+          "returns_class": "Polka",
+          "file": ".analysis/polka/node_modules/polka/index.js",
+          "line": 102,
+          "params": [
+            "opts"
+          ],
+          "async": false,
+          "usage_example": "const polka = require('polka'); const app = polka();",
+          "reasoning": "Polka exports a factory function that creates Polka instances"
+        }
+      }
+    ]
+  }
+}

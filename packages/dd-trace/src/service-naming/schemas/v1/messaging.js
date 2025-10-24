@@ -16,6 +16,10 @@ const messaging = {
   producer: {
     amqplib: amqpOutbound,
     amqp10: amqpOutbound,
+    'bee-queue': {
+      opName: () => 'bee-queue.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService
@@ -41,6 +45,10 @@ const messaging = {
   consumer: {
     amqplib: amqpInbound,
     amqp10: amqpInbound,
+    'bee-queue': {
+      opName: () => 'bee-queue.process',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.process',
       serviceName: identityService

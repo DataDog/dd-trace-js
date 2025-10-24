@@ -69,6 +69,7 @@ declare -a plugins=(
   "pg"
   "pino"
   "playwright"
+  "polka"
   "prisma"
   "protobufjs"
   "redis"

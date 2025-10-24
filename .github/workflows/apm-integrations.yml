@@ -768,6 +768,24 @@ jobs:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
 
+  polka:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: polka
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+
   postgres:
     runs-on: ubuntu-latest
     services:
