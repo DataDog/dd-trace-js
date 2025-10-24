@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -19,7 +19,7 @@ describe('esm', () => {
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'microgateway-core@${version}'`], false, [
+      sandbox = await linkedSandbox([`'microgateway-core@${version}'`], false, [
         './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
     })
 

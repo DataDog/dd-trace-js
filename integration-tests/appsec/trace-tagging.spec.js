@@ -5,7 +5,7 @@ const path = require('path')
 const Axios = require('axios')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
@@ -35,7 +35,7 @@ describe('ASM Trace Tagging rules', () => {
 
   describe('express', () => {
     before(async () => {
-      sandbox = await createSandbox(['express'])
+      sandbox = await isolatedSandbox(['express'])
       cwd = sandbox.folder
       appFile = path.join(cwd, 'appsec/data-collection/index.js')
     })
@@ -60,7 +60,7 @@ describe('ASM Trace Tagging rules', () => {
 
   describe('fastify', () => {
     before(async () => {
-      sandbox = await createSandbox(['fastify'])
+      sandbox = await isolatedSandbox(['fastify'])
       cwd = sandbox.folder
       appFile = path.join(cwd, 'appsec/data-collection/fastify.js')
     })

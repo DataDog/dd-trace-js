@@ -4,7 +4,7 @@ const { once } = require('node:events')
 const assert = require('node:assert')
 const { exec } = require('child_process')
 
-const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
+const { isolatedSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 
@@ -55,7 +55,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         testFrameworks.push('@cucumber/cucumber')
       }
 
-      sandbox = await createSandbox(testFrameworks, true)
+      sandbox = await isolatedSandbox(testFrameworks, true)
       cwd = sandbox.folder
     })
 

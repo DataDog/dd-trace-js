@@ -5,7 +5,7 @@ const { exec } = require('child_process')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -32,7 +32,7 @@ versionRange.forEach(version => {
     let webAppPort
 
     before(async function () {
-      sandbox = await createSandbox([
+      sandbox = await isolatedSandbox([
         'mocha',
         'jest',
         '@cucumber/cucumber',

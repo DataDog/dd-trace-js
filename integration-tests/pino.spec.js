@@ -1,6 +1,6 @@
 'use strict'
 
-const { FakeAgent, spawnProc, createSandbox, curl, assertObjectContains } = require('./helpers')
+const { FakeAgent, spawnProc, isolatedSandbox, curl, assertObjectContains } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { once } = require('events')
@@ -13,7 +13,7 @@ describe('pino test', () => {
   let startupTestFile
 
   before(async () => {
-    sandbox = await createSandbox(['pino'])
+    sandbox = await isolatedSandbox(['pino'])
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, 'pino/index.js')
   })

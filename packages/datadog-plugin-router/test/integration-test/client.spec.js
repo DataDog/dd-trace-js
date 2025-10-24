@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('router', 'router', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'router@${version}'`]
+      sandbox = await linkedSandbox([`'router@${version}'`]
         , false, ['./packages/datadog-plugin-router/test/integration-test/*'])
     })
 

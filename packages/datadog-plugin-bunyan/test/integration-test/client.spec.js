@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc,
   varySandbox
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('bunyan', 'bunyan', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'bunyan@${version}'`], false,
+      sandbox = await linkedSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'bunyan')
     })

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -19,7 +19,7 @@ describe('esm', () => {
   withVersions('azure-event-hubs', '@azure/event-hubs', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@azure/event-hubs@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@azure/event-hubs@${version}'`], false, [
         './packages/datadog-plugin-azure-event-hubs/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('redis', 'redis', '>=4', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'redis@${version}'`], false, [
+      sandbox = await linkedSandbox([`'redis@${version}'`], false, [
         './packages/datadog-plugin-redis/test/integration-test/*'])
     })
 

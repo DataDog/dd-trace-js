@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('oracledb', 'oracledb', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'oracledb@${version}'`], false, [
+      sandbox = await linkedSandbox([`'oracledb@${version}'`], false, [
         './packages/datadog-plugin-oracledb/test/integration-test/*'])
     })
 

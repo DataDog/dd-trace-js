@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -20,7 +20,7 @@ describe('Plugin (ESM)', () => {
     withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
       before(async function () {
         this.timeout(50000)
-        sandbox = await createSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
+        sandbox = await linkedSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
           './packages/datadog-plugin-graphql/test/esm-test/*'])
       })
 

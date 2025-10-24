@@ -5,7 +5,7 @@ const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
 
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { linkedSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - command_injection - integration', () => {
   let axios, sandbox, cwd, appFile, agent, proc
@@ -13,7 +13,7 @@ describe('RASP - command_injection - integration', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
-    sandbox = await createSandbox(
+    sandbox = await linkedSandbox(
       ['express'],
       false,
       [path.join(__dirname, 'resources')]

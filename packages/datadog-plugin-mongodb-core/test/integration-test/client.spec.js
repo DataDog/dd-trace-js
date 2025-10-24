@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -19,7 +19,7 @@ describe('esm', () => {
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'mongodb@${version}'`], false, [
+      sandbox = await linkedSandbox([`'mongodb@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'mongodb', 'MongoClient')
     })
@@ -56,7 +56,7 @@ describe('esm', () => {
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
+      sandbox = await linkedSandbox([`'mongodb-core@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server2.mjs', 'MongoDBCore')
     })

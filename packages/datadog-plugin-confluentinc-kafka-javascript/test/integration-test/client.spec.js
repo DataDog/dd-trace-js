@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('confluentinc-kafka-javascript', '@confluentinc/kafka-javascript', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@confluentinc/kafka-javascript@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@confluentinc/kafka-javascript@${version}'`], false, [
         './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*'])
     })
 

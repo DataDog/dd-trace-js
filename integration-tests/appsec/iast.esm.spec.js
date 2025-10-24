@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
+const { isolatedSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -10,7 +10,7 @@ describe('ESM', () => {
 
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox(['express'])
+    sandbox = await isolatedSandbox(['express'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec', 'esm-app', 'index.mjs')
   })

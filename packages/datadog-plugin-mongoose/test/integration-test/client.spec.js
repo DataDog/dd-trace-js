@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   varySandbox
@@ -19,7 +19,7 @@ describe('esm', () => {
   withVersions('mongoose', ['mongoose'], '>=4', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'mongoose@${version}'`], false, [
+      sandbox = await linkedSandbox([`'mongoose@${version}'`], false, [
         './packages/datadog-plugin-mongoose/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'mongoose')
     })

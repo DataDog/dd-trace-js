@@ -8,7 +8,7 @@ const fs = require('fs')
 const path = require('path')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -86,7 +86,7 @@ versions.forEach(version => {
       // add an explicit timeout to make tests less flaky
       this.timeout(50000)
 
-      sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
+      sandbox = await isolatedSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
       cwd = sandbox.folder
     })
 

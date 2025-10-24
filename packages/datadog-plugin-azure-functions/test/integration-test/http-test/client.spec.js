@@ -3,7 +3,7 @@
 const {
   FakeAgent,
   hookFile,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
@@ -21,7 +21,7 @@ describe('esm', () => {
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
     before(async function () {
       this.timeout(120_000)
-      sandbox = await createSandbox([
+      sandbox = await linkedSandbox([
         `@azure/functions@${version}`,
         'azure-functions-core-tools@4',
       ],

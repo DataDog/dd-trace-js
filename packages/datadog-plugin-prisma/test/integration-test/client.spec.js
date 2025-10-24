@@ -7,7 +7,7 @@ const { describe, it, beforeEach, before, after, afterEach } = require('mocha')
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc,
   assertObjectContains
 } = require('../../../../integration-tests/helpers')
@@ -21,7 +21,7 @@ describe('esm', () => {
   withVersions('prisma', '@prisma/client', version => {
     before(async function () {
       this.timeout(100000)
-      sandbox = await createSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
+      sandbox = await linkedSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
         './packages/datadog-plugin-prisma/test/integration-test/*',
         './packages/datadog-plugin-prisma/test/schema.prisma'
       ])

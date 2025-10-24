@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('sharedb', 'sharedb', '>=3', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'sharedb@${version}'`], false, [
+      sandbox = await linkedSandbox([`'sharedb@${version}'`], false, [
         './packages/datadog-plugin-sharedb/test/integration-test/*'])
     })
 

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('iovalkey', 'iovalkey', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'iovalkey@${version}'`], false, [
+      sandbox = await linkedSandbox([`'iovalkey@${version}'`], false, [
         './packages/datadog-plugin-iovalkey/test/integration-test/*'])
     })
 

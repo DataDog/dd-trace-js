@@ -11,7 +11,7 @@ const execPromise = promisify(exec)
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -130,7 +130,7 @@ moduleTypes.forEach(({
 
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+      sandbox = await isolatedSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env

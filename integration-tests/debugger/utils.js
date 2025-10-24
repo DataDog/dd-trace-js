@@ -6,7 +6,7 @@ const { randomUUID } = require('crypto')
 
 const Axios = require('axios')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
@@ -75,7 +75,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   }
 
   before(async function () {
-    sandbox = await createSandbox(dependencies)
+    sandbox = await isolatedSandbox(dependencies)
     cwd = sandbox.folder
     // The sandbox uses the `integration-tests` folder as its root
     t.appFile = join(cwd, 'debugger', breakpoints[0].deployedFile)

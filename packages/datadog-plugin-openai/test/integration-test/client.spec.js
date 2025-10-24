@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
@@ -20,7 +20,7 @@ describe('esm', () => {
   withVersions('openai', 'openai', '>=3 <4.0.0 || >4.1.0', (version) => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox(
+      sandbox = await linkedSandbox(
         [
           `'openai@${version}'`,
           'nock',

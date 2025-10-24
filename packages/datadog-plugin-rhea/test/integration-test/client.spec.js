@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('rhea', 'rhea', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'rhea@${version}'`], false, [
+      sandbox = await linkedSandbox([`'rhea@${version}'`], false, [
         './packages/datadog-plugin-rhea/test/integration-test/*'])
     })
 

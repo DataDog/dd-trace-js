@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -11,7 +11,7 @@ describe('Remote config client id', () => {
   before(async function () {
     this.timeout(process.platform === 'win32' ? 90000 : 30000)
 
-    sandbox = await createSandbox(
+    sandbox = await isolatedSandbox(
       ['express'],
       false,
       [path.join(__dirname, 'remote_config')]

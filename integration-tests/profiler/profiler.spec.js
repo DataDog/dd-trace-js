@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox
+  isolatedSandbox
 } = require('../helpers')
 const childProcess = require('child_process')
 const { fork } = childProcess
@@ -310,7 +310,7 @@ describe('profiler', () => {
   const maxBusyCycleTimeNs = (timeout - 1000) * 1000000 / expectedSpans
 
   before(async () => {
-    sandbox = await createSandbox()
+    sandbox = await isolatedSandbox()
     cwd = sandbox.folder
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')

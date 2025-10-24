@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { isolatedSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
@@ -38,7 +38,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       '@openfeature/core',
     ]
 
-    sandbox = await createSandbox(
+    sandbox = await isolatedSandbox(
       dependencies,
       false,
       [path.join(__dirname, 'app')]

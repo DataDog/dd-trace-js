@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
@@ -24,7 +24,7 @@ describe('esm', () => {
   withVersions('ai', 'ai', (version, _, realVersion) => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([
+      sandbox = await linkedSandbox([
         `ai@${version}`,
         `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
         'zod@3.25.75'

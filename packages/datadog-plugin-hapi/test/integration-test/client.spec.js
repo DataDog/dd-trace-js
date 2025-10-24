@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('hapi', '@hapi/hapi', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'@hapi/hapi@${version}'`], false, [
+      sandbox = await linkedSandbox([`'@hapi/hapi@${version}'`], false, [
         './packages/datadog-plugin-hapi/test/integration-test/*'])
     })
 

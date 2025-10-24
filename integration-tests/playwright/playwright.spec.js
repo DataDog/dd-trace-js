@@ -9,7 +9,7 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -82,7 +82,7 @@ versions.forEach((version) => {
     before(async function () {
       // Usually takes under 30 seconds but sometimes the server is really slow.
       this.timeout(300_000)
-      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
+      sandbox = await isolatedSandbox([`@playwright/test@${version}`, 'typescript'], true)
       cwd = sandbox.folder
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)

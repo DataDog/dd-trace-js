@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   spawnPluginIntegrationTestProc,
   varySandbox
 } = require('../../../../integration-tests/helpers')
@@ -18,7 +18,7 @@ describe('esm', () => {
   withVersions('pino', 'pino', version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'pino@${version}'`],
+      sandbox = await linkedSandbox([`'pino@${version}'`],
         false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
       variants = varySandbox(sandbox, 'server.mjs', 'pino')
     })

@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('aws-sdk', ['aws-sdk'], version => {
     before(async function () {
       this.timeout(60000)
-      sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
+      sandbox = await linkedSandbox([`'aws-sdk@${version}'`], false, [
         './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
     })
 

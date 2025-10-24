@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  linkedSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
   assertObjectContains,
@@ -17,7 +17,7 @@ describe('esm integration test', () => {
   withVersions('hono', 'hono', (range, _moduleName_, version) => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`'hono@${range}'`, '@hono/node-server@1.15.0'], false,
+      sandbox = await linkedSandbox([`'hono@${range}'`, '@hono/node-server@1.15.0'], false,
         ['./packages/datadog-plugin-hono/test/integration-test/*'])
     })
 

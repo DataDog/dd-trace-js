@@ -5,7 +5,7 @@ const path = require('path')
 const Axios = require('axios')
 
 const {
-  createSandbox,
+  isolatedSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
@@ -14,7 +14,7 @@ describe('Headers collection - Fastify', () => {
   let axios, sandbox, cwd, appFile, agent, proc
 
   before(async () => {
-    sandbox = await createSandbox(['fastify'])
+    sandbox = await isolatedSandbox(['fastify'])
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec/data-collection/fastify.js')
   })
