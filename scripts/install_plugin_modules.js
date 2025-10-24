@@ -56,8 +56,6 @@ async function assertPrerequisites () {
     await assertInstrumentation(inst, false)
   }
 
-  // TODO: Always install as a peer dependency along the internal module instead
-  // so that we no longer need NODE_PATH.
   const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
 
   for (const name of externalNames) {
@@ -101,7 +99,6 @@ async function assertInstrumentation (instrumentation, external) {
 /**
  * @param {string} name
  * @param {string} version
- * @param {string?} parent
  */
 async function assertModules (name, version) {
   const range = process.env.RANGE
@@ -165,9 +162,10 @@ async function assertPeerDependencies () {
       const pkgJsonPath = join(folder, 'node_modules', externalName, 'package.json')
       const pkgJson = require(pkgJsonPath)
 
-      // Add missing dependency to the module. While this technically means the
-      // module is broken, a user could add the dependency manually as well, so we
-      // need to do the same thing in order to test that scenario.
+      // Add missing dependency to the module. While having to do this
+      // technically means the module itself is broken, a user could add the
+      // dependency manually as well, so we need to do the same thing in order
+      // to test that scenario.
       if (typeof dep === 'string' && semver.validRange(dep)) {
         versionPkgJson.dependencies[name] = dep
 
@@ -287,6 +285,8 @@ async function assertWorkspaces () {
 function install (force = false, retry = true) {
   const flags = ['--linker=isolated']
 
+  // Bun doesn't have a `rebuild` command, so the only way to rebuild native
+  // extensions is to force a reinstall.
   if (force) {
     flags.push('--force')
   }
