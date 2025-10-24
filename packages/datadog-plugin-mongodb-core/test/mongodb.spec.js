@@ -602,7 +602,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-00'`
+                `traceparent='00-${traceId}-${spanId}-01'`
               )
             })
             .then(done)
