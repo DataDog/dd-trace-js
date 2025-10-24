@@ -876,9 +876,8 @@ class Config {
         // Validate OTEL propagators
         for (const style of otelStyles || []) {
           if (!VALID_PROPAGATION_STYLES.has(style)) {
-            log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
+            log.warn('unexpected value %s for OTEL_PROPAGATORS environment variable', style)
             getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
-            break // Only warn once
           }
         }
         // Set inject/extract from OTEL_PROPAGATORS

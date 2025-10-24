@@ -2954,6 +2954,7 @@ apm_configuration_default:
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
     })
+
     it('should support all extended configs across product areas', () => {
       fs.writeFileSync(
         process.env.DD_TEST_LOCAL_CONFIG_PATH,
