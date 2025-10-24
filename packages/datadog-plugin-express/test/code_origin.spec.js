@@ -11,31 +11,8 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const host = 'localhost'
 
-const modulePaths = [
-  '../../dd-trace/src/plugins/util/stacktrace',
-  '../../datadog-code-origin',
-  '../src/index',
-  '../src/code_origin'
-].map(path => require.resolve(path))
-
-function clearCodeOriginCaches () {
-  for (const modulePath of modulePaths) {
-    delete require.cache[modulePath]
-  }
-}
-
 describe('Plugin', () => {
   let express, app, listener
-
-  before(() => {
-    process.env._DD_CODE_ORIGIN_ENABLE_FILTER = '1'
-    clearCodeOriginCaches()
-  })
-
-  after(() => {
-    delete process.env._DD_CODE_ORIGIN_ENABLE_FILTER
-    clearCodeOriginCaches()
-  })
 
   describe('express', () => {
     withVersions('express', 'express', (version) => {
