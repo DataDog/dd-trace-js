@@ -8,8 +8,8 @@ class WebServerTestHelper extends BaseTestHelper {
     generateTestCases () {
         super.generateTestCases()
 
-        it('should instrument HTTP GET requests', function (done) {
-            this.agent
+        it('should instrument HTTP GET requests', async () => {
+            const agentAssertion = this.agent
                 .assertSomeTraces(traces => {
                     expect(traces[0][0]).to.deep.include({
                         service: 'test'
@@ -19,14 +19,13 @@ class WebServerTestHelper extends BaseTestHelper {
                     expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                     expect(traces[0][0].meta).to.have.property('span.kind', 'server')
                 })
-                .then(done)
-                .catch(done)
 
-            this.testSetup.handle_request({ method: 'GET', path: '/' }).catch(done)
+            await this.testSetup.handle_request({ method: 'GET', path: '/' })
+            return agentAssertion
         })
 
-        it('should instrument HTTP POST requests', function (done) {
-            this.agent
+        it('should instrument HTTP POST requests', async () => {
+            const agentAssertion = this.agent
                 .assertSomeTraces(traces => {
                     expect(traces[0][0]).to.deep.include({
                         service: 'test'
@@ -36,33 +35,30 @@ class WebServerTestHelper extends BaseTestHelper {
                     expect(traces[0][0].meta).to.have.property('http.status_code', '200')
                     expect(traces[0][0].meta).to.have.property('span.kind', 'server')
                 })
-                .then(done)
-                .catch(done)
 
-            this.testSetup.handle_request({ method: 'POST', path: '/' }).catch(done)
+            await this.testSetup.handle_request({ method: 'POST', path: '/' })
+            return agentAssertion
         })
 
-        it('should instrument parameterized routes', function (done) {
-            this.agent
+        it('should instrument parameterized routes', async () => {
+            const agentAssertion = this.agent
                 .assertSomeTraces(traces => {
                     expect(traces[0][0].meta).to.have.property('http.route')
                 })
-                .then(done)
-                .catch(done)
 
-            this.testSetup.handle_request({ method: 'GET', path: '/users/123' }).catch(done)
+            await this.testSetup.handle_request({ method: 'GET', path: '/users/123' })
+            return agentAssertion
         })
 
-        it('should handle HTTP error responses', function (done) {
-            this.agent
+        it('should handle HTTP error responses', async () => {
+            const agentAssertion = this.agent
                 .assertSomeTraces(traces => {
                     expect(traces[0][0]).to.have.property('error', 1)
                     expect(traces[0][0].meta).to.have.property('http.status_code', '500')
                 })
-                .then(done)
-                .catch(done)
 
-            this.testSetup.handle_request({ method: 'GET', path: '/', expectError: true }).catch(() => {})
+            await this.testSetup.handle_request({ method: 'GET', path: '/', expectError: true })
+            return agentAssertion
         })
     }
 }

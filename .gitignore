@@ -5,6 +5,8 @@
 *.DS_Store
 .AppleDouble
 .LSOverride
+.analysis/*
+.claude/*
 
 # Icon must end with two \r
 Icon
@@ -114,7 +116,7 @@ docs/test.js
 dist
 acmeair-nodejs
 !packages/*/test/**/dist
-!packages/*/test/**/node_modules
+packages/*/test/**/node_modules
 packages/datadog-plugin-next/test/package.json
 packages/datadog-plugin-next/test/node_modules
 packages/datadog-plugin-next/test/yarn.lock

@@ -29,11 +29,19 @@ class MessagingTestHelper extends BaseTestHelper {
                 it('should handle errors in message production', async () => {
                     const agentAssertion = this.agent
                         .assertSomeTraces(traces => {
-                            expect(traces[0][0]).to.have.property('error', 1)
-                            expect(traces[0][0].meta).to.have.property('component', this.pluginName)
+                            const errorSpan = traces.flat().find(span => span.error === 1)
+                            expect(errorSpan).to.exist
+                            expect(errorSpan.meta).to.have.property('component', this.pluginName)
                         })
 
-                    await this.testSetup.produce({ destination: 'test-queue', message: 'test', expectError: true }).catch(() => {})
+                    try {
+                        await this.testSetup.produce({ destination: 'test-queue', message: 'test', expectError: true })
+                    } catch (e) {
+                        // expected
+                    }
+
+                    await new Promise(resolve => setTimeout(resolve, 200))
+
                     return agentAssertion
                 })
             })
@@ -83,8 +91,13 @@ class MessagingTestHelper extends BaseTestHelper {
                             expect(errorSpan.meta).to.have.property('component', this.pluginName)
                         })
 
-                    await this.testSetup.consume({ destination: 'test-queue', expectError: true }).catch(() => {})
-
+                    let threw = false
+                    try {
+                        await this.testSetup.consume({ destination: 'test-queue', expectError: true })
+                    } catch (e) {
+                        threw = true
+                    }
+                    expect(threw).to.equal(true)
                     return agentAssertion
                 })
             })

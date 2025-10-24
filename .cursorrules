@@ -1,0 +1,133 @@
+# DD-Trace APM Integration Development Rules
+
+## General Behavior
+
+When working in this repository:
+- Make changes immediately, don't ask for permission
+- Run tests after changes to validate
+- Read relevant files when needed without asking
+- Execute terminal commands when necessary
+
+## APM Integration Test Fixing
+
+When asked to fix integration tests:
+
+### Autonomous Mode
+1. Run tests FIRST to see actual failures
+2. Analyze failure output (timeouts, errors, missing spans)
+3. Read relevant files immediately
+4. Apply fixes without asking
+5. Re-run tests to validate
+6. Loop until ALL tests pass
+
+### Do NOT Ask Permission For
+- Reading any file in the workspace
+- Running `yarn`, `npm`, `docker-compose` commands
+- Editing test files, plugin code, or configuration
+- Running integration tests
+- Starting Docker services
+- Searching codebase
+
+### Only Ask When
+- Considering architectural changes
+- Deleting substantial code
+- Tried 10+ different approaches without success
+- About to make breaking changes to public APIs
+
+## Test Fixing Common Issues
+
+### Issue: Tests timeout with no spans
+**Fix immediately:**
+1. Check `packages/dd-trace/test/plugins/externals.json` - add external service
+2. Check `integration-tests/docker-compose.yml` - ensure service exists
+3. Run: `docker-compose -f integration-tests/docker-compose.yml up -d <service>`
+
+### Issue: TypeError in test-setup.js
+**Fix immediately:**
+1. Read `packages/datadog-plugin-<lib>/test/test-setup.js`
+2. Check `setup()` method - ensure library initialized correctly
+3. Verify connection options use correct env vars
+4. Fix and re-test
+
+### Issue: No spans created
+**Fix immediately:**
+1. Read `packages/datadog-instrumentations/src/<lib>.js` - check hooks
+2. Read `packages/datadog-plugin-<lib>/src/producer.js` - check subscriptions
+3. Verify channel names match between instrumentation and plugin
+4. Check `<lib>.analysis.json` for `channel_name` fields
+
+### Issue: Spans missing tags
+**Fix immediately:**
+1. Read `packages/datadog-plugin-<lib>/src/extractors.js`
+2. Check `<lib>.analysis.json` - verify `context_capture` not empty
+3. Fix extractor functions to map context properly
+
+## File Structure Reference
+
+```
+packages/
+  datadog-instrumentations/src/
+    <library>.js                      # Hooks that wrap library methods
+  datadog-plugin-<library>/
+    src/
+      producer.js, consumer.js        # Plugin that creates spans
+      extractors.js                   # Tag extraction from context
+      <library>.analysis.json         # Configuration & metadata
+    test/
+      index.spec.js                   # Test suite
+      test-setup.js                   # Library initialization
+  dd-trace/test/plugins/
+    externals.json                    # External service dependencies
+integration-tests/
+  docker-compose.yml                  # Docker services for testing
+```
+
+## Code Style
+
+- Follow existing patterns in the codebase
+- Use single quotes for strings
+- No semicolons at end of lines (repo convention)
+- Prefer `const` over `let`
+- Use async/await over callbacks
+- Keep lines under 120 characters
+
+## Testing Commands
+
+```bash
+# Run specific plugin tests
+PLUGINS=<name> yarn test:plugins
+
+# Run with verbose output
+PLUGINS=<name> yarn test:plugins --grep "specific test"
+
+# Start Docker services
+docker-compose -f integration-tests/docker-compose.yml up -d redis
+
+# Check service logs
+docker-compose -f integration-tests/docker-compose.yml logs redis
+```
+
+## When Stuck
+
+After trying multiple approaches (5+), provide:
+1. Summary of what you tried
+2. Current error/failure
+3. Hypothesis about root cause
+4. Recommendation for next step
+
+Then WAIT for human guidance.
+
+## Success Criteria
+
+Tests are fixed when:
+- ✅ All test cases pass
+- ✅ Spans are created with correct names
+- ✅ Spans have semantic tags populated
+- ✅ No timeout errors
+- ✅ No connection errors
+- ✅ Tests complete in <10 seconds
+
+---
+
+**Remember**: Act first, report results. Don't ask "Should I...?" - just do it and show the outcome.
+

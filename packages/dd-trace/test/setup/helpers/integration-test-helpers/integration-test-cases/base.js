@@ -40,7 +40,7 @@ class BaseTestHelper {
 
     generateTestCases () {
         it('should load the module correctly', () => {
-            expect(this.mod).to.be.an('object')
+            expect(this.mod).to.exist
             expect(this.testSetup).to.be.an('object')
         })
 

@@ -34,7 +34,7 @@ function createVersionedTests (pluginName, packageName, TestSetupClass, options 
             await agent.close({ ritmReset: false })
         })
 
-        beforeEach(async () => {
+        before(async () => {
             tracer = require('../../../../../dd-trace').init()
             mod = require(`../../../../../../versions/${packageName}@${version}`)
             mod = options.subModule ? mod.get(options.subModule) : mod.get()
