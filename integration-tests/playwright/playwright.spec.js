@@ -736,6 +736,51 @@ versions.forEach((version) => {
           receiverPromise,
         ])
       })
+
+      it('does not run EFD if the percentage of new tests is too high', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({ playwright: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 0)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+            })
+        ])
+      })
     })
 
     it('does not crash when maxFailures=1 and there is an error', (done) => {
