@@ -9,6 +9,7 @@ const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/h
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
+process.env._DD_CODE_ORIGIN_ENABLE_FILTER = 'true'
 const host = 'localhost'
 
 describe('Plugin', () => {

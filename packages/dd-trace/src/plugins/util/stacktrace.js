@@ -1,11 +1,20 @@
 'use strict'
 
 const { relative, sep } = require('path')
+const { getEnvironmentVariable } = require('../../config-helper')
+const { isTrue } = require('../../util')
 
 const cwd = process.cwd()
 
 const NODE_MODULES_PATTERN_MIDDLE = `${sep}node_modules${sep}`
 const NODE_MODULES_PATTERN_START = `node_modules${sep}`
+
+/**
+ * Check if we should filter dd-trace-js instrumentation frames at load time
+ * This is needed for local and CI where dd-trace-js is not in node_modules.
+ * In production, these frames are already filtered by isNodeModulesFrame.
+ */
+const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = isTrue(getEnvironmentVariable('_DD_CODE_ORIGIN_ENABLE_FILTER'))
 
 module.exports = {
   getCallSites,
@@ -90,7 +99,7 @@ function parseLine (stack, start, end) {
   [fileName, lineNumber, columnNumber, index] = result
 
   if (isNodeModulesFrame(fileName)) return
-  if (isDDInstrumentationFile(fileName)) return
+  if (SHOULD_FILTER_DD_TRACE_INSTRUMENTAION && isDDInstrumentationFile(fileName)) return
 
   // parse method name
   let methodName, functionName

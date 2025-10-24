@@ -185,7 +185,6 @@ function hasRouterCycle (router, stack = new Set()) {
     if (!layer?.route && layer?.handle?.stack?.length) {
       const hasCycle = hasRouterCycle(layer.handle, stack)
       if (hasCycle) {
-        stack.delete(router)
         return true
       }
     }
@@ -201,7 +200,7 @@ function wrapRouteMethodsAndPublish (route, paths, publish) {
   const filteredPaths = paths.filter(Boolean)
   if (!filteredPaths.length) return
 
-  const uniquePaths = [...new Set(filteredPaths)]
+  const uniquePaths = new Set(filteredPaths)
 
   METHODS.forEach(method => {
     if (typeof route[method] !== 'function') return
