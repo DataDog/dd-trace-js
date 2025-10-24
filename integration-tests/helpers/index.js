@@ -11,10 +11,10 @@ const path = require('path')
 const assert = require('assert')
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
-const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 const { BUN, withBun } = require('./bun')
 
+const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 // This is set by the setShouldKill function
@@ -270,14 +270,16 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
+  const folder = path.join(sandboxRoot, id().toString())
+  const out = path.join(sandboxRoot, 'dd-trace.tgz')
   const deps = cappedDependencies.concat(`file:${out}`)
 
-  await fs.mkdir(folder)
+  await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--linker=hoisted', '--trust']
-  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --destination ${folder}`, { env: restOfEnv })
+  if (!existsSync(out)) {
+    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
+  }
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
