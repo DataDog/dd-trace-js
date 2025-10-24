@@ -2,18 +2,27 @@
 
 const axios = require('axios')
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-process.env._DD_CODE_ORIGIN_ENABLE_FILTER = 'true'
 const host = 'localhost'
 
 describe('Plugin', () => {
   let express, app, listener
+
+  before(() => {
+    process.env._DD_CODE_ORIGIN_ENABLE_FILTER = '1'
+    clearCodeOriginCaches()
+  })
+
+  after(() => {
+    delete process.env._DD_CODE_ORIGIN_ENABLE_FILTER
+    clearCodeOriginCaches()
+  })
 
   describe('express', () => {
     withVersions('express', 'express', (version) => {
@@ -174,3 +183,18 @@ describe('Plugin', () => {
     })
   }
 })
+
+function clearCodeOriginCaches () {
+  const modulePaths = [
+    '../../dd-trace/src/plugins/util/stacktrace',
+    '../../datadog-code-origin',
+    '../src/index',
+    '../src/code_origin'
+  ].map(path => require.resolve(path))
+
+  for (const modulePath of modulePaths) {
+    if (require.cache[modulePath]) {
+      delete require.cache[modulePath]
+    }
+  }
+}
