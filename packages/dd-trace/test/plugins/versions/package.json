@@ -93,6 +93,7 @@
     "couchbase": "4.6.0",
     "cypress": "15.4.0",
     "cypress-fail-fast": "7.1.1",
+    "dc-polyfill": "0.1.10",
     "dd-trace-api": "1.0.0",
     "ejs": "3.1.10",
     "elasticsearch": "16.7.3",
