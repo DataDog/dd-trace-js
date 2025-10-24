@@ -317,6 +317,7 @@ class Config {
     }
 
     this.#defaults = defaults
+    this.#applyDefaults()
     this.#applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
     this.#applyEnvironment(envs)
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
@@ -377,6 +378,32 @@ class Config {
 
   #applyStableConfig (config, obj) {
     this.#applyConfigValues(config, obj, {})
+  }
+
+  #applyDefaults () {
+    const defaults = this.#defaults
+
+    // Set environment-dependent defaults that can be overridden by users
+    // These defaults are calculated at runtime, not at module load time
+
+    // Disable crashtracking in serverless environments by default
+    this.#setBoolean(defaults, 'crashtracking.enabled', !isInServerlessEnvironment())
+
+    // Disable profiling in serverless environments by default
+    if (isInServerlessEnvironment()) {
+      this.#setString(defaults, 'profiling.enabled', 'false')
+    }
+
+    // Disable telemetry and remote config in serverless environments by default
+    if (isInServerlessEnvironment()) {
+      this.#setBoolean(defaults, 'telemetry.enabled', false)
+      this.#setBoolean(defaults, 'remoteConfig.enabled', false)
+    }
+
+    // Disable telemetry inside Jest workers by default
+    if (getEnv('JEST_WORKER_ID')) {
+      this.#setBoolean(defaults, 'telemetry.enabled', false)
+    }
   }
 
   #applyEnvironment () {
@@ -1182,17 +1209,6 @@ class Config {
       // This will only be used if no other source (options, env, stable config) set the value
       calc['tracePropagationStyle.inject'] = defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = defaultPropagationStyle
-    }
-
-    // Disable telemetry and remote config if in serverless environment
-    if (isInServerlessEnvironment()) {
-      this.#setBoolean(calc, 'telemetry.enabled', false)
-      this.#setBoolean(calc, 'remoteConfig.enabled', false)
-    }
-
-    // Disable telemetry if inside a Jest worker
-    if (getEnv('JEST_WORKER_ID')) {
-      this.#setBoolean(calc, 'telemetry.enabled', false)
     }
   }
 
