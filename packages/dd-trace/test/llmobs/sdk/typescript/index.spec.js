@@ -1,7 +1,6 @@
 'use strict'
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const chai = require('chai')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
 
@@ -10,17 +9,13 @@ const {
   createSandbox,
   spawnProc
 } = require('../../../../../../integration-tests/helpers')
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../../util')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
-
-const { expect } = chai
+const { assertLlmObsSpanEvent } = require('../../util')
 
 function check (expected, actual) {
   for (const expectedLLMObsSpanIdx in expected) {
     const expectedLLMObsSpan = expected[expectedLLMObsSpanIdx]
     const actualLLMObsSpan = actual[expectedLLMObsSpanIdx]
-    expect(actualLLMObsSpan).to.deep.deepEqualWithMockValues(expectedLLMObsSpan)
+    assertLlmObsSpanEvent(actualLLMObsSpan, expectedLLMObsSpan)
   }
 }
 
@@ -53,20 +48,18 @@ const testCases = [
     },
     runTest: ({ llmobsSpans, apmSpans }) => {
       const actual = llmobsSpans
-      const expected = [
-        expectedLLMObsNonLLMSpanEvent({
-          span: apmSpans[0][0],
-          spanKind: 'agent',
-          tags: {
-            ml_app: 'test',
-            language: 'javascript',
-            foo: 'bar',
-            bar: 'baz'
-          },
-          inputValue: 'this is a',
-          outputValue: 'test'
-        })
-      ]
+      const expected = [{
+        span: apmSpans[0][0],
+        spanKind: 'agent',
+        name: 'runChain',
+        tags: {
+          ml_app: 'test',
+          foo: 'bar',
+          bar: 'baz'
+        },
+        inputData: 'this is a',
+        outputData: 'test'
+      }]
 
       check(expected, actual)
     }

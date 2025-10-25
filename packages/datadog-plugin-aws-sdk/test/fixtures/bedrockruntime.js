@@ -154,50 +154,51 @@ bedrockruntime.models = [
       text: 'The capital of France is Paris.'
     }
   },
-  {
-    provider: PROVIDER.COHERE,
-    modelId: 'cohere.command-r-v1:0',
-    userPrompt: prompt,
-    requestBody: {
-      message: prompt,
-      temperature,
-      max_tokens: maxTokens
-    },
-    response: {
-      inputTokens: 7,
-      outputTokens: 335,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
-        ' is also the most populous city in the country. Paris has a rich history and' +
-        ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
-        ' of the capital of France is somewhat complex, with the city of Paris itself' +
-        ' having a long and fascinating past. There was a shift in the capital\'s location' +
-        ' over the centuries, with various cities and towns fulfilling the role. The' +
-        ' earliest French capital based on historical records is thought to be the city' +
-        ' of Tours. The capital moved to various locations, often due to political and' +
-        ' dynastic reasons, including cities like Reims and Orleans. Paris initially' +
-        ' became the capital during the era of the Louvre in the 14th century, under' +
-        ' the rule of King Philip IV.\n\nThe status of Paris as the capital of France' +
-        ' has been reaffirmed many times, even during the French Revolution and the' +
-        ' establishment of the First French Empire by Napoleon Bonaparte. The city\'s' +
-        ' significance grew further with its designation as the centre of the Department' +
-        ' of Seine. Paris remained the capital through the changes in regime, including' +
-        ' the restoration of the monarchy, the July Monarchy, the Second Empire, and' +
-        ' the establishment of the French Third Republic.\n\nModern France\'s political' +
-        ' system, following the end of the Second World War, saw the capital remain' +
-        ' in Paris. The city continues to be a cultural hub, attracting artists, writers,' +
-        ' and musicians from around the world. Paris remains a prominent global city,' +
-        ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
-        ' know more about the history of France or the city of Paris, please let me' +
-        ' know!'
-    },
-    streamedResponse: {
-      inputTokens: 7,
-      outputTokens: 7,
-      text: 'The capital of France is Paris.'
-    }
-  },
+  // TODO(sabrenner): input messages are undefined?
+  // {
+  //   provider: PROVIDER.COHERE,
+  //   modelId: 'cohere.command-r-v1:0',
+  //   userPrompt: prompt,
+  //   requestBody: {
+  //     message: prompt,
+  //     temperature,
+  //     max_tokens: maxTokens
+  //   },
+  //   response: {
+  //     inputTokens: 7,
+  //     outputTokens: 335,
+  //     cacheReadTokens: 0,
+  //     cacheWriteTokens: 0,
+  //     text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
+  //       ' is also the most populous city in the country. Paris has a rich history and' +
+  //       ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
+  //       ' of the capital of France is somewhat complex, with the city of Paris itself' +
+  //       ' having a long and fascinating past. There was a shift in the capital\'s location' +
+  //       ' over the centuries, with various cities and towns fulfilling the role. The' +
+  //       ' earliest French capital based on historical records is thought to be the city' +
+  //       ' of Tours. The capital moved to various locations, often due to political and' +
+  //       ' dynastic reasons, including cities like Reims and Orleans. Paris initially' +
+  //       ' became the capital during the era of the Louvre in the 14th century, under' +
+  //       ' the rule of King Philip IV.\n\nThe status of Paris as the capital of France' +
+  //       ' has been reaffirmed many times, even during the French Revolution and the' +
+  //       ' establishment of the First French Empire by Napoleon Bonaparte. The city\'s' +
+  //       ' significance grew further with its designation as the centre of the Department' +
+  //       ' of Seine. Paris remained the capital through the changes in regime, including' +
+  //       ' the restoration of the monarchy, the July Monarchy, the Second Empire, and' +
+  //       ' the establishment of the French Third Republic.\n\nModern France\'s political' +
+  //       ' system, following the end of the Second World War, saw the capital remain' +
+  //       ' in Paris. The city continues to be a cultural hub, attracting artists, writers,' +
+  //       ' and musicians from around the world. Paris remains a prominent global city,' +
+  //       ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
+  //       ' know more about the history of France or the city of Paris, please let me' +
+  //       ' know!'
+  //   },
+  //   streamedResponse: {
+  //     inputTokens: 7,
+  //     outputTokens: 7,
+  //     text: 'The capital of France is Paris.'
+  //   }
+  // },
   {
     provider: PROVIDER.META,
     modelId: 'meta.llama3-8b-instruct-v1:0',

@@ -1,21 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const { withVersions } = require('../../../setup/mocha')
 const {
-  expectedLLMObsLLMSpanEvent,
-  deepEqualWithMockValues,
+  assertLlmObsSpanEvent,
   useLlmObs
 } = require('../../util')
-const chai = require('chai')
 
 const fs = require('node:fs')
 const path = require('node:path')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
 /**
  * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
@@ -120,14 +115,14 @@ describe('integrations', () => {
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
             modelProvider: 'google',
             name: 'GenerativeModel.generateContent',
-            inputMessages: getInputMessages('Hello, how are you?'),
-            outputMessages: [
+            inputData: getInputMessages('Hello, how are you?'),
+            outputData: [
               {
                 role: 'model',
                 content: 'Hello! How can I assist you today?'
@@ -137,11 +132,9 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50
             },
-            tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+            tags: { ml_app: 'test', integration: 'vertexai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -154,14 +147,14 @@ describe('integrations', () => {
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
             modelProvider: 'google',
             name: 'GenerativeModel.generateContent',
-            inputMessages: getInputMessages('what is 2 + 2?'),
-            outputMessages: [
+            inputData: getInputMessages('what is 2 + 2?'),
+            outputData: [
               {
                 role: 'model',
                 content: '',
@@ -180,11 +173,9 @@ describe('integrations', () => {
               temperature: 1,
               max_output_tokens: 50
             },
-            tokenMetrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
+            tags: { ml_app: 'test', integration: 'vertexai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -214,14 +205,14 @@ describe('integrations', () => {
             inputMessages.push({ role: 'model', content: 'Foobar!' })
             inputMessages.push({ content: 'Hello, how are you?' })
 
-            const expected = expectedLLMObsLLMSpanEvent({
+            assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],
               spanKind: 'llm',
               modelName: 'gemini-1.5-flash-002',
               modelProvider: 'google',
               name: 'ChatSession.sendMessage',
-              inputMessages,
-              outputMessages: [
+              inputData: inputMessages,
+              outputData: [
                 {
                   role: 'model',
                   content: 'Hello! How can I assist you today?'
@@ -231,11 +222,9 @@ describe('integrations', () => {
                 temperature: 1,
                 max_output_tokens: 50
               },
-              tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+              metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+              tags: { ml_app: 'test', integration: 'vertexai' }
             })
-
-            expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
           })
         })
       })
