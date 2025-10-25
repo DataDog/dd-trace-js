@@ -15,7 +15,7 @@ withVersions('express-session', 'express-session', version => {
       this.timeout(50000)
       sandbox = await createSandbox([`'express-session@${version}'`, 'express'], false,
         ['./packages/datadog-plugin-express-session/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'express-session', 'expressSession')
+      variants = varySandbox(sandbox, 'server.mjs', 'expressSession', undefined, 'express-session')
     })
 
     after(async function () {
