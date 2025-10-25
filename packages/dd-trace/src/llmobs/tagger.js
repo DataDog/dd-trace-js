@@ -292,11 +292,17 @@ class LLMObsTagger {
         continue
       }
 
-      const { result, toolId, type } = toolResult
+      const { result, toolId, name = '', type } = toolResult
       const toolResultObj = {}
 
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      // name can be empty string, so always include it
+      if (typeof name === 'string') {
+        toolResultObj.name = name
+      } else {
+        this.#handleFailure(`[LLMObs] Expected tool result name to be a string, instead got "${typeof name}"`)
+      }
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -332,12 +338,12 @@ class LLMObsTagger {
       const toolId = message.toolId
       const messageObj = { content }
 
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+
       const valid = typeof content === 'string'
       if (!valid) {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
-
-      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)

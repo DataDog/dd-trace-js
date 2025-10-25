@@ -11,7 +11,8 @@ const { MEASURED } = require('../../../ext/tags')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
-  constructChatCompletionResponseFromStreamedChunks
+  constructChatCompletionResponseFromStreamedChunks,
+  constructResponseResponseFromStreamedChunks
 } = require('./stream-helpers')
 
 const { DD_MAJOR } = require('../../../version')
@@ -59,6 +60,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         response = constructCompletionResponseFromStreamedChunks(chunks, n)
       } else if (methodName === 'createChatCompletion') {
         response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
+      } else if (methodName === 'createResponse') {
+        response = constructResponseResponseFromStreamedChunks(chunks)
       }
 
       ctx.result = { data: response }
@@ -133,6 +136,10 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'createEdit':
         createEditRequestExtraction(tags, payload, openaiStore)
+        break
+
+      case 'createResponse':
+        createResponseRequestExtraction(tags, payload, openaiStore)
         break
     }
 
@@ -313,6 +320,10 @@ function normalizeMethodName (methodName) {
     case 'embeddings.create':
       return 'createEmbedding'
 
+    // responses
+    case 'responses.create':
+      return 'createResponse'
+
     // files
     case 'files.create':
       return 'createFile'
@@ -376,6 +387,16 @@ function createEditRequestExtraction (tags, payload, openaiStore) {
   openaiStore.instruction = instruction
 }
 
+function createResponseRequestExtraction (tags, payload, openaiStore) {
+  // Extract model information
+  if (payload.model) {
+    tags['openai.request.model'] = payload.model
+  }
+
+  // Store the full payload for response extraction
+  openaiStore.responseData = payload
+}
+
 function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
@@ -408,6 +429,10 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createChatCompletion':
     case 'createEdit':
       commonCreateResponseExtraction(tags, body, openaiStore, methodName)
+      break
+
+    case 'createResponse':
+      createResponseResponseExtraction(tags, body, openaiStore)
       break
 
     case 'listFiles':
@@ -511,6 +536,26 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
   if (!body.choices) return
 
   openaiStore.choices = body.choices
+}
+
+function createResponseResponseExtraction (tags, body, openaiStore) {
+  // Extract response ID if available
+  if (body.id) {
+    tags['openai.response.id'] = body.id
+  }
+
+  // Extract status if available
+  if (body.status) {
+    tags['openai.response.status'] = body.status
+  }
+
+  // Extract model from response if available
+  if (body.model) {
+    tags['openai.response.model'] = body.model
+  }
+
+  // Store the full response for potential future use
+  openaiStore.response = body
 }
 
 // The server almost always responds with JSON
