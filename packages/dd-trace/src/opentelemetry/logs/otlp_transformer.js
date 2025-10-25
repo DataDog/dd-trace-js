@@ -40,7 +40,7 @@ const SEVERITY_MAP = {
 /**
  * OtlpTransformer transforms log records to OTLP format.
  *
- * This implementation follows the OTLP Logs Data Model specification:
+ * This implementation follows the OTLP Logs v1.7.0 Data Model specification:
  * https://opentelemetry.io/docs/specs/otlp/#log-data-model
  *
  * @class OtlpTransformer

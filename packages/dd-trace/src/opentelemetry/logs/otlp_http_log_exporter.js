@@ -11,7 +11,7 @@ const OtlpTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpLogExporter exports log records via OTLP over HTTP.
  *
- * This implementation follows the OTLP HTTP specification:
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpLogExporter
