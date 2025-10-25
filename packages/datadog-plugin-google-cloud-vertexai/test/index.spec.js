@@ -70,12 +70,16 @@ describe('Plugin', () => {
       before(() => {
         const { VertexAI } = require(`../../../versions/@google-cloud/vertexai@${version}`).get()
 
-        // stub credentials checking
-        const { GoogleAuth } = require(`../../../versions/@google-cloud/vertexai@${version}`)
-          .get('google-auth-library/build/src/auth/googleauth')
-        authStub = sinon.stub(GoogleAuth.prototype, 'getAccessToken').resolves({})
+        class TestVertexAI extends VertexAI {
+          constructor (...args) {
+            super(...args)
 
-        const client = new VertexAI({
+            // stub credentials checking
+            authStub = sinon.stub(this.googleAuth.constructor.prototype, 'getAccessToken').resolves({})
+          }
+        }
+
+        const client = new TestVertexAI({
           project: 'datadog-sandbox',
           location: 'us-central1'
         })
