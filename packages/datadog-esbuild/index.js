@@ -8,6 +8,12 @@ const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
 
+const { pathToFileURL, fileURLToPath } = require('url')
+const { processModule, isESMFile } = require('./src/utils.js')
+
+const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
+const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+
 let rewriter
 
 for (const hook of Object.values(hooks)) {
@@ -30,7 +36,6 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
@@ -46,14 +51,6 @@ for (const builtin of RAW_BUILTINS) {
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
-
-// We don't want to handle any built-in packages
-// Those packages will still be handled via RITM
-// Attempting to instrument them would fail as they have no package.json file
-for (const pkg of INSTRUMENTED) {
-  if (builtins.has(pkg) || pkg.startsWith('node:')) continue
-  modulesOfInterest.add(pkg)
-}
 
 module.exports.name = 'datadog-esbuild'
 
@@ -123,7 +120,8 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
-  if (isESMBuild(build)) {
+  const esmBuild = isESMBuild(build)
+  if (esmBuild) {
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
       build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
@@ -157,6 +155,9 @@ ${build.initialOptions.banner.js}`
     console.warn('Warning: No git metadata available - skipping injection')
   }
 
+  // first time is intercepted, proxy should be created, next time the original should be loaded
+  const interceptedESMModules = new Set()
+
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
@@ -175,7 +176,7 @@ ${build.initialOptions.banner.js}`
 
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch (err) {
       if (DEBUG) {
         console.warn(`Warning: Unable to find "${args.path}".` +
@@ -205,8 +206,25 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // The file namespace is used when requiring files from disk in userland
+      // Internal module like http/fs is imported and the build output is ESM
+      if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
 
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            pkg: extracted?.pkg,
+            path: extracted?.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM: true
+          }
+        }
+      }
+      // The file namespace is used when requiring files from disk in userland
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
@@ -228,6 +246,11 @@ ${build.initialOptions.banner.js}`
 
       const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
+      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule += ESM_INTERCEPTED_SUFFIX
+      }
+
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
@@ -240,13 +263,15 @@ ${build.initialOptions.banner.js}`
           full: fullPathToModule,
           raw: args.path,
           pkgOfInterest: true,
-          internal
+          kind: args.kind,
+          internal,
+          isESM
         }
       }
     }
   })
 
-  build.onLoad({ filter: /.*/ }, args => {
+  build.onLoad({ filter: /.*/ }, async args => {
     if (args.pluginData?.pkgOfInterest) {
       const data = args.pluginData
 
@@ -257,26 +282,63 @@ ${build.initialOptions.banner.js}`
         : data.pkg
 
       // Read the content of the module file of interest
-      const fileCode = fs.readFileSync(args.path, 'utf8')
+      let contents
 
-      const contents = `
-      (function() {
-        ${fileCode}
-      })(...arguments);
-      {
-        const dc = require('dc-polyfill');
-        const ch = dc.channel('${CHANNEL}');
-        const mod = module.exports
-        const payload = {
-          module: mod,
-          version: '${data.version}',
-          package: '${data.pkg}',
-          path: '${pkgPath}'
-        };
-        ch.publish(payload);
-        module.exports = payload.module;
-    }
-    `
+      if (data.isESM) {
+        if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+
+          if (data.internal) {
+            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
+          }
+
+          interceptedESMModules.add(args.path)
+
+          const setters = await processModule({
+            path: args.path,
+            internal: data.internal,
+            context: { format: 'module' }
+          })
+
+          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
+          contents = `
+import { register } from ${JSON.stringify(iitmPath)};
+import * as namespace from ${JSON.stringify(args.path)};
+const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
+const set = {};
+const get = {};
+
+${Array.from(setters.values()).join(';\n')};
+
+register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
+`
+        } else {
+          contents = fs.readFileSync(args.path, 'utf8')
+        }
+      } else {
+        const fileCode = fs.readFileSync(args.path, 'utf8')
+        contents = `
+        (function() {
+          ${fileCode}
+        })(...arguments);
+        {
+          const dc = require('dc-polyfill');
+          const ch = dc.channel('${CHANNEL}');
+          const mod = module.exports
+          const payload = {
+            module: mod,
+            version: '${data.version}',
+            package: '${data.pkg}',
+            path: '${pkgPath}'
+          };
+          ch.publish(payload);
+          module.exports = payload.module;
+      }
+      `
+      }
+
       // https://esbuild.github.io/plugins/#on-load-results
       return {
         contents,
@@ -284,7 +346,6 @@ ${build.initialOptions.banner.js}`
         resolveDir: path.dirname(args.path)
       }
     }
-
     if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
       const ext = path.extname(args.path).toLowerCase()
       const isJs = /^\.(js|mjs|cjs)$/.test(ext)
@@ -303,12 +364,19 @@ ${build.initialOptions.banner.js}`
 }
 
 // @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory) {
+function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path === '.') {
     path = './'
   } else if (path === '..') {
     path = '../'
   }
+  let conditions
+  if (usesImportStatement) {
+    conditions = new Set(['import', 'node'])
+  }
 
-  return require.resolve(path, { paths: [directory] })
+  if (path.startsWith('file://')) {
+    path = fileURLToPath(path)
+  }
+  return require.resolve(path, { paths: [directory], conditions })
 }

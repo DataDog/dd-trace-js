@@ -3,53 +3,69 @@ name: Nightly Testing
 on:
   workflow_dispatch:
     inputs:
-      runApmIntegrations:
+      node-version:
+        description: 'Node Version To Use'
+        required: true
+        type: number
+      apm-integrations:
         description: 'APM Integration Tests'
         required: false
         default: true
         type: boolean
-      runApmCapabilities:
+      apm-capabilities:
         description: 'APM Capabilities Tests'
         required: false
         default: true
         type: boolean
-      runLlmobs:
+      llmobs:
         description: 'LLM-OBS Tests'
         required: false
         default: true
         type: boolean
-      runPlatform:
+      platform:
         description: 'Platform Tests'
         required: false
         default: true
         type: boolean
-      runServerless:
+      serverless:
         description: 'Serverless Tests'
         required: false
         default: true
         type: boolean
+      profiling:
+        description: 'Profiling Tests'
+        required: false
+        default: true
+        type: boolean
+      appsec:
+        description: 'AppSec Tests'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 jobs:
-  nightly:
+  run-nightly:
+    strategy:
+      matrix:
+        workflow:
+          - apm-integrations
+          - apm-capabilities
+          - llmobs
+          - platform
+          - serverless
+          - appsec
+          - profiling
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/workflows/apm-integrations
-        if: inputs.runApmIntegrations
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/apm-capabilities
-        if: inputs.runApmCapabilities
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/llmobs
-        if: inputs.runLlmobs
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/platform
-        if: inputs.runPlatform
-        with:
-          runNightly: 'true'
-      - uses: ./.github/workflows/serverless
-        if: inputs.runServerless
-        with:
-          runNightly: 'true'
+      - name: Trigger ${{matrix.workflow }} workflow
+        if: ${{ inputs[matrix.workflow] }}
+        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f latest-version=${{ inputs.node-version }}
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -14,16 +14,20 @@ const { writeFileSync, readdirSync } = require('node:fs')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { rawExpectedSchema } = require('./naming')
+const { NODE_MAJOR } = require('../../../version')
+
+const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
 
 describe('Plugin', function () {
   let server
   let port
 
+  // These next versions have a dependency which uses a deprecated node buffer
   describe('next', () => {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', '>=11.1 <15.4.1', version => {
+    withVersions('next', 'next', `${min} <15.4.1`, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {

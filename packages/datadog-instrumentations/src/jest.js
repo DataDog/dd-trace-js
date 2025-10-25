@@ -1335,7 +1335,7 @@ addHook({
       }
       const returnedValue = requireModuleOrMock.apply(this, arguments)
       if (process.exitCode === 1) {
-        if (this.loggedReferenceErrors.size > 0) {
+        if (this.loggedReferenceErrors?.size > 0) {
           const errorMessage = [...this.loggedReferenceErrors][0]
           testSuiteErrorCh.publish({
             errorMessage,
@@ -1427,6 +1427,7 @@ function enqueueWrapper (enqueue) {
       if (worker && !wrappedWorkers.has(worker)) {
         shimmer.wrap(worker._child, 'send', sendWrapper)
         shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+        worker._child.removeAllListeners('message')
         worker._child.on('message', worker._onMessage.bind(worker))
         wrappedWorkers.add(worker)
       }

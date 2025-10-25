@@ -16,6 +16,7 @@ const TEST_DIR = pathModule.join(__dirname, '.')
 const execSync = (command, options) => chproc.execSync(command, { ...(options ?? {}), cwd: TEST_DIR })
 const rmSync = (path, options) => fs.rmSync(pathModule.join(TEST_DIR, path), options)
 const readFileSync = (path, options) => fs.readFileSync(pathModule.join(TEST_DIR, path), options)
+const originalDir = process.cwd()
 
 // This should switch to our withVersion helper. The order here currently matters.
 const esbuildVersions = ['latest', '0.16.12']
@@ -23,14 +24,25 @@ const esbuildVersions = ['latest', '0.16.12']
 esbuildVersions.forEach((version) => {
   describe(`esbuild ${version}`, () => {
     before(() => {
+      process.chdir(TEST_DIR)
       execSync('npm install', {
         timeout: 1000 * 30
       })
-      if (version !== 'latest') {
+      if (version === 'latest') {
+        const versionsPackageJson = require('../../packages/dd-trace/test/plugins/versions/package.json')
+        const version = versionsPackageJson.dependencies.esbuild
+        execSync(`npm install esbuild@${version}`, {
+          timeout: 1000 * 30
+        })
+      } else {
         execSync(`npm install esbuild@${version}`, {
           timeout: 1000 * 30
         })
       }
+    })
+
+    after(() => {
+      process.chdir(originalDir)
     })
 
     it('works', () => {

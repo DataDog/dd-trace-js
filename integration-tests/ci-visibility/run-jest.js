@@ -9,7 +9,8 @@ const options = {
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !!process.env.ENABLE_CODE_COVERAGE,
   runInBand: true,
-  shard: process.env.TEST_SHARD || undefined
+  shard: process.env.TEST_SHARD || undefined,
+  setupFilesAfterEnv: process.env.SETUP_FILES_AFTER_ENV ? process.env.SETUP_FILES_AFTER_ENV.split(',') : []
 }
 
 if (process.env.RUN_IN_PARALLEL) {

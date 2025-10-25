@@ -846,20 +846,40 @@ addHook({
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
-      for (const newTest of newTests) {
-        // No need to filter out attempt to fix tests here because attempt to fix tests are never new
+      /**
+       * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
+       * as playwright could change it at any time.
+       *
+       * `applyRepeatEachIndex` goes through all the tests in a suite and applies the "repeat" logic
+       * for a single repeat index.
+       *
+       * This means that the clone logic is cumbersome:
+       * - we grab the unique file suites that have new tests
+       * - we store its project suite
+       * - we clone each of these file suites for each repeat index
+       * - we execute `applyRepeatEachIndex` for each of these cloned file suites
+       * - we add the cloned file suites to the project suite
+       */
+
+      const fileSuitesWithNewTestsToProjects = new Map()
+      newTests.forEach(newTest => {
         newTest._ddIsNew = true
         if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
           const fileSuite = getSuiteType(newTest, 'file')
-          const projectSuite = getSuiteType(newTest, 'project')
-          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
-              '_ddIsNew',
-              '_ddIsEfdRetry'
-            ])
-            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-            projectSuite._addSuite(copyFileSuite)
+          if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
+            fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
           }
+        }
+      })
+
+      for (const [fileSuite, projectSuite] of fileSuitesWithNewTestsToProjects.entries()) {
+        for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
+            '_ddIsNew',
+            '_ddIsEfdRetry'
+          ])
+          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+          projectSuite._addSuite(copyFileSuite)
         }
       }
     }

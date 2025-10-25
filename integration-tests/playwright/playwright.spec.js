@@ -315,7 +315,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('early flake detection', () => {
-      it('retries new tests', (done) => {
+      it('retries new tests', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -334,7 +334,8 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with annotated tests'
               ],
               'skipped-suite-test.js': [
                 'should work with fixme root'
@@ -355,23 +356,56 @@ versions.forEach((version) => {
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const newTests = tests.filter(test =>
+            const newPassingTests = tests.filter(test =>
               test.resource.endsWith('should work with passing tests')
             )
-            newTests.forEach(test => {
+            newPassingTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
             })
+            assert.equal(
+              newPassingTests.length,
+              NUM_RETRIES_EFD + 1,
+              'passing test has not been retried the correct number of times'
+            )
+            const newAnnotatedTests = tests.filter(test =>
+              test.resource.endsWith('should work with annotated tests')
+            )
+            newAnnotatedTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+            assert.equal(
+              newAnnotatedTests.length,
+              NUM_RETRIES_EFD + 1,
+              'annotated test has not been retried the correct number of times'
+            )
 
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            // The only new tests are the passing and annotated tests
+            const totalNewTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(
+              totalNewTests.length,
+              newPassingTests.length + newAnnotatedTests.length,
+              'total new tests is not the sum of the passing and annotated tests'
+            )
 
-            assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+            // The only retried tests are the passing and annotated tests
+            const totalRetriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(
+              totalRetriedTests.length,
+              newPassingTests.length - 1 + newAnnotatedTests.length - 1,
+              'total retried tests is not the sum of the passing and annotated tests'
+            )
+            assert.equal(
+              totalRetriedTests.length,
+              NUM_RETRIES_EFD * 2,
+              'total retried tests is not the correct number of times'
+            )
 
-            retriedTests.forEach(test => {
+            totalRetriedTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
             })
 
             // all but one has been retried
-            assert.equal(retriedTests.length, newTests.length - 1)
+            assert.equal(totalRetriedTests.length, totalNewTests.length - 2)
           })
 
         childProcess = exec(
@@ -386,9 +420,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
       it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {

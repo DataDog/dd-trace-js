@@ -39,6 +39,7 @@ let totalCount = 0
 let flakeCount = 0
 
 async function checkWorkflowRuns (id, page = 1) {
+  // This only gets the last attempt of every run.
   const response = await octokit.rest.actions.listWorkflowRuns({
     owner: 'DataDog',
     repo: 'dd-trace-js',
@@ -68,7 +69,7 @@ async function checkWorkflowRuns (id, page = 1) {
 
     flakeCount++
 
-    promises.push(checkWorkflowJobs(run.id))
+    promises.push(checkWorkflowJobs(run.id, run.run_attempt - 1))
   }
 
   promises.push(checkWorkflowRuns(id, page + 1))
@@ -76,9 +77,11 @@ async function checkWorkflowRuns (id, page = 1) {
   return Promise.all(promises)
 }
 
-async function checkWorkflowJobs (id, page = 1) {
+async function checkWorkflowJobs (id, attempt, page = 1) {
+  if (attempt < 1) return
+
   const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
-    attempt_number: 1, // ignore other attempts to keep things simple
+    attempt_number: attempt,
     owner: 'DataDog',
     repo: 'dd-trace-js',
     run_id: id,
@@ -87,9 +90,6 @@ async function checkWorkflowJobs (id, page = 1) {
   })
 
   const { jobs } = response.data
-
-  // We've reached the last page and there are no more results.
-  if (jobs.length === 0) return
 
   for (const job of jobs) {
     if (job.conclusion !== 'failure') continue
@@ -107,7 +107,13 @@ async function checkWorkflowJobs (id, page = 1) {
     }
   }
 
-  return checkWorkflowJobs(id, page + 1)
+  // We've reached the last page and there are no more results.
+  if (jobs.length < 100) {
+    // Check previous attempt to include successive failures.
+    return checkWorkflowJobs(id, attempt - 1)
+  }
+
+  return checkWorkflowJobs(id, attempt, page + 1)
 }
 
 await Promise.all(workflows.map(w => checkWorkflowRuns(w)))

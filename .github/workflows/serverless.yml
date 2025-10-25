@@ -6,13 +6,22 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_dispatch:
+    inputs:
+      latest-version:
+        description: 'Node version to use'
+        required: false
+        type: string
+
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
+
 
 jobs:
   lambda:
@@ -102,8 +111,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # TODO: Remove :flaky once flakiness is better
-      - run: yarn test:plugins:ci:flaky
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
