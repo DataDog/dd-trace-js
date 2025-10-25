@@ -2,32 +2,27 @@
 
 const {
   FakeAgent,
-  createSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 const semver = require('semver')
 
-describe('esm', () => {
-  let agent
-  let proc
-  let sandbox
-  let variants
-
+describe.only('esm', () => {
   withVersions('express', 'express', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'express@${version}'`], false,
-        ['./packages/datadog-plugin-express/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'express')
-    })
+    let agent
+    let proc
+    let variants
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
+    useSandbox([`'express@${version}'`], false,
+      ['./packages/datadog-plugin-express/test/integration-test/*'])
+
+    before(async function () {
+      variants = varySandbox('server.mjs', 'express')
     })
 
     beforeEach(async () => {
@@ -41,7 +36,7 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       describe('with DD_TRACE_MIDDLEWARE_TRACING_ENABLED unset', () => {
         it(`is instrumented loaded with ${variant}`, async () => {
-          proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
           const numberOfSpans = semver.intersects(version, '<5.0.0') ? 4 : 2
           const whichMiddleware = semver.intersects(version, '<5.0.0')
             ? 'express'
@@ -69,7 +64,7 @@ describe('esm', () => {
         })
 
         it('disables middleware spans when config.middlewareTracingEnabled is false via env var', async () => {
-          proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+          proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
           const numberOfSpans = 1
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
