@@ -7,7 +7,8 @@ const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
   getTestSuitePath,
-  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
+  PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../version')
@@ -52,6 +53,7 @@ let isKnownTestsEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isEarlyFlakeDetectionFaulty = false
+let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let knownTests = {}
@@ -111,8 +113,10 @@ function deepCloneSuite (suite, filterTest, tags = []) {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
         tags.forEach(tag => {
-          if (tag) {
-            copiedTest[tag] = true
+          const resolvedTag = typeof tag === 'function' ? tag(entry) : tag
+
+          if (resolvedTag) {
+            copiedTest[resolvedTag] = true
           }
         })
         copy._addTest(copiedTest)
@@ -542,6 +546,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -761,6 +766,30 @@ addHook({
   return suiteUtilsPackage
 })
 
+/**
+ * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
+ * as playwright could change it at any time.
+ *
+ * `applyRepeatEachIndex` goes through all the tests in a suite and applies the "repeat" logic
+ * for a single repeat index.
+ *
+ * This means that the clone logic is cumbersome:
+ * - we grab the unique file suites that have new tests
+ * - we store its project suite
+ * - we clone each of these file suites for each repeat index
+ * - we execute `applyRepeatEachIndex` for each of these cloned file suites
+ * - we add the cloned file suites to the project suite
+ */
+function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToApply) {
+  for (const [fileSuite, projectSuite] of fileSuitesWithTestsToRetry.entries()) {
+    for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+      const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply)
+      applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+      projectSuite._addSuite(copyFileSuite)
+    }
+  }
+}
+
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
@@ -816,71 +845,64 @@ addHook({
     }
 
     if (isImpactedTestsEnabled) {
-      await Promise.all(allTests.map(async (test) => {
-        const { isModified } = await getChannelPromise(isModifiedCh, {
+      const impactedTests = allTests.filter(test => {
+        let isImpacted = false
+        isModifiedCh.publish({
           filePath: test._requireFile,
-          modifiedFiles
+          modifiedFiles,
+          onDone: (isModified) => { isImpacted = isModified }
         })
-        if (isModified) {
-          test._ddIsModified = true
-        }
-        if (isEarlyFlakeDetectionEnabled && test.expectedStatus !== 'skipped') {
-          const isNew = isKnownTestsEnabled && isNewTest(test)
-          const fileSuite = getSuiteType(test, 'file')
-          const projectSuite = getSuiteType(test, 'project')
-          // If something change in the file, all tests in the file are impacted
-          const isModifiedTest = () => isModified
-          for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isModifiedTest, [
-              isNew && '_ddIsNew',
-              '_ddIsModified',
-              '_ddIsEfdRetry'
-            ])
-            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-            projectSuite._addSuite(copyFileSuite)
+        return isImpacted
+      })
+
+      const fileSuitesWithImpactedTestsToProjects = new Map()
+      impactedTests.forEach(impactedTest => {
+        impactedTest._ddIsModified = true
+        if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
+          const fileSuite = getSuiteType(impactedTest, 'file')
+          if (!fileSuitesWithImpactedTestsToProjects.has(fileSuite)) {
+            fileSuitesWithImpactedTestsToProjects.set(fileSuite, getSuiteType(impactedTest, 'project'))
           }
         }
-      }))
+      })
+      // If something change in the file, all tests in the file are impacted, hence the () => true filter
+      applyRetriesToTests(
+        fileSuitesWithImpactedTestsToProjects,
+        () => true,
+        [
+          '_ddIsModified',
+          '_ddIsEfdRetry',
+          (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null)
+        ]
+      )
     }
 
     if (isKnownTestsEnabled) {
       const newTests = allTests.filter(isNewTest)
 
-      /**
-       * We could repeat the logic of `applyRepeatEachIndex` here, but it'd be more risky
-       * as playwright could change it at any time.
-       *
-       * `applyRepeatEachIndex` goes through all the tests in a suite and applies the "repeat" logic
-       * for a single repeat index.
-       *
-       * This means that the clone logic is cumbersome:
-       * - we grab the unique file suites that have new tests
-       * - we store its project suite
-       * - we clone each of these file suites for each repeat index
-       * - we execute `applyRepeatEachIndex` for each of these cloned file suites
-       * - we add the cloned file suites to the project suite
-       */
+      const isFaulty = getIsFaultyEarlyFlakeDetection(
+        allTests.map(test => getTestSuitePath(test._requireFile, rootDir)),
+        knownTests.playwright,
+        earlyFlakeDetectionFaultyThreshold
+      )
 
-      const fileSuitesWithNewTestsToProjects = new Map()
-      newTests.forEach(newTest => {
-        newTest._ddIsNew = true
-        if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
-          const fileSuite = getSuiteType(newTest, 'file')
-          if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
-            fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
+      if (isFaulty) {
+        isEarlyFlakeDetectionEnabled = false
+        isKnownTestsEnabled = false
+        isEarlyFlakeDetectionFaulty = true
+      } else {
+        const fileSuitesWithNewTestsToProjects = new Map()
+        newTests.forEach(newTest => {
+          newTest._ddIsNew = true
+          if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+            const fileSuite = getSuiteType(newTest, 'file')
+            if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
+              fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
+            }
           }
-        }
-      })
+        })
 
-      for (const [fileSuite, projectSuite] of fileSuitesWithNewTestsToProjects.entries()) {
-        for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest, [
-            '_ddIsNew',
-            '_ddIsEfdRetry'
-          ])
-          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-          projectSuite._addSuite(copyFileSuite)
-        }
+        applyRetriesToTests(fileSuitesWithNewTestsToProjects, isNewTest, ['_ddIsNew', '_ddIsEfdRetry'])
       }
     }
 

@@ -736,6 +736,51 @@ versions.forEach((version) => {
           receiverPromise,
         ])
       })
+
+      it('does not run EFD if the percentage of new tests is too high', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({ playwright: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 0)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+            })
+        ])
+      })
     })
 
     it('does not crash when maxFailures=1 and there is an error', (done) => {
@@ -1695,7 +1740,8 @@ versions.forEach((version) => {
       beforeEach(() => {
         receiver.setKnownTests({
           playwright: {
-            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js': ['impacted test should be impacted']
+            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
+              ['impacted test should be impacted', 'impacted test 2 should be impacted 2']
           }
         })
       })
@@ -1715,6 +1761,13 @@ versions.forEach((version) => {
              test('should be impacted', async ({ page }) => {
                await expect(page.locator('.hello-world')).toHaveText([
                  'Hello Worldd'
+               ])
+             })
+           })
+           test.describe('impacted test 2', () => {
+             test('should be impacted 2', async ({ page }) => {
+               await expect(page.locator('.hello-world')).toHaveText([
+                 'Hello World'
                ])
              })
            })`
@@ -1745,18 +1798,18 @@ versions.forEach((version) => {
 
             assert.includeMembers(resourceNames,
               [
-                'impacted-test.js.impacted test should be impacted'
+                'impacted-test.js.impacted test should be impacted',
+                'impacted-test.js.impacted test 2 should be impacted 2'
               ]
             )
 
             const impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js' &&
-              test.meta[TEST_NAME] === 'impacted test should be impacted')
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
 
             if (isEfd) {
-              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+              assert.equal(impactedTests.length, (NUM_RETRIES_EFD + 1) * 2) // Retries + original test
             } else {
-              assert.equal(impactedTests.length, 1)
+              assert.equal(impactedTests.length, 2)
             }
 
             for (const impactedTest of impactedTests) {
@@ -1774,10 +1827,9 @@ versions.forEach((version) => {
 
             if (isEfd) {
               const retriedTests = tests.filter(
-                test => test.meta[TEST_IS_RETRY] === 'true' &&
-                test.meta[TEST_NAME] === 'impacted test should be impacted'
+                test => test.meta[TEST_IS_RETRY] === 'true'
               )
-              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
               let retriedTestNew = 0
               let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
@@ -1788,13 +1840,12 @@ versions.forEach((version) => {
                   retriedTestsWithReason++
                 }
               })
-              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
-              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
             }
           }, 25000)
 
-      const runImpactedTest = (
-        done,
+      const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
@@ -1815,29 +1866,30 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(done).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', (done) => {
+        it('should be detected as impacted', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
-          runImpactedTest(done, { isModified: true })
+          await runImpactedTest({ isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', (done) => {
+        it('should not be detected as impacted if disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
-          runImpactedTest(done, { isModified: false })
+          await runImpactedTest({ isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          (done) => {
+          async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done,
+            await runImpactedTest(
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
@@ -1845,7 +1897,7 @@ versions.forEach((version) => {
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
+        it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
             playwright: {}
           })
@@ -1859,8 +1911,7 @@ versions.forEach((version) => {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(
-            done,
+          await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
           )
         })
