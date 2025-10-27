@@ -10,11 +10,7 @@ const OtlpTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpMetricExporter exports metrics via OTLP over HTTP.
  *
- * This implementation follows the OTLP HTTP v1.7.0 specification:
- * https://opentelemetry.io/docs/specs/otlp/#otlphttp
- *
  * @class OtlpHttpMetricExporter
- * @extends OtlpHttpExporterBase
  */
 class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
   /**
@@ -36,6 +32,8 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    *
    * @param {Array} metrics - Array of metric data to export
    * @param {Function} resultCallback - Callback function for export result
+   *
+   * @returns {void}
    */
   export (metrics, resultCallback) {
     if (metrics.length === 0) {
@@ -52,14 +50,14 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
     }
 
     // Record export attempt with tags
-    const telemetryTags = [...this._getTelemetryTags(), `points:${dataPointCount}`]
-    this._recordTelemetry('otel.metrics_export_attempts', 1, telemetryTags)
+    const telemetryTags = [...this.telemetryTags, `points:${dataPointCount}`]
+    this.recordTelemetry('otel.metrics_export_attempts', 1, telemetryTags)
 
     const payload = this.transformer.transformMetrics(metrics)
-    this._sendPayload(payload, (result) => {
+    this.sendPayload(payload, (result) => {
       // Record success if export succeeded
       if (result.code === 0) {
-        this._recordTelemetry('otel.metrics_export_successes', 1, telemetryTags)
+        this.recordTelemetry('otel.metrics_export_successes', 1, telemetryTags)
       }
       resultCallback(result)
     })

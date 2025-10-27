@@ -417,7 +417,7 @@ describe('OTLP Metrics Export', () => {
         'http/protobuf',
         resourceAttributes
       )
-      const tags = exporter._getTelemetryTags()
+      const tags = exporter.telemetryTags
       assert(Array.isArray(tags))
       assert(tags.includes('protocol:http'))
       assert(tags.includes('encoding:protobuf'))

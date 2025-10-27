@@ -25,7 +25,7 @@ class OtlpTransformerBase {
    * @param {string} signalType - Signal type for warning messages (e.g., 'logs', 'metrics')
    */
   constructor (resourceAttributes, protocol, signalType) {
-    this.#resourceAttributes = this._transformAttributes(resourceAttributes)
+    this.#resourceAttributes = this.transformAttributes(resourceAttributes)
     if (protocol === 'grpc') {
       log.warn(`OTLP gRPC protocol is not supported for ${signalType}. ` +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
@@ -40,7 +40,7 @@ class OtlpTransformerBase {
    * @returns {Map<string, Array>} Map of instrumentation scope key to items
    * @protected
    */
-  _groupByInstrumentationScope (items) {
+  groupByInstrumentationScope (items) {
     const grouped = new Map()
 
     for (const item of items) {
@@ -64,7 +64,7 @@ class OtlpTransformerBase {
    * @returns {Object} OTLP resource object
    * @protected
    */
-  _transformResource () {
+  transformResource () {
     return {
       attributes: this.#resourceAttributes,
       droppedAttributesCount: 0
@@ -77,12 +77,12 @@ class OtlpTransformerBase {
    * @returns {Object[]} Array of OTLP KeyValue objects
    * @protected
    */
-  _transformAttributes (attributes) {
+  transformAttributes (attributes) {
     if (!attributes) return []
 
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this._transformAnyValue(value)
+      value: this.transformAnyValue(value)
     }))
   }
 
@@ -92,7 +92,7 @@ class OtlpTransformerBase {
    * @returns {Object[]} Array of OTLP KeyValue objects with string values
    * @protected
    */
-  _attributesToJson (attributes) {
+  attributesToJson (attributes) {
     if (!attributes) return []
 
     return Object.entries(attributes).map(([key, value]) => ({
@@ -107,7 +107,7 @@ class OtlpTransformerBase {
    * @returns {Object} OTLP AnyValue object
    * @protected
    */
-  _transformAnyValue (value) {
+  transformAnyValue (value) {
     if (typeof value === 'string') {
       return { stringValue: value }
     } else if (typeof value === 'number') {
@@ -120,7 +120,7 @@ class OtlpTransformerBase {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this._transformAnyValue(v))
+          values: value.map(v => this.transformAnyValue(v))
         }
       }
     } else if (value && typeof value === 'object') {
@@ -128,7 +128,7 @@ class OtlpTransformerBase {
         kvlistValue: {
           values: Object.entries(value).map(([k, v]) => ({
             key: k,
-            value: this._transformAnyValue(v)
+            value: this.transformAnyValue(v)
           }))
         }
       }
@@ -143,7 +143,7 @@ class OtlpTransformerBase {
    * @returns {Buffer} Protobuf-encoded data
    * @protected
    */
-  _serializeToProtobuf (protoType, data) {
+  serializeToProtobuf (protoType, data) {
     const message = protoType.create(data)
     const buffer = protoType.encode(message).finish()
     return buffer
@@ -155,7 +155,7 @@ class OtlpTransformerBase {
    * @returns {Buffer} JSON-encoded data
    * @protected
    */
-  _serializeToJson (data) {
+  serializeToJson (data) {
     return Buffer.from(JSON.stringify(data))
   }
 }

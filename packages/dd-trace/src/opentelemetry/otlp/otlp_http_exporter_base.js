@@ -10,12 +10,12 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /**
  * Base class for OTLP HTTP exporters.
  *
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
+ * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
-  #telemetryTags
-
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
@@ -47,19 +47,10 @@ class OtlpHttpExporterBase {
         ...this.#parseAdditionalHeaders(headers)
       }
     }
-    this.#telemetryTags = [
+    this.telemetryTags = [
       'protocol:http',
       `encoding:${isJson ? 'json' : 'protobuf'}`
     ]
-  }
-
-  /**
-   * Gets the telemetry tags for this exporter.
-   * @returns {Array<string>} Telemetry tags
-   * @protected
-   */
-  _getTelemetryTags () {
-    return this.#telemetryTags
   }
 
   /**
@@ -69,8 +60,8 @@ class OtlpHttpExporterBase {
    * @param {Array<string>} [tags] - Optional custom tags (defaults to this exporter's tags)
    * @protected
    */
-  _recordTelemetry (metricName, count, tags) {
-    const telemetryTags = tags || this.#telemetryTags
+  recordTelemetry (metricName, count, tags) {
+    const telemetryTags = tags || this.telemetryTags
     tracerMetrics.count(metricName, telemetryTags).inc(count)
   }
 
@@ -80,7 +71,7 @@ class OtlpHttpExporterBase {
    * @param {Function} resultCallback - Callback for the result
    * @protected
    */
-  _sendPayload (payload, resultCallback) {
+  sendPayload (payload, resultCallback) {
     const options = {
       ...this.options,
       headers: {
