@@ -1084,6 +1084,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('test management', () => {
+      const ATTEMPT_TO_FIX_NUM_RETRIES = 3
       context('attempt to fix', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
@@ -1092,6 +1093,11 @@ versions.forEach((version) => {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true
                       }
@@ -1123,27 +1129,30 @@ versions.forEach((version) => {
               }
 
               const attemptedToFixTests = tests.filter(
-                test => test.meta[TEST_NAME] === 'attempt to fix should attempt to fix failed test'
+                test => test.meta[TEST_NAME].startsWith('attempt to fix should attempt to fix')
               )
 
-              if (isAttemptingToFix) {
-                assert.equal(attemptedToFixTests.length, 4)
-              } else {
-                assert.equal(attemptedToFixTests.length, 1)
+              if (isDisabled) {
+                assert.equal(attemptedToFixTests.length, 2)
+                assert.isTrue(attemptedToFixTests.every(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+                ))
+                // if the test is disabled, there will be no retries
+                return
               }
 
-              if (isDisabled) {
-                const numDisabledTests = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-                ).length
-                assert.equal(numDisabledTests, attemptedToFixTests.length)
+              if (isAttemptingToFix) {
+                assert.equal(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+              } else {
+                assert.equal(attemptedToFixTests.length, 2)
               }
 
               if (isQuarantined) {
                 const numQuarantinedTests = attemptedToFixTests.filter(test =>
                   test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
                 ).length
-                assert.equal(numQuarantinedTests, attemptedToFixTests.length)
+                // quarantined tests still run and are retried
+                assert.equal(numQuarantinedTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               }
 
               // Retried tests are in randomly order, so we just count number of tests
@@ -1169,21 +1178,24 @@ versions.forEach((version) => {
                 test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'false'
               ).length
 
+              // One of the tests is passing always
               if (isAttemptingToFix) {
-                assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
-                assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
+                assert.equal(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                assert.equal(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
                 if (shouldAlwaysPass) {
                   assert.equal(testsMarkedAsFailedAllRetries, 0)
                   assert.equal(testsMarkedAsFailed, 0)
-                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                  assert.equal(testsMarkedAsPassedAllRetries, 2)
                 } else if (shouldFailSometimes) {
+                  // one test failed sometimes, the other always passed
                   assert.equal(testsMarkedAsFailedAllRetries, 0)
                   assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 0)
-                } else { // always fail
+                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                } else {
+                  // one test failed always, the other always passed
                   assert.equal(testsMarkedAsFailedAllRetries, 1)
                   assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 0)
+                  assert.equal(testsMarkedAsPassedAllRetries, 1)
                 }
               } else {
                 assert.equal(countAttemptToFixTests, 0)
@@ -1193,7 +1205,7 @@ versions.forEach((version) => {
               }
             })
 
-        const runAttemptToFixTest = (done, {
+        const runAttemptToFixTest = async ({
           isAttemptingToFix,
           isQuarantined,
           extraEnvVars,
@@ -1225,57 +1237,75 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isQuarantined || isDisabled || shouldAlwaysPass) {
-                // even though a test fails, the exit code is 0 because the test is quarantined
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isQuarantined || isDisabled || shouldAlwaysPass) {
+            // even though a test fails, the exit code is 0 because the test is quarantined
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true })
         })
 
-        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, shouldAlwaysPass: true })
         })
 
-        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, shouldFailSometimes: true })
         })
 
-        it('does not attempt to fix tests if test management is not enabled', (done) => {
-          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+        it('does not attempt to fix tests if test management is not enabled', async () => {
+          receiver.setSettings({
+            test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done)
+          await runAttemptToFixTest()
         })
 
-        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+          await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
 
-        it('does not fail retry if a test is quarantined', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not fail retry if a test is quarantined', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
           receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
                         quarantined: true
@@ -1287,17 +1317,25 @@ versions.forEach((version) => {
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantined: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
         })
 
-        it('does not fail retry if a test is disabled', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not fail retry if a test is disabled', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
           receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
                         disabled: true
@@ -1309,7 +1347,7 @@ versions.forEach((version) => {
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabled: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
         })
       })
 
@@ -1355,7 +1393,7 @@ versions.forEach((version) => {
               }
             })
 
-        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+        const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
 
           childProcess = exec(
@@ -1372,34 +1410,34 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isDisabling) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isDisabling) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can disable tests', (done) => {
+        it('can disable tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, true)
+          await runDisableTest(true)
         })
 
-        it('fails if disable is not enabled', (done) => {
+        it('fails if disable is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runDisableTest(done, false)
+          await runDisableTest(false)
         })
 
-        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
@@ -1440,7 +1478,7 @@ versions.forEach((version) => {
               }
             })
 
-        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+        const runQuarantineTest = async (isQuarantining, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
 
           childProcess = exec(
@@ -1457,34 +1495,34 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isQuarantining) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isQuarantining) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can quarantine tests', (done) => {
+        it('can quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, true)
+          await runQuarantineTest(true)
         })
 
-        it('fails if quarantine is not enabled', (done) => {
+        it('fails if quarantine is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runQuarantineTest(done, false)
+          await runQuarantineTest(false)
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
@@ -1502,8 +1540,10 @@ versions.forEach((version) => {
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // it is not retried
-            assert.equal(tests.length, 1)
+            // they are not retried
+            assert.equal(tests.length, 2)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
           })
 
         childProcess = exec(
