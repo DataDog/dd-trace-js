@@ -7,15 +7,15 @@ const {
 const { assert } = require('chai')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-withVersions('cookie-parser', 'cookie-parser', version => {
+withVersions('express-session', 'express-session', version => {
   describe('ESM', () => {
     let sandbox, variants, proc, agent
 
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`'cookie-parser@${version}'`, 'express'], false,
-        ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'cookieParser', undefined, 'cookie-parser')
+      sandbox = await createSandbox([`'express-session@${version}'`, 'express'], false,
+        ['./packages/datadog-plugin-express-session/test/integration-test/*'])
+      variants = varySandbox(sandbox, 'server.mjs', 'expressSession', undefined, 'express-session')
     })
 
     after(async function () {
