@@ -1063,13 +1063,10 @@ addHook({
                   const url = page.url()
                   if (url) {
                     const domain = new URL(url).hostname
-                    await page.context().addCookies([{
+                    await page.context().clearCookies({
                       name: 'datadog-ci-visibility-test-execution-id',
-                      value: '',
-                      domain,
-                      expires: 0,
-                      path: '/'
-                    }])
+                      domain
+                    })
                   }
                 }
               }
