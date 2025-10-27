@@ -114,6 +114,9 @@ ${build.initialOptions.banner.js}`
   }
 
   try {
+    // @openfeature/core is a peer dependency of @openfeature/server-sdk
+    // which is used by @datadog/openfeature-node-server
+    // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
   } catch (error) {
     build.initialOptions.external ??= []
