@@ -73,7 +73,10 @@ function copyObjectProperties (original, wrapped, skipKey) {
  * @returns {Function} The wrapped function.
  */
 function wrapFunction (original, wrapper) {
-  if (typeof original === 'object' && original !== null) return original
+  if (typeof original === 'object' && original !== null) {
+    throw new Error('Kapput')
+    // return original
+  }
   const wrapped = wrapper(original)
 
   if (typeof original === 'function') {
