@@ -373,9 +373,15 @@ describe('shimmer', () => {
     })
 
     it('should work without a function', () => {
-      const a = { b: 1 }
+      const a = null
       const wrapped = shimmer.wrapFunction(a, x => () => x)
       expect(wrapped()).to.equal(a)
+    })
+
+    it('should not work with an object', () => {
+      const a = { b: 1 }
+      const wrapped = shimmer.wrapFunction(a, x => () => x)
+      expect(typeof wrapped).to.not.equal('function')
     })
 
     it('should wrap the function', () => {
