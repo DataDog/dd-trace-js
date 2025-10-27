@@ -709,8 +709,9 @@ class Config {
     this.#setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) {
       target.flushInterval = 0
-    } else if (DD_TRACE_FLUSH_INTERVAL) {
+    } else {
       target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
+      unprocessedTarget.flushInterval = DD_TRACE_FLUSH_INTERVAL
     }
     target.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
     unprocessedTarget.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
