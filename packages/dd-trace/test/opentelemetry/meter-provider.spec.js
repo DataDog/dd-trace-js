@@ -348,9 +348,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(typeof dataPoint.timeUnixNano, 'string')
         assert.strictEqual(typeof dataPoint.startTimeUnixNano, 'string')
         assert(parseInt(dataPoint.timeUnixNano) > 0, 'Timestamp should be positive')
-        // Integer values also become strings, but doubles stay as numbers
-        assert.strictEqual(typeof dataPoint.asInt, 'string')
-        assert.strictEqual(dataPoint.asInt, '5')
+        assert.strictEqual(dataPoint.asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsProtocol: 'http/json' }))
