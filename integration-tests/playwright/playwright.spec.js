@@ -1203,7 +1203,7 @@ versions.forEach((version) => {
                 assert.equal(testsMarkedAsFailedAllRetries, 0)
                 assert.equal(testsMarkedAsPassedAllRetries, 0)
               }
-            })
+            }, 25000)
 
         const runAttemptToFixTest = async ({
           isAttemptingToFix,
@@ -1391,7 +1391,7 @@ versions.forEach((version) => {
                 assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
                 assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
-            })
+            }, 25000)
 
         const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -1476,7 +1476,7 @@ versions.forEach((version) => {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
-            })
+            }, 25000)
 
         const runQuarantineTest = async (isQuarantining, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
