@@ -255,7 +255,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             toolResults: [{
               toolId: item.call_id,
               result: item.output,
-              name: item.name || '',
+              name: item.name,
               type: item.type
             }]
           })
