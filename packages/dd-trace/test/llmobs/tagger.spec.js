@@ -405,14 +405,14 @@ describe('tagger', () => {
       describe('tagging tool results appropriately', () => {
         it('tags a span with tool results', () => {
           const inputData = [
-            { content: 'hello', toolResults: [{ result: 'foo', toolId: '123', type: 'tool_result' }] }
+            { content: 'hello', toolResults: [{ name: '', result: 'foo', toolId: '123', type: 'tool_result'}] }
           ]
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData)
           expect(Tagger.tagMap.get(span)).to.deep.equal({
             '_ml_obs.meta.input.messages': [
-              { content: 'hello', tool_results: [{ result: 'foo', tool_id: '123', type: 'tool_result' }] }
+              { content: 'hello', tool_results: [{ result: 'foo', tool_id: '123', name: '', type: 'tool_result' }] }
             ]
           })
         })
