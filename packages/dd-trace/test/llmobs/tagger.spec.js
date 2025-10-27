@@ -405,7 +405,7 @@ describe('tagger', () => {
       describe('tagging tool results appropriately', () => {
         it('tags a span with tool results', () => {
           const inputData = [
-            { content: 'hello', toolResults: [{ name: '', result: 'foo', toolId: '123', type: 'tool_result'}] }
+            { content: 'hello', toolResults: [{ name: '', result: 'foo', toolId: '123', type: 'tool_result' }] }
           ]
 
           tagger._register(span)
