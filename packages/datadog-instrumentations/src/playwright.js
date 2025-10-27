@@ -780,9 +780,9 @@ addHook({
  * - we execute `applyRepeatEachIndex` for each of these cloned file suites
  * - we add the cloned file suites to the project suite
  */
-function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToApply) {
+function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToApply, numRetries) {
   for (const [fileSuite, projectSuite] of fileSuitesWithTestsToRetry.entries()) {
-    for (let repeatEachIndex = 1; repeatEachIndex <= earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+    for (let repeatEachIndex = 1; repeatEachIndex <= numRetries; repeatEachIndex++) {
       const copyFileSuite = deepCloneSuite(fileSuite, filterTest, tagsToApply)
       applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
       projectSuite._addSuite(copyFileSuite)
@@ -809,39 +809,45 @@ addHook({
     const allTests = rootSuite.allTests()
 
     if (isTestManagementTestsEnabled) {
+      const fileSuitesWithManagedTestsToProjects = new Map()
       for (const test of allTests) {
         const testProperties = getTestProperties(test)
+        // Disabled tests are skipped and not retried
         if (testProperties.disabled) {
           test._ddIsDisabled = true
-        } else if (testProperties.quarantined) {
+          test.expectedStatus = 'skipped'
+          continue
+        }
+        if (testProperties.quarantined) {
           test._ddIsQuarantined = true
+          if (!testProperties.attemptToFix) {
+            // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
+            const testFqn = getTestFullyQualifiedName(test)
+            quarantinedButNotAttemptToFixFqns.add(testFqn)
+          }
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
           const fileSuite = getSuiteType(test, 'file')
-          const projectSuite = getSuiteType(test, 'project')
-          const isAttemptToFix = test => getTestProperties(test).attemptToFix
-          for (let repeatEachIndex = 1; repeatEachIndex <= testManagementAttemptToFixRetries; repeatEachIndex++) {
-            const copyFileSuite = deepCloneSuite(fileSuite, isAttemptToFix, [
-              testProperties.disabled && '_ddIsDisabled',
-              testProperties.quarantined && '_ddIsQuarantined',
-              '_ddIsAttemptToFix',
-              '_ddIsAttemptToFixRetry'
-            ])
-            applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-            projectSuite._addSuite(copyFileSuite)
+
+          if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
+            fileSuitesWithManagedTestsToProjects.set(fileSuite, getSuiteType(test, 'project'))
           }
           if (testProperties.disabled || testProperties.quarantined) {
             quarantinedOrDisabledTestsAttemptToFix.push(test)
           }
-        } else if (testProperties.disabled) {
-          test.expectedStatus = 'skipped'
-        } else if (testProperties.quarantined) {
-          // Do not skip quarantined tests, let them run and overwrite results post-run if they fail
-          const testFqn = getTestFullyQualifiedName(test)
-          quarantinedButNotAttemptToFixFqns.add(testFqn)
         }
       }
+      applyRetriesToTests(
+        fileSuitesWithManagedTestsToProjects,
+        (test) => test._ddIsAttemptToFix,
+        [
+          (test) => test._ddIsQuarantined && '_ddIsQuarantined',
+          '_ddIsAttemptToFix',
+          '_ddIsAttemptToFixRetry'
+        ],
+        testManagementAttemptToFixRetries
+      )
     }
 
     if (isImpactedTestsEnabled) {
@@ -873,7 +879,8 @@ addHook({
           '_ddIsModified',
           '_ddIsEfdRetry',
           (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null)
-        ]
+        ],
+        earlyFlakeDetectionNumRetries
       )
     }
 
@@ -902,7 +909,12 @@ addHook({
           }
         })
 
-        applyRetriesToTests(fileSuitesWithNewTestsToProjects, isNewTest, ['_ddIsNew', '_ddIsEfdRetry'])
+        applyRetriesToTests(
+          fileSuitesWithNewTestsToProjects,
+          isNewTest,
+          ['_ddIsNew', '_ddIsEfdRetry'],
+          earlyFlakeDetectionNumRetries
+        )
       }
     }
 
