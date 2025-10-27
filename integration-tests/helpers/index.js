@@ -368,7 +368,7 @@ async function createSandbox (
  */
 function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = variants
+    const bindingName = namedVariant || variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
