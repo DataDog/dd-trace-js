@@ -531,6 +531,7 @@ class Config {
       DD_TRACE_MIDDLEWARE_TRACING_ENABLED,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
+      DD_TRACE_FLUSH_INTERVAL,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT,
@@ -706,7 +707,11 @@ class Config {
     unprocessedTarget['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     this.#setBoolean(target, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this.#setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    if (AWS_LAMBDA_FUNCTION_NAME) target.flushInterval = 0
+    if (AWS_LAMBDA_FUNCTION_NAME) {
+      target.flushInterval = 0
+    } else if (DD_TRACE_FLUSH_INTERVAL) {
+      target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
+    }
     target.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
     unprocessedTarget.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.#setBoolean(target, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)

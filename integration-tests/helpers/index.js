@@ -11,9 +11,10 @@ const path = require('path')
 const assert = require('assert')
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
-const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { BUN, withBun } = require('./bun')
 
+const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 // This is set by the setShouldKill function
@@ -220,7 +221,7 @@ function execHelper (command, options) {
     console.log('Exec SUCCESS: ', command)
   } catch (error) {
     console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('yarn')) {
+    if (command.startsWith('bun')) {
       try {
         console.log('Exec RETRY START: ', command)
         execSync(command, options)
@@ -242,9 +243,12 @@ function execHelper (command, options) {
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
  */
-
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+async function createSandbox (
+  dependencies = [],
+  isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'],
+  followUpCommand
+) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
@@ -257,7 +261,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
@@ -269,17 +273,22 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
+  const folder = path.join(sandboxRoot, id().toString())
+  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const deps = cappedDependencies.concat(`file:${out}`)
 
-  await fs.mkdir(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
+  await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  const addFlags = ['--linker=hoisted', '--trust']
+  if (!existsSync(out)) {
+    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
+  }
 
-  execHelper(addCommand, addOptions)
+  if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
+    addFlags.push('--prefer-offline')
+  }
+
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -359,7 +368,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  */
 function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = variants
+    const bindingName = namedVariant || variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
@@ -544,7 +553,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   additionalEnvArgs = additionalEnvArgs || {}
   let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: String(agentPort)
+    DD_TRACE_AGENT_PORT: String(agentPort),
+    DD_TRACE_FLUSH_INTERVAL: '0'
   })
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
