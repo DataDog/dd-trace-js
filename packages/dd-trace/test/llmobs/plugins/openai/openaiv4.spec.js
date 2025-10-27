@@ -733,7 +733,12 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, cache_read_input_tokens: 0 },
+          tokenMetrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
           metadata: {
@@ -780,7 +785,12 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, cache_read_input_tokens: 0 },
+          tokenMetrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
           metadata: {
