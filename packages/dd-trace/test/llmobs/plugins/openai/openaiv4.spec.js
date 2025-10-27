@@ -715,7 +715,7 @@ describe('integrations', () => {
         }
 
         await openai.responses.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           input: 'What is the capital of France?',
           max_output_tokens: 100,
           temperature: 0.5,
@@ -733,13 +733,65 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, cache_read_input_tokens: 0 },
           modelName: 'gpt-4o-mini',
           modelProvider: 'openai',
           metadata: {
             max_output_tokens: 100,
             temperature: 0.5,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
             stream: false
+          },
+          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+        })
+
+        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
+      })
+
+      it('submits a streamed response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const stream = await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true
+        })
+
+        for await (const part of stream) {
+          expect(part).to.have.property('type')
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        const expected = expectedLLMObsLLMSpanEvent({
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'Stream this please' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER, cache_read_input_tokens: 0 },
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 50,
+            temperature: 0,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
+            stream: true
           },
           tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
         })
