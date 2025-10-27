@@ -691,20 +691,20 @@
     "@octokit/request-error" "^7.0.0"
     "@octokit/webhooks-methods" "^6.0.0"
 
-"@openfeature/core@^1.8.1":
+"@openfeature/core@^1.9.0":
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
+
+"@openfeature/server-sdk@^1.20.0":
+  version "1.20.0"
+  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.20.0.tgz#43a5d3cffd915742ff64eeef53b7132279df4823"
+  integrity sha512-95L9CCaGVKC6+7rNCmDxjthFvUyPLOUkoYyjg9Y/Cmy0G9D63xrJBsmH6fqHtLifzAu4+E7fWAZ3TIBnnCtr7A==
 
 "@openfeature/server-sdk@~1.18.0":
   version "1.18.0"
   resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
   integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
-
-"@openfeature/server-sdk@~1.20.0":
-  version "1.20.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.20.0.tgz#43a5d3cffd915742ff64eeef53b7132279df4823"
-  integrity sha512-95L9CCaGVKC6+7rNCmDxjthFvUyPLOUkoYyjg9Y/Cmy0G9D63xrJBsmH6fqHtLifzAu4+E7fWAZ3TIBnnCtr7A==
 
 "@opentelemetry/api-logs@<1.0.0":
   version "0.207.0"
