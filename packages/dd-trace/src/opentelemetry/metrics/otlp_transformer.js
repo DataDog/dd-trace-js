@@ -63,7 +63,6 @@ class OtlpTransformer extends OtlpTransformerBase {
       resourceMetrics: [{
         resource: this._transformResource(),
         scopeMetrics: this.#transformScope(metrics),
-        schemaUrl: ''
       }]
     }
 
