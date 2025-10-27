@@ -1,7 +1,10 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const {
+  addHook,
+  channel
+} = require('./helpers/instrument')
 
 const routeChannel = channel('apm:hono:request:route')
 const handleChannel = channel('apm:hono:request:handle')
@@ -33,16 +36,11 @@ function wrapCompose (compose) {
       return onError(...args)
     }
 
-    const instrumentedMiddlewares = middlewares.map((h) => {
+    const instrumentedMiddlewares = middlewares.map(h => {
       const [[fn, meta], params] = h
       return [[wrapMiddleware(fn, meta?.path), meta], params]
     })
-    return compose.call(
-      this,
-      instrumentedMiddlewares,
-      instrumentedOnError,
-      onNotFound
-    )
+    return compose.call(this, instrumentedMiddlewares, instrumentedOnError, onNotFound)
   }
 }
 
@@ -96,71 +94,57 @@ function wrapMiddleware (middleware, route) {
   )
 }
 
-addHook(
-  {
-    name: 'hono',
-    versions: ['>=4'],
-    file: 'dist/hono.js',
-  },
-  (hono) => {
-    class Hono extends hono.Hono {
-      constructor (...args) {
-        super(...args)
-        shimmer.wrap(this, 'fetch', wrapFetch)
-      }
+addHook({
+  name: 'hono',
+  versions: ['>=4'],
+  file: 'dist/hono.js'
+}, hono => {
+  class Hono extends hono.Hono {
+    constructor (...args) {
+      super(...args)
+      shimmer.wrap(this, 'fetch', wrapFetch)
     }
-
-    hono.Hono = Hono
-
-    return hono
   }
-)
 
-addHook(
-  {
-    name: 'hono',
-    versions: ['>=4'],
-    file: 'dist/cjs/hono.js',
-  },
-  (hono) => {
-    class Hono extends hono.Hono {
-      constructor (...args) {
-        super(...args)
-        shimmer.wrap(this, 'fetch', wrapFetch)
-      }
+  hono.Hono = Hono
+
+  return hono
+})
+
+addHook({
+  name: 'hono',
+  versions: ['>=4'],
+  file: 'dist/cjs/hono.js'
+}, hono => {
+  class Hono extends hono.Hono {
+    constructor (...args) {
+      super(...args)
+      shimmer.wrap(this, 'fetch', wrapFetch)
     }
+  }
 
-    return Object.create(hono, {
-      Hono: {
-        get () {
-          return Hono
-        },
-        enumerable: true,
+  return Object.create(hono, {
+    Hono: {
+      get () {
+        return Hono
       },
-    })
-  }
-)
+      enumerable: true,
+    }
+  })
+})
 
-addHook(
-  {
-    name: 'hono',
-    versions: ['>=4'],
-    file: 'dist/cjs/compose.js',
-  },
-  (Compose) => {
-    return shimmer.wrap(Compose, 'compose', wrapCompose, {
-      replaceGetter: true,
-    })
-  }
-)
+addHook({
+  name: 'hono',
+  versions: ['>=4'],
+  file: 'dist/cjs/compose.js'
+}, Compose => {
+  return shimmer.wrap(Compose, 'compose', wrapCompose, { replaceGetter: true })
+})
 
-addHook(
-  {
-    name: 'hono',
-    versions: ['>=4'],
-    file: 'dist/compose.js',
-  },
-  (Compose) => {
-    return shimmer.wrap(Compose, 'compose', wrapCompose)
-  }
-)
+addHook({
+  name: 'hono',
+  versions: ['>=4'],
+  file: 'dist/compose.js'
+}, Compose => {
+  return shimmer.wrap(Compose, 'compose', wrapCompose)
+})
