@@ -73,14 +73,14 @@ function copyObjectProperties (original, wrapped, skipKey) {
  * @returns {Function} The wrapped function.
  */
 function wrapFunction (original, wrapper) {
-  const wrapped = wrapper(original)
-
+  let wrapped
   if (typeof original === 'function') {
+    wrapped = wrapper(original)
     assertNotClass(original)
     copyProperties(original, wrapped)
   }
 
-  return wrapped
+  return wrapped || original
 }
 
 /**
