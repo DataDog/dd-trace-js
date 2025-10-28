@@ -17,7 +17,7 @@ describe('esbuild support for IAST', () => {
     let proc, agent, sandbox, axios
     let applicationDir, bundledApplicationDir
 
-    before(async () => {
+    before(async function () {
       this.timeout(120_000)
       sandbox = await createSandbox([])
       const cwd = sandbox.folder
