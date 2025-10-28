@@ -42,21 +42,21 @@ const testFrameworks = [
 
 testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestContext }) => {
   describe(`test optimization wrong init for ${testFramework}`, () => {
-    let sandbox, cwd, receiver, childProcess, processOutput
+    let cwd, receiver, childProcess, processOutput
 
     // cucumber does not support Node.js@18 anymore
     if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
 
+    const testFrameworks = ['jest', 'mocha', 'vitest']
+
+    // Remove once we drop support for Node.js@18
+    if (NODE_MAJOR > 18) {
+      testFrameworks.push('@cucumber/cucumber')
+    }
+
     useSandbox(testFrameworks, true)
 
     before(() => {
-      const testFrameworks = ['jest', 'mocha', 'vitest']
-
-      // Remove once we drop support for Node.js@18
-      if (NODE_MAJOR > 18) {
-        testFrameworks.push('@cucumber/cucumber')
-      }
-
       cwd = sandboxCwd()
     })
 
