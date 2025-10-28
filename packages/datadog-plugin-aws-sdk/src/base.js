@@ -282,7 +282,6 @@ function normalizeConfig (config, serviceIdentifier) {
   return {
     ...config,
     ...specificConfig,
-    splitByAwsService: config.splitByAwsService !== false,
     batchPropagationEnabled,
     hooks
   }
