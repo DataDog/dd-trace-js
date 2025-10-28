@@ -37,7 +37,7 @@ describe('esm', () => {
           NODE_OPTIONS: '--openssl-legacy-provider'
         }
       })
-      variants = varySandbox(sandbox, 'server.mjs', 'next')
+      variants = varySandbox('server.mjs', 'next')
     })
 
     beforeEach(async () => {

@@ -22,7 +22,7 @@ describe('esm', () => {
       './packages/datadog-plugin-connect/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox(sandbox, 'server.mjs', 'connect')
+      variants = varySandbox('server.mjs', 'connect')
     })
 
     beforeEach(async () => {
