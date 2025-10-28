@@ -9,7 +9,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -77,27 +78,26 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, () => {
-    let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
+    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
-    before(async function () {
-      // Usually takes under 30 seconds but sometimes the server is really slow.
-      this.timeout(300_000)
-      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
-      cwd = sandbox.folder
+    useSandbox([`@playwright/test@${version}`, 'typescript'], true)
+
+    before(function (done) {
+      cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
       webAppServer.listen(0, () => {
         webAppPort = webAppServer.address().port
-      })
-      webAppServerWithRedirect.listen(0, () => {
-        webPortWithRedirect = webAppServerWithRedirect.address().port
+        webAppServerWithRedirect.listen(0, () => {
+          webPortWithRedirect = webAppServerWithRedirect.address().port
+          done()
+        })
       })
     })
 
     after(async () => {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
       await new Promise(resolve => webAppServerWithRedirect.close(resolve))
     })

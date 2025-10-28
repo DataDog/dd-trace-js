@@ -1,27 +1,21 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('RASP - lfi - integration - sync', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox(
-      ['express', 'fs'],
-      false,
-      [path.join(__dirname, 'resources')])
+  useSandbox(
+    ['express', 'fs'],
+    false,
+    [path.join(__dirname, 'resources')])
 
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'lfi-app', 'index.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   beforeEach(async () => {

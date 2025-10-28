@@ -5,22 +5,15 @@ const { describe, before, after, it } = require('mocha')
 
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
-  let sandbox, cwd
+  let cwd
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  useSandbox(['express', 'fastify'])
 
-    sandbox = await createSandbox(['express', 'fastify'])
-
-    cwd = sandbox.folder
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
+  before(function () {
+    cwd = sandboxCwd()
   })
 
   function getExpectedEndpoints (framework) {

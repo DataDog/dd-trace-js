@@ -6,7 +6,7 @@ const { execSync } = require('node:child_process')
 
 const axios = require('axios')
 
-const { FakeAgent, spawnProc, createSandbox } = require('../helpers')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('../helpers')
 
 const esbuildVersions = ['latest', '0.16.12']
 
@@ -23,19 +23,16 @@ function findWebSpan (payload) {
 
 esbuildVersions.forEach((version) => {
   describe('ESM is built and runs as expected in a sandbox', () => {
-    let sandbox, agent, cwd
+    let agent, cwd
 
-    before(async () => {
-      sandbox = await createSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
-      cwd = sandbox.folder
+    useSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
+
+    before(() => {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-    })
-
-    after(() => {
-      sandbox.remove()
     })
 
     afterEach(() => {

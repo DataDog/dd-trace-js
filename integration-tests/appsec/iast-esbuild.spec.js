@@ -8,18 +8,19 @@ const path = require('path')
 const { promisify } = require('util')
 const msgpack = require('@msgpack/msgpack')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
 
 describe('esbuild support for IAST', () => {
   describe('cjs', () => {
-    let proc, agent, sandbox, axios
+    let proc, agent, axios
     let applicationDir, bundledApplicationDir
 
+    useSandbox()
+
     before(async () => {
-      sandbox = await createSandbox([])
-      const cwd = sandbox.folder
+      const cwd = sandboxCwd()
       applicationDir = path.join(cwd, 'appsec/iast-esbuild')
 
       // Craft node_modules directory to ship native modules

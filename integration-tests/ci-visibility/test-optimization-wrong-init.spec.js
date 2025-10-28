@@ -4,7 +4,7 @@ const { once } = require('node:events')
 const assert = require('node:assert')
 const { exec } = require('child_process')
 
-const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
+const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 
@@ -47,7 +47,9 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
     // cucumber does not support Node.js@18 anymore
     if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
 
-    before(async () => {
+    useSandbox(testFrameworks, true)
+
+    before(() => {
       const testFrameworks = ['jest', 'mocha', 'vitest']
 
       // Remove once we drop support for Node.js@18
@@ -55,12 +57,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
         testFrameworks.push('@cucumber/cucumber')
       }
 
-      sandbox = await createSandbox(testFrameworks, true)
-      cwd = sandbox.folder
-    })
-
-    after(async () => {
-      await sandbox.remove()
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {

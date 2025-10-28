@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -8,16 +8,15 @@ const { assert } = require('chai')
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox(
-      ['express', 'pg'],
-      false,
-      [path.join(__dirname, 'resources')])
+  useSandbox(
+    ['express', 'pg'],
+    false,
+    [path.join(__dirname, 'resources')])
 
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'postgress-app', 'index.js')
   })
 

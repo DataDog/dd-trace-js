@@ -74,7 +74,7 @@ let sandbox
  * @param {string} expectedSource
  */
 async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
-  const cwd = sandbox.folder
+  const cwd = sandboxCwd()
   const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
   const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
@@ -391,7 +391,7 @@ function varySandbox (filename, variants, namedVariant, packageName = variants) 
     }
   }
 
-  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
+  const origFileData = readFileSync(path.join(sandboxCwd(), filename), 'utf8')
   const { name: prefix, ext: suffix } = path.parse(filename)
   const variantFilenames = /** @type {Variants} */ ({})
 
@@ -402,7 +402,7 @@ function varySandbox (filename, variants, namedVariant, packageName = variants) 
     if (variant !== 'default') {
       newFileData = origFileData.replace(variants.default, `${value}`)
     }
-    writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
+    writeFileSync(path.join(sandboxCwd(), variantFilename), newFileData)
   }
   return variantFilenames
 }
@@ -609,7 +609,7 @@ function useSandbox (...args) {
  * @returns {string}
  */
 function sandboxCwd () {
-  return sandbox.folder
+  return sandboxCwd()
 }
 
 /**
@@ -682,7 +682,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,

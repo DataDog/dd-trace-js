@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -15,15 +16,8 @@ describe('esm', () => {
   let sandbox
 
   withVersions('aws-sdk', ['aws-sdk'], version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
-        './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'aws-sdk@${version}'`], false, [
+      './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +35,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined,
         {
           AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
           AWS_ACCESS_KEY_ID: '00000000000000000000'

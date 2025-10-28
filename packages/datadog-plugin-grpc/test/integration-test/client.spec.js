@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -13,18 +14,10 @@ const { NODE_MAJOR } = require('../../../../version')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 && '>=1.3.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
-        './packages/datadog-plugin-grpc/test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
+      './packages/datadog-plugin-grpc/test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +34,7 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
       })
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'integration-test/server.mjs', agent.port)
 
       await res
     }).timeout(20000)

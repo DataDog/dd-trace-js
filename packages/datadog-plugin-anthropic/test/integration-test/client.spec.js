@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -13,21 +14,13 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('anthropic', ['@anthropic-ai/sdk'], version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([
-        `@anthropic-ai/sdk@${version}`,
-      ], false, [
-        './packages/datadog-plugin-anthropic/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([
+      `@anthropic-ai/sdk@${version}`,
+    ], false, [
+      './packages/datadog-plugin-anthropic/test/integration-test/*'
+    ])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -45,7 +38,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'anthropic.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, null, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs',
         ANTHROPIC_API_KEY: '<not-a-real-key>'
       })

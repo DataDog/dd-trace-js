@@ -8,7 +8,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -77,29 +78,25 @@ const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 describe('jest CommonJS', () => {
   let receiver
   let childProcess
-  let sandbox
   let cwd
   let startupTestFile
   let testOutput = ''
 
-  before(async function () {
-    sandbox = await createSandbox([
-      'jest',
-      'chai@v4',
-      'jest-jasmine2',
-      'jest-environment-jsdom',
-      '@happy-dom/jest-environment',
-      'office-addin-mock',
-      'winston',
-      'jest-image-snapshot',
-      '@fast-check/jest'
-    ], true)
-    cwd = sandbox.folder
-    startupTestFile = path.join(cwd, testFile)
-  })
+  useSandbox([
+    'jest',
+    'chai@v4',
+    'jest-jasmine2',
+    'jest-environment-jsdom',
+    '@happy-dom/jest-environment',
+    'office-addin-mock',
+    'winston',
+    'jest-image-snapshot',
+    '@fast-check/jest'
+  ], true)
 
-  after(async function () {
-    await sandbox.remove()
+  before(function () {
+    cwd = sandboxCwd()
+    startupTestFile = path.join(cwd, testFile)
   })
 
   beforeEach(async function () {
