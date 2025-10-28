@@ -53,6 +53,7 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
 
@@ -399,7 +400,10 @@ versions.forEach((version) => {
     })
 
     // total code coverage only works for >=2.0.0
-    if (version === 'latest') {
+    // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
+    // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
+    // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
+    if (version === 'latest' && NODE_MAJOR >= 20) {
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
