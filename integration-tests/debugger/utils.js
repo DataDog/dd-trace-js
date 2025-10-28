@@ -6,7 +6,7 @@ const { randomUUID } = require('crypto')
 
 const Axios = require('axios')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, useSandbox } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
