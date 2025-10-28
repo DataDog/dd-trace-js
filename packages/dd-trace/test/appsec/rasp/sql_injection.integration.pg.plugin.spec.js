@@ -20,11 +20,6 @@ describe('RASP - sql_injection - integration', () => {
     appFile = path.join(cwd, 'resources', 'postgress-app', 'index.js')
   })
 
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
-  })
-
   beforeEach(async () => {
     agent = await new FakeAgent().start()
     proc = await spawnProc(appFile, {
