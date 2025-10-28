@@ -36,7 +36,6 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
       it(`is instrumented loaded with ${variant}`, async () => {
         const proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
         const response = await axios.get(`${proc.url}/?param=paramvalue`)
-        process._rawDebug('These are the response headers: ', response.headers)
         assert.equal(response.headers['x-counter'], '1')
       })
     }
