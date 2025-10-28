@@ -709,9 +709,8 @@ class Config {
     this.#setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (AWS_LAMBDA_FUNCTION_NAME) {
       target.flushInterval = 0
-    } else {
+    } else if (DD_TRACE_FLUSH_INTERVAL) {
       target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
-      unprocessedTarget.flushInterval = DD_TRACE_FLUSH_INTERVAL
     }
     target.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
     unprocessedTarget.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
@@ -949,17 +948,27 @@ class Config {
     this.#optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this.#setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this.#setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
-    if (options.cloudPayloadTagging) {
-      this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', options.cloudPayloadTagging.requestsEnabled)
-      this.#setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', options.cloudPayloadTagging.responsesEnabled)
-      opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging.maxDepth)
-      if (options.cloudPayloadTagging.request || options.cloudPayloadTagging.response) {
-        opts['cloudPayloadTagging.rules'] = appendRules(
-          splitJSONPathRules(options.cloudPayloadTagging.request),
-          splitJSONPathRules(options.cloudPayloadTagging.response)
-        )
+    if (options.cloudPayloadTagging?.request || options.cloudPayloadTagging?.response) {
+      // Auto-enable based on presence of request/response rules
+      if (options.cloudPayloadTagging.request) {
+        this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', true)
       }
+      if (options.cloudPayloadTagging.response) {
+        this.#setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', true)
+      }
+      opts['cloudPayloadTagging.rules'] = appendRules(
+        splitJSONPathRules(options.cloudPayloadTagging.request),
+        splitJSONPathRules(options.cloudPayloadTagging.response)
+      )
     }
+    // Allow explicit override if provided
+    if (options.cloudPayloadTagging?.requestsEnabled !== undefined) {
+      this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', options.cloudPayloadTagging.requestsEnabled)
+    }
+    if (options.cloudPayloadTagging?.responsesEnabled !== undefined) {
+      this.#setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', options.cloudPayloadTagging.responsesEnabled)
+    }
+    opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging?.maxDepth)
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
     opts.baggageTagKeys = options.baggageTagKeys
