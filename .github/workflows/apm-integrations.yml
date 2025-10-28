@@ -384,6 +384,16 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
 
+  express-session:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express-session
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   fastify:
     runs-on: ubuntu-latest
     env:

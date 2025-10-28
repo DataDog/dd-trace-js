@@ -262,7 +262,6 @@ const elasticsearchOptions: plugins.elasticsearch = {
 
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
-  splitByAwsService: false,
   batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},

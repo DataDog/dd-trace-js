@@ -221,7 +221,7 @@ function execHelper (command, options) {
     console.log('Exec SUCCESS: ', command)
   } catch (error) {
     console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('bun')) {
+    if (command.startsWith(BUN)) {
       try {
         console.log('Exec RETRY START: ', command)
         execSync(command, options)
@@ -368,7 +368,7 @@ async function createSandbox (
  */
 function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = variants
+    const bindingName = namedVariant || variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
