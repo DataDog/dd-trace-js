@@ -229,7 +229,7 @@ class MetricAggregator {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
 
         for (const dataPoint of metric.data) {
-          const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint._attrKey)
+          const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
             const lastValue = lastExportedState.get(stateKey) || 0
@@ -267,7 +267,7 @@ class MetricAggregator {
     let dataPoint = metric.dataPointMap.get(attrKey)
 
     if (!dataPoint) {
-      dataPoint = { attributes, _attrKey: attrKey, ...createInitialDataPoint() }
+      dataPoint = { attributes, attrKey, ...createInitialDataPoint() }
       metric.data.push(dataPoint)
       metric.dataPointMap.set(attrKey, dataPoint)
     }

@@ -16,6 +16,8 @@ const { METRIC_TYPES } = require('./constants')
  * @private
  */
 class Instrument {
+  #baseMetadata
+
   constructor (name, options, instrumentationScope, reader) {
     this.name = name
     this.description = options.description || ''
@@ -23,7 +25,7 @@ class Instrument {
     this.instrumentationScope = instrumentationScope
     this.reader = reader
     // Pre-create static measurement fields to avoid object creation on every measurement
-    this._baseMetadata = {
+    this.#baseMetadata = {
       name: this.name,
       description: this.description,
       unit: this.unit,
@@ -31,9 +33,9 @@ class Instrument {
     }
   }
 
-  _createMeasurement (type, value, attributes) {
+  createMeasurement (type, value, attributes) {
     return {
-      ...this._baseMetadata,
+      ...this.#baseMetadata,
       type,
       value,
       attributes: sanitizeAttributes(attributes),
@@ -45,28 +47,28 @@ class Instrument {
 class Counter extends Instrument {
   add (value, attributes = {}) {
     if (!this.reader || value < 0) return
-    this.reader.record(this._createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
   }
 }
 
 class UpDownCounter extends Instrument {
   add (value, attributes = {}) {
     if (!this.reader) return
-    this.reader.record(this._createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
   }
 }
 
 class Histogram extends Instrument {
   record (value, attributes = {}) {
     if (!this.reader || value < 0) return
-    this.reader.record(this._createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
   }
 }
 
 class Gauge extends Instrument {
   record (value, attributes = {}) {
     if (!this.reader) return
-    this.reader.record(this._createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
   }
 }
 
@@ -103,7 +105,7 @@ class ObservableInstrument extends Instrument {
     const observations = []
     const observableResult = {
       observe: (value, attributes = {}) => {
-        observations.push(this._createMeasurement(this.#type, value, attributes))
+        observations.push(this.createMeasurement(this.#type, value, attributes))
       }
     }
 
