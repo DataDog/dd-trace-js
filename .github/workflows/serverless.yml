@@ -78,7 +78,6 @@ jobs:
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
           FORCE_NONINTERACTIVE: 'true'
-          LAMBDA_EXECUTOR: local
           START_WEB: '0'
         ports:
           - 4566:4566
