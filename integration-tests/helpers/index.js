@@ -402,7 +402,7 @@ function varySandbox (filename, variants, namedVariant, packageName = variants) 
     if (variant !== 'default') {
       newFileData = origFileData.replace(variants.default, `${value}`)
     }
-    writeFileSync(path.join(sandboxCwd(), variantFilename), newFileData)
+    writeFileSync(path.join(sandbox.folder, variantFilename), newFileData)
   }
   return variantFilenames
 }
