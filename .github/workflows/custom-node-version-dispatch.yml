@@ -1,4 +1,4 @@
-name: Custom Node Version Testing
+name: Nightly and custom Node.js builds
 
 on:
   workflow_dispatch:
