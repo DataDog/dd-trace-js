@@ -1,5 +1,7 @@
 'use strict'
 
+const { inspect } = require('node:util')
+
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -140,7 +142,7 @@ class LLMObsSpanProcessor {
     if (error) {
       meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE] || error.message || error.code
       meta[ERROR_TYPE] = spanTags[ERROR_TYPE] || error.name
-      meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack
+      meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack ? inspect(error, { depth: 0 }) : error.stack
     }
 
     const metrics = mlObsTags[METRICS] || {}

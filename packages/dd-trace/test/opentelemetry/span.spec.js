@@ -1,25 +1,26 @@
 'use strict'
 
+const { inspect } = require('util')
+const { performance } = require('perf_hooks')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
-const { performance } = require('perf_hooks')
-const { timeOrigin } = performance
 const { timeInputToHrTime } = require('@opentelemetry/core')
+const api = require('@opentelemetry/api')
 
 require('../setup/core')
 
 const tracer = require('../../').init()
-
-const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 const format = require('../../src/format')
+
+const { timeOrigin } = performance
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -385,7 +386,7 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
-    expect(_tags).to.have.property(ERROR_STACK, error.stack)
+    expect(_tags).to.have.property(ERROR_STACK, inspect(error))
     expect(_tags).to.have.property(IGNORE_OTEL_ERROR, true)
 
     const events = span._ddSpan._events
@@ -423,21 +424,25 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     class TestError extends Error {
-      constructor () {
-        super('test message')
+      abc = 123
+
+      deep = {
+        invisible: 'invisible'
       }
     }
 
     const time = timeInputToHrTime(60000 + timeOrigin)
     const timeInMilliseconds = time[0] * 1e3 + time[1] / 1e6
 
-    const error = new TestError()
+    const cause = new TypeError('cause')
+    const error = new TestError('test message', { cause })
     span.recordException(error)
 
     const { _tags } = span._ddSpan.context()
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
-    expect(_tags).to.have.property(ERROR_STACK, error.stack)
+    expect(_tags).to.not.have.property(ERROR_STACK, inspect(error, { depth: 1 }))
+    expect(_tags).to.have.property(ERROR_STACK, inspect(error, { depth: 0 }))
 
     const events = span._ddSpan._events
     expect(events).to.have.lengthOf(1)

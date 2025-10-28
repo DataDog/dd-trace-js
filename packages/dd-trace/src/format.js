@@ -212,9 +212,16 @@ function extractError (formattedSpan, error) {
     // AggregateError only has a code and no message.
     // TODO(BridgeAR)[31.03.2025]: An AggregateError can have a message. Should
     // the code just generally be added, if available?
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_MESSAGE, error.message || error.code)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_TYPE, error.name)
-    addTag(formattedSpan.meta, formattedSpan.metrics, ERROR_STACK, error.stack)
+    const message = error.message || error.code
+    if (message != null) {
+      formattedSpan.meta[ERROR_MESSAGE] = message
+    }
+    if (error.name != null) {
+      formattedSpan.meta[ERROR_TYPE] = error.name
+    }
+    if (error.stack != null) {
+      formattedSpan.meta[ERROR_STACK] = error.stack
+    }
   }
 }
 
