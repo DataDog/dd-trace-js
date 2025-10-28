@@ -3,12 +3,11 @@
 const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
-const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const log = require('./log/writer')
+const { addErrorTagsToSpan } = require('./util')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -66,7 +65,9 @@ class DatadogTracer extends Tracer {
     try {
       if (fn.length > 1) {
         return this.scope().activate(span, () => fn(span, err => {
-          addError(span, err)
+          if (err) {
+            addErrorTagsToSpan(span, err)
+          }
           span.finish()
         }))
       }
@@ -80,7 +81,7 @@ class DatadogTracer extends Tracer {
             return value
           },
           err => {
-            addError(span, err)
+            addErrorTagsToSpan(span, err)
             span.finish()
             throw err
           }
@@ -90,7 +91,7 @@ class DatadogTracer extends Tracer {
 
       return result
     } catch (e) {
-      addError(span, e)
+      addErrorTagsToSpan(span, e)
       span.finish()
       throw e
     }
@@ -142,16 +143,6 @@ class DatadogTracer extends Tracer {
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
-  }
-}
-
-function addError (span, error) {
-  if (isError(error)) {
-    span.addTags({
-      [ERROR_TYPE]: error.name,
-      [ERROR_MESSAGE]: error.message,
-      [ERROR_STACK]: error.stack
-    })
   }
 }
 

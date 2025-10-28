@@ -1,5 +1,7 @@
 'use strict'
 
+const { inspect } = require('node:util')
+
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -24,7 +26,8 @@ const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
-  ERROR_STACK
+  ERROR_STACK,
+  ERROR_FULL_SERIALIZED
 } = require('../constants')
 
 const telemetry = require('./telemetry')
@@ -35,6 +38,7 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 
 const util = require('node:util')
+const { addErrorProperties } = require('../util')
 
 class LLMObservabilitySpan {
   constructor () {
@@ -141,11 +145,16 @@ class LLMObsSpanProcessor {
       outputType = 'value'
     }
 
-    const error = spanTags.error || spanTags[ERROR_TYPE]
-    if (error) {
-      meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE] || error.message || error.code
-      meta[ERROR_TYPE] = spanTags[ERROR_TYPE] || error.name
-      meta[ERROR_STACK] = spanTags[ERROR_STACK] || error.stack
+    let error = false
+    if (spanTags[ERROR_TYPE]) {
+      error = true
+      meta[ERROR_MESSAGE] = spanTags[ERROR_MESSAGE]
+      meta[ERROR_TYPE] = spanTags[ERROR_TYPE]
+      meta[ERROR_STACK] = spanTags[ERROR_STACK]
+      meta[ERROR_FULL_SERIALIZED] = spanTags[ERROR_FULL_SERIALIZED]
+    } else if (spanTags.error) {
+      error = true
+      addErrorProperties(meta, spanTags.error)
     }
 
     const metrics = mlObsTags[METRICS] || {}

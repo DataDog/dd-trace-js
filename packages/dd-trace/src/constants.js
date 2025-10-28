@@ -26,6 +26,7 @@ module.exports = {
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',
   ERROR_STACK: 'error.stack',
+  ERROR_FULL_SERIALIZED: 'error.full_serialized',
   IGNORE_OTEL_ERROR: Symbol('ignore.otel.error'),
   COMPONENT: 'component',
   CLIENT_PORT_KEY: 'network.destination.port',
@@ -53,5 +54,5 @@ module.exports = {
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
     DOWNSTREAM: 'd'
-  })
+  }),
 }

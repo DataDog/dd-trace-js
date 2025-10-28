@@ -1,27 +1,33 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('util')
+const { performance } = require('perf_hooks')
 
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
-const { performance } = require('perf_hooks')
-const { timeOrigin } = performance
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
+const api = require('@opentelemetry/api')
 
 require('../setup/core')
 
 const tracer = require('../../').init()
-
-const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
+const {
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  ERROR_TYPE,
+  ERROR_FULL_SERIALIZED,
+  IGNORE_OTEL_ERROR
+} = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 const spanFormat = require('../../src/span_format')
+
+const { timeOrigin } = performance
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -395,6 +401,7 @@ describe('OTel Span', () => {
     assert.strictEqual(_tags[ERROR_TYPE], error.name)
     assert.strictEqual(_tags[ERROR_MESSAGE], error.message)
     assert.strictEqual(_tags[ERROR_STACK], error.stack)
+    assert.strictEqual(_tags[ERROR_FULL_SERIALIZED], inspect(error))
     assert.strictEqual(_tags[IGNORE_OTEL_ERROR], true)
 
     const events = span._ddSpan._events
@@ -432,15 +439,18 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     class TestError extends Error {
-      constructor () {
-        super('test message')
+      abc = 123
+
+      deep = {
+        invisible: 'invisible'
       }
     }
 
     const time = timeInputToHrTime(60000 + timeOrigin)
     const timeInMilliseconds = time[0] * 1e3 + time[1] / 1e6
 
-    const error = new TestError()
+    const cause = new TypeError('cause')
+    const error = new TestError('test message', { cause })
     span.recordException(error)
 
     const { _tags } = span._ddSpan.context()

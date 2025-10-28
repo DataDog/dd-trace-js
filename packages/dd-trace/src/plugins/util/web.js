@@ -8,10 +8,11 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const urlFilter = require('./urlfilter')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
+const { ERROR_MESSAGE } = require('../../constants')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const TracingPlugin = require('../tracing')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
+const { addErrorTagsToSpan } = require('../../util')
 
 let extractIp
 
@@ -215,11 +216,7 @@ const web = {
 
     if (span) {
       if (error) {
-        span.addTags({
-          [ERROR_TYPE]: error.name,
-          [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
-        })
+        addErrorTagsToSpan(span, error)
       }
 
       span.finish()

@@ -9,9 +9,11 @@ const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/co
 
 const tracer = require('../../')
 const DatadogSpan = require('../opentracing/span')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, IGNORE_OTEL_ERROR } = require('../constants')
+const { ERROR_MESSAGE, IGNORE_OTEL_ERROR } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
+
+const { addErrorTagsToSpan } = require('../util')
 
 const SpanContext = require('./span_context')
 const id = require('../id')
@@ -291,12 +293,8 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    this._ddSpan.addTags({
-      [ERROR_TYPE]: exception.name,
-      [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack,
-      [IGNORE_OTEL_ERROR]: this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true
-    })
+    addErrorTagsToSpan(this._ddSpan, exception)
+    this._ddSpan.setTag(IGNORE_OTEL_ERROR, this._ddSpan.context()._tags[IGNORE_OTEL_ERROR] ?? true)
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
     if (exception.type) attributes['exception.type'] = exception.type
