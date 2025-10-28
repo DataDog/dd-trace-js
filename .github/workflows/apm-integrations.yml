@@ -384,7 +384,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
 
-  cookie-session:
+  express-session:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express-session
