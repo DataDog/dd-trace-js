@@ -5,6 +5,7 @@ const {
   Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
 } = require('./instruments')
 const log = require('../../log')
+const { METRIC_TYPES } = require('./constants')
 
 /**
  * @typedef {import('@opentelemetry/api').Counter} Counter
@@ -71,7 +72,7 @@ class Meter {
    * @returns {Counter} Counter instrument
    */
   createCounter (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'counter', Counter, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.COUNTER, Counter, options)
   }
 
   /**
@@ -85,7 +86,7 @@ class Meter {
    * @returns {UpDownCounter} UpDownCounter instrument
    */
   createUpDownCounter (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'updowncounter', UpDownCounter, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.UPDOWNCOUNTER, UpDownCounter, options)
   }
 
   /**
@@ -99,7 +100,7 @@ class Meter {
    * @returns {Histogram} Histogram instrument
    */
   createHistogram (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'histogram', Histogram, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.HISTOGRAM, Histogram, options)
   }
 
   /**
@@ -113,7 +114,7 @@ class Meter {
    * @returns {Gauge} Gauge instrument
    */
   createGauge (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'gauge', Gauge, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.GAUGE, Gauge, options)
   }
 
   /**
@@ -127,7 +128,7 @@ class Meter {
    * @returns {ObservableGauge} ObservableGauge instrument
    */
   createObservableGauge (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'observable-gauge', ObservableGauge, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLEGAUGE, ObservableGauge, options)
   }
 
   /**
@@ -140,7 +141,7 @@ class Meter {
    * @returns {ObservableCounter} ObservableCounter instrument
    */
   createObservableCounter (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'observable-counter', ObservableCounter, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLECOUNTER, ObservableCounter, options)
   }
 
   /**
@@ -153,7 +154,7 @@ class Meter {
    * @returns {ObservableUpDownCounter} ObservableUpDownCounter instrument
    */
   createObservableUpDownCounter (name, options = {}) {
-    return this.#getOrCreateInstrument(name, 'observable-updowncounter', ObservableUpDownCounter, options)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER, ObservableUpDownCounter, options)
   }
 
   /**

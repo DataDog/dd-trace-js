@@ -1,6 +1,7 @@
 'use strict'
 
 const { sanitizeAttributes } = require('@opentelemetry/core')
+const { METRIC_TYPES } = require('./constants')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -44,28 +45,28 @@ class Instrument {
 class Counter extends Instrument {
   add (value, attributes = {}) {
     if (!this.reader || value < 0) return
-    this.reader.record(this._createMeasurement('counter', value, attributes))
+    this.reader.record(this._createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
   }
 }
 
 class UpDownCounter extends Instrument {
   add (value, attributes = {}) {
     if (!this.reader) return
-    this.reader.record(this._createMeasurement('updowncounter', value, attributes))
+    this.reader.record(this._createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
   }
 }
 
 class Histogram extends Instrument {
   record (value, attributes = {}) {
     if (!this.reader || value < 0) return
-    this.reader.record(this._createMeasurement('histogram', value, attributes))
+    this.reader.record(this._createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
   }
 }
 
 class Gauge extends Instrument {
   record (value, attributes = {}) {
     if (!this.reader) return
-    this.reader.record(this._createMeasurement('gauge', value, attributes))
+    this.reader.record(this._createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
   }
 }
 
@@ -121,19 +122,19 @@ class ObservableInstrument extends Instrument {
 
 class ObservableGauge extends ObservableInstrument {
   constructor (name, options, instrumentationScope, reader) {
-    super(name, options, instrumentationScope, reader, 'gauge')
+    super(name, options, instrumentationScope, reader, METRIC_TYPES.GAUGE)
   }
 }
 
 class ObservableCounter extends ObservableInstrument {
   constructor (name, options, instrumentationScope, reader) {
-    super(name, options, instrumentationScope, reader, 'observable-counter')
+    super(name, options, instrumentationScope, reader, METRIC_TYPES.OBSERVABLECOUNTER)
   }
 }
 
 class ObservableUpDownCounter extends ObservableInstrument {
   constructor (name, options, instrumentationScope, reader) {
-    super(name, options, instrumentationScope, reader, 'observable-updowncounter')
+    super(name, options, instrumentationScope, reader, METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER)
   }
 }
 

@@ -525,4 +525,22 @@ describe('OpenTelemetry Meter Provider', () => {
       setTimeout(() => { validator(); done() }, 150)
     })
   })
+
+  describe('Unimplemented Features', () => {
+    it('logs warning for meter batch callbacks', () => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+
+      initializeOpenTelemetryMetrics(mockConfig())
+      const meter = metrics.getMeter('app')
+      meter.addBatchObservableCallback(() => {}, [])
+      meter.removeBatchObservableCallback(() => {}, [])
+
+      assert.strictEqual(warnSpy.callCount, 2)
+      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
+      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
+
+      warnSpy.restore()
+    })
+  })
 })
