@@ -1,4 +1,4 @@
-name: Nightly Testing
+name: Nightly and custom Node.js builds
 
 on:
   workflow_dispatch:
