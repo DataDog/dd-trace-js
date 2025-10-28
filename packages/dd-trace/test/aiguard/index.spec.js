@@ -88,10 +88,14 @@ describe('AIGuard SDK', () => {
   })
 
   const mockFetch = (options) => {
-    global.fetch.resolves({
-      status: options.status ?? 200,
-      json: sinon.stub().resolves(options.body)
-    })
+    if (options.error) {
+      global.fetch.rejects(options.error)
+    } else {
+      global.fetch.resolves({
+        status: options.status ?? 200,
+        json: sinon.stub().resolves(options.body)
+      })
+    }
   }
 
   const assertFetch = (messages, url) => {
@@ -182,6 +186,25 @@ describe('AIGuard SDK', () => {
       () => aiguard.evaluate(toolCall),
       err =>
         err.name === 'AIGuardClientError' && JSON.stringify(err.errors) === JSON.stringify(errors)
+    )
+
+    assertTelemetry('ai_guard.requests', { error: true })
+    assertFetch(toolCall)
+    await assertAIGuardSpan({
+      'ai_guard.target': 'tool',
+      'error.type': 'AIGuardClientError'
+    })
+  })
+
+  it('test evaluate with API exception', async () => {
+    mockFetch({
+      error: new Error('Boom!!!'),
+    })
+
+    await rejects(
+      () => aiguard.evaluate(toolCall),
+      err =>
+        err.name === 'AIGuardClientError' && err.message === 'Unexpected error calling AI Guard service: Boom!!!',
     )
 
     assertTelemetry('ai_guard.requests', { error: true })
