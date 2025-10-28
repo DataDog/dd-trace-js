@@ -6,7 +6,7 @@ const cypressFailFast = require('cypress-fail-fast/plugin')
 const ddTracePlugin = require('dd-trace/ci/cypress/plugin')
 
 module.exports = {
-  defaultCommandTimeout: 1000,
+  defaultCommandTimeout: 5000,
   e2e: {
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {

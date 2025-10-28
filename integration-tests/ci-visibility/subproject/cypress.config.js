@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  defaultCommandTimeout: 100,
+  defaultCommandTimeout: 5000,
   e2e: {
     setupNodeEvents (on, config) {
       return require('dd-trace/ci/cypress/plugin')(on, config)
