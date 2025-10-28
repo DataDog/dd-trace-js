@@ -18,6 +18,7 @@ describe('esbuild support for IAST', () => {
     let applicationDir, bundledApplicationDir
 
     before(async () => {
+      this.timeout(120_000)
       sandbox = await createSandbox([])
       const cwd = sandbox.folder
       applicationDir = path.join(cwd, 'appsec/iast-esbuild')
@@ -26,16 +27,33 @@ describe('esbuild support for IAST', () => {
       const craftedNodeModulesDir = path.join(applicationDir, 'tmp_node_modules')
       fs.mkdirSync(craftedNodeModulesDir)
       await exec('npm init -y', { cwd: craftedNodeModulesDir })
-      await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
-        cwd: craftedNodeModulesDir,
-        timeout: 3e3
-      })
 
-      // Install app deps
-      await exec('npm install || npm install', {
-        cwd: applicationDir,
-        timeout: 6e3
-      })
+      try {
+        await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
+          cwd: craftedNodeModulesDir,
+          timeout: 3e3
+        })
+      } catch {
+        await exec('sleep 60')
+        await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
+          cwd: craftedNodeModulesDir,
+          timeout: 3e3
+        })
+      }
+
+      try {
+        // Install app deps
+        await exec('npm install', {
+          cwd: applicationDir,
+          timeout: 6e3
+        })
+      } catch {
+        await exec('sleep 60')
+        await exec('npm install', {
+          cwd: applicationDir,
+          timeout: 6e3
+        })
+      }
 
       // Bundle the application
       await exec('npm run build', {
