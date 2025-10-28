@@ -2,7 +2,7 @@
 
 const axios = require('axios')
 const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const path = require('node:path')
 

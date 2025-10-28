@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 const { execSync } = require('node:child_process')
 
-const { describe, it, beforeEach, before, after, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const {
   FakeAgent,

@@ -9,7 +9,7 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 describe('esm', () => {
   let agent
