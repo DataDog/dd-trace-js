@@ -1,7 +1,7 @@
 'use strict'
 
 const {
-  createSandbox, varySandbox, curl,
+  createSandbox, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
