@@ -3,7 +3,7 @@ import cypress from 'cypress'
 async function runCypress () {
   const results = await cypress.run({
     config: {
-      defaultCommandTimeout: 5000,
+      defaultCommandTimeout: 1000,
       e2e: {
         setupNodeEvents (on, config) {
           if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
