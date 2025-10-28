@@ -13,7 +13,6 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('aws-sdk', ['aws-sdk'], version => {
     useSandbox([`'aws-sdk@${version}'`], false, [

@@ -18,7 +18,7 @@ module.exports = {
 }
 
 function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler } = {}) {
-  let sandbox, cwd
+  let cwd
 
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,

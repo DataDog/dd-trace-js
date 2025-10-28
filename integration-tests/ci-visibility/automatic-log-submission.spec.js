@@ -16,7 +16,7 @@ const webAppServer = require('./web-app-server')
 const { NODE_MAJOR } = require('../../version')
 
 describe('test optimization automatic log submission', () => {
-  let sandbox, cwd, receiver, childProcess, webAppPort
+  let cwd, receiver, childProcess, webAppPort
   let testOutput = ''
 
   useSandbox([

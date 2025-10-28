@@ -90,7 +90,6 @@ const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
   let childProcess
-  let sandbox
   let cwd
   let startupTestFile
   let testOutput = ''

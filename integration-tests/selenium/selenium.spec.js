@@ -28,7 +28,6 @@ versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {
     let receiver
     let childProcess
-    let sandbox
     let cwd
     let webAppPort
 
