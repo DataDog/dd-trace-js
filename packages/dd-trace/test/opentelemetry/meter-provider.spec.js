@@ -505,5 +505,24 @@ describe('OpenTelemetry Meter Provider', () => {
 
       setTimeout(() => { validator(); done() }, 150)
     })
+
+    it('removes callbacks from observable instruments', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 200)
+      })
+
+      initializeOpenTelemetryMetrics(mockConfig())
+      const meter = metrics.getMeter('app')
+      const gauge = meter.createObservableGauge('temperature')
+
+      const cb1 = (result) => result.observe(100)
+      const cb2 = (result) => result.observe(200)
+      gauge.addCallback(cb1)
+      gauge.addCallback(cb2)
+      gauge.removeCallback(cb1)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
   })
 })

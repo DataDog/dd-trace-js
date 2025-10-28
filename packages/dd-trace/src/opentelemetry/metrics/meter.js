@@ -2,6 +2,7 @@
 
 const packageVersion = require('../../../../../package.json').version
 const { Counter, UpDownCounter, Histogram, Gauge, ObservableGauge } = require('./instruments')
+const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Counter} Counter
@@ -16,7 +17,7 @@ const { Counter, UpDownCounter, Histogram, Gauge, ObservableGauge } = require('.
  * Meter provides methods to create metric instruments.
  *
  * This implementation follows the OpenTelemetry JavaScript API Meter:
- * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api.Meter.html
+ * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api._opentelemetry_api.Meter.html
  *
  * @class Meter
  */
@@ -187,6 +188,26 @@ class Meter {
       this.#instruments.set(key, updown)
     }
     return this.#instruments.get(key)
+  }
+
+  /**
+   * Adds a batch observable callback (not implemented).
+   *
+   * @param {Function} callback - Batch observable callback
+   * @param {Array} observables - Array of observable instruments
+   */
+  addBatchObservableCallback (callback, observables) {
+    log.warn('addBatchObservableCallback is not implemented')
+  }
+
+  /**
+   * Removes a batch observable callback (not implemented).
+   *
+   * @param {Function} callback - Batch observable callback
+   * @param {Array} observables - Array of observable instruments
+   */
+  removeBatchObservableCallback (callback, observables) {
+    log.warn('removeBatchObservableCallback is not implemented')
   }
 }
 

@@ -14,7 +14,7 @@ const ContextManager = require('../context_manager')
  * MeterProvider is the main entry point for creating meters with a single reader for Datadog Agent export.
  *
  * This implementation follows the OpenTelemetry JavaScript API MeterProvider interface:
- * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api.MeterProvider.html
+ * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api._opentelemetry_api.MeterProvider.html
  *
  * @class MeterProvider
  * @implements {import('@opentelemetry/api').MeterProvider}
