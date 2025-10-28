@@ -949,7 +949,6 @@ class Config {
     this.#setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this.#setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
     if (options.cloudPayloadTagging?.request || options.cloudPayloadTagging?.response) {
-      // Auto-enable based on presence of request/response rules
       if (options.cloudPayloadTagging.request) {
         this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', true)
       }
@@ -961,7 +960,6 @@ class Config {
         splitJSONPathRules(options.cloudPayloadTagging.response)
       )
     }
-    // Allow explicit override if provided
     if (options.cloudPayloadTagging?.requestsEnabled !== undefined) {
       this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', options.cloudPayloadTagging.requestsEnabled)
     }
