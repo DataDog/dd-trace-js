@@ -50,10 +50,6 @@ describe('esbuild support for IAST', () => {
       fs.cpSync(path.join(craftedNodeModulesDir, 'node_modules'), bundledApplicationDir, { recursive: true })
     })
 
-    after(async () => {
-      await sandbox.remove()
-    })
-
     function startServer (appFile, iastEnabled) {
       beforeEach(async () => {
         agent = await new FakeAgent().start()

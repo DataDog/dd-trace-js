@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, before, after, it } = require('mocha')
+const { describe, before, it } = require('mocha')
 
 const path = require('node:path')
 

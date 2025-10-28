@@ -64,10 +64,6 @@ describe('ASM Trace Tagging rules', () => {
       appFile = path.join(cwd, 'appsec/data-collection/fastify.js')
     })
 
-    after(async () => {
-      await sandbox.remove()
-    })
-
     startServer()
 
     it('should report waf attributes', async () => {
