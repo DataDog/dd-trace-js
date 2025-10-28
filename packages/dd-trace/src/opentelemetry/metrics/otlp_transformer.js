@@ -2,21 +2,11 @@
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { METRIC_TYPES, TEMPORALITY } = require('./constants')
 
-// Get the aggregation temporality enum
 const { protoAggregationTemporality } = getProtobufTypes()
 const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
 const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_CUMULATIVE
-
-// Metric type constants
-const METRIC_TYPES = {
-  HISTOGRAM: 'histogram',
-  COUNTER: 'counter',
-  UPDOWNCOUNTER: 'updowncounter',
-  OBSERVABLECOUNTER: 'observable-counter',
-  OBSERVABLEUPDOWNCOUNTER: 'observable-updowncounter',
-  GAUGE: 'gauge'
-}
 
 /**
  * OtlpTransformer transforms metrics to OTLP format.
@@ -138,7 +128,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
-    const temporality = metric.temporality === 'CUMULATIVE'
+    const temporality = metric.temporality === TEMPORALITY.CUMULATIVE
       ? AGGREGATION_TEMPORALITY_CUMULATIVE
       : AGGREGATION_TEMPORALITY_DELTA
 
@@ -192,7 +182,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       unit: metric.unit || ''
     }
 
-    const temporalityStr = metric.temporality === 'CUMULATIVE'
+    const temporalityStr = metric.temporality === TEMPORALITY.CUMULATIVE
       ? 'AGGREGATION_TEMPORALITY_CUMULATIVE'
       : 'AGGREGATION_TEMPORALITY_DELTA'
 
