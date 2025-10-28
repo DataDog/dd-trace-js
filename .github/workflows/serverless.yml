@@ -81,6 +81,8 @@ jobs:
           START_WEB: '0'
         ports:
           - 4566:4566
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:rw
       # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
       # To-Do: Debug localstack / lambda and localstack / S3
       localstack-legacy:
