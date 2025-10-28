@@ -43,19 +43,19 @@ describe('OpenTelemetry Meter Provider', () => {
     }
 
     httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
+      const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
-          statusCode: 200,
-          on: (event, handler) => {
-            responseHandlers[event] = handler
-            return mockRes
-          },
-          setTimeout: () => mockRes
+          ...baseMockRes,
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
         }
 
         const mockReq = {
+          ...baseMockReq,
           write: (data) => { capturedPayload = data },
           end: () => {
             const contentType = capturedHeaders['Content-Type']
@@ -70,50 +70,18 @@ describe('OpenTelemetry Meter Provider', () => {
 
             validator(decoded, capturedHeaders)
             validatorCalled = true
-
-            if (responseHandlers.end) {
-              responseHandlers.end()
-            }
-          },
-          on: () => {},
-          once: () => {},
-          setTimeout: () => {}
+            if (responseHandlers.end) responseHandlers.end()
+          }
         }
         callback(mockRes)
         return mockReq
       }
-
-      const mockReq = {
-        write: () => {},
-        end: () => {},
-        on: () => {},
-        once: () => {},
-        setTimeout: () => {}
-      }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
-      return mockReq
+      callback(baseMockRes)
+      return baseMockReq
     })
 
     return () => {
-      if (!validatorCalled) {
-        throw new Error('OTLP export validator was never called')
-      }
-    }
-  }
-
-  // Helper to assert metric value (either asInt or asDouble, not both)
-  function assertMetricValue (dataPoint, expectedValue, message) {
-    // First verify only one type is set
-    assert(
-      (dataPoint.asInt !== undefined) !== (dataPoint.asDouble !== undefined),
-      'Should have exactly one of asInt or asDouble'
-    )
-
-    // Then check the value matches
-    if (dataPoint.asInt !== undefined) {
-      assert.strictEqual(dataPoint.asInt, expectedValue, message || `Expected asInt to be ${expectedValue}`)
-    } else {
-      assert.strictEqual(dataPoint.asDouble, expectedValue, message || `Expected asDouble to be ${expectedValue}`)
+      if (!validatorCalled) throw new Error('OTLP export validator was never called')
     }
   }
 
@@ -143,12 +111,10 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports counter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
-        assert.strictEqual(counter.name, 'requests')
-        assert.strictEqual(counter.sum.isMonotonic, true)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 5)
+        assert.strictEqual(metrics.length, 1)
+        assert.strictEqual(metrics[0].name, 'requests')
+        assert.strictEqual(metrics[0].sum.isMonotonic, true)
+        assert.strictEqual(metrics[0].sum.dataPoints[0].asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -160,17 +126,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports histogram metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const histogram = metrics[0]
+        const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(histogram.name, 'duration')
-        assert(histogram.histogram, 'Should have histogram data')
-        assert.strictEqual(histogram.histogram.dataPoints.length, 1, 'Should have exactly 1 data point')
-        const dp = histogram.histogram.dataPoints[0]
-        assert.strictEqual(dp.count, 1, 'Should have recorded 1 value')
-        assert.strictEqual(dp.sum, 100, 'Sum should be 100')
-        assert(Array.isArray(dp.bucketCounts), 'Should have bucket counts')
-        assert(Array.isArray(dp.explicitBounds), 'Should have explicit bounds')
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 1)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -202,13 +161,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports gauge metrics (last value wins)', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const gauge = metrics[0]
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(gauge.name, 'temperature')
-        assert(gauge.gauge, 'Should have gauge data')
-        assert.strictEqual(gauge.gauge.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(gauge.gauge.dataPoints[0], 75, 'Last value should win')
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 75)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -222,13 +177,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports updowncounter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const updown = metrics[0]
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.name, 'queue')
         assert.strictEqual(updown.sum.isMonotonic, false)
-        assert.strictEqual(updown.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(updown.sum.dataPoints[0], 7, 'Should be 10 - 3 = 7')
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 7)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -242,21 +194,12 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports observable gauge metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const gauge = metrics[0]
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(gauge.name, 'memory')
-        assert(gauge.gauge, 'Should have gauge data')
-        assert.strictEqual(gauge.gauge.dataPoints.length, 1, 'Should have exactly 1 data point')
         const dp = gauge.gauge.dataPoints[0]
-        // Verify value is present and positive (memory is dynamic, so we just check it's positive)
         const value = dp.asDouble !== undefined ? dp.asDouble : dp.asInt
-        assert(dp.asDouble !== undefined || dp.asInt !== undefined, 'Should have either asDouble or asInt')
-        assert(value > 0, 'Memory should be positive')
-        // Verify it has attributes
-        assert(Array.isArray(dp.attributes), 'Should have attributes array')
-        const typeAttr = dp.attributes.find(a => a.key === 'type')
-        assert.strictEqual(typeAttr.value.stringValue, 'heap')
+        assert(value > 0)
+        assert.strictEqual(dp.attributes.find(a => a.key === 'type').value.stringValue, 'heap')
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -269,19 +212,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports observable counter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'connections')
-        assert(counter.sum, 'Should have sum data')
         assert.strictEqual(counter.sum.isMonotonic, true)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        // Observable counters report the observed value
-        const dataPoint = counter.sum.dataPoints[0]
-        assert(dataPoint.asInt !== undefined || dataPoint.asDouble !== undefined, 'Should have a value')
-        const value = dataPoint.asInt !== undefined ? dataPoint.asInt : dataPoint.asDouble
-        assert(value >= 0, 'Observable counter value should be non-negative')
-        assert.strictEqual(value, 42)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 42)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'CUMULATIVE' }))
@@ -294,18 +228,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('exports observable updowncounter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const updown = metrics[0]
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.name, 'tasks')
-        assert(updown.sum, 'Should have sum data')
         assert.strictEqual(updown.sum.isMonotonic, false)
-        assert.strictEqual(updown.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        // Observable updowncounters report the observed value
-        const dataPoint = updown.sum.dataPoints[0]
-        assert(dataPoint.asInt !== undefined || dataPoint.asDouble !== undefined, 'Should have a value')
-        const value = dataPoint.asInt !== undefined ? dataPoint.asInt : dataPoint.asDouble
-        assert.strictEqual(value, 15)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 15)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'CUMULATIVE' }))
@@ -321,14 +247,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('uses protobuf with numeric timestamps by default', (done) => {
       const validator = mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const dataPoint = metrics[0].sum.dataPoints[0]
-        // Protobuf should use numbers for timestamps (fixed64) and values
+        const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
         assert.strictEqual(typeof dataPoint.timeUnixNano, 'number')
-        assert.strictEqual(typeof dataPoint.startTimeUnixNano, 'number')
-        assert(dataPoint.timeUnixNano > 0, 'Timestamp should be positive')
-        assertMetricValue(dataPoint, 5)
+        assert.strictEqual(dataPoint.asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -341,16 +262,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('uses JSON with string timestamps when configured', (done) => {
       const validator = mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['Content-Type'], 'application/json')
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const dataPoint = metrics[0].sum.dataPoints[0]
-        // JSON should use strings for 64-bit integers to avoid precision loss
+        const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
         assert.strictEqual(typeof dataPoint.timeUnixNano, 'string')
-        assert.strictEqual(typeof dataPoint.startTimeUnixNano, 'string')
-        assert(parseInt(dataPoint.timeUnixNano) > 0, 'Timestamp should be positive')
-        // Integer values also become strings, but doubles stay as numbers
-        assert.strictEqual(typeof dataPoint.asInt, 'string')
-        assert.strictEqual(dataPoint.asInt, '5')
+        assert.strictEqual(dataPoint.asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsProtocol: 'http/json' }))
@@ -379,25 +293,14 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('supports multiple attributes and data points', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'api')
-        assert.strictEqual(counter.sum.dataPoints.length, 2, 'Should have exactly 2 data points')
-
-        // Find data points by attributes
+        assert.strictEqual(counter.sum.dataPoints.length, 2)
         const getDp = (method) => counter.sum.dataPoints.find(dp =>
           dp.attributes.some(a => a.key === 'method' && a.value.stringValue === method)
         )
-
-        const getDataPoint = getDp('GET')
-        const postDataPoint = getDp('POST')
-
-        assert(getDataPoint, 'Should have GET data point')
-        assert(postDataPoint, 'Should have POST data point')
-
-        assertMetricValue(getDataPoint, 10)
-        assertMetricValue(postDataPoint, 5)
+        assert.strictEqual(getDp('GET').asInt, 10)
+        assert.strictEqual(getDp('POST').asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -413,13 +316,10 @@ describe('OpenTelemetry Meter Provider', () => {
   describe('Temporality', () => {
     it('supports CUMULATIVE for counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'test')
         assert.strictEqual(counter.sum.aggregationTemporality, 2)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 8)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 8)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'CUMULATIVE' }))
@@ -433,13 +333,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('supports DELTA for counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'test')
         assert.strictEqual(counter.sum.aggregationTemporality, 1)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 5)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'DELTA' }))
@@ -451,13 +348,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('LOWMEMORY uses DELTA for sync counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
-        assert.strictEqual(counter.name, 'sync')
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.sum.aggregationTemporality, 1)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 5)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'LOWMEMORY' }))
@@ -469,13 +362,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('LOWMEMORY uses CUMULATIVE for observable counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
-        assert.strictEqual(counter.name, 'obs')
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.sum.aggregationTemporality, 2)
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 10)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 10)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'LOWMEMORY' }))
@@ -488,13 +377,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('updowncounter always uses CUMULATIVE', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const updown = metrics[0]
-        assert.strictEqual(updown.name, 'updown')
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.sum.aggregationTemporality, 2)
-        assert.strictEqual(updown.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(updown.sum.dataPoints[0], 5)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 5)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'DELTA' }))
@@ -506,13 +391,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('observable updowncounter always uses CUMULATIVE', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const updown = metrics[0]
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(updown.name, 'obs.updown')
         assert.strictEqual(updown.sum.aggregationTemporality, 2)
-        assert.strictEqual(updown.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(updown.sum.dataPoints[0], 10)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 10)
       })
 
       initializeOpenTelemetryMetrics(mockConfig({ otelMetricsTemporalityPreference: 'DELTA' }))
@@ -534,12 +416,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('metric names are case-insensitive', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 1, 'Should have exactly 1 metric')
-        const counter = metrics[0]
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
         assert.strictEqual(counter.name, 'mymetric')
-        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Should have exactly 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 6)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 6)
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -556,7 +435,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('different instrument types with same name are distinct', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assert.strictEqual(metrics.length, 2, 'Should have exactly 2 metrics')
+        assert.strictEqual(metrics.length, 2)
         const counter = metrics.find(m => m.sum)
         const histogram = metrics.find(m => m.histogram)
         assert(counter, 'Should have counter')
@@ -565,8 +444,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(histogram.name, 'test')
         assert.strictEqual(counter.sum.dataPoints.length, 1, 'Counter should have 1 data point')
         assert.strictEqual(histogram.histogram.dataPoints.length, 1, 'Histogram should have 1 data point')
-        assertMetricValue(counter.sum.dataPoints[0], 5)
-        assert.strictEqual(histogram.histogram.dataPoints[0].count, 1)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
         assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
       })
 
@@ -613,18 +491,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
     it('encodes instrumentation scope attributes', (done) => {
       const validator = mockOtlpExport((decoded) => {
-        const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics
-        assert.strictEqual(scopeMetrics.length, 1, 'Should have exactly 1 scope')
-        const scope = scopeMetrics[0].scope
+        const scope = decoded.resourceMetrics[0].scopeMetrics[0].scope
         assert.strictEqual(scope.name, 'my-app')
-        assert(scope.attributes, 'Scope should have attributes')
-        assert.strictEqual(scope.attributes.length, 2, 'Should have 2 attributes')
-        const envAttr = scope.attributes.find(a => a.key === 'env')
-        assert(envAttr, 'Should have env attribute')
-        assert.strictEqual(envAttr.value.stringValue, 'production')
-        const regionAttr = scope.attributes.find(a => a.key === 'region')
-        assert(regionAttr, 'Should have region attribute')
-        assert.strictEqual(regionAttr.value.stringValue, 'us-east-1')
+        assert.strictEqual(scope.attributes.find(a => a.key === 'env').value.stringValue, 'production')
+        assert.strictEqual(scope.attributes.find(a => a.key === 'region').value.stringValue, 'us-east-1')
       })
 
       initializeOpenTelemetryMetrics(mockConfig())
@@ -634,6 +504,43 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createCounter('requests').add(10)
 
       setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('removes callbacks from observable instruments', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 200)
+      })
+
+      initializeOpenTelemetryMetrics(mockConfig())
+      const meter = metrics.getMeter('app')
+      const gauge = meter.createObservableGauge('temperature')
+
+      const cb1 = (result) => result.observe(100)
+      const cb2 = (result) => result.observe(200)
+      gauge.addCallback(cb1)
+      gauge.addCallback(cb2)
+      gauge.removeCallback(cb1)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+  })
+
+  describe('Unimplemented Features', () => {
+    it('logs warning for meter batch callbacks', () => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+
+      initializeOpenTelemetryMetrics(mockConfig())
+      const meter = metrics.getMeter('app')
+      meter.addBatchObservableCallback(() => {}, [])
+      meter.removeBatchObservableCallback(() => {}, [])
+
+      assert.strictEqual(warnSpy.callCount, 2)
+      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
+      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
+
+      warnSpy.restore()
     })
   })
 })

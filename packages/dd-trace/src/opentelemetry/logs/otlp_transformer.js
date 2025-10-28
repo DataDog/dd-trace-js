@@ -80,12 +80,12 @@ class OtlpTransformer extends OtlpTransformerBase {
 
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords),
       }]
     }
 
-    return this._serializeToProtobuf(protoLogsService, logsData)
+    return this.serializeToProtobuf(protoLogsService, logsData)
   }
 
   /**
@@ -97,11 +97,11 @@ class OtlpTransformer extends OtlpTransformerBase {
   #transformToJson (logRecords) {
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords)
       }]
     }
-    return this._serializeToJson(logsData)
+    return this.serializeToJson(logsData)
   }
 
   /**
@@ -111,7 +111,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * @private
    */
   #transformScope (logRecords) {
-    const groupedRecords = this._groupByInstrumentationScope(logRecords)
+    const groupedRecords = this.groupByInstrumentationScope(logRecords)
     const scopeLogs = []
 
     for (const records of groupedRecords.values()) {
@@ -159,7 +159,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     }
 
     if (logRecord.attributes) {
-      result.attributes = this._transformAttributes(logRecord.attributes)
+      result.attributes = this.transformAttributes(logRecord.attributes)
     }
 
     if (spanContext?.traceFlags !== undefined) {
@@ -240,7 +240,7 @@ class OtlpTransformer extends OtlpTransformerBase {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this._transformAnyValue(value)
+            value: this.transformAnyValue(value)
           }))
         }
       }

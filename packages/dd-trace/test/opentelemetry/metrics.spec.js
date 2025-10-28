@@ -18,16 +18,19 @@ describe('OTLP Metrics Export', () => {
     let capturedPayload; let capturedHeaders; let validatorCalled = false
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
+      const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
-          statusCode: 200,
-          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
-          setTimeout: () => mockRes
+          ...baseMockRes,
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
         }
 
         const mockReq = {
+          ...baseMockReq,
           write: (data) => { capturedPayload = data },
           end: () => {
             const decoded = protocol === 'json'
@@ -36,17 +39,13 @@ describe('OTLP Metrics Export', () => {
             validator(decoded, capturedHeaders)
             validatorCalled = true
             if (responseHandlers.end) responseHandlers.end()
-          },
-          on: () => {},
-          once: () => {},
-          setTimeout: () => {}
+          }
         }
         callback(mockRes)
         return mockReq
       }
-      const mockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
-      return mockReq
+      callback(baseMockRes)
+      return baseMockReq
     })
 
     return () => {
@@ -90,7 +89,16 @@ describe('OTLP Metrics Export', () => {
       type: 'gauge',
       data: [{ attributes: { instance: 'web-01' }, timeUnixNano: '4000000000', value: 75 }]
     }
-  ].map(m => ({ ...m, instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' } }))
+  ].map(m => (
+    {
+      ...m,
+      instrumentationScope: {
+        name: 'webapp-metrics',
+        version: '1.0.0',
+        schemaUrl: 'https://opentelemetry.io/schemas/v1.28.0',
+        attributes: { 'scope.name': 'checkout' }
+      }
+    }))
 
   beforeEach(() => {
     resourceAttributes = {
@@ -112,7 +120,13 @@ describe('OTLP Metrics Export', () => {
       const resource = decoded.resourceMetrics[0].resource
       assert(resource.attributes.find(a => a.key === 'service.name').value.stringValue === 'ecommerce-api')
 
-      const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+      const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics[0]
+      assert.strictEqual(scopeMetrics.scope.name, 'webapp-metrics')
+      assert.strictEqual(scopeMetrics.scope.version, '1.0.0')
+      assert.strictEqual(scopeMetrics.schemaUrl, 'https://opentelemetry.io/schemas/v1.28.0')
+      assert(scopeMetrics.scope.attributes.find(a => a.key === 'scope.name').value.stringValue === 'checkout')
+
+      const metrics = scopeMetrics.metrics
       assert.strictEqual(metrics[0].sum.isMonotonic, true)
       assert.strictEqual(metrics[1].sum.isMonotonic, false)
       assert(metrics[2].histogram)
@@ -121,12 +135,17 @@ describe('OTLP Metrics Export', () => {
       const jsonTransformer = new OtlpTransformer(resourceAttributes, 'http/json')
       const jsonBuffer = jsonTransformer.transformMetrics(allMetricTypes)
       const jsonDecoded = JSON.parse(jsonBuffer.toString())
-      const jsonMetrics = jsonDecoded.resourceMetrics[0].scopeMetrics[0].metrics
+      const jsonScopeMetrics = jsonDecoded.resourceMetrics[0].scopeMetrics[0]
+      assert.strictEqual(jsonScopeMetrics.scope.name, 'webapp-metrics')
+      assert.strictEqual(jsonScopeMetrics.scope.version, '1.0.0')
+      assert.strictEqual(jsonScopeMetrics.schemaUrl, 'https://opentelemetry.io/schemas/v1.28.0')
+      assert(jsonScopeMetrics.scope.attributes.find(a => a.key === 'scope.name').value.stringValue === 'checkout')
 
-      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, '42')
+      const jsonMetrics = jsonScopeMetrics.metrics
+      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, 42)
       assert.strictEqual(jsonMetrics[1].sum.dataPoints[0].asDouble, -10.5)
-      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, '5')
-      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, '75')
+      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, 5)
+      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, 75)
     })
 
     it('handles missing metric metadata and transforms complex attribute types to OTLP format', () => {
@@ -398,7 +417,7 @@ describe('OTLP Metrics Export', () => {
         'http/protobuf',
         resourceAttributes
       )
-      const tags = exporter._getTelemetryTags()
+      const tags = exporter.telemetryTags
       assert(Array.isArray(tags))
       assert(tags.includes('protocol:http'))
       assert(tags.includes('encoding:protobuf'))

@@ -1,5 +1,7 @@
 'use strict'
 
+const { METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS } = require('./constants')
+
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
@@ -63,46 +65,29 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @returns {Promise<void>} Promise that resolves when export is complete
+   * @returns {void}
    */
   forceFlush () {
-    return new Promise((resolve) => {
-      this.#collectAndExport(() => resolve())
-    })
+    this.#collectAndExport()
   }
 
   /**
    * Shuts down the reader and stops periodic collection.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   * @returns {void}
    */
   shutdown () {
     this.#clearTimer()
-    return this.forceFlush()
+    this.forceFlush()
   }
 
-  /**
-   * Starts the periodic export timer.
-   * @private
-   */
   #startTimer () {
-    if (this.#timer) {
-      return
-    }
+    if (this.#timer) return
 
     this.#timer = setInterval(() => {
       this.#collectAndExport()
-    }, this.#exportInterval)
-
-    // Don't keep the process alive
-    if (this.#timer.unref) {
-      this.#timer.unref()
-    }
+    }, this.#exportInterval).unref()
   }
 
-  /**
-   * Clears the periodic export timer.
-   * @private
-   */
   #clearTimer () {
     if (this.#timer) {
       clearInterval(this.#timer)
@@ -110,37 +95,24 @@ class PeriodicMetricReader {
     }
   }
 
-  /**
-   * Collects measurements from all sources and exports them.
-   * @private
-   */
   #collectAndExport (callback = () => {}) {
-    // Collect synchronous measurements
-    const synchronousMeasurements = this.#measurements.splice(0)
+    const allMeasurements = this.#measurements.splice(0)
 
-    // Collect asynchronous measurements from observable instruments
-    const asynchronousMeasurements = []
     for (const instrument of this.#observableInstruments) {
-      const observations = instrument.collect()
-      asynchronousMeasurements.push(...observations)
+      allMeasurements.push(...instrument.collect())
     }
-
-    // Combine all measurements
-    const allMeasurements = [...synchronousMeasurements, ...asynchronousMeasurements]
 
     if (allMeasurements.length === 0) {
       callback()
       return
     }
 
-    // Aggregate measurements into metrics with temporality handling
     const metrics = this.#aggregator.aggregate(
       allMeasurements,
       this.#cumulativeState,
       this.#lastExportedState
     )
 
-    // Export metrics
     this.exporter.export(metrics, callback)
   }
 }
@@ -153,51 +125,35 @@ class MetricAggregator {
   #temporalityPreference
   #startTime
 
-  constructor (temporalityPreference = 'DELTA') {
+  constructor (temporalityPreference = TEMPORALITY.DELTA) {
     this.#temporalityPreference = temporalityPreference
-    this.#startTime = Date.now() * 1e6 // Start time in nanoseconds
+    this.#startTime = Number(process.hrtime.bigint())
   }
 
-  /**
-   * Determines the temporality for a given instrument type.
-   *
-   * @param {string} type - The instrument type
-   * @returns {string} 'DELTA', 'CUMULATIVE', or 'GAUGE'
-   * @private
-   */
   #getTemporality (type) {
     // UpDownCounter and Observable UpDownCounter always use CUMULATIVE
-    if (type === 'updowncounter' || type === 'observable-updowncounter') {
-      return 'CUMULATIVE'
+    if (type === METRIC_TYPES.UPDOWNCOUNTER || type === METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER) {
+      return TEMPORALITY.CUMULATIVE
     }
 
     // Gauge always uses last-value aggregation
-    if (type === 'gauge') {
-      return 'GAUGE'
+    if (type === METRIC_TYPES.GAUGE) {
+      return TEMPORALITY.GAUGE
     }
 
-    // For other instruments, follow the temporality preference
     switch (this.#temporalityPreference) {
-      case 'CUMULATIVE':
-        return 'CUMULATIVE'
-      case 'LOWMEMORY':
-        // LOWMEMORY: only synchronous Counter and Histogram use DELTA
-        // Observable Counter uses CUMULATIVE
-        return (type === 'counter' || type === 'histogram') ? 'DELTA' : 'CUMULATIVE'
+      case TEMPORALITY.CUMULATIVE:
+        return TEMPORALITY.CUMULATIVE
+      case TEMPORALITY.LOWMEMORY:
+        // LOWMEMORY: only synchronous Counter and Histogram use DELTA, Observable Counter uses CUMULATIVE
+        return (type === METRIC_TYPES.COUNTER || type === METRIC_TYPES.HISTOGRAM)
+          ? TEMPORALITY.DELTA
+          : TEMPORALITY.CUMULATIVE
       default:
-        // DELTA (default): Counter, Observable Counter, and Histogram use DELTA
-        return 'DELTA'
+        return TEMPORALITY.DELTA
     }
   }
 
-  /**
-   * Aggregates measurements into metrics suitable for OTLP export.
-   *
-   * @param {Array} measurements - Array of measurement objects
-   * @param {Map} cumulativeState - State map for tracking cumulative values
-   * @param {Map} lastExportedState - State map for tracking last exported values (for delta calculation)
-   * @returns {Array} Array of aggregated metrics
-   */
   aggregate (measurements, cumulativeState, lastExportedState) {
     const metricsMap = new Map()
 
@@ -213,11 +169,10 @@ class MetricAggregator {
         timestamp
       } = measurement
 
-      // Create unique key for this metric
-      const scopeKey = `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
+      const scopeKey = this.#getScopeKey(instrumentationScope)
       const metricKey = `${scopeKey}:${name}:${type}`
       const attrKey = JSON.stringify(attributes)
-      const stateKey = `${metricKey}:${attrKey}`
+      const stateKey = this.#getStateKey(scopeKey, name, type, attrKey)
 
       if (!metricsMap.has(metricKey)) {
         metricsMap.set(metricKey, {
@@ -227,46 +182,61 @@ class MetricAggregator {
           type,
           instrumentationScope,
           temporality: this.#getTemporality(type),
-          data: []
+          data: [],
+          dataPointMap: new Map()
         })
       }
 
       const metric = metricsMap.get(metricKey)
 
-      // Aggregate based on instrument type
-      if (type === 'histogram') {
-        this.#aggregateHistogram(metric, value, attributes, timestamp, stateKey, cumulativeState, lastExportedState)
-      } else if (type === 'gauge' || type === 'observable-counter' || type === 'observable-updowncounter') {
+      if (type === METRIC_TYPES.HISTOGRAM) {
+        this.#aggregateHistogram(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
+      } else if (type === METRIC_TYPES.GAUGE ||
+                 type === METRIC_TYPES.OBSERVABLECOUNTER ||
+                 type === METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER) {
         // Gauges and observable instruments use last value (observations report current total, not increments)
-        this.#aggregateGauge(metric, value, attributes, timestamp)
+        this.#aggregateLastValue(metric, value, attributes, attrKey, timestamp)
       } else {
         // Synchronous Counters and UpDownCounters use sum aggregation
-        this.#aggregateSum(metric, value, attributes, timestamp, stateKey, cumulativeState, lastExportedState)
+        this.#aggregateSum(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
       }
     }
 
     const metrics = [...metricsMap.values()]
 
-    // Apply temporality to final aggregated metrics
+    this.#applyDeltaTemporality(metrics, lastExportedState)
+
+    return metrics
+  }
+
+  #getScopeKey (instrumentationScope) {
+    return `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
+  }
+
+  #getStateKey (scopeKey, name, type, attrKey) {
+    return `${scopeKey}:${name}:${type}:${attrKey}`
+  }
+
+  #isDeltaType (type) {
+    return type === METRIC_TYPES.COUNTER ||
+           type === METRIC_TYPES.OBSERVABLECOUNTER ||
+           type === METRIC_TYPES.HISTOGRAM
+  }
+
+  #applyDeltaTemporality (metrics, lastExportedState) {
     for (const metric of metrics) {
-      const isDeltaType = metric.type === 'counter' ||
-                         metric.type === 'observable-counter' ||
-                         metric.type === 'histogram'
+      if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
+        const scopeKey = this.#getScopeKey(metric.instrumentationScope)
 
-      if (metric.temporality === 'DELTA' && isDeltaType) {
-        // For DELTA temporality, calculate difference from last export
         for (const dataPoint of metric.data) {
-          const attrKey = JSON.stringify(dataPoint.attributes)
-          const scopeKey = `${metric.instrumentationScope.name}@` +
-            `${metric.instrumentationScope.version}@${metric.instrumentationScope.schemaUrl}`
-          const stateKey = `${scopeKey}:${metric.name}:${metric.type}:${attrKey}`
+          const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint._attrKey)
 
-          if (metric.type === 'counter' || metric.type === 'observable-counter') {
+          if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
             const lastValue = lastExportedState.get(stateKey) || 0
             const currentValue = dataPoint.value
             dataPoint.value = currentValue - lastValue
             lastExportedState.set(stateKey, currentValue)
-          } else if (metric.type === 'histogram') {
+          } else if (metric.type === METRIC_TYPES.HISTOGRAM) {
             const lastState = lastExportedState.get(stateKey) || {
               count: 0,
               sum: 0,
@@ -288,122 +258,95 @@ class MetricAggregator {
           }
         }
       }
-    }
 
-    return metrics
+      delete metric.dataPointMap
+    }
   }
 
-  /**
-   * Finds or creates a data point in metric.data for the given attributes.
-   * @private
-   */
-  #findOrCreateDataPoint (metric, attributes, initialDataPoint) {
-    const attrKey = JSON.stringify(attributes)
-    let dataPoint = metric.data.find(dp => JSON.stringify(dp.attributes) === attrKey)
+  #findOrCreateDataPoint (metric, attributes, attrKey, createInitialDataPoint) {
+    let dataPoint = metric.dataPointMap.get(attrKey)
 
     if (!dataPoint) {
-      dataPoint = { attributes, ...initialDataPoint }
+      dataPoint = { attributes, _attrKey: attrKey, ...createInitialDataPoint() }
       metric.data.push(dataPoint)
+      metric.dataPointMap.set(attrKey, dataPoint)
     }
 
     return dataPoint
   }
 
-  /**
-   * Aggregates sum values for counters and updowncounters with temporality.
-   * @private
-   */
-  #aggregateSum (metric, value, attributes, timestamp, stateKey, cumulativeState, lastExportedState) {
-    // Initialize or update cumulative state
+  #aggregateSum (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
         value: 0,
-        startTime: metric.temporality === 'CUMULATIVE' ? this.#startTime : timestamp
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
       })
     }
 
     const state = cumulativeState.get(stateKey)
     state.value += value
 
-    // Find or create data point
-    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, {
+    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       startTimeUnixNano: state.startTime,
       timeUnixNano: timestamp,
       value: 0
-    })
+    }))
 
-    // Update the data point with cumulative state value
-    // Temporality will be applied after all measurements are aggregated
     dataPoint.value = state.value
     dataPoint.timeUnixNano = timestamp
   }
 
-  /**
-   * Aggregates gauge values (last value wins).
-   * @private
-   */
-  #aggregateGauge (metric, value, attributes, timestamp) {
-    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, {
+  #aggregateLastValue (metric, value, attributes, attrKey, timestamp) {
+    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       timeUnixNano: timestamp,
       value: 0
-    })
+    }))
 
-    // Last value wins for gauges
     dataPoint.value = value
     dataPoint.timeUnixNano = timestamp
   }
 
-  /**
-   * Aggregates histogram values into buckets with temporality.
-   * @private
-   */
-  #aggregateHistogram (metric, value, attributes, timestamp, stateKey, cumulativeState, lastExportedState) {
-    const defaultBuckets = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10_000]
+  #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
+    const buckets = DEFAULT_HISTOGRAM_BUCKETS
 
-    // Initialize or get cumulative state
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
         count: 0,
         sum: 0,
         min: Infinity,
         max: -Infinity,
-        bucketCounts: new Array(defaultBuckets.length + 1).fill(0),
-        startTime: metric.temporality === 'CUMULATIVE' ? this.#startTime : timestamp
+        bucketCounts: new Array(buckets.length + 1).fill(0),
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
       })
     }
 
     const state = cumulativeState.get(stateKey)
 
-    // Find which bucket this value belongs to
-    let bucketIndex = defaultBuckets.length
-    for (let i = 0; i < defaultBuckets.length; i++) {
-      if (value <= defaultBuckets[i]) {
+    let bucketIndex = buckets.length
+    for (let i = 0; i < buckets.length; i++) {
+      if (value <= buckets[i]) {
         bucketIndex = i
         break
       }
     }
 
-    // Update cumulative state
     state.bucketCounts[bucketIndex]++
     state.count++
     state.sum += value
     state.min = Math.min(state.min, value)
     state.max = Math.max(state.max, value)
 
-    // Find or create data point
-    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, {
+    const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       startTimeUnixNano: state.startTime,
       timeUnixNano: timestamp,
       count: 0,
       sum: 0,
       min: Infinity,
       max: -Infinity,
-      bucketCounts: new Array(defaultBuckets.length + 1).fill(0),
-      explicitBounds: defaultBuckets
-    })
+      bucketCounts: new Array(buckets.length + 1).fill(0),
+      explicitBounds: buckets
+    }))
 
-    // Update data point with cumulative state
-    // Temporality will be applied after all measurements are aggregated
     dataPoint.count = state.count
     dataPoint.sum = state.sum
     dataPoint.min = state.min

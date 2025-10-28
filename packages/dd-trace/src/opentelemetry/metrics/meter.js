@@ -1,7 +1,11 @@
 'use strict'
 
 const packageVersion = require('../../../../../package.json').version
-const { Counter, UpDownCounter, Histogram, Gauge, ObservableGauge } = require('./instruments')
+const {
+  Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
+} = require('./instruments')
+const log = require('../../log')
+const { METRIC_TYPES } = require('./constants')
 
 /**
  * @typedef {import('@opentelemetry/api').Counter} Counter
@@ -16,7 +20,7 @@ const { Counter, UpDownCounter, Histogram, Gauge, ObservableGauge } = require('.
  * Meter provides methods to create metric instruments.
  *
  * This implementation follows the OpenTelemetry JavaScript API Meter:
- * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api.Meter.html
+ * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api._opentelemetry_api.Meter.html
  *
  * @class Meter
  */
@@ -45,6 +49,18 @@ class Meter {
     this.#instruments = new Map()
   }
 
+  #getOrCreateInstrument (name, type, InstrumentClass, options = {}) {
+    const normalizedName = name.toLowerCase()
+    const key = `${type}:${normalizedName}`
+    if (!this.#instruments.has(key)) {
+      const instrument = new InstrumentClass(
+        normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
+      )
+      this.#instruments.set(key, instrument)
+    }
+    return this.#instruments.get(key)
+  }
+
   /**
    * Creates a Counter instrument.
    *
@@ -56,13 +72,7 @@ class Meter {
    * @returns {Counter} Counter instrument
    */
   createCounter (name, options = {}) {
-    const normalizedName = name.toLowerCase()
-    const key = `counter:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const counter = new Counter(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
-      this.#instruments.set(key, counter)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.COUNTER, Counter, options)
   }
 
   /**
@@ -76,13 +86,7 @@ class Meter {
    * @returns {UpDownCounter} UpDownCounter instrument
    */
   createUpDownCounter (name, options = {}) {
-    const normalizedName = name.toLowerCase()
-    const key = `updowncounter:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const counter = new UpDownCounter(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
-      this.#instruments.set(key, counter)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.UPDOWNCOUNTER, UpDownCounter, options)
   }
 
   /**
@@ -96,13 +100,7 @@ class Meter {
    * @returns {Histogram} Histogram instrument
    */
   createHistogram (name, options = {}) {
-    const normalizedName = name.toLowerCase()
-    const key = `histogram:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const histogram = new Histogram(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
-      this.#instruments.set(key, histogram)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.HISTOGRAM, Histogram, options)
   }
 
   /**
@@ -116,13 +114,7 @@ class Meter {
    * @returns {Gauge} Gauge instrument
    */
   createGauge (name, options = {}) {
-    const normalizedName = name.toLowerCase()
-    const key = `gauge:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const gauge = new Gauge(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
-      this.#instruments.set(key, gauge)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.GAUGE, Gauge, options)
   }
 
   /**
@@ -136,13 +128,7 @@ class Meter {
    * @returns {ObservableGauge} ObservableGauge instrument
    */
   createObservableGauge (name, options = {}) {
-    const normalizedName = name.toLowerCase()
-    const key = `observable-gauge:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const gauge = new ObservableGauge(normalizedName, options, this.#instrumentationScope, this.meterProvider.reader)
-      this.#instruments.set(key, gauge)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLEGAUGE, ObservableGauge, options)
   }
 
   /**
@@ -155,16 +141,7 @@ class Meter {
    * @returns {ObservableCounter} ObservableCounter instrument
    */
   createObservableCounter (name, options = {}) {
-    const { ObservableCounter } = require('./instruments')
-    const normalizedName = name.toLowerCase()
-    const key = `observable-counter:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const counter = new ObservableCounter(
-        normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
-      )
-      this.#instruments.set(key, counter)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLECOUNTER, ObservableCounter, options)
   }
 
   /**
@@ -177,16 +154,27 @@ class Meter {
    * @returns {ObservableUpDownCounter} ObservableUpDownCounter instrument
    */
   createObservableUpDownCounter (name, options = {}) {
-    const { ObservableUpDownCounter } = require('./instruments')
-    const normalizedName = name.toLowerCase()
-    const key = `observable-updowncounter:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const updown = new ObservableUpDownCounter(
-        normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
-      )
-      this.#instruments.set(key, updown)
-    }
-    return this.#instruments.get(key)
+    return this.#getOrCreateInstrument(name, METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER, ObservableUpDownCounter, options)
+  }
+
+  /**
+   * Adds a batch observable callback (not implemented).
+   *
+   * @param {Function} callback - Batch observable callback
+   * @param {Array} observables - Array of observable instruments
+   */
+  addBatchObservableCallback (callback, observables) {
+    log.warn('addBatchObservableCallback is not implemented')
+  }
+
+  /**
+   * Removes a batch observable callback (not implemented).
+   *
+   * @param {Function} callback - Batch observable callback
+   * @param {Array} observables - Array of observable instruments
+   */
+  removeBatchObservableCallback (callback, observables) {
+    log.warn('removeBatchObservableCallback is not implemented')
   }
 }
 
