@@ -3,6 +3,7 @@
 const { metrics } = require('@opentelemetry/api')
 const Meter = require('./meter')
 const log = require('../../log')
+const { context } = require('@opentelemetry/api')
 const ContextManager = require('../context_manager')
 
 /**
@@ -74,29 +75,27 @@ class MeterProvider {
       return
     }
     // Set context manager (may be needed for future trace/metrics correlation)
-    this.#contextManager.enable()
+    context.setGlobalContextManager(this.#contextManager)
     metrics.setGlobalMeterProvider(this)
   }
 
   /**
    * Forces a flush of all pending metrics.
-   * @returns {Promise<void>} Promise that resolves when flush is complete
+   * @returns {void}
    */
-  async forceFlush () {
-    if (!this.isShutdown && this.reader) {
-      return await this.reader.forceFlush()
-    }
+  forceFlush () {
+    if (!this.isShutdown && this.reader) this.reader.forceFlush()
   }
 
   /**
    * Shuts down the meter provider and all associated readers.
-   * @returns {Promise<void>} Promise that resolves when shutdown is complete
+   * @returns {void}
    */
-  async shutdown () {
+  shutdown () {
     if (!this.isShutdown) {
       this.isShutdown = true
       if (this.reader) {
-        return await this.reader.shutdown()
+        this.reader.shutdown()
       }
     }
   }
