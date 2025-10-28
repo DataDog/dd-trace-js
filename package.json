@@ -214,7 +214,7 @@
     "tap": "^16.3.10",
     "tiktoken": "^1.0.21",
     "typescript": "^5.9.2",
-    "workerpool": "^9.2.0",
+    "workerpool": "^10.0.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
   }
