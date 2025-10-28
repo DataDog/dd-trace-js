@@ -74,7 +74,7 @@ let sandbox
  * @param {string} expectedSource
  */
 async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetryPoints, expectedSource) {
-  const cwd = sandboxCwd()
+  const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints.length > 0)
   const pid = await runAndCheckOutput(filename, cwd, expectedOut, expectedSource)
   const msgs = await cleanup()
@@ -391,7 +391,7 @@ function varySandbox (filename, variants, namedVariant, packageName = variants) 
     }
   }
 
-  const origFileData = readFileSync(path.join(sandboxCwd(), filename), 'utf8')
+  const origFileData = readFileSync(path.join(sandbox.folder, filename), 'utf8')
   const { name: prefix, ext: suffix } = path.parse(filename)
   const variantFilenames = /** @type {Variants} */ ({})
 
@@ -609,7 +609,7 @@ function useSandbox (...args) {
  * @returns {string}
  */
 function sandboxCwd () {
-  return sandboxCwd()
+  return sandbox.folder
 }
 
 /**
@@ -689,8 +689,6 @@ module.exports = {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   useEnv,
-  useSandbox,
-  sandboxCwd,
   setShouldKill,
   sandboxCwd,
   useSandbox,
