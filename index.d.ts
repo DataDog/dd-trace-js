@@ -181,6 +181,7 @@ interface Tracer extends opentracing.Tracer {
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
+  "ai": tracer.plugins.ai;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
@@ -1641,6 +1642,12 @@ declare namespace tracer {
      * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
      */
     interface aerospike extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
+     */
+    interface ai extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
