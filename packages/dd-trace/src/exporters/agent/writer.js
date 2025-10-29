@@ -21,14 +21,24 @@ class Writer extends BaseWriter {
     this._config = config
     this._encoder = new AgentEncoder(this)
     this._retryQueue = []
-    this._retryInProgress = false
-    this._maxRetryQueueSize = 100
-    this._maxRetryAttempts = 3
-    this._baseRetryDelay = 1000 // 1 second
+    this._retryTimer = null
+    this._maxRetryQueueSize = config.maxRetryQueueSize || 100
+    this._maxRetryAttempts = config.maxRetryAttempts || 3
+    this._baseRetryDelay = config.baseRetryDelay || 1000 // 1 second
   }
 
   _sendPayload (data, count, done) {
-    this._sendPayloadWithRetry(data, count, done, 0)
+    this._sendPayloadWithRetry(data, count, this._wrapDoneCallback(done), 0)
+  }
+
+  _wrapDoneCallback (done) {
+    let doneCalled = false
+    return () => {
+      if (!doneCalled) {
+        doneCalled = true
+        done()
+      }
+    }
   }
 
   _sendPayloadWithRetry (data, count, done, retryAttempt = 0) {
@@ -99,6 +109,7 @@ class Writer extends BaseWriter {
 
     // Calculate exponential backoff delay
     const delay = this._baseRetryDelay * (2 ** retryAttempt)
+    const scheduledAt = Date.now() + delay
 
     // Track retry metrics
     runtimeMetrics.increment(`${METRIC_PREFIX}.retries.scheduled`, true)
@@ -106,42 +117,87 @@ class Writer extends BaseWriter {
 
     log.debug(`Scheduling retry attempt ${retryAttempt + 1} in ${delay}ms`)
 
-    // Add to retry queue
+    // Add to retry queue with scheduled time
     this._retryQueue.push({
       data,
       count,
       done,
-      retryAttempt: retryAttempt + 1
+      retryAttempt: retryAttempt + 1,
+      scheduledAt
     })
 
-    // Process retry queue after delay
-    if (!this._retryInProgress) {
-      this._retryInProgress = true
-      setTimeout(() => this._processRetryQueue(), delay)
-    }
+    // Start processing if not already running
+    this._scheduleNextRetry()
   }
 
-  _processRetryQueue () {
+  _scheduleNextRetry () {
+    // Clear any existing timer
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer)
+      this._retryTimer = null
+    }
+
     if (this._retryQueue.length === 0) {
-      this._retryInProgress = false
       return
     }
 
-    const payload = this._retryQueue.shift()
-    this._sendPayloadWithRetry(
-      payload.data,
-      payload.count,
-      payload.done,
-      payload.retryAttempt
-    )
+    // Find the next payload that's ready to send
+    const now = Date.now()
+    let readyIndex = -1
 
-    // Continue processing queue if there are more items
-    if (this._retryQueue.length > 0) {
-      const nextPayload = this._retryQueue[0]
-      const delay = this._baseRetryDelay * (2 ** (nextPayload.retryAttempt - 1))
-      setTimeout(() => this._processRetryQueue(), delay)
+    for (let i = 0; i < this._retryQueue.length; i++) {
+      if (this._retryQueue[i].scheduledAt <= now) {
+        readyIndex = i
+        break
+      }
+    }
+
+    if (readyIndex >= 0) {
+      // Process ready payload immediately
+      const payload = this._retryQueue.splice(readyIndex, 1)[0]
+
+      try {
+        this._sendPayloadWithRetry(
+          payload.data,
+          payload.count,
+          payload.done,
+          payload.retryAttempt
+        )
+      } catch (err) {
+        log.errorWithoutTelemetry('Error processing retry', err)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.retries.dropped`, true)
+        payload.done()
+      }
+
+      // Schedule next immediately if there are more items
+      if (this._retryQueue.length > 0) {
+        setImmediate(() => this._scheduleNextRetry())
+      }
     } else {
-      this._retryInProgress = false
+      // Nothing ready yet, wait for the earliest one
+      const earliestTime = Math.min(...this._retryQueue.map(p => p.scheduledAt))
+      const delay = Math.max(0, earliestTime - now)
+
+      this._retryTimer = setTimeout(() => {
+        this._retryTimer = null
+        this._scheduleNextRetry()
+      }, delay)
+    }
+  }
+
+  _destroy () {
+    // Clear pending timer
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer)
+      this._retryTimer = null
+    }
+
+    // Drain queue and call done callbacks
+    while (this._retryQueue.length > 0) {
+      const payload = this._retryQueue.shift()
+      log.debug('Dropping queued retry due to writer cleanup')
+      runtimeMetrics.increment(`${METRIC_PREFIX}.retries.dropped`, true)
+      payload.done()
     }
   }
 }
