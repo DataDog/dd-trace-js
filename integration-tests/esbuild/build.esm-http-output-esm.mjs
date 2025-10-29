@@ -18,10 +18,6 @@ const external = [
   // required if you use profiling
   '@datadog/pprof',
 
-  // @openfeature/core is a peer dependency of @openfeature/server-sdk
-  // which is used by @datadog/openfeature-node-server
-  '@openfeature/core',
-
   // required if you use Datadog security features
   '@datadog/native-appsec',
   '@datadog/native-iast-taint-tracking',
