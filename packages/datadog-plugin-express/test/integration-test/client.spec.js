@@ -12,7 +12,7 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 const semver = require('semver')
 
-describe.only('esm', () => {
+describe('esm', () => {
   withVersions('express', 'express', version => {
     let agent
     let proc
