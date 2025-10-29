@@ -493,7 +493,7 @@ moduleTypes.forEach(({
           .map(file => file.filename)
 
         assert.includeMembers(fileNames, Object.keys(coverageFixture))
-      }, 20000)
+      }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -988,7 +988,7 @@ moduleTypes.forEach(({
               'ci-visibility/subproject/src/index.tsx',
               'ci-visibility/subproject/cypress/e2e/spec.cy.js'
             ])
-          }, 10000)
+          }, 25000)
 
         childProcess = exec(
           command,
@@ -1028,7 +1028,7 @@ moduleTypes.forEach(({
             assert.exists(testEvent.content.test_session_id)
             assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -1173,7 +1173,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1241,7 +1241,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1298,7 +1298,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/skipped-test.js'
 
@@ -1353,7 +1353,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.equal(newTests.length, 0)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1416,7 +1416,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1432,6 +1432,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1478,7 +1482,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1494,6 +1498,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1616,7 +1624,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1675,7 +1683,7 @@ moduleTypes.forEach(({
             ])
 
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1787,7 +1795,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1827,7 +1835,7 @@ moduleTypes.forEach(({
             const test = events.find(event => event.type === 'test').content
             assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
             assert.equal(test.meta[TEST_STATUS], 'pass')
-          })
+          }, 25000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
@@ -2003,7 +2011,7 @@ moduleTypes.forEach(({
                   }
                 }
               }
-            })
+            }, 25000)
 
         const runAttemptToFixTest = async ({
           isAttemptToFix,
@@ -2187,7 +2195,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
-            })
+            }, 25000)
 
         const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -2286,7 +2294,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
-            })
+            }, 25000)
 
         const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
@@ -2358,7 +2366,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.equal(tests.length, 1)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS,

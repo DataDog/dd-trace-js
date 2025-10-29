@@ -1,6 +1,11 @@
 'use strict'
 
+const assert = require('node:assert')
+const { once } = require('node:events')
+
 const { expect } = require('chai')
+const { describe, before, after, it } = require('mocha')
+
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -15,6 +20,32 @@ describe('Plugin', () => {
 
   describe('ws', () => {
     withVersions('ws', 'ws', '>=8.0.0', version => {
+      describe('regression tests', () => {
+        before(async () => {
+          await agent.load(['ws'], [{
+            service: 'some',
+            traceWebsocketMessagesEnabled: true
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+        })
+
+        it('should emit original error in case close is called before connection is established', async () => {
+          const socket = new WebSocket('wss://localhost:12345')
+
+          const errorPromise = once(socket, 'error')
+          socket.close()
+
+          const error = await errorPromise
+
+          // Some versions emit an array with an error, some directly emit the error
+          assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
+        })
+
+        after(async () => {
+          agent.close({ ritmReset: false, wipe: true })
+        })
+      })
+
       describe('when using WebSocket', () => {
         route = 'test'
         beforeEach(async () => {
