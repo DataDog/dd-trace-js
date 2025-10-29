@@ -122,7 +122,8 @@ function describeWriter (protocolVersion) {
             'Datadog-Meta-Lang-Version': process.version,
             'Datadog-Meta-Lang-Interpreter': 'v8',
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
-            'X-Datadog-Trace-Count': '2'
+            'X-Datadog-Trace-Count': '2',
+            'Datadog-Send-Real-Http-Status': 'true'
           },
           lookup: undefined
         })
@@ -145,8 +146,18 @@ function describeWriter (protocolVersion) {
           'Datadog-Meta-Lang-Version': process.version,
           'Datadog-Meta-Lang-Interpreter': 'v8',
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
+          'X-Datadog-Trace-Count': '2',
+          'Datadog-Send-Real-Http-Status': 'true'
         })
+        done()
+      })
+    })
+
+    it('should include Datadog-Send-Real-Http-Status header', (done) => {
+      encoder.count.returns(2)
+      encoder.makePayload.returns([Buffer.from('data')])
+      writer.flush(() => {
+        expect(request.getCall(0).args[1].headers['Datadog-Send-Real-Http-Status']).to.equal('true')
         done()
       })
     })
