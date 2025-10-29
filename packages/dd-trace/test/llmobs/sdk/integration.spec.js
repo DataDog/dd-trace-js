@@ -1,14 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
 
 const assert = require('node:assert')
-
-// const tracerVersion = require('../../../../../package.json').version
 
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -38,7 +35,7 @@ describe('end to end sdk integration tests', () => {
       })
     })
 
-    expect(result).to.equal('boom')
+    assert.equal(result, 'boom')
 
     const { apmSpans, llmobsSpans } = await getEvents()
     assert.equal(apmSpans.length, 3)
@@ -50,8 +47,8 @@ describe('end to end sdk integration tests', () => {
       name: 'agent',
       tags: { ml_app: 'test', bar: 'baz' },
       metadata: { foo: 'bar' },
-      inputData: 'hello',
-      outputData: 'world'
+      inputValue: 'hello',
+      outputValue: 'world'
     })
 
     assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -60,8 +57,8 @@ describe('end to end sdk integration tests', () => {
       parentId: llmobsSpans[0].span_id,
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
-      inputData: 'world',
-      outputData: 'hello'
+      inputValue: 'world',
+      outputValue: 'hello'
     })
   })
 
@@ -98,8 +95,8 @@ describe('end to end sdk integration tests', () => {
       spanKind: 'agent',
       name: 'agent',
       tags: { ml_app: 'test' },
-      inputData: 'hello',
-      outputData: 'world',
+      inputValue: 'hello',
+      outputValue: 'world',
       metadata: { foo: 'bar' }
     })
 
@@ -109,8 +106,8 @@ describe('end to end sdk integration tests', () => {
       parentId: llmobsSpans[0].span_id,
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
-      inputData: 'my custom input',
-      outputData: 'custom'
+      inputValue: 'my custom input',
+      outputValue: 'custom'
     })
   })
 

@@ -70,7 +70,7 @@ describe('Plugin', () => {
               span: apmSpans[0],
               spanKind: 'llm',
               name: 'bedrock-runtime.command',
-              inputData: model.systemPrompt
+              inputMessages: model.systemPrompt
                 ? [
                     { content: model.systemPrompt, role: 'system' },
                     { content: model.userPrompt, role: 'user' }
@@ -78,7 +78,7 @@ describe('Plugin', () => {
                 : [
                     { content: model.userPrompt }
                   ],
-              outputData: [expectedOutput],
+              outputMessages: [expectedOutput],
               metrics: {
                 input_tokens: model.response.inputTokens,
                 output_tokens: model.response.outputTokens,
@@ -119,7 +119,7 @@ describe('Plugin', () => {
               span: apmSpans[0],
               spanKind: 'llm',
               name: 'bedrock-runtime.command',
-              inputData: model.systemPrompt
+              inputMessages: model.systemPrompt
                 ? [
                     { content: model.systemPrompt, role: 'system' },
                     { content: model.userPrompt, role: 'user' }
@@ -127,7 +127,7 @@ describe('Plugin', () => {
                 : [
                     { content: model.userPrompt }
                   ],
-              outputData: [{ content: expectedResponseObject.text, role: 'assistant' }],
+              outputMessages: [{ content: expectedResponseObject.text, role: 'assistant' }],
               metrics: {
                 input_tokens: expectedResponseObject.inputTokens,
                 output_tokens: expectedResponseObject.outputTokens,
@@ -171,8 +171,8 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputData: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
-            outputData: [expectedOutput],
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheWriteRequest.response.inputTokens,
               output_tokens: cacheWriteRequest.response.outputTokens,
@@ -214,8 +214,8 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputData: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
-            outputData: [expectedOutput],
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheWriteRequest.userPrompt }],
+            outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheWriteRequest.response.inputTokens,
               output_tokens: cacheWriteRequest.response.outputTokens,
@@ -260,8 +260,8 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputData: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
-            outputData: [expectedOutput],
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheReadRequest.response.inputTokens,
               output_tokens: cacheReadRequest.response.outputTokens,
@@ -303,8 +303,8 @@ describe('Plugin', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'bedrock-runtime.command',
-            inputData: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
-            outputData: [expectedOutput],
+            inputMessages: [{ content: 'You are a geography expert'.repeat(200) + cacheReadRequest.userPrompt }],
+            outputMessages: [expectedOutput],
             metrics: {
               input_tokens: cacheReadRequest.response.inputTokens,
               output_tokens: cacheReadRequest.response.outputTokens,

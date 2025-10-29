@@ -138,8 +138,8 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-instruct',
               modelProvider: 'openai',
               name: 'langchain.llms.openai.OpenAI',
-              inputData: [{ content: 'What is 2 + 2?' }],
-              outputData: [{ content: '\n\n4' }],
+              inputMessages: [{ content: 'What is 2 + 2?' }],
+              outputMessages: [{ content: '\n\n4' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -160,8 +160,8 @@ describe('integrations', () => {
               modelName: 'text-embedding-3-small',
               modelProvider: 'openai',
               name: 'langchain.llms.openai.OpenAI',
-              inputData: [{ content: 'Hello!' }],
-              outputData: [{ content: '' }],
+              inputMessages: [{ content: 'Hello!' }],
+              outputMessages: [{ content: '' }],
               metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
@@ -205,8 +205,8 @@ describe('integrations', () => {
               modelName: 'command',
               modelProvider: 'cohere',
               name: 'langchain.llms.cohere.Cohere',
-              inputData: [{ content: 'Hello!' }],
-              outputData: [{ content: 'hello world!' }],
+              inputMessages: [{ content: 'Hello!' }],
+              outputMessages: [{ content: 'hello world!' }],
               metadata: MOCK_ANY,
               // @langchain/cohere does not provide token usage in the response
               metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
@@ -228,8 +228,8 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'What is 2 + 2?', role: 'user' }],
-              outputData: [{ content: '2 + 2 = 4', role: 'assistant' }],
+              inputMessages: [{ content: 'What is 2 + 2?', role: 'user' }],
+              outputMessages: [{ content: '2 + 2 = 4', role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 15, output_tokens: 7, total_tokens: 22 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -250,8 +250,8 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-instruct',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'Hello!', role: 'user' }],
-              outputData: [{ content: '' }],
+              inputMessages: [{ content: 'Hello!', role: 'user' }],
+              outputMessages: [{ content: '' }],
               metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
@@ -274,8 +274,8 @@ describe('integrations', () => {
               modelName: 'claude-3-5-sonnet-20241022',
               modelProvider: 'anthropic',
               name: 'langchain.chat_models.anthropic.ChatAnthropic',
-              inputData: [{ content: 'Hello!', role: 'user' }],
-              outputData: [{ content: 'Hi there! How can I help you today?', role: 'assistant' }],
+              inputMessages: [{ content: 'Hello!', role: 'user' }],
+              outputMessages: [{ content: 'Hi there! How can I help you today?', role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 9, output_tokens: 13, total_tokens: 22 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -312,8 +312,8 @@ describe('integrations', () => {
               modelName: 'gpt-4',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'My name is SpongeBob and I live in Bikini Bottom.', role: 'user' }],
-              outputData: [{
+              inputMessages: [{ content: 'My name is SpongeBob and I live in Bikini Bottom.', role: 'user' }],
+              outputMessages: [{
                 content: '',
                 role: 'assistant',
                 tool_calls: [{
@@ -344,8 +344,8 @@ describe('integrations', () => {
               modelName: 'text-embedding-ada-002',
               modelProvider: 'openai',
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-              inputData: [{ text: 'Hello, world!' }],
-              outputData: '[1 embedding(s) returned with size 1536]',
+              inputDocuments: [{ text: 'Hello, world!' }],
+              outputValue: '[1 embedding(s) returned with size 1536]',
               metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -365,7 +365,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-instruct',
               modelProvider: 'openai',
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-              inputData: [{ text: 'Hello, world!' }],
+              inputDocuments: [{ text: 'Hello, world!' }],
               metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
@@ -388,8 +388,8 @@ describe('integrations', () => {
               modelName: 'text-embedding-ada-002',
               modelProvider: 'openai',
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
-              inputData: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
-              outputData: '[2 embedding(s) returned with size 1536]',
+              inputDocuments: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
+              outputValue: '[2 embedding(s) returned with size 1536]',
               metadata: MOCK_ANY,
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -425,8 +425,8 @@ describe('integrations', () => {
               span: workflowSpan,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
-              outputData: expectedOutput,
+              inputValue: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
+              outputValue: expectedOutput,
               tags: { ml_app: 'test', integration: 'langchain' }
             })
 
@@ -437,11 +437,11 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-instruct',
               modelProvider: 'openai',
               name: 'langchain.llms.openai.OpenAI',
-              inputData: [{
+              inputMessages: [{
                 content: 'System: You are a world class technical documentation writer\n' +
                 'Human: Can you tell me about LangSmith?'
               }],
-              outputData: [{ content: expectedOutput }],
+              outputMessages: [{ content: expectedOutput }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -462,7 +462,7 @@ describe('integrations', () => {
               span: apmSpans[0],
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: 'Hello!',
+              inputValue: 'Hello!',
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
@@ -512,8 +512,8 @@ describe('integrations', () => {
               span: topLevelWorkflow,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
-              outputData: expectedOutput,
+              inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
+              outputValue: expectedOutput,
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
@@ -522,8 +522,8 @@ describe('integrations', () => {
               parentId: topLevelWorkflow.span_id,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
-              outputData: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
+              inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
+              outputValue: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
@@ -535,10 +535,10 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [
+              inputMessages: [
                 { content: 'what is the city Abraham Lincoln is from?', role: 'user' }
               ],
-              outputData: [{
+              outputMessages: [{
                 content: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
                 role: 'assistant'
@@ -553,12 +553,12 @@ describe('integrations', () => {
               parentId: topLevelWorkflow.span_id,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({
+              inputValue: JSON.stringify({
                 language: 'Spanish',
                 city: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived in ' +
                 'Springfield, Illinois, which is often associated with him as his home city.'
               }),
-              outputData: expectedOutput,
+              outputValue: expectedOutput,
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
 
@@ -569,7 +569,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [
+              inputMessages: [
                 {
                   content: 'what country is the city Abraham Lincoln was born in Hodgenville, Kentucky. ' +
                   'He later lived in Springfield, Illinois, which is often associated with him as his home city. ' +
@@ -577,7 +577,7 @@ describe('integrations', () => {
                   role: 'user'
                 }
               ],
-              outputData: [{ content: expectedOutput, role: 'assistant' }],
+              outputMessages: [{ content: expectedOutput, role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
@@ -614,8 +614,8 @@ describe('integrations', () => {
               span: workflowSpan,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify(['chickens', 'dogs']),
-              outputData: JSON.stringify([
+              inputValue: JSON.stringify(['chickens', 'dogs']),
+              outputValue: JSON.stringify([
                 "Why don't chickens use Facebook?\n\nBecause they already know what everyone's clucking about!",
                 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!']
               ),
@@ -629,8 +629,8 @@ describe('integrations', () => {
               modelName: 'gpt-4',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'Tell me a joke about chickens', role: 'user' }],
-              outputData: [{
+              inputMessages: [{ content: 'Tell me a joke about chickens', role: 'user' }],
+              outputMessages: [{
                 content: "Why don't chickens use Facebook?\n\nBecause " +
                 "they already know what everyone's clucking about!",
                 role: 'assistant'
@@ -647,8 +647,8 @@ describe('integrations', () => {
               modelName: 'gpt-4',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'Tell me a joke about dogs', role: 'user' }],
-              outputData: [{
+              inputMessages: [{ content: 'Tell me a joke about dogs', role: 'user' }],
+              outputMessages: [{
                 content: 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!',
                 role: 'assistant'
               }],
@@ -686,7 +686,7 @@ describe('integrations', () => {
               span: workflowSpan,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({
+              inputValue: JSON.stringify({
                 ability: 'world capitals',
                 history: [
                   {
@@ -701,7 +701,7 @@ describe('integrations', () => {
                 input: 'What is the powerhouse of the cell?'
               }),
               // takes the form of an AIMessage struct since there is no output parser
-              outputData: JSON.stringify({
+              outputValue: JSON.stringify({
                 content: 'Mitochondria',
                 role: 'assistant'
               }),
@@ -715,7 +715,7 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [
+              inputMessages: [
                 {
                   content: 'You are an assistant who is good at world capitals. Respond in 20 words or fewer',
                   role: 'system'
@@ -733,7 +733,7 @@ describe('integrations', () => {
                   role: 'user'
                 }
               ],
-              outputData: [{ content: 'Mitochondria', role: 'assistant' }],
+              outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 54, output_tokens: 3, total_tokens: 57 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -770,8 +770,8 @@ describe('integrations', () => {
               span: workflowSpan,
               spanKind: 'workflow',
               name: 'langchain_core.runnables.RunnableSequence',
-              inputData: JSON.stringify({ foo: 'bar' }),
-              outputData: '3 squared is 9.',
+              inputValue: JSON.stringify({ foo: 'bar' }),
+              outputValue: '3 squared is 9.',
               tags: { ml_app: 'test', integration: 'langchain' }
             })
 
@@ -780,8 +780,8 @@ describe('integrations', () => {
               parentId: workflowSpan.span_id,
               spanKind: 'task',
               name: 'lengthFunction',
-              inputData: JSON.stringify({ foo: 'bar' }),
-              outputData: JSON.stringify({ length: '3' }),
+              inputValue: JSON.stringify({ foo: 'bar' }),
+              outputValue: JSON.stringify({ length: '3' }),
               tags: { ml_app: 'test' }
             })
 
@@ -792,8 +792,8 @@ describe('integrations', () => {
               modelName: 'gpt-4o',
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
-              inputData: [{ content: 'What is 3 squared?', role: 'user' }],
-              outputData: [{ content: '3 squared is 9.', role: 'assistant' }],
+              inputMessages: [{ content: 'What is 3 squared?', role: 'user' }],
+              outputMessages: [{ content: '3 squared is 9.', role: 'assistant' }],
               metadata: MOCK_ANY,
               metrics: { input_tokens: 13, output_tokens: 6, total_tokens: 19 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -825,8 +825,8 @@ describe('integrations', () => {
               span: apmSpans[0],
               spanKind: 'tool',
               name: 'add',
-              inputData: JSON.stringify({ a: 1, b: 2 }),
-              outputData: JSON.stringify(3),
+              inputValue: JSON.stringify({ a: 1, b: 2 }),
+              outputValue: JSON.stringify(3),
               tags: { ml_app: 'test', integration: 'langchain' }
             })
           })
@@ -858,7 +858,7 @@ describe('integrations', () => {
               span: apmSpans[0],
               spanKind: 'tool',
               name: 'add',
-              inputData: JSON.stringify({ a: 1, b: 2 }),
+              inputValue: JSON.stringify({ a: 1, b: 2 }),
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
@@ -906,8 +906,8 @@ describe('integrations', () => {
               span: apmSpans[0],
               spanKind: 'retrieval',
               name: 'langchain.vectorstores.memory.MemoryVectorStore',
-              inputData: 'Biology',
-              outputData: [{
+              inputValue: 'Biology',
+              outputDocuments: [{
                 text: 'The powerhouse of the cell is the mitochondria',
                 name: 'https://example.com'
               }],
@@ -931,8 +931,8 @@ describe('integrations', () => {
               span: apmSpans[0],
               spanKind: 'retrieval',
               name: 'langchain.vectorstores.memory.MemoryVectorStore',
-              inputData: 'Biology',
-              outputData: [{
+              inputValue: 'Biology',
+              outputDocuments: [{
                 text: 'The powerhouse of the cell is the mitochondria',
                 name: 'https://example.com',
                 score: 0.7882083567178202

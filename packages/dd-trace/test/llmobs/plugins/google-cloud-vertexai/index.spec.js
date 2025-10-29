@@ -121,8 +121,8 @@ describe('integrations', () => {
             modelName: 'gemini-1.5-flash-002',
             modelProvider: 'google',
             name: 'GenerativeModel.generateContent',
-            inputData: getInputMessages('Hello, how are you?'),
-            outputData: [
+            inputMessages: getInputMessages('Hello, how are you?'),
+            outputMessages: [
               {
                 role: 'model',
                 content: 'Hello! How can I assist you today?'
@@ -153,8 +153,8 @@ describe('integrations', () => {
             modelName: 'gemini-1.5-flash-002',
             modelProvider: 'google',
             name: 'GenerativeModel.generateContent',
-            inputData: getInputMessages('what is 2 + 2?'),
-            outputData: [
+            inputMessages: getInputMessages('what is 2 + 2?'),
+            outputMessages: [
               {
                 role: 'model',
                 content: '',
@@ -211,8 +211,8 @@ describe('integrations', () => {
               modelName: 'gemini-1.5-flash-002',
               modelProvider: 'google',
               name: 'ChatSession.sendMessage',
-              inputData: inputMessages,
-              outputData: [
+              inputMessages,
+              outputMessages: [
                 {
                   role: 'model',
                   content: 'Hello! How can I assist you today?'

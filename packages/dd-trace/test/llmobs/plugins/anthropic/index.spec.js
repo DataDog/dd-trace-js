@@ -19,8 +19,8 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
     name: 'anthropic.request',
     modelName: 'claude-3-7-sonnet-20250219',
     modelProvider: 'anthropic',
-    inputData: [{ role: 'user', content: 'Hello, world!' }],
-    outputData: [{ role: 'assistant', content: MOCK_STRING }],
+    inputMessages: [{ role: 'user', content: 'Hello, world!' }],
+    outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
     metadata: {
       max_tokens: 100,
       temperature: 0.5,

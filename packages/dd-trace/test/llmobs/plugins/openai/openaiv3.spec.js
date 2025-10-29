@@ -52,10 +52,10 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
-          inputData: [
+          inputMessages: [
             { content: 'Hello, OpenAI!' }
           ],
-          outputData: [
+          outputMessages: [
             { content: MOCK_STRING }
           ],
           metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
@@ -100,11 +100,11 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
-          inputData: [
+          inputMessages: [
             { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: 'Hello, OpenAI!' }
           ],
-          outputData: [
+          outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
           metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
@@ -133,10 +133,10 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'embedding',
           name: 'OpenAI.createEmbedding',
-          inputData: [
+          inputDocuments: [
             { text: 'hello world' }
           ],
-          outputData: '[1 embedding(s) returned]',
+          outputValue: '[1 embedding(s) returned]',
           metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
           modelName: 'text-embedding-ada-002',
           modelProvider: 'openai',
@@ -176,8 +176,8 @@ describe('integrations', () => {
           name: 'OpenAI.createChatCompletion',
           modelName: 'gpt-3.5-turbo',
           modelProvider: 'openai',
-          inputData: [{ role: 'user', content: 'What is the weather in New York City?' }],
-          outputData: [{
+          inputMessages: [{ role: 'user', content: 'What is the weather in New York City?' }],
+          outputMessages: [{
             role: 'assistant',
             content: '',
             tool_calls: [
@@ -218,8 +218,8 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
-          inputData: [{ content: 'Hello, OpenAI!' }],
-          outputData: [{ content: '' }],
+          inputMessages: [{ content: 'Hello, OpenAI!' }],
+          outputMessages: [{ content: '' }],
           modelName: 'gpt-3.5-turbo',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false },
@@ -268,11 +268,11 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
-          inputData: [
+          inputMessages: [
             { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: 'Hello, OpenAI!' }
           ],
-          outputData: [{ content: '' }],
+          outputMessages: [{ content: '' }],
           modelName: 'gpt-3.5-turbo-instruct',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false, user: 'dd-trace-test' },

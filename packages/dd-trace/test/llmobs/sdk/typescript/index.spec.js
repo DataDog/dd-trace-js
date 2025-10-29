@@ -57,8 +57,8 @@ const testCases = [
           foo: 'bar',
           bar: 'baz'
         },
-        inputData: 'this is a',
-        outputData: 'test'
+        inputValue: 'this is a',
+        outputValue: 'test'
       }]
 
       check(expected, actual)

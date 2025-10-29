@@ -75,8 +75,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
-        inputData: 'Hello, OpenAI!',
-        outputData: MOCK_STRING,
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -87,11 +87,11 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doGenerate',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'Hello, OpenAI!', role: 'user' }
         ],
-        outputData: [{ content: MOCK_STRING, role: 'assistant' }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
@@ -132,8 +132,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'generateObject',
         spanKind: 'workflow',
-        inputData: 'Invent a character for a video game',
-        outputData: MOCK_STRING,
+        inputValue: 'Invent a character for a video game',
+        outputValue: MOCK_STRING,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -145,8 +145,8 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doGenerate',
-        inputData: [{ content: 'Invent a character for a video game', role: 'user' }],
-        outputData: [{ content: MOCK_STRING, role: 'assistant' }],
+        inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' }
       })
@@ -164,8 +164,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'embed',
         spanKind: 'workflow',
-        inputData: 'hello world',
-        outputData: '[1 embedding(s) returned with size 1536]',
+        inputValue: 'hello world',
+        outputValue: '[1 embedding(s) returned with size 1536]',
         tags: { ml_app: 'test', integration: 'ai' }
       }
 
@@ -184,8 +184,8 @@ describe('Plugin', () => {
         modelName: 'text-embedding-ada-002',
         modelProvider: 'openai',
         name: 'doEmbed',
-        inputData: [{ text: 'hello world' }],
-        outputData: '[1 embedding(s) returned with size 1536]',
+        inputDocuments: [{ text: 'hello world' }],
+        outputValue: '[1 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' }
       })
@@ -203,8 +203,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'embedMany',
         spanKind: 'workflow',
-        inputData: JSON.stringify(['hello world', 'goodbye world']),
-        outputData: '[2 embedding(s) returned with size 1536]',
+        inputValue: JSON.stringify(['hello world', 'goodbye world']),
+        outputValue: '[2 embedding(s) returned with size 1536]',
         tags: { ml_app: 'test', integration: 'ai' }
       }
       if (semifies(realVersion, '>=5.0.0')) {
@@ -222,8 +222,8 @@ describe('Plugin', () => {
         modelName: 'text-embedding-ada-002',
         modelProvider: 'openai',
         name: 'doEmbed',
-        inputData: [{ text: 'hello world' }, { text: 'goodbye world' }],
-        outputData: '[2 embedding(s) returned with size 1536]',
+        inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
+        outputValue: '[2 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' }
       })
@@ -259,8 +259,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
-        inputData: 'Hello, OpenAI!',
-        outputData: 'Hello! How can I assist you today?', // assert text from stream is fully captured
+        inputValue: 'Hello, OpenAI!',
+        outputValue: 'Hello! How can I assist you today?', // assert text from stream is fully captured
         metadata: expectedMetadata,
         tags: { ml_app: 'test', integration: 'ai' }
       })
@@ -272,11 +272,11 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doStream',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'Hello, OpenAI!', role: 'user' }
         ],
-        outputData: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
+        outputMessages: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
@@ -323,8 +323,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'streamObject',
         spanKind: 'workflow',
-        inputData: 'Invent a character for a video game',
-        outputData: JSON.stringify(expectedCharacter),
+        inputValue: 'Invent a character for a video game',
+        outputValue: JSON.stringify(expectedCharacter),
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' }
       })
@@ -336,8 +336,8 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doStream',
-        inputData: [{ content: 'Invent a character for a video game', role: 'user' }],
-        outputData: [{
+        inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
+        outputMessages: [{
           content: JSON.stringify(expectedCharacter),
           role: 'assistant'
         }],
@@ -347,7 +347,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments"
-    it.skip('creates a span for a tool call', async () => { // eslint-disable-line mocha/no-pending-tests
+    it.skip('creates a span for a tool call', async () => {
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
@@ -393,13 +393,15 @@ describe('Plugin', () => {
         }
       }
 
-      await ai.generateText({
+      const result = await ai.generateText({
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
         ...additionalOptions
       })
+
+      const toolCallId = result.steps[0].toolCalls[0].toolCallId
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -425,8 +427,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
-        inputData: 'What is the weather in Tokyo?',
-        outputData: expectedFinalOutput,
+        inputValue: 'What is the weather in Tokyo?',
+        outputValue: expectedFinalOutput,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -438,15 +440,15 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doGenerate',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'What is the weather in Tokyo?', role: 'user' }
         ],
-        outputData: [{
+        outputMessages: [{
           content: MOCK_STRING,
           role: 'assistant',
           tool_calls: [{
-            tool_id: MOCK_STRING,
+            tool_id: toolCallId,
             name: 'weather',
             arguments: {
               location: 'Tokyo'
@@ -463,8 +465,8 @@ describe('Plugin', () => {
         parentId: llmobsSpans[0].span_id,
         name: 'weather',
         spanKind: 'tool',
-        inputData: '{"location":"Tokyo"}',
-        outputData: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+        inputValue: '{"location":"Tokyo"}',
+        outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -475,14 +477,14 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doGenerate',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'What is the weather in Tokyo?', role: 'user' },
           {
             content: '',
             role: 'assistant',
             tool_calls: [{
-              tool_id: MOCK_STRING,
+              tool_id: toolCallId,
               name: 'weather',
               arguments: {
                 location: 'Tokyo'
@@ -493,17 +495,17 @@ describe('Plugin', () => {
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: MOCK_STRING
+            tool_id: toolCallId
           }
         ],
-        outputData: [{ content: expectedFinalOutput, role: 'assistant' }],
+        outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
 
     // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments" & parsing, streaming
-    it.skip('created a span for a tool call from a stream', async () => { // eslint-disable-line mocha/no-pending-tests
+    it.skip('created a span for a tool call from a stream', async () => {
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
@@ -561,6 +563,10 @@ describe('Plugin', () => {
 
       for await (const part of textStream) {} // eslint-disable-line
 
+      const stepsPromise = result._steps ?? result.stepsPromise
+      const steps = stepsPromise.status.value
+      const toolCallId = steps[0].toolCalls[0].toolCallId
+
       const { apmSpans, llmobsSpans } = await getEvents()
 
       let expectedFinalOutput
@@ -586,8 +592,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
-        inputData: 'What is the weather in Tokyo?',
-        outputData: expectedFinalOutput,
+        inputValue: 'What is the weather in Tokyo?',
+        outputValue: expectedFinalOutput,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -599,15 +605,15 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doStream',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'What is the weather in Tokyo?', role: 'user' }
         ],
-        outputData: [{
+        outputMessages: [{
           content: MOCK_STRING,
           role: 'assistant',
           tool_calls: [{
-            tool_id: MOCK_STRING,
+            tool_id: toolCallId,
             name: 'weather',
             arguments: {
               location: 'Tokyo'
@@ -633,8 +639,8 @@ describe('Plugin', () => {
          */
         name: MOCK_STRING,
         spanKind: 'tool',
-        inputData: JSON.stringify({ location: 'Tokyo' }),
-        outputData: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+        inputValue: JSON.stringify({ location: 'Tokyo' }),
+        outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -645,14 +651,14 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'doStream',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'What is the weather in Tokyo?', role: 'user' },
           {
             content: '',
             role: 'assistant',
             tool_calls: [{
-              tool_id: MOCK_STRING,
+              tool_id: toolCallId,
               name: 'weather',
               arguments: {
                 location: 'Tokyo'
@@ -663,10 +669,10 @@ describe('Plugin', () => {
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: MOCK_STRING
+            tool_id: toolCallId
           }
         ],
-        outputData: [{ content: expectedFinalOutput, role: 'assistant' }],
+        outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -705,8 +711,8 @@ describe('Plugin', () => {
         span: apmSpans[0],
         name: 'test.generateText',
         spanKind: 'workflow',
-        inputData: 'Hello, OpenAI!',
-        outputData: MOCK_STRING,
+        inputValue: 'Hello, OpenAI!',
+        outputValue: MOCK_STRING,
         metadata: expectedWorkflowMetadata,
         tags: { ml_app: 'test', integration: 'ai' },
       })
@@ -718,11 +724,11 @@ describe('Plugin', () => {
         modelName: 'gpt-4o-mini',
         modelProvider: 'openai',
         name: 'test.doGenerate',
-        inputData: [
+        inputMessages: [
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'Hello, OpenAI!', role: 'user' }
         ],
-        outputData: [{ content: MOCK_STRING, role: 'assistant' }],
+        outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
