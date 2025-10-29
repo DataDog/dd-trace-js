@@ -19,6 +19,7 @@ module.exports = {
     'mysql',
     'oracledb',
     'pg-query-stream',
-    'tedious'
+    'tedious',
+    '@yaacovcr/transform' // an unlisted peerDependency of @apollo/server@v5.1.0
   ]
 }
