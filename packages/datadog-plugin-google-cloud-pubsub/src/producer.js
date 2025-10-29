@@ -28,11 +28,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         msg.attributes = {}
       }
       this.tracer.inject(span, 'text_map', msg.attributes)
-
-      // Also inject project_id and topic for consumer correlation
-      msg.attributes['gcloud.project_id'] = projectId
-      msg.attributes['pubsub.topic'] = topic
-
       if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(msg)
         const dataStreamsContext = this.tracer
