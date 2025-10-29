@@ -229,7 +229,7 @@ class MetricAggregator {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
 
         for (const dataPoint of metric.data) {
-          const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint._attrKey)
+          const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
             const lastValue = lastExportedState.get(stateKey) || 0
@@ -267,7 +267,7 @@ class MetricAggregator {
     let dataPoint = metric.dataPointMap.get(attrKey)
 
     if (!dataPoint) {
-      dataPoint = { attributes, _attrKey: attrKey, ...createInitialDataPoint() }
+      dataPoint = { attributes, attrKey, ...createInitialDataPoint() }
       metric.data.push(dataPoint)
       metric.dataPointMap.set(attrKey, dataPoint)
     }
@@ -307,24 +307,22 @@ class MetricAggregator {
   }
 
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
-    const buckets = DEFAULT_HISTOGRAM_BUCKETS
-
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
         count: 0,
         sum: 0,
         min: Infinity,
         max: -Infinity,
-        bucketCounts: new Array(buckets.length + 1).fill(0),
+        bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
         startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
       })
     }
 
     const state = cumulativeState.get(stateKey)
 
-    let bucketIndex = buckets.length
-    for (let i = 0; i < buckets.length; i++) {
-      if (value <= buckets[i]) {
+    let bucketIndex = DEFAULT_HISTOGRAM_BUCKETS.length
+    for (let i = 0; i < DEFAULT_HISTOGRAM_BUCKETS.length; i++) {
+      if (value <= DEFAULT_HISTOGRAM_BUCKETS[i]) {
         bucketIndex = i
         break
       }
@@ -343,8 +341,8 @@ class MetricAggregator {
       sum: 0,
       min: Infinity,
       max: -Infinity,
-      bucketCounts: new Array(buckets.length + 1).fill(0),
-      explicitBounds: buckets
+      bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
+      explicitBounds: DEFAULT_HISTOGRAM_BUCKETS
     }))
 
     dataPoint.count = state.count
