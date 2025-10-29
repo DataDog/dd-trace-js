@@ -2,6 +2,9 @@
 
 const { before, beforeEach, after } = require('mocha')
 const util = require('node:util')
+const agent = require('../plugins/agent')
+const assert = require('node:assert')
+const { useEnv } = require('../../../../integration-tests/helpers')
 
 const tracerVersion = require('../../../../package.json').version
 
@@ -216,10 +219,6 @@ function fromBuffer (spanProperty, isNumber = false) {
   const strVal = spanProperty.toString(10)
   return isNumber ? Number(strVal) : strVal
 }
-
-const agent = require('../plugins/agent')
-const assert = require('node:assert')
-const { useEnv } = require('../../../../integration-tests/helpers')
 
 /**
  * @param {Object} options
