@@ -254,7 +254,6 @@ describe('Plugin', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
             service: 'test',
-            splitByAwsService: false,
             hooks: {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)

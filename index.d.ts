@@ -1699,12 +1699,6 @@ declare namespace tracer {
      */
     interface aws_sdk extends Instrumentation {
       /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
-      /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
        * @default false

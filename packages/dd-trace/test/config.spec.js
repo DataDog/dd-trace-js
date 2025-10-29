@@ -480,7 +480,7 @@ describe('Config', () => {
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
-      { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
+      { name: 'remoteConfig.enabled', value: true, origin: 'default' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
@@ -500,7 +500,7 @@ describe('Config', () => {
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
+      { name: 'telemetry.enabled', value: true, origin: 'default' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
@@ -882,7 +882,6 @@ describe('Config', () => {
       { name: 'service', value: 'service', origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
@@ -2957,6 +2956,127 @@ apm_configuration_default:
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
+    })
+
+    it('should support all extended configs across product areas', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_TRACE_PROPAGATION_STYLE: "tracecontext"
+  DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true
+
+  DD_APPSEC_TRACE_RATE_LIMIT: 100
+  DD_APPSEC_MAX_STACK_TRACES: 2
+  DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: "password|token"
+
+  DD_IAST_REQUEST_SAMPLING: 50
+  DD_IAST_MAX_CONCURRENT_REQUESTS: 10
+
+  DD_TELEMETRY_HEARTBEAT_INTERVAL: 42
+  DD_TELEMETRY_METRICS_ENABLED: false
+
+  DD_LLMOBS_ML_APP: "my-llm-app"
+
+  DD_PROFILING_EXPORTERS: "agent"
+
+  DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: "/tmp/probes"
+`)
+      const config = new Config()
+
+      // Tracing
+      expect(config).to.have.nested.property('traceId128BitGenerationEnabled', true)
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+
+      // Appsec
+      expect(config).to.have.nested.property('appsec.rateLimit', 100)
+      expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
+      expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', 'password|token')
+
+      // IAST
+      expect(config).to.have.nested.property('iast.requestSampling', 50)
+      expect(config).to.have.nested.property('iast.maxConcurrentRequests', 10)
+
+      // Telemetry
+      expect(config).to.have.nested.property('telemetry.heartbeatInterval', 42000)
+      expect(config).to.have.nested.property('telemetry.metrics', false)
+
+      // LLMObs
+      expect(config).to.have.nested.property('llmobs.mlApp', 'my-llm-app')
+
+      // Profiling
+      expect(config).to.have.nested.property('profiling.exporters', 'agent')
+
+      // Dynamic Instrumentation
+      expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', '/tmp/probes')
+    })
+
+    // Regression test for fields that were previously set directly from environment variables
+    // before they were supported by stable config as well.
+    it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
+      // Test 1: Local stable config should work
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_API_KEY: "local-api-key"
+  DD_APP_KEY: "local-app-key"
+  DD_INSTRUMENTATION_INSTALL_ID: "local-install-id"
+  DD_INSTRUMENTATION_INSTALL_TIME: "1234567890"
+  DD_INSTRUMENTATION_INSTALL_TYPE: "local_install"
+  DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
+  DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 5
+`)
+      let config = new Config()
+      expect(config).to.have.property('apiKey', 'local-api-key')
+      expect(config).to.have.property('appKey', 'local-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'local-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '1234567890')
+      expect(config).to.have.nested.property('installSignature.type', 'local_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 5)
+
+      // Test 2: Env vars should take precedence over local stable config
+      process.env.DD_API_KEY = 'env-api-key'
+      process.env.DD_APP_KEY = 'env-app-key'
+      process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'env-api-key')
+      expect(config).to.have.property('appKey', 'env-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'env-install-id')
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 7)
+
+      // Test 3: Fleet stable config should take precedence over env vars
+      fs.writeFileSync(
+        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_API_KEY: "fleet-api-key"
+      DD_APP_KEY: "fleet-app-key"
+      DD_INSTRUMENTATION_INSTALL_ID: "fleet-install-id"
+      DD_INSTRUMENTATION_INSTALL_TIME: "9999999999"
+      DD_INSTRUMENTATION_INSTALL_TYPE: "fleet_install"
+      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: ""
+      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 15
+`)
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'fleet-api-key')
+      expect(config).to.have.property('appKey', 'fleet-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'fleet-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '9999999999')
+      expect(config).to.have.nested.property('installSignature.type', 'fleet_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', false)
+      expect(config).to.have.nested.property('cloudPayloadTagging.responsesEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 15)
     })
   })
 
