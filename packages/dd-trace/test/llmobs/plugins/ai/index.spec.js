@@ -347,7 +347,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments"
-    it.skip('creates a span for a tool call', async () => {
+    it.skip('creates a span for a tool call', async () => { // eslint-disable-line mocha/no-pending-tests
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
@@ -505,7 +505,7 @@ describe('Plugin', () => {
     })
 
     // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments" & parsing, streaming
-    it.skip('created a span for a tool call from a stream', async () => {
+    it.skip('created a span for a tool call from a stream', async () => { // eslint-disable-line mocha/no-pending-tests
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
