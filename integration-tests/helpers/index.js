@@ -232,6 +232,8 @@ function execHelper (command, options) {
     error('Exec ERROR: ', command, execError)
     if (command.startsWith(BUN)) {
       try {
+        log('Exec RETRY BACKOFF: 60 seconds')
+        execSync('sleep 60')
         log('Exec RETRY START: ', command)
         execSync(command, options)
         log('Exec RETRY SUCESS: ', command)
@@ -300,7 +302,10 @@ async function createSandbox (
     addFlags.push('--silent')
   }
 
-  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
+    ...addOptions,
+    timeout: 90_000
+  })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
