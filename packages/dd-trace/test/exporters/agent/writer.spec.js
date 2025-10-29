@@ -45,7 +45,8 @@ function describeWriter (protocolVersion) {
 
     log = {
       error: sinon.spy(),
-      errorWithoutTelemetry: sinon.spy()
+      errorWithoutTelemetry: sinon.spy(),
+      debug: sinon.spy()
     }
 
     const AgentEncoder = function () {
@@ -59,7 +60,13 @@ function describeWriter (protocolVersion) {
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log
     })
-    writer = new Writer({ url, prioritySampler, protocolVersion })
+
+    // Use shorter backoff times for testing
+    const config = {
+      initialBackoff: 50,  // 50ms instead of 1s
+      maxBackoff: 500      // 500ms instead of 30s
+    }
+    writer = new Writer({ url, prioritySampler, protocolVersion, config })
 
     process.nextTick(done)
   })
@@ -122,7 +129,8 @@ function describeWriter (protocolVersion) {
             'Datadog-Meta-Lang-Version': process.version,
             'Datadog-Meta-Lang-Interpreter': 'v8',
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
-            'X-Datadog-Trace-Count': '2'
+            'X-Datadog-Trace-Count': '2',
+            'Datadog-Send-Real-Http-Status': 'true'
           },
           lookup: undefined
         })
@@ -145,8 +153,18 @@ function describeWriter (protocolVersion) {
           'Datadog-Meta-Lang-Version': process.version,
           'Datadog-Meta-Lang-Interpreter': 'v8',
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
+          'X-Datadog-Trace-Count': '2',
+          'Datadog-Send-Real-Http-Status': 'true'
         })
+        done()
+      })
+    })
+
+    it('should include Datadog-Send-Real-Http-Status header', (done) => {
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+      writer.flush(() => {
+        expect(request.getCall(0).args[1].headers).to.have.property('Datadog-Send-Real-Http-Status', 'true')
         done()
       })
     })
@@ -158,9 +176,7 @@ function describeWriter (protocolVersion) {
       request.yields(error)
 
       encoder.count.returns(1)
-      writer.flush()
-
-      setTimeout(() => {
+      writer.flush(() => {
         expect(log.errorWithoutTelemetry)
           .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
             error.status, error)
@@ -178,10 +194,131 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('should queue payload for retry on 429 response', (done) => {
+      request.yieldsAsync(new Error('Too Many Requests'), null, 429)
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        // First request should have been made
+        expect(request).to.have.been.calledOnce
+        // Retry process should be in progress
+        expect(writer._retryInProgress).to.equal(true)
+        // Check queue before setTimeout processes it
+        setTimeout(() => {
+          // The item should still be in queue waiting for backoff timeout
+          expect(writer._retryQueue).to.have.lengthOf(1)
+          done()
+        }, 100)
+      })
+    })
+
+    it('should not queue payload for retry on non-429 errors', (done) => {
+      const error = new Error('Server Error')
+      error.status = 500
+      request.yieldsAsync(error, null, 500)
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        expect(request).to.have.been.calledOnce
+        // Should not queue non-429 errors
+        expect(writer._retryQueue).to.have.lengthOf(0)
+        done()
+      })
+    })
+
+    it('should not queue if retry queue is at max capacity', (done) => {
+      request.yieldsAsync(new Error('Too Many Requests'), null, 429)
+
+      // Fill the retry queue to max capacity
+      writer._retryQueue = new Array(1000).fill({ data: [Buffer.from('old')], count: 1 })
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        // Queue should still be at max
+        expect(writer._retryQueue).to.have.lengthOf(1000)
+        done()
+      })
+    })
+
+    it('should retry queued payloads with exponential backoff', (done) => {
+      // First call returns 429, second call succeeds
+      request.onFirstCall().yieldsAsync(new Error('Too Many Requests'), null, 429)
+      request.onSecondCall().yieldsAsync(null, response, 200)
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        // After first flush, should have queued the payload
+        // The retry process starts automatically
+        expect(writer._retryInProgress).to.equal(true)
+
+        // Wait for retry to complete (initial backoff is 50ms in tests)
+        setTimeout(() => {
+          expect(request).to.have.been.calledTwice
+          expect(writer._retryInProgress).to.equal(false)
+          done()
+        }, 150)
+      })
+    })
+
+    it('should reset backoff after successful retry', (done) => {
+      // First two calls return 429, third succeeds
+      request.onCall(0).yieldsAsync(new Error('Too Many Requests'), null, 429)
+      request.onCall(1).yieldsAsync(new Error('Too Many Requests'), null, 429)
+      request.onCall(2).yieldsAsync(null, response, 200)
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        // Wait for retries to complete
+        // Backoffs: 50ms, 100ms
+        setTimeout(() => {
+          // After success, backoff should be reset to 50ms
+          expect(writer._currentBackoff).to.equal(50)
+          expect(request).to.have.been.calledThrice
+          done()
+        }, 250)
+      })
+    })
+
+    it('should enforce maximum backoff time', (done) => {
+      // Simulate multiple failures to test max backoff
+      // Calls 0-4 return 429, call 5 succeeds
+      for (let i = 0; i < 5; i++) {
+        request.onCall(i).yieldsAsync(new Error('Too Many Requests'), null, 429)
+      }
+      request.onCall(5).yieldsAsync(null, response, 200)
+
+      encoder.count.returns(1)
+      encoder.makePayload.returns([Buffer.from('data')])
+
+      writer.flush(() => {
+        // After multiple 429s, backoff should cap at 500ms (test max)
+        // Backoffs: 50ms, 100ms, 200ms, 400ms, 500ms (capped)
+        setTimeout(() => {
+          // Backoff should not exceed maximum (500ms in tests)
+          expect(writer._currentBackoff).to.be.at.most(500)
+          done()
+        }, 2000)
+      })
+    })
+
     context('with the url as a unix socket', () => {
       beforeEach(() => {
         url = new URL('unix:/path/to/somesocket.sock')
-        writer = new Writer({ url, protocolVersion })
+        const config = {
+          initialBackoff: 50,
+          maxBackoff: 500
+        }
+        writer = new Writer({ url, protocolVersion, config })
       })
 
       it('should make a request to the socket', () => {
