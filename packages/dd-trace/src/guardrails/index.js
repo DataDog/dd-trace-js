@@ -14,7 +14,9 @@ function guard (fn) {
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
   var engines = require('../../../../package.json').engines
-  var minMajor = parseInt(engines.node.replace(/[^0-9]/g, ''))
+  var majors = engines.node.match(/\d+/)
+  var minMajor = parseInt(majors[0])
+  var maxMajor = parseInt(majors[1])
   var version = process.versions.node
 
   if (process.env.DD_INJECTION_ENABLED) {
@@ -40,7 +42,7 @@ function guard (fn) {
 
   // If the runtime doesn't match the engines field in package.json, then we
   // should not initialize the tracer.
-  if (!clobberBailout && NODE_MAJOR < minMajor) {
+  if (!clobberBailout && (NODE_MAJOR < minMajor || NODE_MAJOR > maxMajor)) {
     initBailout = true
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
