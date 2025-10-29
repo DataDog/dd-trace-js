@@ -36,6 +36,10 @@ describe('extended data collection', () => {
     }
 
     tests.forEach(({ appName, serverPath }) => {
+      if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
+        return
+      }
+
       describe(`extended data collection in ${appName}`, () => {
         initApp(appName, version, realVersion)
 
