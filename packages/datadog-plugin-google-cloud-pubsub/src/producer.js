@@ -53,13 +53,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       }
     }, ctx)
 
-<<<<<<< Updated upstream
-    for (const msg of messages) {
-      if (!msg.attributes) {
-        msg.attributes = {}
-      }
-      this.tracer.inject(span, 'text_map', msg.attributes)
-=======
     const spanCtx = batchSpan.context()
     const batchTraceId = spanCtx.toTraceId()
     const batchSpanId = spanCtx.toSpanId()
@@ -103,7 +96,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
       msg.attributes['x-dd-publish-start-time'] ??= String(Date.now())
 
->>>>>>> Stashed changes
       if (this.config.dsmEnabled) {
         const dataStreamsContext = this.tracer.setCheckpoint(
           ['direction:out', `topic:${topic}`, 'type:google-pubsub'], 
