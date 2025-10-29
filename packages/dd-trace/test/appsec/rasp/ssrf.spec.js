@@ -7,7 +7,6 @@ const { EventEmitter } = require('events')
 
 const {
   httpClientRequestStart,
-  httpClientResponseData,
   httpClientResponseFinish
 } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
@@ -154,7 +153,30 @@ describe('RASP - ssrf.js', () => {
       sinon.assert.notCalled(waf.run)
     })
 
-    it('captures response data when sampling enabled', () => {
+    it('sets shouldCollectBody flag when sampling enabled', () => {
+      const ctx = makeCtx()
+      const { req } = stubStore({}, {})
+
+      const requestAddresses = { [addresses.HTTP_OUTGOING_METHOD]: 'POST' }
+
+      publishRequestStart({ ctx, includeBodies: true, requestAddresses })
+
+      sinon.assert.match(ctx.shouldCollectBody, true)
+      sinon.assert.calledOnceWithExactly(downstream.incrementBodyAnalysisCount, req)
+      sinon.assert.calledWith(downstream.extractRequestData, ctx)
+      sinon.assert.calledOnce(downstream.shouldSampleBody)
+    })
+
+    it('does not set shouldCollectBody flag when sampling disabled', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      publishRequestStart({ ctx, includeBodies: false })
+
+      sinon.assert.match(ctx.shouldCollectBody, false)
+    })
+
+    it('evaluates response and passes body through to extractResponseData', () => {
       const ctx = makeCtx()
       const { req } = stubStore({}, {})
 
@@ -170,22 +192,18 @@ describe('RASP - ssrf.js', () => {
 
       publishRequestStart({ ctx, includeBodies: true, requestAddresses })
 
-      sinon.assert.calledOnceWithExactly(downstream.incrementBodyAnalysisCount, req)
-      sinon.assert.calledWith(downstream.extractRequestData, ctx)
-      sinon.assert.calledOnce(downstream.shouldSampleBody)
-
       const response = createResponse({ headers: { 'content-type': 'application/json' } })
+      const body = Buffer.from('{"ok":true}')
 
-      httpClientResponseData.publish({ ctx, res: response, chunk: Buffer.from('{"ok":true}') })
-      httpClientResponseFinish.publish({ ctx, res: response })
+      httpClientResponseFinish.publish({ ctx, res: response, body })
 
-      sinon.assert.calledWith(downstream.extractResponseData, response, true, sinon.match.instanceOf(Buffer))
+      sinon.assert.calledWith(downstream.extractResponseData, response, body)
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledWith(downstream.handleResponseTracing, req, { type: 'ssrf', variant: 'response' })
       sinon.assert.calledTwice(waf.run)
     })
 
-    it('does not collect body when sampling disabled', () => {
+    it('evaluates response without body when body is null', () => {
       const ctx = makeCtx()
       const { req } = stubStore({}, {})
 
@@ -197,88 +215,16 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({ ctx, includeBodies: false })
 
       const response = createResponse()
-      httpClientResponseFinish.publish({ ctx, res: response })
+      httpClientResponseFinish.publish({ ctx, res: response, body: null })
 
-      sinon.assert.calledWith(downstream.extractResponseData, response, false, null)
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledTwice(waf.run)
-    })
-
-    it('concatenates string chunks', () => {
-      const ctx = makeCtx()
-      stubStore({}, {})
-
-      downstream.extractResponseData.returns({
-        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
-      })
-      waf.run.returns({ events: [] })
-
-      publishRequestStart({ ctx, includeBodies: true })
-
-      const response = createResponse({ headers: { 'content-type': 'text/plain' } })
-
-      httpClientResponseData.publish({ ctx, res: response, chunk: 'hello ' })
-      httpClientResponseData.publish({ ctx, res: response, chunk: 'world' })
-      httpClientResponseFinish.publish({ ctx, res: response })
-
-      sinon.assert.calledWith(downstream.extractResponseData, response, true, 'hello world')
-    })
-
-    it('concatenates buffer chunks', () => {
-      const ctx = makeCtx()
-      stubStore({}, {})
-
-      downstream.extractResponseData.returns({
-        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
-      })
-      waf.run.returns({ events: [] })
-
-      publishRequestStart({ ctx, includeBodies: true })
-
-      const response = createResponse()
-
-      httpClientResponseData.publish({ ctx, res: response, chunk: Buffer.from('{"a":') })
-      httpClientResponseData.publish({ ctx, res: response, chunk: Buffer.from('1}') })
-      httpClientResponseFinish.publish({ ctx, res: response })
-
-      const expectedBuffer = Buffer.from('{"a":1}')
-      sinon.assert.calledWith(
-        downstream.extractResponseData,
-        response,
-        true,
-        sinon.match((arg) => Buffer.isBuffer(arg) && arg.equals(expectedBuffer))
-      )
-    })
-
-    it('converts Uint8Array chunks to Buffer', () => {
-      const ctx = makeCtx()
-      stubStore({}, {})
-
-      downstream.extractResponseData.returns({
-        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
-      })
-      waf.run.returns({ events: [] })
-
-      publishRequestStart({ ctx, includeBodies: true })
-
-      const response = createResponse()
-
-      httpClientResponseData.publish({ ctx, res: response, chunk: new Uint8Array([123, 125]) })
-      httpClientResponseFinish.publish({ ctx, res: response })
-
-      sinon.assert.calledWith(
-        downstream.extractResponseData,
-        response,
-        true,
-        sinon.match.instanceOf(Buffer)
-      )
     })
 
     it('does not call response evaluation when no response addresses', () => {
       const ctx = makeCtx()
       const { req } = stubStore({}, {})
-
-      stubStore({}, {})
 
       downstream.extractResponseData.returns({})
       waf.run.returns({ events: [] })
@@ -286,7 +232,7 @@ describe('RASP - ssrf.js', () => {
       publishRequestStart({ ctx, includeBodies: false })
 
       const response = createResponse()
-      httpClientResponseFinish.publish({ ctx, res: response })
+      httpClientResponseFinish.publish({ ctx, res: response, body: null })
 
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledOnce(waf.run) // only for request

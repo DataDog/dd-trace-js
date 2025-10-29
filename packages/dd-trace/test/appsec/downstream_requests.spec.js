@@ -1,13 +1,16 @@
 'use strict'
 
 const { expect } = require('chai')
+const sinon = require('sinon')
 
 const downstream = require('../../src/appsec/downstream_requests')
 const addresses = require('../../src/appsec/addresses')
+const log = require('../../src/log')
 
 describe('appsec downstream_requests', () => {
   let config
   let req
+  let logWarnStub
 
   beforeEach(() => {
     config = {
@@ -20,12 +23,14 @@ describe('appsec downstream_requests', () => {
       }
     }
 
+    logWarnStub = sinon.stub(log, 'warn')
     downstream.enable(config)
     req = {}
   })
 
   afterEach(() => {
     downstream.disable()
+    logWarnStub.restore()
   })
 
   describe('shouldSampleBody', () => {
@@ -46,6 +51,46 @@ describe('appsec downstream_requests', () => {
       downstream.enable(config)
 
       expect(downstream.shouldSampleBody(req)).to.be.false
+    })
+
+    it('logs warning and clamps value when sample rate is above 1', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.5
+      downstream.enable(config)
+
+      downstream.shouldSampleBody(req)
+
+      sinon.assert.calledOnce(logWarnStub)
+      sinon.assert.calledWith(
+        logWarnStub,
+        'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+        1.5
+      )
+    })
+
+    it('logs warning and clamps value when sample rate is below 0', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = -0.5
+      downstream.enable(config)
+
+      downstream.shouldSampleBody(req)
+
+      sinon.assert.calledOnce(logWarnStub)
+      sinon.assert.calledWith(
+        logWarnStub,
+        'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+        -0.5
+      )
+    })
+
+    it('does not log warning when sample rate is within valid range', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0.5
+      downstream.enable(config)
+
+      downstream.shouldSampleBody(req)
+
+      sinon.assert.notCalled(logWarnStub)
     })
   })
 
@@ -107,7 +152,7 @@ describe('appsec downstream_requests', () => {
     })
 
     it('collects status and headers', () => {
-      const addressesMap = downstream.extractResponseData(res, false)
+      const addressesMap = downstream.extractResponseData(res)
 
       expect(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_STATUS]).to.equal('201')
       expect(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_HEADERS]).to.deep.equal({
@@ -116,15 +161,15 @@ describe('appsec downstream_requests', () => {
       })
     })
 
-    it('parses response body when allowed', () => {
+    it('parses response body when provided', () => {
       const body = Buffer.from(JSON.stringify({ ok: true }))
-      const addressesMap = downstream.extractResponseData(res, true, body)
+      const addressesMap = downstream.extractResponseData(res, body)
 
       expect(addressesMap[addresses.HTTP_OUTGOING_RESPONSE_BODY]).to.deep.equal({ ok: true })
     })
 
     it('omits body when not provided', () => {
-      const addressesMap = downstream.extractResponseData(res, true)
+      const addressesMap = downstream.extractResponseData(res)
 
       expect(addressesMap).to.not.have.property(addresses.HTTP_OUTGOING_RESPONSE_BODY)
     })

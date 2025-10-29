@@ -1,6 +1,7 @@
 'use strict'
 
 const web = require('../plugins/util/web')
+const log = require('../log')
 const { updateRaspRuleMatchMetricTags } = require('./telemetry')
 const {
   HTTP_OUTGOING_METHOD,
@@ -52,8 +53,15 @@ function shouldSampleBody (req) {
 
   const samplingRate = Math.min(Math.max(downstreamRequestBodyAnalysisSampleRate, 0), 1)
 
+  if (samplingRate !== downstreamRequestBodyAnalysisSampleRate) {
+    log.warn(
+      'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+      downstreamRequestBodyAnalysisSampleRate)
+  }
+
   const hashed = (globalRequestCounter * KNUTH_FACTOR) % UINT64_MAX
-  const threshold = BigInt(Math.round(samplingRate * Number(UINT64_MAX)))
+  // Replace 1000n with the accuraccy that we want to maintain
+  const threshold = (UINT64_MAX * BigInt(Math.round(samplingRate * 1000))) / 1000n
 
   return hashed <= threshold
 }
@@ -90,11 +98,10 @@ function extractRequestData (ctx) {
 /**
  * Extracts response data for WAF analysis.
  * @param {import('http').IncomingMessage} res downstream response object.
- * @param {boolean} includeBody flag describing if the response body should be collected.
  * @param {Buffer|string|object|null} responseBody response body.
  * @returns {object} a map of addresses and response data.
  */
-function extractResponseData (res, includeBody, responseBody) {
+function extractResponseData (res, responseBody) {
   const addresses = {}
 
   if (res.statusCode !== undefined && res.statusCode !== null) {
@@ -106,7 +113,7 @@ function extractResponseData (res, includeBody, responseBody) {
     addresses[HTTP_OUTGOING_RESPONSE_HEADERS] = headers
   }
 
-  if (includeBody && responseBody) {
+  if (responseBody) {
     // Parse the body based on content-type
     const contentType = getResponseContentType(res.headers)
     const body = parseBody(responseBody, contentType)

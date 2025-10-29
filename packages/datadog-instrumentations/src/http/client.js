@@ -14,7 +14,6 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
-const responseDataChannel = channel('apm:http:client:response:data')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
 const names = ['http', 'https', 'node:http', 'node:https']
@@ -50,10 +49,9 @@ function normalizeCallback (inputOptions, callback, inputURL) {
  * @returns {{ finalizeIfNeeded: () => void }|null} Cleanup helper used for drain.
  */
 function setupResponseInstrumentation (ctx, res) {
-  const shouldInstrumentData = responseDataChannel.hasSubscribers
   const shouldInstrumentFinish = responseFinishChannel.hasSubscribers
 
-  if (!shouldInstrumentData && !shouldInstrumentFinish) {
+  if (!shouldInstrumentFinish) {
     return null
   }
 
@@ -64,17 +62,26 @@ function setupResponseInstrumentation (ctx, res) {
   let originalRead = null
   let cleaned = false
 
-  // We only publish chunks once the customer asks for them
-  const publishChunk = chunk => {
-    if (chunk !== undefined && chunk !== null) {
-      responseDataChannel.publish({ ctx, res, chunk })
+  const { shouldCollectBody } = ctx
+  const bodyChunks = shouldCollectBody ? [] : null
+
+  const collectChunk = chunk => {
+    if (!shouldCollectBody || !chunk) return
+
+    if (typeof chunk === 'string') {
+      bodyChunks.push(chunk)
+    } else if (Buffer.isBuffer(chunk)) {
+      bodyChunks.push(chunk)
+    } else {
+      // Handle Uint8Array or other array-like types
+      bodyChunks.push(Buffer.from(chunk))
     }
   }
 
   // Wrapping read() only taps what the customer already pulled,
   // so back pressure stays unchanged.
   const wrapRead = () => {
-    if (!shouldInstrumentData || readWrapped) return
+    if (readWrapped) return
     if (typeof res.read !== 'function') return
 
     readWrapped = true
@@ -84,7 +91,7 @@ function setupResponseInstrumentation (ctx, res) {
       const chunk = originalRead.apply(this, arguments)
 
       if (chunk !== undefined && chunk !== null) {
-        publishChunk(chunk)
+        collectChunk(chunk)
       }
 
       return chunk
@@ -92,8 +99,10 @@ function setupResponseInstrumentation (ctx, res) {
   }
 
   onNewListener = (eventName) => {
-    if (eventName === 'data' && shouldInstrumentData && !dataHandler) {
-      dataHandler = publishChunk
+    if (eventName === 'data' && !dataHandler) {
+      dataHandler = (chunk) => {
+        collectChunk(chunk)
+      }
       res.on('data', dataHandler)
     }
 
@@ -110,12 +119,12 @@ function setupResponseInstrumentation (ctx, res) {
     cleaned = true
 
     if (dataHandler) {
-      res.removeListener('data', dataHandler)
+      res.off('data', dataHandler)
       dataHandler = null
     }
 
     if (onNewListener) {
-      res.removeListener('newListener', onNewListener)
+      res.off('newListener', onNewListener)
       onNewListener = null
     }
 
@@ -132,7 +141,18 @@ function setupResponseInstrumentation (ctx, res) {
     notifyFinish = () => {
       if (finishCalled) return
       finishCalled = true
-      responseFinishChannel.publish({ ctx, res })
+
+      // Combine collected chunks into a single body (or null if no chunks)
+      let body = null
+      if (bodyChunks?.length) {
+        const firstChunk = bodyChunks[0]
+        body = typeof firstChunk === 'string'
+          ? bodyChunks.join('')
+          : Buffer.concat(bodyChunks)
+      }
+
+      // ctx is included for test assertions (see stubHasResponseForUrl in http.spec.js)
+      responseFinishChannel.publish({ ctx, res, body })
       cleanup()
     }
 
@@ -186,10 +206,8 @@ function shouldAutoFinishResponse (res) {
  * @param {import('http').IncomingMessage} res
  */
 function autoDrainResponse (res) {
-  if (!res || typeof res.resume !== 'function') {
-    return
-  }
-
+  if (!res) return
+  if (typeof res.resume !== 'function') return
   if (res.destroyed) return
   if (res.readableFlowing) return
   if (res.readable === false) return

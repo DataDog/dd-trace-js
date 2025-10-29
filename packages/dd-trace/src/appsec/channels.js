@@ -22,7 +22,6 @@ module.exports = {
   fsOperationStart: dc.channel('apm:fs:operation:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),
   httpClientRequestStart: dc.channel('apm:http:client:request:start'),
-  httpClientResponseData: dc.channel('apm:http:client:response:data'),
   httpClientResponseFinish: dc.channel('apm:http:client:response:finish'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),

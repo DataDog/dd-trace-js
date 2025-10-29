@@ -5,7 +5,6 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const assert = require('node:assert')
-const { EventEmitter } = require('events')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
@@ -16,7 +15,6 @@ describe('client', () => {
   const endChannel = dc.channel('apm:http:client:request:end')
   const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
   const errorChannel = dc.channel('apm:http:client:request:error')
-  const responseDataChannel = dc.channel('apm:http:client:response:data')
   const responseFinishChannel = dc.channel('apm:http:client:response:finish')
 
   before(async () => {
@@ -195,13 +193,8 @@ describe('client', () => {
         })
       })
 
-      describe('response data and finish channels', () => {
-        let responseDataChannelCb, responseFinishChannelCb
-        const readableMethods = ['on', 'addListener']
-
-        if (httpSchema === 'http') {
-          readableMethods.push('once', 'prependListener')
-        }
+      describe('response finish channel', () => {
+        let responseFinishChannelCb
 
         before(() => {
           http = require(httpSchema)
@@ -209,109 +202,43 @@ describe('client', () => {
         })
 
         beforeEach(() => {
-          responseDataChannelCb = sinon.stub()
           responseFinishChannelCb = sinon.stub()
-          responseDataChannel.subscribe(responseDataChannelCb)
           responseFinishChannel.subscribe(responseFinishChannelCb)
         })
 
         afterEach(() => {
-          responseDataChannel.unsubscribe(responseDataChannelCb)
           responseFinishChannel.unsubscribe(responseFinishChannelCb)
         })
 
-        ;['on', 'addListener', 'once', 'prependListener'].forEach(method => {
-          if (typeof EventEmitter.prototype[method] !== 'function') {
-            return
+        function setCollectBody (ctx) {
+          if (ctx.args.originalUrl === url) {
+            ctx.shouldCollectBody = true
           }
+        }
 
-          it(`publishes data chunks when customer uses ${method} for data`, (done) => {
-            http.get(url, (res) => {
-              res[method]('data', () => {})
-              res.on('end', () => {
-                try {
-                  assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
-                  assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
-                  done()
-                } catch (e) {
-                  done(e)
-                }
-              })
-            })
-          })
-        })
-
-        // Limit readable variants to ones that continue draining so TLS never stalls
-        readableMethods.forEach(method => {
-          if (typeof EventEmitter.prototype[method] !== 'function') {
-            return
+        function getResponseFinishPayload (url, stub) {
+          for (const args of stub.args) {
+            const payload = args[0]
+            const originalUrl = payload?.ctx?.args?.originalUrl || payload?.ctx?.args?.uri
+            if (originalUrl === url) {
+              return payload
+            }
           }
+          return null
+        }
 
-          it(`publishes data chunks when customer uses ${method} for readable`, (done) => {
-            http.get(url, (res) => {
-              res.setEncoding('utf8')
-              const consume = () => {
-                let chunk
-                while ((chunk = res.read()) !== null) { // eslint-disable-line no-unused-vars
-                  // wrapping res.read() lets instrumentation capture each chunk
-                }
-              }
-
-              res[method]('readable', consume)
-              res.on('end', () => {
-                try {
-                  assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
-                  assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
-                  done()
-                } catch (e) {
-                  done(e)
-                }
-              })
-            })
-          })
-        })
-
-        it('publishes data chunks when customer iterates with for-await', (done) => {
+        it('publishes finish when customer uses for-await to consume', (done) => {
           http.get(url, (res) => {
             (async () => {
               for await (const _ of res) { // eslint-disable-line no-unused-vars
                 // consume without capturing
               }
-              assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), true)
               assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
             })().then(() => done(), done)
           })
         })
 
-        it('does not publish data chunks when customer does not consume response', (done) => {
-          http.get(url, (res) => {
-            // Don't attach data listener
-            setTimeout(() => {
-              try {
-                assert.strictEqual(stubHasResponseForUrl(url, responseDataChannelCb), false)
-                assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            }, 100)
-          })
-        })
-
-        it('publishes finish when customer attaches end listener', (done) => {
-          http.get(url, (res) => {
-            res.on('end', () => {
-              try {
-                assert.strictEqual(stubHasResponseForUrl(url, responseFinishChannelCb), true)
-                done()
-              } catch (e) {
-                done(e)
-              }
-            })
-          })
-        })
-
-        it('handles response close event', (done) => {
+        it('publishes finish on response close event', (done) => {
           http.get(url, (res) => {
             res.destroy()
             setTimeout(() => {
@@ -321,7 +248,95 @@ describe('client', () => {
               } catch (e) {
                 done(e)
               }
-            }, 50)
+            }, 100)
+          })
+        })
+
+        it('collects and concatenates all chunks when ctx.shouldCollectBody is true', (done) => {
+          startChannelCb.callsFake(setCollectBody)
+
+          const chunks = []
+          http.get(url, (res) => {
+            res.on('data', (chunk) => {
+              chunks.push(chunk)
+            })
+            res.on('end', () => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert(Buffer.isBuffer(payload.body))
+
+                const expectedBody = Buffer.concat(chunks)
+                assert(payload.body.equals(expectedBody))
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        it('collects and concatenates string chunks when using setEncoding', (done) => {
+          startChannelCb.callsFake(setCollectBody)
+
+          const chunks = []
+          http.get(url, (res) => {
+            res.setEncoding('utf8')
+            const consume = () => {
+              let chunk
+              while ((chunk = res.read()) !== null) {
+                chunks.push(chunk)
+              }
+            }
+
+            res.on('readable', consume)
+            res.on('end', () => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert(typeof payload.body === 'string')
+
+                const expectedBody = chunks.join('')
+                assert.strictEqual(payload.body, expectedBody)
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        it('does not collect body when ctx.shouldCollectBody is false', (done) => {
+          // Don't set shouldCollectBody flag
+
+          http.get(url, (res) => {
+            res.on('data', () => {})
+            res.on('end', () => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert.strictEqual(payload.body, null)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        it('does not collect body when customer does not consume response', (done) => {
+          startChannelCb.callsFake(setCollectBody)
+
+          http.get(url, (res) => {
+            // Don't attach data listener
+            setTimeout(() => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert.strictEqual(payload.body, null)
+                done()
+              } catch (e) {
+                done(e)
+              }
+            }, 100)
           })
         })
       })

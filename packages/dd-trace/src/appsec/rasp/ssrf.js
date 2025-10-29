@@ -3,7 +3,6 @@
 const { format } = require('url')
 const {
   httpClientRequestStart,
-  httpClientResponseData,
   httpClientResponseFinish
 } = require('../channels')
 const { storage } = require('../../../../datadog-core')
@@ -12,9 +11,6 @@ const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 const downstream = require('../downstream_requests')
 
-// Store response state on ctx
-const RESPONSE_STATE = Symbol('http.client.response.state')
-
 let config
 
 function enable (_config) {
@@ -22,7 +18,6 @@ function enable (_config) {
   downstream.enable(_config)
 
   httpClientRequestStart.subscribe(analyzeSsrf)
-  httpClientResponseData.subscribe(handleResponseData)
   httpClientResponseFinish.subscribe(handleResponseFinish)
 }
 
@@ -30,7 +25,6 @@ function disable () {
   downstream.disable()
 
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
-  if (httpClientResponseData.hasSubscribers) httpClientResponseData.unsubscribe(handleResponseData)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
 }
 
@@ -42,15 +36,7 @@ function analyzeSsrf (ctx) {
   if (!req || !outgoingUrl) return
 
   // Determine if we should collect the response body based on sampling rate
-  const includeBodies = downstream.shouldSampleBody(req)
-
-  // Initialize state for tracking this request's response
-  ctx[RESPONSE_STATE] = {
-    req,
-    includeBodies,
-    chunks: includeBodies ? [] : null,
-    done: false
-  }
+  ctx.shouldCollectBody = downstream.shouldSampleBody(req)
 
   const requestAddresses = downstream.extractRequestData(ctx)
 
@@ -68,60 +54,26 @@ function analyzeSsrf (ctx) {
   downstream.incrementDownstreamAnalysisCount(req)
 
   // Track body analysis count if we're sampling the response body
-  if (includeBodies) {
+  if (ctx.shouldCollectBody) {
     downstream.incrementBodyAnalysisCount(req)
   }
 }
 
 /**
- * Collects outgoing response chunks when body sampling is enabled.
- * @param {{
- * ctx: object,
- * chunk: Buffer|string|Uint8Array,
- * res: import('http').IncomingMessage}} payload event payload from the channel.
- */
-function handleResponseData ({ ctx, chunk, res }) {
-  if (!res || !chunk) return
-
-  const state = ctx[RESPONSE_STATE]
-
-  if (!state?.includeBodies || state?.done) return
-
-  // Handle both string chunks (from setEncoding) and Buffer chunks
-  if (typeof chunk === 'string') {
-    state.chunks.push(chunk)
-  } else if (Buffer.isBuffer(chunk)) {
-    state.chunks.push(chunk)
-  } else {
-    // Handle Uint8Array or other array-like types
-    state.chunks.push(Buffer.from(chunk))
-  }
-}
-
-/**
  * Finalizes body collection for the response and triggers RASP analysis.
- * @param {{ctx: object, res: import('http').IncomingMessage}} payload event payload from the channel.
+ * @param {{
+ *   res: import('http').IncomingMessage,
+ *   body: string|Buffer|null
+ * }} payload event payload from the channel.
  */
-function handleResponseFinish ({ ctx, res }) {
+function handleResponseFinish ({ res, body }) {
   if (!res) return
 
-  const state = ctx[RESPONSE_STATE]
-  if (!state || state.done) return
+  const store = storage('legacy').getStore()
+  const req = store?.req
+  if (!req) return
 
-  state.done = true
-
-  // Combine collected chunks into a single body (or null if no chunks)
-  let body = null
-  if (state.chunks?.length) {
-    const firstChunk = state.chunks[0]
-    body = typeof firstChunk === 'string'
-      ? state.chunks.join('')
-      : Buffer.concat(state.chunks)
-  }
-
-  runResponseEvaluation(res, state.req, body)
-
-  delete ctx[RESPONSE_STATE]
+  runResponseEvaluation(res, req, body)
 }
 
 /**
@@ -131,7 +83,7 @@ function handleResponseFinish ({ ctx, res }) {
  * @param {string|Buffer|null} responseBody collected downstream response body
  */
 function runResponseEvaluation (res, req, responseBody) {
-  const responseAddresses = downstream.extractResponseData(res, !!responseBody, responseBody)
+  const responseAddresses = downstream.extractResponseData(res, responseBody)
 
   if (!Object.keys(responseAddresses).length) return
 
