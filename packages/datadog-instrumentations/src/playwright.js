@@ -1051,7 +1051,6 @@ addHook({
 
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
     if (test.expectedStatus === 'skipped') {
-      console.log('skipped test', test.title)
       return _runTest.apply(this, arguments)
     }
     steps = []
