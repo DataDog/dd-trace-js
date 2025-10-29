@@ -19,7 +19,9 @@ const missingPlugins = [
   'datadog-plugin-axios', // we test axios to ensure our functionality works with axios, see: https://github.com/DataDog/dd-trace-js/pull/1469
   'datadog-plugin-limitd-client', // limitd-client instrumentation handles trace context propagation, no tracing is done
   'datadog-plugin-mongoose', // mongoose tracing is done through mongodb-core instrumentation
-  'datadog-plugin-cookie-parser' // cookie-parser does not produce spans
+  'datadog-plugin-cookie-parser', // cookie-parser does not produce spans
+  'datadog-plugin-express-session', // express-session does not produce spans
+  'datadog-plugin-express-mongo-sanitize' // express-mongo-sanitize does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
