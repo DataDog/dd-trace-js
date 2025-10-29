@@ -243,7 +243,6 @@ function execHelper (command, options) {
       throw execError
     }
   }
-  /* eslint-enable no-console */
 }
 
 /**
