@@ -74,12 +74,11 @@ function wrapMethod (method) {
             ctx.error = error
             requestErrorCh.publish(ctx)
           }
-
           return requestFinishCh.runStores(ctx, cb, this, ...arguments)
         })
-
         return method.apply(this, arguments)
       }
+
       return method.apply(this, arguments)
         .then(
           response => {
@@ -98,11 +97,11 @@ function wrapMethod (method) {
 }
 
 function massWrap (obj, methods, wrapper) {
-  for (const method of methods) {
+  methods.forEach(method => {
     if (typeof obj[method] === 'function') {
       shimmer.wrap(obj, method, wrapper)
     }
-  }
+  })
 }
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
@@ -147,6 +146,71 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     }
     return clear.apply(this, arguments)
   })
+
+  return obj
+})
+
+// Inject trace context into messages at queue time
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
+  if (!obj.Topic?.prototype) return obj
+
+  function injectTraceContext (attributes, pubsub, topicName) {
+    // Skip if already injected
+    if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+
+    try {
+      const tracer = require('../../dd-trace')
+      const activeSpan = tracer.scope().active()
+      
+      if (activeSpan) {
+        const ctx = activeSpan.context()
+        tracer.inject(activeSpan, 'text_map', attributes)
+        
+        // Inject upper 64 bits of 128-bit trace ID for proper span linking
+        const traceIdUpperBits = ctx._trace.tags['_dd.p.tid']
+        if (traceIdUpperBits) {
+          attributes['_dd.p.tid'] = traceIdUpperBits
+        }
+      }
+    } catch (error) {
+      // Silently fail - trace context injection is best-effort
+    }
+    
+    // Add metadata for consumer correlation
+    if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
+    if (topicName) attributes['pubsub.topic'] = topicName
+  }
+
+  // Wrap Topic.publishMessage (modern API)
+  if (typeof obj.Topic.prototype.publishMessage === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+      return function (data, attributesOrCallback, callback) {
+        if (data && typeof data === 'object') {
+          if (!data.attributes) data.attributes = {}
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        }
+        return publishMessage.apply(this, arguments)
+      }
+    })
+  }
+
+  // Wrap Topic.publish (legacy API)
+  if (typeof obj.Topic.prototype.publish === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
+      let attributes = attributesOrCallback
+      if (typeof attributesOrCallback === 'function') {
+        attributes = {}
+        arguments[1] = attributes
+        arguments[2] = attributesOrCallback
+      } else if (!attributes || typeof attributes !== 'object') {
+        attributes = {}
+        arguments[1] = attributes
+      }
+
+      injectTraceContext(attributes, this.pubsub, this.name)
+      return publish.apply(this, arguments)
+    })
+  }
 
   return obj
 })
