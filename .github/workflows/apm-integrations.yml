@@ -25,6 +25,18 @@ env:
 # TODO: upstream jobs
 
 jobs:
+  cache:
+    run-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - run: rm yarn.lock
+      - run: bun pm pack --filename ${{ runner.temp }}/dd-trace.tgz
+      - run: tar -xf ${{ runner.temp }}/dd-trace.tgz -C ${{ runner.temp }}
+      - run: bun install --linker=hoisted --prod
+        working-directory: ${{ runner.temp }}/package
+      - run: ls -lisa ${{ runner.temp }}
+      - run: ls -lisa ${{ runner.temp }}/package
+
   aerospike:
     strategy:
       matrix:
