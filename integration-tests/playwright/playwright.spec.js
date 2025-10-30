@@ -2004,5 +2004,68 @@ versions.forEach((version) => {
         })
       })
     })
+
+    const fullyParallelConfigValue = [true, false]
+
+    fullyParallelConfigValue.forEach((parallelism) => {
+      context(`with fullyParallel=${parallelism}`, () => {
+        /**
+         * Due to a bug in the playwright plugin, durations of test suites that included skipped tests
+         * were not reported correctly, as they dragged until the end of the test session.
+         * This test checks that a long suite, which makes the test session longer,
+         * does not affect the duration of a short suite, which is expected to finish earlier.
+         */
+        it('should report the correct test suite duration when there are skipped tests', async () => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.equal(testSuites.length, 2)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 3)
+
+              const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+              assert.propertyVal(
+                skippedTest.meta,
+                TEST_NAME,
+                'short suite should skip and not mess up the duration of the test suite'
+              )
+              const shortSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('short-suite-test.js'))
+              const longSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('long-suite-test.js'))
+              // The values are not deterministic, so we can only assert that they're distant enough
+              // This checks that the long suite takes at least twice longer than the short suite
+              assert.isAbove(
+                Number(longSuite.duration),
+                Number(shortSuite.duration) * 2,
+                'The long test suite should take at least twice as long as the short suite, ' +
+                'but their durations are: \n' +
+                `- Long suite: ${Number(longSuite.duration) / 1e6}ms \n` +
+                `- Short suite: ${Number(shortSuite.duration) / 1e6}ms`
+              )
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-test-duration',
+                FULLY_PARALLEL: parallelism,
+                PLAYWRIGHT_WORKERS: 2
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          await Promise.all([
+            receiverPromise,
+            once(childProcess, 'exit')
+          ])
+        })
+      })
+    })
   })
 })

@@ -414,6 +414,9 @@ class PlaywrightPlugin extends CiPlugin {
         testSourceLine,
         browserName
       )
+
+      span.setTag(TEST_STATUS, 'skip')
+
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
       }

@@ -339,7 +339,11 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 }
 
 function testEndHandler (test, annotations, testStatus, error, isTimeout, shouldCreateTestSpan) {
-  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
+  const {
+    _requireFile: testSuiteAbsolutePath,
+    results,
+    _type,
+  } = test
 
   let annotationTags
   if (annotations.length) {
@@ -430,7 +434,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, should
     skippedTests.forEach(test => {
       testSkipCh.publish({
         testName: getTestFullname(test),
-        testSuiteAbsolutePath: test._requireFile,
+        testSuiteAbsolutePath,
         testSourceLine: test.location.line,
         browserName: 'chromium', // TODO: REMOVE HARDCODE
         isNew: test._ddIsNew,
