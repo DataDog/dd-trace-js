@@ -15,6 +15,7 @@ const { DD_MAJOR } = require('../../../version')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
+const testSkipCh = channel('ci:playwright:test:skip')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
@@ -285,7 +286,12 @@ function getTestFullname (test) {
   return names.join(' ')
 }
 
-function testBeginHandler (test, browserName, isMainProcess) {
+function shouldFinishTestSuite (testSuiteAbsolutePath) {
+  const remainingTests = remainingTestsByFile[testSuiteAbsolutePath]
+  return !remainingTests.length || remainingTests.every(test => test.expectedStatus === 'skipped')
+}
+
+function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
     location: {
@@ -295,6 +301,10 @@ function testBeginHandler (test, browserName, isMainProcess) {
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
+    return
+  }
+  // this means that a skipped test is being handled
+  if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     return
   }
 
@@ -313,7 +323,7 @@ function testBeginHandler (test, browserName, isMainProcess) {
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
-  if (isMainProcess) {
+  if (shouldCreateTestSpan) {
     const testName = getTestFullname(test)
     const testCtx = {
       testName,
@@ -328,8 +338,20 @@ function testBeginHandler (test, browserName, isMainProcess) {
   }
 }
 
-function testEndHandler (test, annotations, testStatus, error, isTimeout, isMainProcess) {
-  const { _requireFile: testSuiteAbsolutePath, results, _type } = test
+function testEndHandler ({
+  test,
+  annotations,
+  testStatus,
+  error,
+  isTimeout,
+  shouldCreateTestSpan,
+  projects
+}) {
+  const {
+    _requireFile: testSuiteAbsolutePath,
+    results,
+    _type,
+  } = test
 
   let annotationTags
   if (annotations.length) {
@@ -368,31 +390,34 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
-  if (isMainProcess) {
+  if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
-    testFinishCh.publish({
-      testStatus,
-      steps: testResult?.steps || [],
-      isRetry: testResult?.retry > 0,
-      error,
-      extraTags: annotationTags,
-      isNew: test._ddIsNew,
-      isAttemptToFix: test._ddIsAttemptToFix,
-      isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
-      isQuarantined: test._ddIsQuarantined,
-      isEfdRetry: test._ddIsEfdRetry,
-      hasFailedAllRetries: test._ddHasFailedAllRetries,
-      hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
-      hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
-      isAtrRetry,
-      isModified: test._ddIsModified,
-      ...testCtx.currentStore
-    })
+    // if there is no testCtx, the skipped test will be created later
+    if (testCtx) {
+      testFinishCh.publish({
+        testStatus,
+        steps: testResult?.steps || [],
+        isRetry: testResult?.retry > 0,
+        error,
+        extraTags: annotationTags,
+        isNew: test._ddIsNew,
+        isAttemptToFix: test._ddIsAttemptToFix,
+        isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
+        isQuarantined: test._ddIsQuarantined,
+        isEfdRetry: test._ddIsEfdRetry,
+        hasFailedAllRetries: test._ddHasFailedAllRetries,
+        hasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
+        hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
+        isAtrRetry,
+        isModified: test._ddIsModified,
+        ...testCtx.currentStore
+      })
+    }
   }
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
@@ -410,8 +435,25 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, isMain
       .filter(currentTest => currentTest !== test)
   }
 
-  // Last test, we finish the suite
-  if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
+  if (shouldFinishTestSuite(testSuiteAbsolutePath)) {
+    const skippedTests = remainingTestsByFile[testSuiteAbsolutePath]
+      .filter(test => test.expectedStatus === 'skipped')
+
+    for (const test of skippedTests) {
+      const browserName = getBrowserNameFromProjects(projects, test)
+      testSkipCh.publish({
+        testName: getTestFullname(test),
+        testSuiteAbsolutePath,
+        testSourceLine: test.location.line,
+        browserName,
+        isNew: test._ddIsNew,
+        isDisabled: test._ddIsDisabled,
+        isModified: test._ddIsModified,
+        isQuarantined: test._ddIsQuarantined
+      })
+    }
+    remainingTestsByFile[testSuiteAbsolutePath] = []
+
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
     let testSuiteStatus = 'pass'
     if (testStatuses.includes('fail')) {
@@ -450,12 +492,14 @@ function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
+    const projects = getProjectsFromDispatcher(dispatcher)
+
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
-        const projects = getProjectsFromDispatcher(dispatcher)
         const browser = getBrowserNameFromProjects(projects, test)
-        testBeginHandler(test, browser, true)
+        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+        testBeginHandler(test, browser, shouldCreateTestSpan)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
 
@@ -463,13 +507,17 @@ function dispatcherHook (dispatcherExport) {
         const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
+        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
         testEndHandler(
-          test,
-          params.annotations,
-          STATUS_TO_TEST_STATUS[testResult.status],
-          testResult.error,
-          isTimeout,
-          true
+          {
+            test,
+            annotations: params.annotations,
+            testStatus: STATUS_TO_TEST_STATUS[testResult.status],
+            error: testResult.error,
+            isTimeout,
+            shouldCreateTestSpan,
+            projects
+          }
         )
       }
     })
@@ -484,18 +532,30 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
+    const projects = getProjectsFromDispatcher(dispatcher)
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
-      const projects = getProjectsFromDispatcher(dispatcher)
       const browser = getBrowserNameFromProjects(projects, test)
-      testBeginHandler(test, browser, false)
+      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      testBeginHandler(test, browser, shouldCreateTestSpan)
     })
     worker.on('testEnd', ({ testId, status, errors, annotations }) => {
       const test = getTestByTestId(dispatcher, testId)
 
       const isTimeout = status === 'timedOut'
-      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout, false)
+      const shouldCreateTestSpan = test.expectedStatus === 'skipped'
+      testEndHandler(
+        {
+          test,
+          annotations,
+          testStatus: STATUS_TO_TEST_STATUS[status],
+          error: errors && errors[0],
+          isTimeout,
+          shouldCreateTestSpan,
+          projects
+        }
+      )
       const testResult = test.results.at(-1)
       const isAtrRetry = testResult?.retry > 0 &&
         isFlakyTestRetriesEnabled &&
@@ -625,6 +685,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
 
+    // Tests that have only skipped tests may reach this point
+    // Skipped tests may or may not go through `testBegin` or `testEnd`
+    // depending on the playwright configuration
     Object.values(remainingTestsByFile).forEach(tests => {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
@@ -632,7 +695,15 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       tests.forEach(test => {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
-        testEndHandler(test, [], 'skip', null, false, true)
+        testEndHandler({
+          test,
+          annotations: [],
+          testStatus: 'skip',
+          error: null,
+          isTimeout: false,
+          shouldCreateTestSpan: true,
+          projects
+        })
       })
     })
 
@@ -1007,6 +1078,9 @@ addHook({
   const stepInfoByStepId = {}
 
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
+    if (test.expectedStatus === 'skipped') {
+      return _runTest.apply(this, arguments)
+    }
     steps = []
 
     const {
