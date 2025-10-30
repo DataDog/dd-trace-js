@@ -9,7 +9,7 @@ const rawExpectedSchema = {
       serviceName: 'test-pubsub'
     },
     v1: {
-      opName: 'gcp.pubsub.send',
+      opName: 'gcp.pubsub.request',
       serviceName: 'test'
     }
   },

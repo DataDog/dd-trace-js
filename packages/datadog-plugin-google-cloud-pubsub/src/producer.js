@@ -36,7 +36,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const batchSpan = this.startSpan({
       childOf: parentData ? this._extractParentContext(parentData) : undefined,
       resource: `${api} ${topic}`,
-      service: this.config.service || `${this.tracer._service}-pubsub`,
       meta: {
         'gcloud.project_id': projectId,
         'pubsub.method': api,
