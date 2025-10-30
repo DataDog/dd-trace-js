@@ -5,7 +5,7 @@ const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastre
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
-  static operation = 'send'
+  static operation = 'request'
 
   bindStart (ctx) {
     const { request, api, projectId } = ctx
