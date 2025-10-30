@@ -343,6 +343,9 @@ const nameMapping = {
   otelLogsMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
 }
 
+// This set contains entries that should explicitly be ignored by intake.
+const ignoreProperties = new Set(['appKey', 'apiKey', 'cloudpayloadtagging.rules'])
+
 const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
 function updateConfig (changes, config) {
@@ -357,6 +360,9 @@ function updateConfig (changes, config) {
   const changed = configWithOrigin.size > 0
 
   for (const change of changes) {
+    if (ignoreProperties.has(change.name)) {
+      continue
+    }
     const name = nameMapping[change.name] || change.name
     const { origin, value } = change
     const entry = { name, value, origin, seq_id: seqId++ }
