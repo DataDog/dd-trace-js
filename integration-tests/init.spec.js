@@ -120,14 +120,14 @@ function testRuntimeVersionChecks (arg, filename) {
             it('should not initialize the tracer', () =>
               doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=18.
+${engines.node}.
 false
 `, telemetryAbort))
 
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
               doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=18.
+${engines.node}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
