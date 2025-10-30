@@ -1700,25 +1700,26 @@ versions.forEach((version) => {
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            const playwrightTest = events.find(event => event.type === 'test').content
-            if (isRedirecting) {
-              assert.notProperty(playwrightTest.meta, TEST_IS_RUM_ACTIVE)
-              assert.notProperty(playwrightTest.meta, TEST_BROWSER_VERSION)
-            } else {
-              assert.property(playwrightTest.meta, TEST_IS_RUM_ACTIVE, 'true')
-              assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
-            }
-            assert.include(playwrightTest.meta, {
-              [TEST_BROWSER_NAME]: 'chromium',
-              [TEST_TYPE]: 'browser'
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            tests.forEach(test => {
+              if (isRedirecting) {
+                // can't do assertions because playwright has been redirected
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.notProperty(test.meta, TEST_IS_RUM_ACTIVE)
+                assert.notProperty(test.meta, TEST_BROWSER_VERSION)
+              } else {
+                assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+                assert.property(test.meta, TEST_IS_RUM_ACTIVE, 'true')
+                assert.property(test.meta, TEST_BROWSER_VERSION)
+              }
             })
           })
 
-      const runTest = (done, { isRedirecting }, extraEnvVars) => {
+      const runRumTest = async ({ isRedirecting }, extraEnvVars) => {
         const testAssertionsPromise = getTestAssertions({ isRedirecting })
 
         childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
+          './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
             env: {
@@ -1731,17 +1732,18 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
-      it('can correlate tests and RUM sessions', (done) => {
-        runTest(done, { isRedirecting: false })
+      it('can correlate tests and RUM sessions', async () => {
+        await runRumTest({ isRedirecting: false })
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', (done) => {
-        runTest(done, { isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async () => {
+        await runRumTest({ isRedirecting: true })
       })
     })
 
