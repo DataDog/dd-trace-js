@@ -198,36 +198,6 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addBind('ci:playwright:test:start', (ctx) => {
-      const {
-        testName,
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName,
-        isDisabled
-      } = ctx
-      const store = storage('legacy').getStore()
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const span = this.startTestSpan(
-        testName,
-        testSuiteAbsolutePath,
-        testSuite,
-        testSourceFile,
-        testSourceLine,
-        browserName
-      )
-
-      if (isDisabled) {
-        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
-      }
-
-      ctx.parentStore = store
-      ctx.currentStore = { ...store, span }
-
-      return ctx.currentStore
-    })
-
     this.addSub('ci:playwright:worker:report', (serializedTraces) => {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
@@ -275,6 +245,36 @@ class PlaywrightPlugin extends CiPlugin {
       formattedTraces.forEach(trace => {
         this.tracer._exporter.export(trace)
       })
+    })
+
+    this.addBind('ci:playwright:test:start', (ctx) => {
+      const {
+        testName,
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName,
+        isDisabled
+      } = ctx
+      const store = storage('legacy').getStore()
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(
+        testName,
+        testSuiteAbsolutePath,
+        testSuite,
+        testSourceFile,
+        testSourceLine,
+        browserName
+      )
+
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+
+      ctx.parentStore = store
+      ctx.currentStore = { ...store, span }
+
+      return ctx.currentStore
     })
 
     this.addSub('ci:playwright:test:finish', ({
@@ -392,6 +392,45 @@ class PlaywrightPlugin extends CiPlugin {
       if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
         this.tracer._exporter.flush(onDone)
       }
+    })
+
+    this.addSub('ci:playwright:test:skip', ({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isNew,
+      isDisabled,
+      isModified,
+      isQuarantined
+    }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(
+        testName,
+        testSuiteAbsolutePath,
+        testSuite,
+        testSourceFile,
+        testSourceLine,
+        browserName
+      )
+
+      span.setTag(TEST_STATUS, 'skip')
+
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+      }
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+      }
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
+      span.finish()
     })
   }
 
