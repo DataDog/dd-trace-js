@@ -9,7 +9,7 @@ const fs = require('node:fs')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
 
@@ -52,7 +52,7 @@ describe('HTTP Response Blocking', () => {
         .once('error', reject)
     })
 
-    appsec.enable(new Config({
+    appsec.enable(getConfig({
       appsec: {
         enabled: true,
         rules: path.join(__dirname, 'response_blocking_rules.json'),

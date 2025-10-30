@@ -2,7 +2,7 @@
 
 const path = require('node:path')
 const agent = require('../../plugins/agent')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 const appsec = require('../../../src/appsec')
 
 const Axios = require('axios')
@@ -21,7 +21,7 @@ describe('RASP - fastify blocking', () => {
     before(async () => {
       await agent.load(['http', 'fastify'], { client: false })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfig({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),

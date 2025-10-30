@@ -10,7 +10,7 @@ const path = require('node:path')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 
 describe('set_user', () => {
   describe('Internal API', () => {
@@ -94,7 +94,7 @@ describe('set_user', () => {
   })
 
   describe('Integration with the tracer', () => {
-    const config = new Config({
+    const config = getConfig({
       appsec: {
         enabled: true,
         rules: path.join(__dirname, './user_blocking_rules.json')

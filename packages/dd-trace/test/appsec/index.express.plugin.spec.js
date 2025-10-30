@@ -4,6 +4,7 @@ const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
+const proxyquire = require('proxyquire')
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -12,9 +13,10 @@ const zlib = require('node:zlib')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
+
+const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -72,7 +74,7 @@ withVersions('express', 'express', version => {
     })
 
     beforeEach(async () => {
-      appsec.enable(new Config({
+      appsec.enable(getConfig({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -222,7 +224,7 @@ withVersions('express', 'express', version => {
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({
+      appsec.enable(getConfig({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -298,7 +300,7 @@ withVersions('express', 'express', version => {
     })
 
     beforeEach(() => {
-      config = new Config({
+      config = getConfig({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),

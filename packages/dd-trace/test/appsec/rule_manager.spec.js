@@ -8,19 +8,20 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
-const Config = require('../../src/config')
 const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
 const blocking = require('../../src/appsec/blocking')
 
+const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+
 describe('AppSec Rule Manager', () => {
   let config
 
   beforeEach(() => {
     clearAllRules()
-    config = new Config()
+    config = getConfig()
 
     sinon.stub(waf, 'init')
     sinon.stub(waf, 'destroy')
@@ -165,7 +166,7 @@ describe('AppSec Rule Manager', () => {
 
       RuleManager.clearAllRules()
 
-      config = new Config()
+      config = getConfig()
       RuleManager.loadRules(config.appsec)
       sinon.resetHistory()
     })

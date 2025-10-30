@@ -11,7 +11,7 @@ const http = require('node:http')
 require('./setup/core')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
-const Config = require('../src/config')
+const getConfig = require('../src/config')
 
 const debugChannel = channel('datadog:log:debug')
 
@@ -60,7 +60,7 @@ describe('Flare', () => {
   beforeEach(createServer)
 
   beforeEach(() => {
-    tracerConfig = new Config({
+    tracerConfig = getConfig({
       url: `http://127.0.0.1:${port}`
     })
 

@@ -6,7 +6,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
@@ -37,7 +37,7 @@ withVersions('body-parser', 'body-parser', version => {
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'body-parser-rules.json') } }))
+      appsec.enable(getConfig({ appsec: { enabled: true, rules: path.join(__dirname, 'body-parser-rules.json') } }))
     })
 
     afterEach(() => {

@@ -6,7 +6,6 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const Config = require('../../../src/config')
 const agent = require('../../plugins/agent')
 const iast = require('../../../src/appsec/iast')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
@@ -14,6 +13,8 @@ const overheadController = require('../../../src/appsec/iast/overhead-controller
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { testInRequest } = require('./utils')
 const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
+
+const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -48,7 +49,7 @@ describe('IAST Index', () => {
         const originalReleaseRequest = overheadController.releaseRequest
 
         beforeEach(() => {
-          iast.enable(new Config({
+          iast.enable(getConfig({
             experimental: {
               iast: {
                 enabled: true,
@@ -112,7 +113,7 @@ describe('IAST Index', () => {
     let appsecFsPlugin
     let analyzers
 
-    const config = new Config({
+    const config = getConfig({
       experimental: {
         iast: {
           enabled: true,

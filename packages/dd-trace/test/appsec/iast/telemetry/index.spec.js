@@ -7,7 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
-const Config = require('../../../../src/config')
+const getConfig = require('../../../../src/config')
 const iast = require('../../../../src/appsec/iast')
 const agent = require('../../../plugins/agent')
 const { testInRequest } = require('../utils')
@@ -174,7 +174,7 @@ describe('Telemetry', () => {
         DD_IAST_ENABLED: 'true',
         DD_IAST_REQUEST_SAMPLING: '100'
       }
-      const config = new Config()
+      const config = getConfig()
       iast.enable(config)
     })
 

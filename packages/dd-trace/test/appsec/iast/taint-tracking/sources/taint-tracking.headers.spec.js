@@ -4,7 +4,7 @@ const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
-const Config = require('../../../../../src/config')
+const getConfig = require('../../../../../src/config')
 const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
@@ -28,7 +28,7 @@ describe('Headers sourcing', () => {
 
   function tests (config) {
     beforeEach(() => {
-      iast.enable(new Config({
+      iast.enable(getConfig({
         experimental: {
           iast: {
             enabled: true,

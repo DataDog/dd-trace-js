@@ -1,6 +1,6 @@
 'use strict'
 
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const path = require('path')
 const { withVersions } = require('../setup/mocha')
 const agent = require('../plugins/agent')
@@ -68,7 +68,7 @@ describe('extended data collection', () => {
     })
 
     beforeEach(() => {
-      appsec.enable(new Config(
+      appsec.enable(getConfig(
         {
           appsec: {
             enabled: true,
