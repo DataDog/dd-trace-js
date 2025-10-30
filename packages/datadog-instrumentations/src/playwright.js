@@ -338,7 +338,15 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   }
 }
 
-function testEndHandler (test, annotations, testStatus, error, isTimeout, shouldCreateTestSpan) {
+function testEndHandler ({
+  test,
+  annotations,
+  testStatus,
+  error,
+  isTimeout,
+  shouldCreateTestSpan,
+  projects
+}) {
   const {
     _requireFile: testSuiteAbsolutePath,
     results,
@@ -431,18 +439,19 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout, should
     const skippedTests = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(test => test.expectedStatus === 'skipped')
 
-    skippedTests.forEach(test => {
+    for (const test of skippedTests) {
+      const browserName = getBrowserNameFromProjects(projects, test)
       testSkipCh.publish({
         testName: getTestFullname(test),
         testSuiteAbsolutePath,
         testSourceLine: test.location.line,
-        browserName: 'chromium', // TODO: REMOVE HARDCODE
+        browserName,
         isNew: test._ddIsNew,
         isDisabled: test._ddIsDisabled,
         isModified: test._ddIsModified,
         isQuarantined: test._ddIsQuarantined
       })
-    })
+    }
     remainingTestsByFile[testSuiteAbsolutePath] = []
 
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
@@ -483,10 +492,11 @@ function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
+    const projects = getProjectsFromDispatcher(dispatcher)
+
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
-        const projects = getProjectsFromDispatcher(dispatcher)
         const browser = getBrowserNameFromProjects(projects, test)
         const shouldCreateTestSpan = test.expectedStatus === 'skipped'
         testBeginHandler(test, browser, shouldCreateTestSpan)
@@ -499,12 +509,15 @@ function dispatcherHook (dispatcherExport) {
         const isTimeout = testResult.status === 'timedOut'
         const shouldCreateTestSpan = test.expectedStatus === 'skipped'
         testEndHandler(
-          test,
-          params.annotations,
-          STATUS_TO_TEST_STATUS[testResult.status],
-          testResult.error,
-          isTimeout,
-          shouldCreateTestSpan
+          {
+            test,
+            annotations: params.annotations,
+            testStatus: STATUS_TO_TEST_STATUS[testResult.status],
+            error: testResult.error,
+            isTimeout,
+            shouldCreateTestSpan,
+            projects
+          }
         )
       }
     })
@@ -519,10 +532,10 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
+    const projects = getProjectsFromDispatcher(dispatcher)
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
-      const projects = getProjectsFromDispatcher(dispatcher)
       const browser = getBrowserNameFromProjects(projects, test)
       const shouldCreateTestSpan = test.expectedStatus === 'skipped'
       testBeginHandler(test, browser, shouldCreateTestSpan)
@@ -533,12 +546,15 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const isTimeout = status === 'timedOut'
       const shouldCreateTestSpan = test.expectedStatus === 'skipped'
       testEndHandler(
-        test,
-        annotations,
-        STATUS_TO_TEST_STATUS[status],
-        errors && errors[0],
-        isTimeout,
-        shouldCreateTestSpan
+        {
+          test,
+          annotations,
+          testStatus: STATUS_TO_TEST_STATUS[status],
+          error: errors && errors[0],
+          isTimeout,
+          shouldCreateTestSpan,
+          projects
+        }
       )
       const testResult = test.results.at(-1)
       const isAtrRetry = testResult?.retry > 0 &&
@@ -679,7 +695,15 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       tests.forEach(test => {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
-        testEndHandler(test, [], 'skip', null, false, true)
+        testEndHandler({
+          test,
+          annotations: [],
+          testStatus: 'skip',
+          error: null,
+          isTimeout: false,
+          shouldCreateTestSpan: true,
+          projects
+        })
       })
     })
 

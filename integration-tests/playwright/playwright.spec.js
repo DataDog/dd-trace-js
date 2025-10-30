@@ -2011,9 +2011,10 @@ versions.forEach((version) => {
       context(`with fullyParallel=${parallelism}`, () => {
         /**
          * Due to a bug in the playwright plugin, durations of test suites that included skipped tests
-         * were not reported correctly, as they dragged until the end of the test session.
+         * were not reported correctly, as they dragged out until the end of the test session.
          * This test checks that a long suite, which makes the test session longer,
          * does not affect the duration of a short suite, which is expected to finish earlier.
+         * This only happened with tests that included skipped tests.
          */
         it('should report the correct test suite duration when there are skipped tests', async () => {
           const receiverPromise = receiver
