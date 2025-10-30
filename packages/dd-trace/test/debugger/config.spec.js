@@ -4,11 +4,11 @@ require('../setup/mocha')
 
 const assert = require('node:assert')
 const getDebuggerConfig = require('../../src/debugger/config')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
-    const tracerConfig = new Config({
+    const tracerConfig = getConfig({
       url: new URL('http://example.com:1234')
     })
     const config = getDebuggerConfig(tracerConfig)
@@ -37,7 +37,7 @@ describe('getDebuggerConfig', function () {
   })
 
   it('should be able to send the config over a MessageChannel', function () {
-    const config = getDebuggerConfig(new Config())
+    const config = getDebuggerConfig(getConfig())
     const channel = new MessageChannel()
     channel.port1.on('message', (message) => {
       assert.deepStrictEqual(message, config)

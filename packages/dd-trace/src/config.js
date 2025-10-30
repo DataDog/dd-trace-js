@@ -1507,4 +1507,12 @@ function getAgentUrl (url, options) {
   }
 }
 
-module.exports = Config
+let configInstance = null
+function getConfig (options) {
+  if (!configInstance) {
+    configInstance = new Config(options)
+  }
+  return configInstance
+}
+
+module.exports = getConfig
