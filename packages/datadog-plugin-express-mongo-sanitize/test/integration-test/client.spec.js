@@ -4,9 +4,10 @@ const {
   sandboxCwd, useSandbox, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const axios = require('axios')
+
 withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {
     let variants, proc, agent
