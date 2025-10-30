@@ -68,6 +68,8 @@ let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
+let sessionProjects = []
+
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
 function isValidKnownTests (receivedKnownTests) {
@@ -495,6 +497,7 @@ function dispatcherHook (dispatcherExport) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     // for older versions of playwright, `shouldCreateTestSpan` should always be true,
     // since the `_runTest` function wrapper is not available for older versions
@@ -535,6 +538,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -1254,4 +1258,33 @@ addHook({
   })
 
   return workerPackage
+})
+
+addHook({
+  name: 'playwright',
+  file: 'lib/reporters/base.js',
+  versions: ['>=1.38.0']
+}, (reportersPackage) => {
+  // from https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
+  shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummary => function () {
+    const didNotRunTests = this.suite.allTests().filter(test =>
+      test.outcome() === 'skipped' && (!test.results.length || test.expectedStatus !== 'skipped')
+    )
+    for (const test of didNotRunTests) {
+      const {
+        _requireFile: testSuiteAbsolutePath,
+        location: { line: testSourceLine },
+      } = test
+      const browserName = getBrowserNameFromProjects(sessionProjects, test)
+
+      testSkipCh.publish({
+        testName: getTestFullname(test),
+        testSuiteAbsolutePath,
+        testSourceLine,
+        browserName,
+      })
+    }
+    return generateSummary.apply(this, arguments)
+  })
+  return reportersPackage
 })
