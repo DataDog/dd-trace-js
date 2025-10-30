@@ -1700,25 +1700,26 @@ versions.forEach((version) => {
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            const playwrightTest = events.find(event => event.type === 'test').content
-            if (isRedirecting) {
-              assert.notProperty(playwrightTest.meta, TEST_IS_RUM_ACTIVE)
-              assert.notProperty(playwrightTest.meta, TEST_BROWSER_VERSION)
-            } else {
-              assert.property(playwrightTest.meta, TEST_IS_RUM_ACTIVE, 'true')
-              assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
-            }
-            assert.include(playwrightTest.meta, {
-              [TEST_BROWSER_NAME]: 'chromium',
-              [TEST_TYPE]: 'browser'
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            tests.forEach(test => {
+              if (isRedirecting) {
+                // can't do assertions because playwright has been redirected
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.notProperty(test.meta, TEST_IS_RUM_ACTIVE)
+                assert.notProperty(test.meta, TEST_BROWSER_VERSION)
+              } else {
+                assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+                assert.property(test.meta, TEST_IS_RUM_ACTIVE, 'true')
+                assert.property(test.meta, TEST_BROWSER_VERSION)
+              }
             })
           })
 
-      const runTest = (done, { isRedirecting }, extraEnvVars) => {
+      const runRumTest = async ({ isRedirecting }, extraEnvVars) => {
         const testAssertionsPromise = getTestAssertions({ isRedirecting })
 
         childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
+          './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
             env: {
@@ -1731,17 +1732,18 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
-      it('can correlate tests and RUM sessions', (done) => {
-        runTest(done, { isRedirecting: false })
+      it('can correlate tests and RUM sessions', async () => {
+        await runRumTest({ isRedirecting: false })
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', (done) => {
-        runTest(done, { isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async () => {
+        await runRumTest({ isRedirecting: true })
       })
     })
 
@@ -2001,6 +2003,70 @@ versions.forEach((version) => {
 
         childProcess.on('exit', () => {
           receiverPromise.then(done).catch(done)
+        })
+      })
+    })
+
+    const fullyParallelConfigValue = [true, false]
+
+    fullyParallelConfigValue.forEach((parallelism) => {
+      context(`with fullyParallel=${parallelism}`, () => {
+        /**
+         * Due to a bug in the playwright plugin, durations of test suites that included skipped tests
+         * were not reported correctly, as they dragged out until the end of the test session.
+         * This test checks that a long suite, which makes the test session longer,
+         * does not affect the duration of a short suite, which is expected to finish earlier.
+         * This only happened with tests that included skipped tests.
+         */
+        it('should report the correct test suite duration when there are skipped tests', async () => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.equal(testSuites.length, 2)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 3)
+
+              const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+              assert.propertyVal(
+                skippedTest.meta,
+                TEST_NAME,
+                'short suite should skip and not mess up the duration of the test suite'
+              )
+              const shortSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('short-suite-test.js'))
+              const longSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('long-suite-test.js'))
+              // The values are not deterministic, so we can only assert that they're distant enough
+              // This checks that the long suite takes at least twice longer than the short suite
+              assert.isAbove(
+                Number(longSuite.duration),
+                Number(shortSuite.duration) * 2,
+                'The long test suite should take at least twice as long as the short suite, ' +
+                'but their durations are: \n' +
+                `- Long suite: ${Number(longSuite.duration) / 1e6}ms \n` +
+                `- Short suite: ${Number(shortSuite.duration) / 1e6}ms`
+              )
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-test-duration',
+                FULLY_PARALLEL: parallelism,
+                PLAYWRIGHT_WORKERS: 2
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          await Promise.all([
+            receiverPromise,
+            once(childProcess, 'exit')
+          ])
         })
       })
     })

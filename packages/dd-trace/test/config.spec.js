@@ -15,6 +15,7 @@ require('./setup/core')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../version')
 
 describe('Config', () => {
   let Config
@@ -1170,8 +1171,12 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.requestSampling', 50)
-    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
-      'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+    if (DD_MAJOR < 6) {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+    } else {
+      expect(config).to.not.have.property('iast.securityControlsConfiguration')
+    }
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
@@ -1259,7 +1264,7 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'code' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
       { name: 'iast.requestSampling', value: 50, origin: 'code' },
-      {
+      DD_MAJOR < 6 && {
         name: 'iast.securityControlsConfiguration',
         value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
         origin: 'code'
@@ -1289,7 +1294,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
-    ])
+    ].filter(v => v))
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -1684,8 +1689,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.requestSampling', 30)
-    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
-      'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
+    if (DD_MAJOR < 6) {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
+    } else {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method1')
+    }
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
     expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')

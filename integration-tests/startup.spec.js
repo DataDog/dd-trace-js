@@ -35,11 +35,13 @@ execArgvs.forEach(({ execArgv, skip }) => {
     let sandbox
     let cwd
     let startupTestFile
+    let unsupportedTestFile
 
     before(async () => {
-      sandbox = await createSandbox()
+      sandbox = await createSandbox(['d3-format@3.1.0'])
       cwd = sandbox.folder
       startupTestFile = path.join(cwd, 'startup/index.js')
+      unsupportedTestFile = path.join(cwd, 'startup/unsupported.js')
     })
 
     after(async () => {
@@ -215,6 +217,15 @@ execArgvs.forEach(({ execArgv, skip }) => {
           assert.isArray(payload[0])
           assert.strictEqual(payload[0].length, 1)
           assert.propertyVal(payload[0][0], 'name', 'web.request')
+        })
+      })
+    })
+
+    context('with unsupported module', () => {
+      it('skips the unsupported module', async () => {
+        await spawnProc(unsupportedTestFile, {
+          cwd,
+          execArgv
         })
       })
     })
