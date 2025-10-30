@@ -1,0 +1,36 @@
+{
+  "name": "ast-parser",
+  "run": "node .",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node .\"",
+  "setup": "bash -c \"yarn add --silent acorn oxc-parser @swc/core\"",
+  "cachegrind": false,
+  "instructions": true,
+  "iterations": 20,
+  "variants": {
+    "control": {},
+    "acorn-load": {
+      "baseline": "control",
+      "env": { "USE_ACORN": "true" }
+    },
+    "acorn-load-parse": {
+      "baseline": "control",
+      "env": { "USE_ACORN": "true", "PARSE": "true" }
+    },
+    "oxc-load": {
+      "baseline": "control",
+      "env": { "USE_OXC": "true" }
+    },
+    "oxc-load-parse": {
+      "baseline": "control",
+      "env": { "USE_OXC": "true", "PARSE": "true" }
+    },
+    "swc-load": {
+      "baseline": "control",
+      "env": { "USE_SWC": "true" }
+    },
+    "swc-load-parse": {
+      "baseline": "control",
+      "env": { "USE_SWC": "true", "PARSE": "true" }
+    }
+  }
+}
