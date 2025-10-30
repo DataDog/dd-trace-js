@@ -22,7 +22,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         'gcloud.project_id': subscription.pubsub.projectId,
         'pubsub.topic': topic,
         'span.kind': 'consumer',
-        'operation': 'pubsub.delivery'
+        operation: 'pubsub.delivery'
       },
       metrics: {
         'pubsub.ack': 0
@@ -41,7 +41,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     if (message.attributes) {
       const publishStartTime = message.attributes['x-dd-publish-start-time']
       if (publishStartTime) {
-        const deliveryDuration = Date.now() - parseInt(publishStartTime, 10)
+        const deliveryDuration = Date.now() - Number.parseInt(publishStartTime, 10)
         span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
       }
 
@@ -59,10 +59,10 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       }
 
       if (batchSize) {
-        span.setTag('pubsub.batch.size', parseInt(batchSize, 10))
+        span.setTag('pubsub.batch.size', Number.parseInt(batchSize, 10))
       }
       if (batchIndex) {
-        span.setTag('pubsub.batch.index', parseInt(batchIndex, 10))
+        span.setTag('pubsub.batch.index', Number.parseInt(batchIndex, 10))
       }
     }
 

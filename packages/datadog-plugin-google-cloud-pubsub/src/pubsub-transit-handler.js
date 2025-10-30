@@ -32,7 +32,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
   _processPubSubRequest ({ req, res, emit, server }, isCloudEvent) {
     const messageData = this._parseMessage(req, isCloudEvent)
     const originalContext = this._extractContext(messageData, req)
-    const pubsubRequestContext = messageData?.attrs 
+    const pubsubRequestContext = messageData?.attrs
       ? this._reconstructPubSubContext(messageData.attrs) || originalContext
       : originalContext
 
@@ -41,7 +41,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     if (messageData) {
       const isSameTrace = originalContext && pubsubRequestContext &&
         originalContext.toTraceId() === pubsubRequestContext.toTraceId()
-      
+
       deliverySpan = this._createDeliverySpan(
         messageData,
         isCloudEvent,
@@ -178,14 +178,14 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       traceId: id(traceIdDec, 10),
       spanId: id(spanIdDec, 10)
     })
-    
+
     if (attrs['_dd.pubsub_request.p.tid']) {
       context._trace.tags['_dd.p.tid'] = attrs['_dd.pubsub_request.p.tid']
     }
     if (attrs['x-datadog-sampling-priority']) {
-      context._sampling = { priority: parseInt(attrs['x-datadog-sampling-priority'], 10) }
+      context._sampling = { priority: Number.parseInt(attrs['x-datadog-sampling-priority'], 10) }
     }
-    
+
     return context
   }
 
@@ -195,7 +195,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
 
     // Calculate scheduling duration
     const publishTime = attrs['x-dd-publish-start-time']
-    const schedulingMs = publishTime ? Date.now() - parseInt(publishTime, 10) : null
+    const schedulingMs = publishTime ? Date.now() - Number.parseInt(publishTime, 10) : null
 
     const spanTags = {
       component: 'google-cloud-pubsub',
@@ -228,11 +228,11 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       type: 'worker',
       tags: spanTags,
       childOf: parent,
-      startTime: publishTime ? parseInt(publishTime, 10) : undefined
+      startTime: publishTime ? Number.parseInt(publishTime, 10) : undefined
     })
-    
+
     span.setTag('service.name', this.config.service || `${this.tracer._service}-pubsub`)
-    
+
     // Add OpenTelemetry span link
     if (spanLinkContext) {
       span._links = span._links || []
@@ -242,7 +242,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         span._links.push({ context: spanLinkContext, attributes: {} })
       }
     }
-    
+
     // Preserve sampling priority
     if (parent?._sampling?.priority !== undefined) {
       span.context()._sampling.priority = parent._sampling.priority
@@ -255,7 +255,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     const traceIdLowerHex = attrs['_dd.pubsub_request.trace_id']
     const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
     const spanIdHex = attrs['_dd.pubsub_request.span_id']
-    
+
     if (!traceIdLowerHex || !spanIdHex) return null
 
     // Values are already in hex - just combine upper + lower for full 128-bit
@@ -269,18 +269,18 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         trace_id: traceIdHex,
         span_id: spanIdHex
       }])
-      
+
       try {
         // Convert hex to decimal for SpanContext
         return new SpanContext({
           traceId: id(BigInt('0x' + traceIdHex.slice(-16)).toString(10), 10),
           spanId: id(BigInt('0x' + spanIdHex).toString(10), 10)
         })
-      } catch (err) {
+      } catch {
         return null
       }
     }
-    
+
     return null
   }
 
@@ -289,13 +289,13 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     const index = attrs['_dd.batch.index']
     if (!size || index === undefined) return
 
-    const sizeNum = parseInt(size, 10)
-    const indexNum = parseInt(index, 10)
-    
+    const sizeNum = Number.parseInt(size, 10)
+    const indexNum = Number.parseInt(index, 10)
+
     spanTags['pubsub.batch.size'] = sizeNum
     spanTags['pubsub.batch.index'] = indexNum
     spanTags['pubsub.batch.description'] = `Message ${indexNum + 1} of ${sizeNum}`
-    
+
     if (attrs['_dd.pubsub_request.span_id']) {
       spanTags['pubsub.batch.request_span_id'] = attrs['_dd.pubsub_request.span_id']
     }
