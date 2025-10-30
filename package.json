@@ -126,7 +126,7 @@
     "@datadog/native-iast-taint-tracking": "4.0.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/openfeature-node-server": "0.1.0-preview.12",
-    "@datadog/pprof": "5.11.1",
+    "@datadog/pprof": "5.12.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "4.0.1",
     "@isaacs/ttlcache": "^1.4.1",
