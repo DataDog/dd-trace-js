@@ -1699,12 +1699,6 @@ declare namespace tracer {
      */
     interface aws_sdk extends Instrumentation {
       /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
-      /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
        * @default false
@@ -2821,7 +2815,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 

@@ -136,6 +136,7 @@
     "@opentelemetry/resources": ">=1.0.0 <1.10.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.10",
+    "escape-string-regexp": "^5.0.0",
     "ignore": "^7.0.5",
     "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
@@ -158,25 +159,13 @@
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
   },
-  "peerDependencies": {
-    "@openfeature/core": "^1.9.0",
-    "@openfeature/server-sdk": "~1.20.0"
-  },
-  "peerDependenciesMeta": {
-    "@openfeature/core": {
-      "optional": true
-    },
-    "@openfeature/server-sdk": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@babel/helpers": "^7.27.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.29.0",
     "@msgpack/msgpack": "^3.1.2",
-    "@openfeature/core": "^1.8.1",
-    "@openfeature/server-sdk": "~1.20.0",
+    "@openfeature/core": "^1.9.0",
+    "@openfeature/server-sdk": "^1.20.0",
     "@stylistic/eslint-plugin": "^5.0.0",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.10",
@@ -214,7 +203,7 @@
     "tap": "^16.3.10",
     "tiktoken": "^1.0.21",
     "typescript": "^5.9.2",
-    "workerpool": "^9.2.0",
+    "workerpool": "^10.0.0",
     "yaml": "^2.8.0",
     "yarn-deduplicate": "^6.0.2"
   }

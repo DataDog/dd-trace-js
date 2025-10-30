@@ -19,6 +19,7 @@ const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
 const path = require('path')
+const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -81,20 +82,6 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
     parentbased_traceidratio: otelTracesSamplerArg
   }
   return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
-}
-
-function validateOtelPropagators (propagators) {
-  if (!getEnv('PROPAGATION_STYLE_EXTRACT') &&
-    !getEnv('PROPAGATION_STYLE_INJECT') &&
-    !getEnv('DD_TRACE_PROPAGATION_STYLE') &&
-    getEnv('OTEL_PROPAGATORS')) {
-    for (const style in propagators) {
-      if (!VALID_PROPAGATION_STYLES.has(style)) {
-        log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
-        getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
-      }
-    }
-  }
 }
 
 /**
@@ -210,30 +197,33 @@ function remapify (input, mappings) {
   return output
 }
 
-function propagationStyle (key, option) {
-  // Extract by key if in object-form value
-  if (option !== null && typeof option === 'object' && !Array.isArray(option)) {
-    option = option[key]
+/**
+ * Normalizes propagation style values to a lowercase array.
+ * Handles both string (comma-separated) and array inputs.
+ */
+function normalizePropagationStyle (value) {
+  if (Array.isArray(value)) {
+    return value.map(v => v.toLowerCase())
   }
-
-  // Should be an array at this point
-  if (Array.isArray(option)) return option.map(v => v.toLowerCase())
-
-  // If it's not an array but not undefined there's something wrong with the input
-  if (option !== undefined) {
-    log.warn('Unexpected input for config.tracePropagationStyle')
-  }
-
-  // Otherwise, fallback to env var parsing
-  const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
-
-  const envVar = getEnv(envKey) ??
-    getEnv('DD_TRACE_PROPAGATION_STYLE') ??
-    getEnv('OTEL_PROPAGATORS')
-  if (envVar !== undefined) {
-    return envVar.split(',')
+  if (typeof value === 'string') {
+    return value.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
+  }
+  if (value !== undefined) {
+    log.warn('Unexpected input for config.tracePropagationStyle')
+  }
+}
+
+/**
+ * Warns if both DD_TRACE_PROPAGATION_STYLE and specific inject/extract vars are set.
+ */
+function warnIfPropagationStyleConflict (general, inject, extract) {
+  if (general && (inject || extract)) {
+    log.warn(
+      // eslint-disable-next-line @stylistic/max-len
+      'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
+    )
   }
 }
 
@@ -315,36 +305,6 @@ class Config {
 
     checkIfBothOtelAndDdEnvVarSet()
 
-    const {
-      DD_API_KEY,
-      DD_APP_KEY,
-      DD_INSTRUMENTATION_INSTALL_ID = null,
-      DD_INSTRUMENTATION_INSTALL_TIME = null,
-      DD_INSTRUMENTATION_INSTALL_TYPE = null,
-      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
-      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
-      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
-      DD_TRACE_PROPAGATION_STYLE_EXTRACT,
-      DD_TRACE_PROPAGATION_STYLE_INJECT,
-      DD_TRACE_PROPAGATION_STYLE,
-    } = envs
-
-    if (DD_TRACE_PROPAGATION_STYLE && (
-      DD_TRACE_PROPAGATION_STYLE_INJECT ||
-      DD_TRACE_PROPAGATION_STYLE_EXTRACT
-    )) {
-      log.warn(
-        // eslint-disable-next-line @stylistic/max-len
-        'Use either the DD_TRACE_PROPAGATION_STYLE environment variable or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-      )
-    }
-    const PROPAGATION_STYLE_INJECT = propagationStyle(
-      'inject',
-      options.tracePropagationStyle
-    )
-
-    validateOtelPropagators(PROPAGATION_STYLE_INJECT)
-
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
         enabled: options.appsec
@@ -357,42 +317,8 @@ class Config {
       }
     }
 
-    const cloudPayloadTaggingRequestRules = splitJSONPathRules(
-      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING ??
-      options.cloudPayloadTagging?.request ??
-      ''
-    )
-
-    const cloudPayloadTaggingResponseRules = splitJSONPathRules(
-      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING ??
-      options.cloudPayloadTagging?.response ??
-      ''
-    )
-
-    const cloudPayloadTaggingMaxDepth = maybeInt(
-      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH ??
-      options.cloudPayloadTagging?.maxDepth
-    ) ?? 10
-
-    // TODO: refactor
-    this.apiKey = DD_API_KEY
-    this.appKey = DD_APP_KEY
-
-    // sent in telemetry event app-started
-    this.installSignature = {
-      id: DD_INSTRUMENTATION_INSTALL_ID,
-      time: DD_INSTRUMENTATION_INSTALL_TIME,
-      type: DD_INSTRUMENTATION_INSTALL_TYPE
-    }
-
-    this.cloudPayloadTagging = {
-      requestsEnabled: !!cloudPayloadTaggingRequestRules,
-      responsesEnabled: !!cloudPayloadTaggingResponseRules,
-      maxDepth: cloudPayloadTaggingMaxDepth,
-      rules: appendRules(cloudPayloadTaggingRequestRules, cloudPayloadTaggingResponseRules)
-    }
-
     this.#defaults = defaults
+    this.#applyDefaults()
     this.#applyStableConfig(this.stableConfig?.localEntries ?? {}, this.#localStableConfig)
     this.#applyEnvironment(envs)
     this.#applyStableConfig(this.stableConfig?.fleetEntries ?? {}, this.#fleetStableConfig)
@@ -452,35 +378,32 @@ class Config {
   }
 
   #applyStableConfig (config, obj) {
-    const {
-      DD_APPSEC_ENABLED,
-      DD_APPSEC_SCA_ENABLED,
-      DD_DATA_STREAMS_ENABLED,
-      DD_DYNAMIC_INSTRUMENTATION_ENABLED,
-      DD_ENV,
-      DD_IAST_ENABLED,
-      DD_LOGS_INJECTION,
-      DD_PROFILING_ENABLED,
-      DD_RUNTIME_METRICS_ENABLED,
-      DD_SERVICE,
-      DD_VERSION
-    } = config
-
-    this.#setBoolean(obj, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this.#setBoolean(obj, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this.#setBoolean(obj, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this.#setBoolean(obj, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this.#setString(obj, 'env', DD_ENV)
-    this.#setBoolean(obj, 'iast.enabled', DD_IAST_ENABLED)
-    this.#setBoolean(obj, 'logInjection', DD_LOGS_INJECTION)
-    const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
-    this.#setString(obj, 'profiling.enabled', profilingEnabled)
-    this.#setBoolean(obj, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED)
-    this.#setString(obj, 'service', DD_SERVICE)
-    this.#setString(obj, 'version', DD_VERSION)
+    this.#applyConfigValues(config, obj, {})
   }
 
-  #applyEnvironment (envs) {
+  // Set environment-dependent defaults that can be overridden by users
+  #applyDefaults () {
+    const defaults = this.#defaults
+
+    if (isInServerlessEnvironment()) {
+      this.#setBoolean(defaults, 'crashtracking.enabled', false)
+      this.#setString(defaults, 'profiling.enabled', 'false')
+      this.#setBoolean(defaults, 'telemetry.enabled', false)
+      this.#setBoolean(defaults, 'remoteConfig.enabled', false)
+    } else {
+      this.#setBoolean(defaults, 'crashtracking.enabled', true)
+    }
+
+    if (getEnv('JEST_WORKER_ID')) {
+      this.#setBoolean(defaults, 'telemetry.enabled', false)
+    }
+  }
+
+  #applyEnvironment () {
+    this.#applyConfigValues(getEnvironmentVariables(), this.#env, this.#envUnprocessed)
+  }
+
+  #applyConfigValues (source, target, unprocessedTarget) {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
@@ -489,11 +412,13 @@ class Config {
       DD_AI_GUARD_MAX_CONTENT_SIZE,
       DD_AI_GUARD_MAX_MESSAGES_LENGTH,
       DD_AI_GUARD_TIMEOUT,
+      DD_API_KEY,
       DD_API_SECURITY_ENABLED,
       DD_API_SECURITY_SAMPLE_DELAY,
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED,
       DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT,
       DD_APM_TRACING_ENABLED,
+      DD_APP_KEY,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE,
       DD_APPSEC_COLLECT_ALL_HEADERS,
       DD_APPSEC_ENABLED,
@@ -530,7 +455,6 @@ class Config {
       DD_PROFILING_ENABLED,
       DD_GRPC_CLIENT_ERROR_STATUSES,
       DD_GRPC_SERVER_ERROR_STATUSES,
-      JEST_WORKER_ID,
       DD_HEAP_SNAPSHOT_COUNT,
       DD_HEAP_SNAPSHOT_DESTINATION,
       DD_HEAP_SNAPSHOT_INTERVAL,
@@ -562,6 +486,9 @@ class Config {
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
       DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
+      DD_INSTRUMENTATION_INSTALL_ID,
+      DD_INSTRUMENTATION_INSTALL_TIME,
+      DD_INSTRUMENTATION_INSTALL_TYPE,
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
@@ -588,6 +515,9 @@ class Config {
       DD_TRACE_BAGGAGE_TAG_KEYS,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
+      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
       DD_TRACE_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
@@ -646,262 +576,327 @@ class Config {
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE
-    } = envs
+    } = source
 
     const tags = {}
-    const env = this.#env
 
-    tagger.add(this.#parsedDdTags, parseSpaceSeparatedTags(DD_TAGS))
+    const parsedDdTags = parseSpaceSeparatedTags(DD_TAGS)
+    tagger.add(this.#parsedDdTags, parsedDdTags)
 
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, this.#parsedDdTags)
+    tagger.add(tags, parsedDdTags)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
-    this.#setBoolean(env, 'otelLogsEnabled', isTrue(DD_LOGS_OTEL_ENABLED))
+    this.#setString(target, 'apiKey', DD_API_KEY)
+    this.#setBoolean(target, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
     // Set OpenTelemetry logs configuration with specific _LOGS_ vars taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT) {
       // Only set if there's a custom URL, otherwise let calc phase handle the default
-      this.#setString(env, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
+      this.#setString(target, 'otelUrl', OTEL_EXPORTER_OTLP_ENDPOINT)
     }
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
-      this.#setString(env, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || env.otelUrl)
+      this.#setString(target, 'otelLogsUrl', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || target.otelUrl)
     }
-    this.#setString(env, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
-    this.#setString(env, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || env.otelHeaders)
-    this.#setString(env, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
-    this.#setString(env, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || env.otelProtocol)
-    env.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
-    env.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || env.otelTimeout
-    env.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
-    env.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    this.#setString(target, 'otelHeaders', OTEL_EXPORTER_OTLP_HEADERS)
+    this.#setString(target, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || target.otelHeaders)
+    this.#setString(target, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
+    this.#setString(target, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || target.otelProtocol)
+    target.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
+    target.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || target.otelTimeout
+    target.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
+    target.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
     this.#setBoolean(
-      env,
+      target,
       'apmTracingEnabled',
       DD_APM_TRACING_ENABLED ??
         (DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED && isFalse(DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED))
     )
-    this.#setBoolean(env, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
-    env['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
-    this.#setBoolean(env, 'appsec.apiSecurity.endpointCollectionEnabled',
+    this.#setString(target, 'appKey', DD_APP_KEY)
+    this.#setBoolean(target, 'appsec.apiSecurity.enabled', DD_API_SECURITY_ENABLED && isTrue(DD_API_SECURITY_ENABLED))
+    target['appsec.apiSecurity.sampleDelay'] = maybeFloat(DD_API_SECURITY_SAMPLE_DELAY)
+    this.#setBoolean(target, 'appsec.apiSecurity.endpointCollectionEnabled',
       DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED)
-    env['appsec.apiSecurity.endpointCollectionMessageLimit'] =
+    target['appsec.apiSecurity.endpointCollectionMessageLimit'] =
       maybeInt(DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT)
-    env['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
-    env['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
-    this.#envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
-    env['appsec.blockedTemplateJson'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
-    this.#envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
-    this.#setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
-    this.#setString(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
+    target['appsec.blockedTemplateGraphql'] = maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
+    target['appsec.blockedTemplateHtml'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
+    unprocessedTarget['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
+    target['appsec.blockedTemplateJson'] = maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
+    unprocessedTarget['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+    this.#setBoolean(target, 'appsec.enabled', DD_APPSEC_ENABLED)
+    this.#setString(target, 'appsec.eventTracking.mode', DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
     // TODO appsec.extendedHeadersCollection are deprecated, to delete in a major
-    this.#setBoolean(env, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
+    this.#setBoolean(target, 'appsec.extendedHeadersCollection.enabled', DD_APPSEC_COLLECT_ALL_HEADERS)
     this.#setBoolean(
-      env,
+      target,
       'appsec.extendedHeadersCollection.redaction',
       DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
     )
-    env['appsec.extendedHeadersCollection.maxHeaders'] = maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS)
-    this.#envUnprocessed['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
-    this.#setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
-    this.#setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
-    this.#setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
+    target['appsec.extendedHeadersCollection.maxHeaders'] = maybeInt(DD_APPSEC_MAX_COLLECTED_HEADERS)
+    unprocessedTarget['appsec.extendedHeadersCollection.maxHeaders'] = DD_APPSEC_MAX_COLLECTED_HEADERS
+    this.#setString(target, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
+    this.#setString(target, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this.#setBoolean(target, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     // TODO Deprecated, to delete in a major
-    this.#setBoolean(env, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
-    env['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
-    this.#envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
-    this.#setString(env, 'appsec.rules', DD_APPSEC_RULES)
+    this.#setBoolean(target, 'appsec.rasp.bodyCollection', DD_APPSEC_RASP_COLLECT_REQUEST_BODY)
+    target['appsec.rateLimit'] = maybeInt(DD_APPSEC_TRACE_RATE_LIMIT)
+    unprocessedTarget['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
+    this.#setString(target, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
-    this.#setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
-    this.#setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
-    env['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
-    this.#envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
-    env['appsec.stackTrace.maxStackTraces'] = maybeInt(DD_APPSEC_MAX_STACK_TRACES)
-    this.#envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
-    env['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
-    this.#envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
-    env.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
-    env.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
-    env.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
-    this.#setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
-    this.#setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
-    this.#setBoolean(env, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED ?? !this._isInServerlessEnvironment())
-    this.#setBoolean(env, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
+    this.#setBoolean(target, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this.#setBoolean(target, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
+    target['appsec.stackTrace.maxDepth'] = maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH)
+    unprocessedTarget['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
+    target['appsec.stackTrace.maxStackTraces'] = maybeInt(DD_APPSEC_MAX_STACK_TRACES)
+    unprocessedTarget['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
+    target['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
+    unprocessedTarget['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
+    target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
+    target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
+    this.#setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
+    this.#setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
+    if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING || DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
+      if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING) {
+        this.#setBoolean(target, 'cloudPayloadTagging.requestsEnabled', true)
+      }
+      if (DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
+        this.#setBoolean(target, 'cloudPayloadTagging.responsesEnabled', true)
+      }
+      target['cloudPayloadTagging.rules'] = appendRules(
+        splitJSONPathRules(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
+        splitJSONPathRules(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING)
+      )
+    }
+    if (DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH) {
+      target['cloudPayloadTagging.maxDepth'] = maybeInt(DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH)
+    }
+    this.#setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
+    this.#setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this.#setBoolean(
-      env,
+      target,
       'codeOriginForSpans.experimental.exit_spans.enabled',
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
-    this.#setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
-    this.#setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
-    this.#setString(env, 'dogstatsd.port', DD_DOGSTATSD_PORT)
-    this.#setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    this.#setBoolean(env, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
-    this.#setString(env, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
-    this.#setArray(env, 'dynamicInstrumentation.redactedIdentifiers', DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
+    this.#setString(target, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
+    this.#setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
+    this.#setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
+    this.#setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this.#setBoolean(target, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
+    this.#setString(target, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
+    this.#setArray(target, 'dynamicInstrumentation.redactedIdentifiers',
+      DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS)
     this.#setArray(
-      env,
+      target,
       'dynamicInstrumentation.redactionExcludedIdentifiers',
       DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
     )
-    env['dynamicInstrumentation.uploadIntervalSeconds'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
-    this.#envUnprocessed['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
-    this.#setString(env, 'env', DD_ENV || tags.env)
-    this.#setBoolean(env, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
-    this.#setBoolean(env, 'traceEnabled', DD_TRACE_ENABLED)
-    this.#setBoolean(env, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
-    this.#setString(env, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
-    env['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
-    this.#envUnprocessed['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
-    env['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
-    this.#envUnprocessed['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
-    env['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
-    this.#envUnprocessed['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
-    this.#setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
-    this.#setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    env.flushInterval = AWS_LAMBDA_FUNCTION_NAME ? 0 : maybeInt(DD_TRACE_FLUSH_INTERVAL)
-    env.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
-    this.#envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
-    this.#setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
-    this.#setIntegerRangeSet(env, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
-    this.#setIntegerRangeSet(env, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
-    this.#setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
-    env['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
-    this.#setString(env, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
-    env['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
-    this.#setString(env, 'hostname', DD_AGENT_HOST)
-    env['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
-    this.#setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
-    this.#setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
-    env['iast.maxConcurrentRequests'] = maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS)
-    this.#envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
-    env['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
-    this.#envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
-    this.#setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
-    this.#setString(env, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
-    this.#setString(env, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
+    target['dynamicInstrumentation.uploadIntervalSeconds'] =
+      maybeFloat(DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS)
+    unprocessedTarget['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
+    this.#setString(target, 'env', DD_ENV || tags.env)
+    this.#setBoolean(target, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
+    this.#setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
+    this.#setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
+    this.#setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
+    target['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
+    unprocessedTarget['experimental.aiguard.maxContentSize'] = DD_AI_GUARD_MAX_CONTENT_SIZE
+    target['experimental.aiguard.maxMessagesLength'] = maybeInt(DD_AI_GUARD_MAX_MESSAGES_LENGTH)
+    unprocessedTarget['experimental.aiguard.maxMessagesLength'] = DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    target['experimental.aiguard.timeout'] = maybeInt(DD_AI_GUARD_TIMEOUT)
+    unprocessedTarget['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
+    this.#setBoolean(target, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
+    this.#setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
+    if (AWS_LAMBDA_FUNCTION_NAME) {
+      target.flushInterval = 0
+    } else if (DD_TRACE_FLUSH_INTERVAL) {
+      target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
+    }
+    target.flushMinSpans = maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)
+    unprocessedTarget.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    this.#setBoolean(target, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this.#setIntegerRangeSet(target, 'grpc.client.error.statuses', DD_GRPC_CLIENT_ERROR_STATUSES)
+    this.#setIntegerRangeSet(target, 'grpc.server.error.statuses', DD_GRPC_SERVER_ERROR_STATUSES)
+    this.#setArray(target, 'headerTags', DD_TRACE_HEADER_TAGS)
+    target['heapSnapshot.count'] = maybeInt(DD_HEAP_SNAPSHOT_COUNT)
+    this.#setString(target, 'heapSnapshot.destination', DD_HEAP_SNAPSHOT_DESTINATION)
+    target['heapSnapshot.interval'] = maybeInt(DD_HEAP_SNAPSHOT_INTERVAL)
+    this.#setString(target, 'hostname', DD_AGENT_HOST)
+    target['iast.dbRowsToTaint'] = maybeInt(DD_IAST_DB_ROWS_TO_TAINT)
+    this.#setBoolean(target, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
+    this.#setBoolean(target, 'iast.enabled', DD_IAST_ENABLED)
+    target['iast.maxConcurrentRequests'] = maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS)
+    unprocessedTarget['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
+    target['iast.maxContextOperations'] = maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS)
+    unprocessedTarget['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
+    this.#setBoolean(target, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
+    this.#setString(target, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
+    this.#setString(target, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
     if (iastRequestSampling !== undefined && iastRequestSampling > -1 && iastRequestSampling < 101) {
-      env['iast.requestSampling'] = iastRequestSampling
+      target['iast.requestSampling'] = iastRequestSampling
     }
-    this.#envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
-    this.#setString(env, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
-    this.#setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
-    this.#setBoolean(env, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
-    this.#setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
-    this.#setString(env, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
-    this.#setBoolean(env, 'injectForce', DD_INJECT_FORCE)
-    this.#setBoolean(env, 'isAzureFunction', getIsAzureFunction())
-    this.#setBoolean(env, 'isGCPFunction', getIsGCPFunction())
-    env['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
-    env['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
-    this.#setBoolean(env, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
-    this.#setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
-    this.#setBoolean(env, 'llmobs.enabled', DD_LLMOBS_ENABLED)
-    this.#setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
-    this.#setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
+    unprocessedTarget['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
+    this.#setString(target, 'iast.securityControlsConfiguration', DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
+    this.#setString(target, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this.#setBoolean(target, 'iast.stackTrace.enabled', DD_IAST_STACK_TRACE_ENABLED)
+    this.#setString(target, 'installSignature.id', DD_INSTRUMENTATION_INSTALL_ID)
+    this.#setString(target, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
+    this.#setString(target, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
+    this.#setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
+    if (DD_INJECTION_ENABLED !== undefined) {
+      this.#setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
+    }
+    this.#setBoolean(target, 'injectForce', DD_INJECT_FORCE)
+    this.#setBoolean(target, 'isAzureFunction', getIsAzureFunction())
+    this.#setBoolean(target, 'isGCPFunction', getIsGCPFunction())
+    target['langchain.spanCharLimit'] = maybeInt(DD_LANGCHAIN_SPAN_CHAR_LIMIT)
+    target['langchain.spanPromptCompletionSampleRate'] = maybeFloat(DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    this.#setBoolean(target, 'legacyBaggageEnabled', DD_TRACE_LEGACY_BAGGAGE_ENABLED)
+    this.#setBoolean(target, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this.#setBoolean(target, 'llmobs.enabled', DD_LLMOBS_ENABLED)
+    this.#setString(target, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
+    this.#setBoolean(target, 'logInjection', DD_LOGS_INJECTION)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
-    this.#setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-    this.#setBoolean(env, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
-    this.#setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    env['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
-    this.#envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+    this.#setBoolean(target, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
+    this.#setBoolean(target, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
+    this.#setBoolean(target, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
+    target['openai.spanCharLimit'] = maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT)
+    unprocessedTarget.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
-      env.peerServiceMapping = Object.fromEntries(
+      target.peerServiceMapping = Object.fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       )
-      this.#envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+      unprocessedTarget.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
-    this.#setString(env, 'port', DD_TRACE_AGENT_PORT)
-    const profilingEnabled = normalizeProfilingEnabledValue(
-      DD_PROFILING_ENABLED ??
-      (this._isInServerlessEnvironment() ? 'false' : undefined)
-    )
-    this.#setString(env, 'profiling.enabled', profilingEnabled)
-    this.#setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
-    this.#setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
+    this.#setString(target, 'port', DD_TRACE_AGENT_PORT)
+    const profilingEnabled = normalizeProfilingEnabledValue(DD_PROFILING_ENABLED)
+    this.#setString(target, 'profiling.enabled', profilingEnabled)
+    this.#setString(target, 'profiling.exporters', DD_PROFILING_EXPORTERS)
+    this.#setBoolean(target, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
     if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
       // This is only used in testing to not have to wait 30s
-      env['profiling.longLivedThreshold'] = Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD)
+      target['profiling.longLivedThreshold'] = Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD)
     }
 
-    this.#setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
-    this.#setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
-    this.#setBoolean(env, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED ?? !this._isInServerlessEnvironment())
-    env['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
-    this.#envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
-    this.#setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    this.#setString(target, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
+    this.#setString(target, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
+    this.#setBoolean(target, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED)
+    target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
+    unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+    this.#setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
-    this.#setBoolean(env, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
+    this.#setBoolean(target, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
-    this.#setBoolean(env, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
-    this.#setBoolean(env, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
-    this.#setBoolean(env, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
-    this.#setArray(env, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
+    this.#setBoolean(target, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    this.#setBoolean(target, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
+    this.#setBoolean(target, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
+    this.#setArray(target, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
-    this.#setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
+    this.#setUnit(target, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
-    env['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
-    this.#setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
-    this.#envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
-    this.#setString(env, 'scope', DD_TRACE_SCOPE)
-    this.#setString(env, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
+    target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
+    this.#setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
+    unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
+    this.#setString(target, 'scope', DD_TRACE_SCOPE)
+    this.#setString(target, 'service', DD_SERVICE || tags.service || OTEL_SERVICE_NAME)
     if (DD_SERVICE_MAPPING) {
-      env.serviceMapping = Object.fromEntries(
+      target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       )
     }
-    this.#setString(env, 'site', DD_SITE)
+    this.#setString(target, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
-      this.#setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
-      this.#envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      this.#setString(target, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
+      unprocessedTarget.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
     // 0: disabled, 1: logging, 2: garbage collection + logging
-    env.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
-    this.#setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
-    this.#setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
-    this.#setTags(env, 'tags', tags)
-    env.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-    this.#setBoolean(env, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED ??
-      !(this._isInServerlessEnvironment() || JEST_WORKER_ID))
-    this.#setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
-    this.#setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
-    this.#setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
-    env['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
-    this.#envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
-    this.#setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
-    this.#setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
-    this.#setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    this.#setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
-    this.#setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
-    const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
-    env.tracePropagationBehaviorExtract =
-      VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
-        ? stringPropagationBehaviorExtract
-        : 'continue'
-    this.#setBoolean(env, 'tracePropagationStyle.otelPropagators',
-      DD_TRACE_PROPAGATION_STYLE ||
-      DD_TRACE_PROPAGATION_STYLE_INJECT ||
+    target.spanLeakDebug = maybeInt(DD_TRACE_SPAN_LEAK_DEBUG)
+    this.#setBoolean(target, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
+    this.#setBoolean(target, 'startupLogs', DD_TRACE_STARTUP_LOGS)
+    this.#setTags(target, 'tags', tags)
+    target.tagsHeaderMaxLength = DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+    this.#setBoolean(target, 'telemetry.enabled', DD_INSTRUMENTATION_TELEMETRY_ENABLED)
+    this.#setString(target, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
+    this.#setBoolean(target, 'telemetry.debug', DD_TELEMETRY_DEBUG)
+    this.#setBoolean(target, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
+    target['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
+    unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
+    this.#setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
+    this.#setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    this.#setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this.#setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    warnIfPropagationStyleConflict(
+      DD_TRACE_PROPAGATION_STYLE,
+      DD_TRACE_PROPAGATION_STYLE_INJECT,
       DD_TRACE_PROPAGATION_STYLE_EXTRACT
-        ? false
-        : !!OTEL_PROPAGATORS)
-    this.#setBoolean(env, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
-    this.#setBoolean(env, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
-    this.#setBoolean(env, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
-    this.#setBoolean(env, 'tracing', DD_TRACING_ENABLED)
-    this.#setString(env, 'version', DD_VERSION || tags.version)
-    this.#setBoolean(env, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
-    this.#setBoolean(env, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
-    this.#setString(env, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
-    this.#setArray(env, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
-    this.#setBoolean(env, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
-    env['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
-    env['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
+    )
+    if (DD_TRACE_PROPAGATION_STYLE !== undefined) {
+      this.#setArray(target, 'tracePropagationStyle.inject', normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE))
+      this.#setArray(target, 'tracePropagationStyle.extract', normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE))
+    }
+    if (DD_TRACE_PROPAGATION_STYLE_INJECT !== undefined) {
+      this.#setArray(target, 'tracePropagationStyle.inject',
+        normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE_INJECT))
+    }
+    if (DD_TRACE_PROPAGATION_STYLE_EXTRACT !== undefined) {
+      this.#setArray(target, 'tracePropagationStyle.extract',
+        normalizePropagationStyle(DD_TRACE_PROPAGATION_STYLE_EXTRACT))
+    }
+    this.#setBoolean(target, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
+    if (DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== undefined) {
+      const stringPropagationBehaviorExtract = String(DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT)
+      target.tracePropagationBehaviorExtract =
+        VALID_PROPAGATION_BEHAVIOR_EXTRACT.has(stringPropagationBehaviorExtract)
+          ? stringPropagationBehaviorExtract
+          : 'continue'
+    }
+    if (DD_TRACE_PROPAGATION_STYLE !== undefined ||
+        DD_TRACE_PROPAGATION_STYLE_INJECT !== undefined ||
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT !== undefined ||
+        OTEL_PROPAGATORS !== undefined) {
+      // At least one var is defined, calculate value using truthy logic
+      const useDdStyle = DD_TRACE_PROPAGATION_STYLE ||
+                         DD_TRACE_PROPAGATION_STYLE_INJECT ||
+                         DD_TRACE_PROPAGATION_STYLE_EXTRACT
+      this.#setBoolean(target, 'tracePropagationStyle.otelPropagators',
+        useDdStyle ? false : !!OTEL_PROPAGATORS)
+
+      // Use OTEL_PROPAGATORS if no DD-specific vars are set
+      if (!useDdStyle && OTEL_PROPAGATORS) {
+        const otelStyles = normalizePropagationStyle(OTEL_PROPAGATORS)
+        // Validate OTEL propagators
+        for (const style of otelStyles || []) {
+          if (!VALID_PROPAGATION_STYLES.has(style)) {
+            log.warn('unexpected value %s for OTEL_PROPAGATORS environment variable', style)
+            getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
+          }
+        }
+        // Set inject/extract from OTEL_PROPAGATORS
+        if (otelStyles) {
+          this.#setArray(target, 'tracePropagationStyle.inject', otelStyles)
+          this.#setArray(target, 'tracePropagationStyle.extract', otelStyles)
+        }
+      }
+    }
+    this.#setBoolean(target, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
+    this.#setBoolean(target, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
+    this.#setBoolean(target, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
+    this.#setBoolean(target, 'tracing', DD_TRACING_ENABLED)
+    this.#setString(target, 'version', DD_VERSION || tags.version)
+    this.#setBoolean(target, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
+    this.#setBoolean(target, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
+    this.#setString(target, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
+    this.#setArray(target, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
+    this.#setBoolean(target, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)
+    target['vertexai.spanPromptCompletionSampleRate'] = maybeFloat(DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE)
+    target['vertexai.spanCharLimit'] = maybeInt(DD_VERTEXAI_SPAN_CHAR_LIMIT)
   }
 
   #applyOptions (options) {
@@ -954,6 +949,25 @@ class Config {
     this.#optsUnprocessed['appsec.wafTimeout'] = options.appsec?.wafTimeout
     this.#setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this.#setString(opts, 'clientIpHeader', options.clientIpHeader?.toLowerCase())
+    if (options.cloudPayloadTagging?.request || options.cloudPayloadTagging?.response) {
+      if (options.cloudPayloadTagging.request) {
+        this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', true)
+      }
+      if (options.cloudPayloadTagging.response) {
+        this.#setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', true)
+      }
+      opts['cloudPayloadTagging.rules'] = appendRules(
+        splitJSONPathRules(options.cloudPayloadTagging.request),
+        splitJSONPathRules(options.cloudPayloadTagging.response)
+      )
+    }
+    if (options.cloudPayloadTagging?.requestsEnabled !== undefined) {
+      this.#setBoolean(opts, 'cloudPayloadTagging.requestsEnabled', options.cloudPayloadTagging.requestsEnabled)
+    }
+    if (options.cloudPayloadTagging?.responsesEnabled !== undefined) {
+      this.#setBoolean(opts, 'cloudPayloadTagging.responsesEnabled', options.cloudPayloadTagging.responsesEnabled)
+    }
+    opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging?.maxDepth)
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
     opts.baggageTagKeys = options.baggageTagKeys
@@ -1019,7 +1033,9 @@ class Config {
       opts['iast.requestSampling'] = iastRequestSampling
       this.#optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    if (DD_MAJOR < 6) {
+      opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    }
     this.#setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this.#setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this.#setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
@@ -1070,6 +1086,12 @@ class Config {
     this.#setBoolean(opts, 'inferredProxyServicesEnabled', options.inferredProxyServicesEnabled)
     this.#setBoolean(opts, 'graphqlErrorExtensions', options.graphqlErrorExtensions)
     this.#setBoolean(opts, 'trace.nativeSpanEvents', options.trace?.nativeSpanEvents)
+    if (options.tracePropagationStyle) {
+      this.#setArray(opts, 'tracePropagationStyle.inject',
+        normalizePropagationStyle(options.tracePropagationStyle.inject ?? options.tracePropagationStyle))
+      this.#setArray(opts, 'tracePropagationStyle.extract',
+        normalizePropagationStyle(options.tracePropagationStyle.extract ?? options.tracePropagationStyle))
+    }
 
     // For LLMObs, we want the environment variable to take precedence over the options.
     // This is reliant on environment config being set before options.
@@ -1189,17 +1211,11 @@ class Config {
     this.#setBoolean(calc, 'spanComputePeerService', this.#getSpanComputePeerService())
     this.#setBoolean(calc, 'stats.enabled', this.#isTraceStatsComputationEnabled())
     const defaultPropagationStyle = this.#getDefaultPropagationStyle(this.#optionsArg)
-    calc['tracePropagationStyle.inject'] = propagationStyle(
-      'inject',
-      this.#optionsArg.tracePropagationStyle
-    )
-    calc['tracePropagationStyle.extract'] = propagationStyle(
-      'extract',
-      this.#optionsArg.tracePropagationStyle
-    )
     if (defaultPropagationStyle.length > 2) {
-      calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
-      calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+      // b3 was added, so update defaults to include it
+      // This will only be used if no other source (options, env, stable config) set the value
+      calc['tracePropagationStyle.inject'] = defaultPropagationStyle
+      calc['tracePropagationStyle.extract'] = defaultPropagationStyle
     }
   }
 
