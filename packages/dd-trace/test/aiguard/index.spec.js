@@ -8,6 +8,9 @@ const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
+const tracerVersion = require('../../../../package.json').version
+const telemetryMetrics = require('../../src/telemetry/metrics')
+const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -29,6 +32,7 @@ describe('AIGuard SDK', () => {
   }
   let tracer
   let aiguard
+  let count, inc
 
   const toolCall = [
     { role: 'system', content: 'You are a beautiful AI assistant' },
@@ -67,6 +71,12 @@ describe('AIGuard SDK', () => {
     originalFetch = global.fetch
     global.fetch = sinon.stub()
 
+    inc = sinon.spy()
+    count = sinon.stub(appsecNamespace, 'count').returns({
+      inc
+    })
+    appsecNamespace.metrics.clear()
+
     aiguard = new AIGuard(tracer, config)
 
     return agent.load(null, [])
@@ -74,14 +84,19 @@ describe('AIGuard SDK', () => {
 
   afterEach(() => {
     global.fetch = originalFetch
+    sinon.restore()
     agent.close()
   })
 
   const mockFetch = (options) => {
-    global.fetch.resolves({
-      status: options.status ?? 200,
-      json: sinon.stub().resolves(options.body)
-    })
+    if (options.error) {
+      global.fetch.rejects(options.error)
+    } else {
+      global.fetch.resolves({
+        status: options.status ?? 200,
+        json: sinon.stub().resolves(options.body)
+      })
+    }
   }
 
   const assertFetch = (messages, url) => {
@@ -96,7 +111,10 @@ describe('AIGuard SDK', () => {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
-          'DD-APPLICATION-KEY': config.appKey
+          'DD-APPLICATION-KEY': config.appKey,
+          'DD-AI-GUARD-VERSION': tracerVersion,
+          'DD-AI-GUARD-SOURCE': 'SDK',
+          'DD-AI-GUARD-LANGUAGE': 'nodejs'
         },
         body: postData,
         signal: sinon.match.instanceOf(AbortSignal)
@@ -113,6 +131,10 @@ describe('AIGuard SDK', () => {
         expect(msgpack.decode(span.meta_struct.ai_guard)).to.deep.equal(metaStruct)
       }
     }, { rejectFirst: true })
+  }
+
+  const assertTelemetry = (metric, tags) => {
+    sinon.assert.calledWith(count, metric, tags)
   }
 
   const testSuite = [
@@ -144,6 +166,7 @@ describe('AIGuard SDK', () => {
         expect(evaluation.reason).to.equal(reason)
       }
 
+      assertTelemetry('ai_guard.requests', { error: false, action, block: shouldBlock })
       assertFetch(messages)
       await assertAIGuardSpan({
         'ai_guard.target': target,
@@ -169,6 +192,26 @@ describe('AIGuard SDK', () => {
         err.name === 'AIGuardClientError' && JSON.stringify(err.errors) === JSON.stringify(errors)
     )
 
+    assertTelemetry('ai_guard.requests', { error: true })
+    assertFetch(toolCall)
+    await assertAIGuardSpan({
+      'ai_guard.target': 'tool',
+      'error.type': 'AIGuardClientError'
+    })
+  })
+
+  it('test evaluate with API exception', async () => {
+    mockFetch({
+      error: new Error('Boom!!!'),
+    })
+
+    await rejects(
+      () => aiguard.evaluate(toolCall),
+      err =>
+        err.name === 'AIGuardClientError' && err.message === 'Unexpected error calling AI Guard service: Boom!!!',
+    )
+
+    assertTelemetry('ai_guard.requests', { error: true })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -184,6 +227,7 @@ describe('AIGuard SDK', () => {
       err => err.name === 'AIGuardClientError'
     )
 
+    assertTelemetry('ai_guard.requests', { error: true })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -199,6 +243,7 @@ describe('AIGuard SDK', () => {
       err => err.name === 'AIGuardClientError'
     )
 
+    assertTelemetry('ai_guard.requests', { error: true })
     assertFetch(toolCall)
     await assertAIGuardSpan({
       'ai_guard.target': 'tool',
@@ -225,6 +270,7 @@ describe('AIGuard SDK', () => {
 
     await aiguard.evaluate(messages)
 
+    assertTelemetry('ai_guard.truncated', { type: 'messages' })
     assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
@@ -242,6 +288,7 @@ describe('AIGuard SDK', () => {
 
     await aiguard.evaluate(messages)
 
+    assertTelemetry('ai_guard.truncated', { type: 'content' })
     assertFetch(messages)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
