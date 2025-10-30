@@ -72,7 +72,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
   _parseMessage (req, isCloudEvent) {
     // Check for unwrapped headers first
     const hasPubSubHeaders = Object.keys(req.headers).some(k => k.toLowerCase().startsWith('x-goog-pubsub-'))
-    
+
     if (hasPubSubHeaders) {
       const subscription = req.headers['x-goog-pubsub-subscription-name']
       const message = {
@@ -90,8 +90,8 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     try {
       if (isCloudEvent) {
         const message = req.body.message || req.body
-        const attrs = message?.attributes && typeof message.attributes === 'object' 
-          ? { ...message.attributes } 
+        const attrs = message?.attributes && message.attributes !== null && typeof message.attributes === 'object'
+          ? { ...message.attributes }
           : {}
         const subscription = req.body.subscription || req.headers['ce-subscription'] || 'cloud-event-subscription'
 
@@ -107,17 +107,16 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
 
         const { projectId, topicName } = this._extractProjectTopic(attrs, subscription)
         return { message, subscription, attrs, projectId, topicName }
-      } else {
-        const message = req.body.message
-        const subscription = req.body.subscription
-        const attrs = message?.attributes && typeof message.attributes === 'object' 
-          ? message.attributes 
-          : {}
-
-        const { projectId, topicName } = this._extractProjectTopic(attrs, subscription)
-        return { message, subscription, attrs, projectId, topicName }
       }
-    } catch (err) {
+      const message = req.body.message
+      const subscription = req.body.subscription
+      const attrs = message?.attributes && message.attributes !== null && typeof message.attributes === 'object'
+        ? message.attributes
+        : {}
+
+      const { projectId, topicName } = this._extractProjectTopic(attrs, subscription)
+      return { message, subscription, attrs, projectId, topicName }
+    } catch {
       return null
     }
   }
@@ -134,7 +133,7 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
     if (req.headers.tracestate) carrier.tracestate = req.headers.tracestate
     if (req.headers['ce-traceparent']) carrier.traceparent = req.headers['ce-traceparent']
     if (req.headers['ce-tracestate']) carrier.tracestate = req.headers['ce-tracestate']
-    
+
     for (const k of ['x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'x-datadog-tags']) {
       if (req.headers[k]) carrier[k] = req.headers[k]
     }
@@ -144,16 +143,16 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
 
   _extractProjectTopic (attrs, subscription) {
     let projectId = attrs['gcloud.project_id']
-    let topicName = attrs['pubsub.topic']
+    const topicName = attrs['pubsub.topic']
 
     if (!projectId && subscription) {
       const match = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
       if (match) projectId = match[1]
     }
 
-    return { 
-      projectId, 
-      topicName: topicName || 'push-subscription-topic' 
+    return {
+      projectId,
+      topicName: topicName || 'push-subscription-topic'
     }
   }
 }
