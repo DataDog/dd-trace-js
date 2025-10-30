@@ -1,0 +1,32 @@
+# APM Dev Tools Configuration for dd-trace-js
+#
+# This file configures the APM instrumentation workflow for Node.js tracer.
+# The adapter system uses this config to locate paths and run language-specific tools.
+
+# Tracer type (node, python, go, ruby, etc.)
+tracer: node
+
+# Directory paths (relative to repository root)
+paths:
+  # Where instrumentation hooks are generated
+  instrumentations: packages/datadog-instrumentations/src
+
+  # Plugin directory template ({name} is replaced with package name)
+  plugins: packages/datadog-plugin-{name}
+
+  # Test directory template
+  tests: packages/datadog-plugin-{name}/test
+
+  # Analysis output directory
+  analysis_output: .analysis
+
+# Node.js-specific configuration
+node:
+  # Package manager (yarn or npm)
+  package_manager: yarn
+
+  # Test command for plugins
+  test_command: yarn test:plugins
+
+  # Environment variable for plugin name
+  plugin_env_var: PLUGINS

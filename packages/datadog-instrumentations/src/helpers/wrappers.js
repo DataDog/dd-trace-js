@@ -94,7 +94,73 @@ function createEventWrapper (channelName, finishEventName) {
   }
 }
 
+/**
+ * Wraps a constructor to gain access to instance methods or callbacks
+ *
+ * Use cases:
+ * 1. Access pattern: Wrap instance methods that aren't accessible via exports
+ * 2. Callback pattern: Wrap callbacks passed to constructor (e.g., BullMQ Worker)
+ *
+ * NOTE: The constructor itself is NOT traced. This just provides access to wrap
+ * methods/callbacks that will be traced when they're invoked.
+ *
+ * @param {string} channelName - Channel name for the wrapped method/callback (NOT the constructor)
+ * @param {Object} options - Configuration options
+ * @param {Array<string>} [options.wrapMethods] - Instance methods to wrap after construction
+ * @param {number} [options.callbackIndex] - Index of callback argument in constructor
+ * @param {string} [options.operator] - Operator for wrapping (default: 'tracePromise')
+ * @returns {function} Constructor wrapper
+ *
+ * @example
+ * // Access pattern - wrap instance method that's not exported
+ * // The wrapped method will be traced, NOT the constructor
+ * const wrapClient = createConstructorWrapper('apm:db:client:connect', {
+ *   wrapMethods: ['connect']
+ * })
+ * shimmer.wrap(dbLib, 'Client', wrapClient)
+ *
+ * @example
+ * // Callback pattern - wrap callback passed to constructor
+ * // The callback invocations will be traced, NOT the constructor
+ * const wrapWorker = createConstructorWrapper('apm:bullmq:worker:process', {
+ *   callbackIndex: 1,  // Second argument is the process callback
+ *   operator: 'traceHandler'
+ * })
+ * shimmer.wrap(bullmq, 'Worker', wrapWorker)
+ */
+function createConstructorWrapper (channelName, options = {}) {
+  const { wrapMethods = [], callbackIndex = -1, operator = 'tracePromise' } = options
+
+  return function (Constructor) {
+    return class extends Constructor {
+      constructor (...args) {
+        // Wrap callback if specified (callback pattern)
+        if (callbackIndex >= 0 && callbackIndex < args.length) {
+          const originalCallback = args[callbackIndex]
+          if (typeof originalCallback === 'function') {
+            // Create wrapper using the specified operator
+            const wrapper = createWrapper(channelName, operator)
+            args[callbackIndex] = wrapper(originalCallback)
+          }
+        }
+
+        // Call original constructor
+        super(...args)
+
+        // Wrap instance methods if specified (access pattern)
+        for (const methodName of wrapMethods) {
+          if (this[methodName] && typeof this[methodName] === 'function') {
+            const wrapper = createWrapper(channelName, operator)
+            this[methodName] = wrapper(this[methodName])
+          }
+        }
+      }
+    }
+  }
+}
+
 module.exports = {
   createWrapper,
-  createEventWrapper
+  createEventWrapper,
+  createConstructorWrapper
 }
