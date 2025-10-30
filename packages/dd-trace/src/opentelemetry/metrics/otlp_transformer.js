@@ -9,6 +9,10 @@ const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGA
 const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_CUMULATIVE
 
 /**
+ * @typedef {import('@./instruments').Instrument} Instrument
+ */
+
+/**
  * OtlpTransformer transforms metrics to OTLP format.
  *
  * This implementation follows the OTLP Metrics v1.7.0 Data Model specification:
@@ -30,7 +34,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Transforms metrics to OTLP format based on the configured protocol.
-   * @param {Array} metrics - Array of metric data to transform
+   * @param {Array<Instrument>} metrics - Array of metric data to transform
    * @returns {Buffer} Transformed metrics in the appropriate format
    */
   transformMetrics (metrics) {
@@ -87,7 +91,6 @@ class OtlpTransformer extends OtlpTransformerBase {
     const scopeMetrics = []
 
     for (const [, metricsInScope] of groupedMetrics) {
-      // Get the first metric to extract the instrumentation scope details
       const firstMetric = metricsInScope[0]
       const instrumentationScope = firstMetric.instrumentationScope || {}
       const { name = '', version = '', schemaUrl = '', attributes = {} } = instrumentationScope

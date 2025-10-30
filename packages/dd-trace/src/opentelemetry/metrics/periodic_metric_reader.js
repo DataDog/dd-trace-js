@@ -189,16 +189,12 @@ class MetricAggregator {
 
       const metric = metricsMap.get(metricKey)
 
-      if (type === METRIC_TYPES.HISTOGRAM) {
-        this.#aggregateHistogram(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
-      } else if (type === METRIC_TYPES.GAUGE ||
-                 type === METRIC_TYPES.OBSERVABLECOUNTER ||
-                 type === METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER) {
-        // Gauges and observable instruments use last value (observations report current total, not increments)
-        this.#aggregateLastValue(metric, value, attributes, attrKey, timestamp)
-      } else {
-        // Synchronous Counters and UpDownCounters use sum aggregation
+      if (type === METRIC_TYPES.COUNTER || type === METRIC_TYPES.UPDOWNCOUNTER) {
         this.#aggregateSum(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
+      } else if (type === METRIC_TYPES.HISTOGRAM) {
+        this.#aggregateHistogram(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
+      } else {
+        this.#aggregateLastValue(metric, value, attributes, attrKey, timestamp)
       }
     }
 
