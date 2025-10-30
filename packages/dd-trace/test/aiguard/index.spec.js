@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
+const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
@@ -110,7 +111,10 @@ describe('AIGuard SDK', () => {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
           'DD-API-KEY': config.apiKey,
-          'DD-APPLICATION-KEY': config.appKey
+          'DD-APPLICATION-KEY': config.appKey,
+          'DD-AI-GUARD-VERSION': tracerVersion,
+          'DD-AI-GUARD-SOURCE': 'SDK',
+          'DD-AI-GUARD-LANGUAGE': 'nodejs'
         },
         body: postData,
         signal: sinon.match.instanceOf(AbortSignal)

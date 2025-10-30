@@ -15,6 +15,7 @@ const {
 } = require('./tags')
 const log = require('../log')
 const telemetryMetrics = require('../telemetry/metrics')
+const tracerVersion = require('../../../../package.json').version
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
@@ -63,6 +64,9 @@ class AIGuard extends NoopAIGuard {
     this.#headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
+      'DD-AI-GUARD-VERSION': tracerVersion,
+      'DD-AI-GUARD-SOURCE': 'SDK',
+      'DD-AI-GUARD-LANGUAGE': 'nodejs'
     }
     const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
