@@ -46,9 +46,9 @@ const params = {
 // Send the message
 sqs.sendMessage(params, (err, data) => {
   if (err) {
-      console.error('Error sending message:', err)
+    logger.error('Error sending message:', err)
   } else {
-      console.log('Message sent successfully. Message ID:', data.MessageId)
+    logger.info('Message sent successfully. Message ID:', data.MessageId)
   }
 })
 
