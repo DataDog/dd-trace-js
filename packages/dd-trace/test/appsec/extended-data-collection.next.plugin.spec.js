@@ -7,19 +7,22 @@ const { satisfies } = require('semver')
 const msgpack = require('@msgpack/msgpack')
 
 const agent = require('../plugins/agent')
-const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
+const { NODE_MAJOR, NODE_VERSION } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
 const { initApp, startServer } = require('./next.utils')
 const { createDeepObject, getWebSpan } = require('./utils')
 
 describe('extended data collection', () => {
   withVersions('next', 'next', '>=11.1', version => {
-    if (version === '>=11.0.0 <13' && NODE_MAJOR === 24 &&
-      NODE_MINOR === 0 && NODE_PATCH === 0) {
+    if (version === '>=11.0.0 <13' && NODE_VERSION === '24.0.0') {
       // node 24.0.0 fails, but 24.0.1 works
+      return
     }
 
     const realVersion = require(`../../../../versions/next@${version}`).version()
+    if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
+      return
+    }
 
     const tests = [
       {
