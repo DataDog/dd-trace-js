@@ -496,12 +496,13 @@ function dispatcherHook (dispatcherExport) {
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
 
+    // for older versions of playwright, `shouldCreateTestSpan` should always be true,
+    // since the `_runTest` function wrapper is not available for older versions
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
         const browser = getBrowserNameFromProjects(projects, test)
-        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
-        testBeginHandler(test, browser, shouldCreateTestSpan)
+        testBeginHandler(test, browser, true)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
 
@@ -509,7 +510,6 @@ function dispatcherHook (dispatcherExport) {
         const testResult = results.at(-1)
 
         const isTimeout = testResult.status === 'timedOut'
-        const shouldCreateTestSpan = test.expectedStatus === 'skipped'
         testEndHandler(
           {
             test,
@@ -517,7 +517,7 @@ function dispatcherHook (dispatcherExport) {
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
             error: testResult.error,
             isTimeout,
-            shouldCreateTestSpan,
+            shouldCreateTestSpan: true,
             projects
           }
         )
