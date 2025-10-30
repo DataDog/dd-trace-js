@@ -238,6 +238,12 @@ describe('integrations', () => {
 
           for await (const part of stream) {
             assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].text != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()
@@ -290,6 +296,12 @@ describe('integrations', () => {
 
           for await (const part of stream) {
             assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].delta != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()
@@ -349,6 +361,12 @@ describe('integrations', () => {
 
           for await (const part of stream) {
             assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].delta != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()

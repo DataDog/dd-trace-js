@@ -12,7 +12,7 @@ const tracerVersion = require('../../../../package.json').version
 const MOCK_STRING = Symbol('string')
 const MOCK_NUMBER = Symbol('number')
 const MOCK_OBJECT = Symbol('object')
-const MOCK_ANY = Symbol('any')
+const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
  * @typedef {{
@@ -52,7 +52,7 @@ function assertWithMockValues (actual, expected, key) {
     assert.equal(typeof actual, 'number', `${actualWithName} (${util.inspect(actual)}) is not a number`)
   } else if (expected === MOCK_OBJECT) {
     assert.equal(typeof actual, 'object', `${actualWithName} (${util.inspect(actual)}) is not an object`)
-  } else if (expected === MOCK_ANY) {
+  } else if (expected === MOCK_NOT_NULLISH) {
     assert.ok(actual != null, `${actualWithName} does not exist`)
   } else if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `${actualWithName} (${util.inspect(actual)}) is not an array`)
@@ -62,11 +62,8 @@ function assertWithMockValues (actual, expected, key) {
       `${actualWithName} has different length than expected (${actual.length} !== ${expected.length})`
     )
 
-    const sortedExpected = [...expected.sort()]
-    const sortedActual = [...actual.sort()]
-
-    for (let i = 0; i < sortedExpected.length; i++) {
-      assertWithMockValues(sortedActual[i], sortedExpected[i], `${key}.${i}`)
+    for (let i = 0; i < expected.length; i++) {
+      assertWithMockValues(actual[i], expected[i], `${key}.${i}`)
     }
   } else if (typeof expected === 'object') {
     if (typeof actual !== 'object') {
@@ -82,6 +79,7 @@ function assertWithMockValues (actual, expected, key) {
     }
 
     for (const objKey of expectedKeys) {
+      assert.ok(Object.hasOwn(actual, objKey), `${actualWithName} does not have key ${objKey}`)
       assertWithMockValues(actual[objKey], expected[objKey], `${key}.${objKey}`)
     }
   } else {
@@ -178,7 +176,7 @@ function assertLlmObsSpanEvent (actual, expected = {}) {
     )
   }
 
-  // assert arbitrary objects (mock values)
+  // 1. assert arbitrary objects (mock values)
   const actualMetrics = actual.metrics
   const actualMetadata = actual.meta.metadata
   const actualOutputMessages = actual.meta.output.messages
@@ -197,7 +195,19 @@ function assertLlmObsSpanEvent (actual, expected = {}) {
   assertWithMockValues(actualTraceId, traceId, 'traceId')
   assertWithMockValues(actualMetrics, metrics ?? {}, 'metrics')
   assertWithMockValues(actualMetadata, metadata, 'metadata')
-  assertWithMockValues(actualTags, expectedLLMObsTags({ span, tags, error, errorType: error?.type, sessionId }), 'tags')
+
+  // 1a. sort tags since they might be unordered
+  const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
+  const sortedExpectedTags = [...expectedTags.sort()]
+  const sortedActualTags = [...actualTags.sort()]
+  for (let i = 0; i < sortedExpectedTags.length; i++) {
+    assert.equal(
+      sortedActualTags[i],
+      sortedExpectedTags[i],
+      `tags[${i}] does not match expected (${sortedExpectedTags[i]} !== ${sortedActualTags[i]})`
+    )
+  }
+
   if (outputMessages) {
     assertWithMockValues(actualOutputMessages, outputMessages, 'outputMessages')
   } else if (outputDocuments) {
@@ -206,7 +216,7 @@ function assertLlmObsSpanEvent (actual, expected = {}) {
     assertWithMockValues(actualOutputValue, outputValue, 'outputValue')
   }
 
-  // assert deepEqual on everything else
+  // 2. assert deepEqual on everything else
   const expectedMeta = { 'span.kind': spanKind }
 
   if (modelName) expectedMeta.model_name = modelName
@@ -242,7 +252,6 @@ function assertLlmObsSpanEvent (actual, expected = {}) {
 function expectedLLMObsTags ({
   span,
   error,
-  errorType,
   tags,
   sessionId
 }) {
@@ -261,7 +270,7 @@ function expectedLLMObsTags ({
     'language:javascript'
   ]
 
-  if (errorType) spanTags.push(`error_type:${errorType}`)
+  if (error) spanTags.push(`error_type:${span.meta[ERROR_TYPE]}`)
   if (sessionId) spanTags.push(`session_id:${sessionId}`)
 
   for (const [key, value] of Object.entries(tags)) {
@@ -342,7 +351,7 @@ function useLlmObs ({
 module.exports = {
   assertLlmObsSpanEvent,
   useLlmObs,
-  MOCK_ANY,
+  MOCK_NOT_NULLISH,
   MOCK_NUMBER,
   MOCK_STRING,
   MOCK_OBJECT

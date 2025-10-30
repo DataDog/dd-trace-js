@@ -9,7 +9,7 @@ const assert = require('node:assert')
 
 const {
   assertLlmObsSpanEvent,
-  MOCK_ANY,
+  MOCK_NOT_NULLISH,
   MOCK_STRING,
   useLlmObs
 } = require('../../util')
@@ -140,7 +140,7 @@ describe('integrations', () => {
               name: 'langchain.llms.openai.OpenAI',
               inputMessages: [{ content: 'What is 2 + 2?' }],
               outputMessages: [{ content: '\n\n4' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -162,12 +162,12 @@ describe('integrations', () => {
               name: 'langchain.llms.openai.OpenAI',
               inputMessages: [{ content: 'Hello!' }],
               outputMessages: [{ content: '' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_ANY
+                stack: MOCK_NOT_NULLISH
               }
             })
           })
@@ -207,7 +207,7 @@ describe('integrations', () => {
               name: 'langchain.llms.cohere.Cohere',
               inputMessages: [{ content: 'Hello!' }],
               outputMessages: [{ content: 'hello world!' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               // @langchain/cohere does not provide token usage in the response
               metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -230,7 +230,7 @@ describe('integrations', () => {
               name: 'langchain.chat_models.openai.ChatOpenAI',
               inputMessages: [{ content: 'What is 2 + 2?', role: 'user' }],
               outputMessages: [{ content: '2 + 2 = 4', role: 'assistant' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 15, output_tokens: 7, total_tokens: 22 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -252,12 +252,12 @@ describe('integrations', () => {
               name: 'langchain.chat_models.openai.ChatOpenAI',
               inputMessages: [{ content: 'Hello!', role: 'user' }],
               outputMessages: [{ content: '' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_ANY
+                stack: MOCK_NOT_NULLISH
               }
             })
           })
@@ -276,7 +276,7 @@ describe('integrations', () => {
               name: 'langchain.chat_models.anthropic.ChatAnthropic',
               inputMessages: [{ content: 'Hello!', role: 'user' }],
               outputMessages: [{ content: 'Hi there! How can I help you today?', role: 'assistant' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 9, output_tokens: 13, total_tokens: 22 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -324,7 +324,7 @@ describe('integrations', () => {
                   name: 'extract_fictional_info'
                 }]
               }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 82, output_tokens: 31, total_tokens: 113 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -346,7 +346,7 @@ describe('integrations', () => {
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }],
               outputValue: '[1 embedding(s) returned with size 1536]',
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' }
             })
           })
@@ -366,12 +366,12 @@ describe('integrations', () => {
               modelProvider: 'openai',
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_ANY
+                stack: MOCK_NOT_NULLISH
               }
             })
           })
@@ -390,7 +390,7 @@ describe('integrations', () => {
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
               outputValue: '[2 embedding(s) returned with size 1536]',
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' }
             })
           })
@@ -442,7 +442,7 @@ describe('integrations', () => {
                 'Human: Can you tell me about LangSmith?'
               }],
               outputMessages: [{ content: expectedOutput }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -467,7 +467,7 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_ANY
+                stack: MOCK_NOT_NULLISH
               }
             })
           })
@@ -543,7 +543,7 @@ describe('integrations', () => {
               'in Springfield, Illinois, which is often associated with him as his home city.',
                 role: 'assistant'
               }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 16, output_tokens: 30, total_tokens: 46 },
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
@@ -578,7 +578,7 @@ describe('integrations', () => {
                 }
               ],
               outputMessages: [{ content: expectedOutput, role: 'assistant' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
               tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
             })
@@ -635,7 +635,7 @@ describe('integrations', () => {
                 "they already know what everyone's clucking about!",
                 role: 'assistant'
               }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 18, total_tokens: 31 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -652,7 +652,7 @@ describe('integrations', () => {
                 content: 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!',
                 role: 'assistant'
               }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 19, total_tokens: 32 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -734,7 +734,7 @@ describe('integrations', () => {
                 }
               ],
               outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 54, output_tokens: 3, total_tokens: 57 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -794,7 +794,7 @@ describe('integrations', () => {
               name: 'langchain.chat_models.openai.ChatOpenAI',
               inputMessages: [{ content: 'What is 3 squared?', role: 'user' }],
               outputMessages: [{ content: '3 squared is 9.', role: 'assistant' }],
-              metadata: MOCK_ANY,
+              metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 6, total_tokens: 19 },
               tags: { ml_app: 'test', integration: 'langchain' }
             })
@@ -863,7 +863,7 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: 'This is a test error',
-                stack: MOCK_ANY
+                stack: MOCK_NOT_NULLISH
               }
             })
           })
