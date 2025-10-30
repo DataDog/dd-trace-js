@@ -38,6 +38,8 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
+const RUM_FLUSH_WAIT_TIME = 1000
+
 let applyRepeatEachIndex = null
 
 let startedSuites = []
@@ -1134,6 +1136,8 @@ addHook({
                 })
 
                 if (isRumActive) {
+                  // Give some time RUM to flush data, similar to what we do in selenium
+                  await new Promise(resolve => setTimeout(resolve, RUM_FLUSH_WAIT_TIME))
                   const url = page.url()
                   if (url) {
                     const domain = new URL(url).hostname
@@ -1141,9 +1145,10 @@ addHook({
                       name: 'datadog-ci-visibility-test-execution-id',
                       value: '',
                       domain,
-                      expires: 0,
                       path: '/'
                     }])
+                  } else {
+                    log.error('RUM is active but page.url() is not available')
                   }
                 }
               }
