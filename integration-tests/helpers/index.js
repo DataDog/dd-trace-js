@@ -279,7 +279,7 @@ async function createSandbox (
 
   await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
-  const addFlags = ['--linker=hoisted', '--trust']
+  const addFlags = ['--trust']
   if (!existsSync(out)) {
     execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
   }
