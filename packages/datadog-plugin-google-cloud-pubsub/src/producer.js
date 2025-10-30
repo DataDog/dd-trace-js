@@ -17,7 +17,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const hasTraceContext = messages[0]?.attributes?.['x-datadog-trace-id']
 
     // Collect span links from messages 2-N (skip first - it becomes parent)
-    const spanLinkData = hasTraceContex
+    const spanLinkData = hasTraceContext
       ? messages.slice(1).map(msg => this._extractSpanLink(msg.attributes)).filter(Boolean)
       : []
 
