@@ -61,9 +61,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push'
       }
     })
-<<<<<<< Updated upstream
-    try { httpSpan.setTag('service.name', this.tracer._service) } catch {}
-=======
     httpSpan.setTag('service.name', this.tracer._service)
 
     // Finish spans when response completes
@@ -83,7 +80,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
         deliverySpan.finish()
       }
     }
->>>>>>> Stashed changes
 
     res.once('finish', () => finish())
     res.once('close', () => finish())
@@ -321,11 +317,6 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
       projectId,
       topicName: topicName || 'push-subscription-topic'
     }
-<<<<<<< Updated upstream
-
-    return { projectId, topicName }
-=======
->>>>>>> Stashed changes
   }
 }
 
