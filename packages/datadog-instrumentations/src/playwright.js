@@ -1062,6 +1062,8 @@ addHook({
                 })
 
                 if (isRumActive) {
+                  // Give some time RUM to flush data, similar to what we do in selenium
+                  await new Promise(resolve => setTimeout(resolve, RUM_FLUSH_WAIT_TIME))
                   const url = page.url()
                   if (url) {
                     const domain = new URL(url).hostname
@@ -1071,10 +1073,8 @@ addHook({
                       domain,
                       path: '/'
                     }])
-                    // Give some time RUM to flush data
-                    await new Promise(resolve => setTimeout(resolve, RUM_FLUSH_WAIT_TIME))
                   } else {
-                    log.error('afterEach hook: page.url() is not available')
+                    log.error('RUM is active but page.url() is not available')
                   }
                 }
               }
