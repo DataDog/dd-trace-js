@@ -39,8 +39,8 @@ const sqs = new AWS.SQS({ apiVersion: '2012-11-05' })
 
 // Define message parameters
 const params = {
-    MessageBody: 'This is a test message from a standalone Node.js application.',
-    QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789012/MyTestQueue' // Replace with your SQS queue URL
+  MessageBody: 'This is a test message from a standalone Node.js application.',
+  QueueUrl: 'https://sqs.us-east-1.amazonaws.com/123456789012/MyTestQueue' // Replace with your SQS queue URL
 }
 
 // Send the message
