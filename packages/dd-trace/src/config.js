@@ -1475,6 +1475,7 @@ class Config {
 
   getAPIKey () {
     return this.apiKey
+  }
 }
 
 function handleOtel (tagString) {
