@@ -150,36 +150,37 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
+// Helper function to inject trace context into Pub/Sub messages
+function injectTraceContext (attributes, pubsub, topicName) {
+  // Skip if already injected
+  if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+
+  try {
+    const tracer = require('../../dd-trace')
+    const activeSpan = tracer.scope().active()
+
+    if (activeSpan) {
+      const ctx = activeSpan.context()
+      tracer.inject(activeSpan, 'text_map', attributes)
+
+      // Inject upper 64 bits of 128-bit trace ID for proper span linking
+      const traceIdUpperBits = ctx._trace.tags['_dd.p.tid']
+      if (traceIdUpperBits) {
+        attributes['_dd.p.tid'] = traceIdUpperBits
+      }
+    }
+  } catch {
+    // Silently fail - trace context injection is best-effort
+  }
+
+  // Add metadata for consumer correlation
+  if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
+  if (topicName) attributes['pubsub.topic'] = topicName
+}
+
 // Inject trace context into messages at queue time
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
-
-  function injectTraceContext (attributes, pubsub, topicName) {
-    // Skip if already injected
-    if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
-
-    try {
-      const tracer = require('../../dd-trace')
-      const activeSpan = tracer.scope().active()
-      
-      if (activeSpan) {
-        const ctx = activeSpan.context()
-        tracer.inject(activeSpan, 'text_map', attributes)
-        
-        // Inject upper 64 bits of 128-bit trace ID for proper span linking
-        const traceIdUpperBits = ctx._trace.tags['_dd.p.tid']
-        if (traceIdUpperBits) {
-          attributes['_dd.p.tid'] = traceIdUpperBits
-        }
-      }
-    } catch (error) {
-      // Silently fail - trace context injection is best-effort
-    }
-    
-    // Add metadata for consumer correlation
-    if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
-    if (topicName) attributes['pubsub.topic'] = topicName
-  }
 
   // Wrap Topic.publishMessage (modern API)
   if (typeof obj.Topic.prototype.publishMessage === 'function') {
