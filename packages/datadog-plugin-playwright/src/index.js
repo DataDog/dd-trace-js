@@ -47,6 +47,7 @@ const {
   TELEMETRY_EVENT_FINISHED
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
+const log = require('../../dd-trace/src/log')
 
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
@@ -174,7 +175,10 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
-      if (!span) return
+      if (!span) {
+        log.error('ci:playwright:test:page-goto: test span not found')
+        return
+      }
 
       if (isRumActive) {
         span.setTag(TEST_IS_RUM_ACTIVE, 'true')
