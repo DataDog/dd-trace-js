@@ -135,9 +135,29 @@ interface Tracer extends opentracing.Tracer {
   dogstatsd: tracer.DogStatsD;
 
   /**
+   * Data Streams manual checkpointer API.
+   */
+  dataStreamsCheckpointer: tracer.DataStreamsCheckpointer;
+
+  /**
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * OpenFeature Provider with Remote Config integration.
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  openfeature: tracer.OpenFeatureProvider;
+
+  /**
+   * AI Guard SDK
+   */
+  aiguard: tracer.aiguard.AIGuard;
 
   /**
    * @experimental
@@ -163,9 +183,11 @@ interface Plugins {
   "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
+  "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
   "bunyan": tracer.plugins.bunyan;
@@ -193,7 +215,7 @@ interface Plugins {
   "ioredis": tracer.plugins.ioredis;
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
-  "kafkajs": tracer.plugins.kafkajs
+  "kafkajs": tracer.plugins.kafkajs;
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
@@ -593,6 +615,44 @@ declare namespace tracer {
            */
           enabled?: boolean
         }
+      },
+
+      aiguard?: {
+        /**
+         * Set to `true` to enable the SDK.
+         */
+        enabled?: boolean,
+        /**
+         * URL of the AI Guard REST API.
+         */
+        endpoint?: string,
+        /**
+         * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
+         */
+        timeout?: number,
+        /**
+         * Maximum number of conversational messages allowed to be set in the meta-struct
+         */
+        maxMessagesLength?: number,
+        /**
+         * Max size of the content property set in the meta-struct
+         */
+        maxContentSize?: number
+      }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
       }
     };
 
@@ -757,6 +817,8 @@ declare namespace tracer {
 
         /** Whether to enable request body collection on RASP event
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         bodyCollection?: boolean
       },
@@ -781,20 +843,28 @@ declare namespace tracer {
       },
       /**
        * Configuration for extended headers collection tied to security events
+       *
+       * @deprecated Use UI and Remote Configuration to enable extended data collection
        */
       extendedHeadersCollection?: {
         /** Whether to enable extended headers collection
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         enabled: boolean,
 
         /** Whether to redact collected headers
          * @default true
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         redaction: boolean,
 
         /** Specifies the maximum number of headers collected.
          * @default 50
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         maxHeaders: number,
       }
@@ -907,7 +977,7 @@ declare namespace tracer {
     scope?: string,
 
     /**
-     * Custom fields to attach to the user (RBAC, Oauth, etc…).
+     * Custom fields to attach to the user (RBAC, Oauth, etc...).
      */
     [key: string]: string | undefined
   }
@@ -959,6 +1029,29 @@ declare namespace tracer {
      * @beta This method is experimental and could be removed in future versions.
      */
     flush(): void
+  }
+
+  /**
+   * Manual Data Streams Monitoring checkpointer API.
+   */
+  export interface DataStreamsCheckpointer {
+    /**
+     * Sets a produce checkpoint and injects the DSM context into the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param target The target of data (topic, exchange, stream name).
+     * @param carrier The carrier object to inject DSM context into.
+     */
+    setProduceCheckpoint (type: string, target: string, carrier: any): void;
+
+    /**
+     * Sets a consume checkpoint and extracts DSM context from the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param source The source of data (topic, exchange, stream name).
+     * @param carrier The carrier object to extract DSM context from.
+     * @param manualCheckpoint Whether this checkpoint was manually set. Defaults to true.
+     * @returns The DSM context associated with the current pathway.
+     */
+    setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
   }
 
   export interface EventTrackingV2 {
@@ -1057,6 +1150,229 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Flagging Provider (OpenFeature-compatible).
+   *
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface OpenFeatureProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string; [key: string]: any };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
+  }
+
+  export namespace aiguard {
+
+    /**
+     * Represents a tool call made by an AI assistant in an agentic workflow.
+     */
+    export interface ToolCall {
+      /**
+       * Unique identifier for this specific tool call instance used to correlate the call with its response.
+       */
+      id: string;
+      /**
+       * Details about the function being invoked.
+       */
+      function: {
+        /**
+         * The name of the tool/function to be called.
+         */
+        name: string;
+        /**
+         * String containing the arguments to pass to the tool.
+         */
+        arguments: string;
+      };
+    }
+
+    /**
+     * A standard conversational message exchanged with a Large Language Model (LLM).
+     */
+    export interface TextMessage {
+      /**
+       * The role of the message sender in the conversation (e.g.: 'system', 'user', 'assistant').
+       */
+      role: string;
+      /**
+       * The textual content of the message.
+       */
+      content: string;
+    }
+
+    /**
+     * A message from an AI assistant containing only textual content.
+     */
+    export interface AssistantTextMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
+      role: "assistant";
+      /**
+       * The textual response content from the assistant.
+       */
+      content: string;
+      /**
+       * Explicitly excluded when content is present to maintain type safety.
+       */
+      tool_calls?: never;
+    }
+
+    /**
+     * A message from an AI assistant that initiates one or more tool calls.
+     */
+    export interface AssistantToolCallMessage {
+      /**
+       * The role identifier, always set to 'assistant'
+       */
+      role: "assistant";
+      /**
+       * Array of tool calls that the assistant wants to execute.
+       */
+      tool_calls: ToolCall[];
+      /**
+       * Explicitly excluded when tool calls are present to maintain type safety.
+       */
+      content?: never;
+    }
+
+    /**
+     * A message containing the result of a tool invocation.
+     */
+    export interface ToolMessage {
+      /**
+       * The role identifier, always set to 'tool' for tool execution results.
+       */
+      role: "tool";
+      /**
+       * The unique identifier linking this result to the original tool call.
+       * Must correspond to a ToolCall.id from a previous AssistantToolCallMessage.
+       */
+      tool_call_id: string;
+      /**
+       * The output returned by the tool execution.
+       */
+      content: string;
+    }
+
+    export type Message =
+      | TextMessage
+      | AssistantTextMessage
+      | AssistantToolCallMessage
+      | ToolMessage;
+
+    /**
+     * The result returned by AI Guard after evaluating a conversation.
+     */
+    export interface Evaluation {
+      /**
+       * The security action determined by AI Guard:
+       * - 'ALLOW': The conversation is safe to proceed
+       * - 'DENY': The current conversation exchange should be blocked
+       * - 'ABORT': The full workflow should be terminated immediately
+       */
+      action: 'ALLOW' | 'DENY' | 'ABORT';
+      /**
+       * Human-readable explanation for why this action was chosen.
+       */
+      reason: string;
+    }
+
+    /**
+     * Error thrown when AI Guard evaluation determines that a conversation should be blocked
+     * and the client is configured to enforce blocking mode.
+     */
+    export interface AIGuardAbortError extends Error {
+      /**
+       * Human-readable explanation from AI Guard describing why the conversation was blocked.
+       */
+      reason: string;
+    }
+
+    /**
+     * Error thrown when the AI Guard SDK encounters communication failures or API errors while attempting to
+     * evaluate conversations.
+     */
+    export interface AIGuardClientError extends Error {
+      /**
+       * Detailed error information returned by the AI Guard API, formatted according to the JSON:API error
+       * specification.
+       */
+      errors?: unknown[];
+      /**
+       * The underlying error that caused the communication failure, such as network timeouts, connection refused,
+       * or JSON parsing errors.
+       */
+      cause?: Error;
+    }
+
+    /**
+     * AI Guard security client for evaluating AI conversations.
+     */
+    export interface AIGuard {
+      /**
+       * Evaluates a conversation thread.
+       *
+       * @param messages - Array of conversation messages
+       * @param opts - Optional configuration object:
+       *   - `block`: When true, throws an exception if evaluation result is not 'ALLOW'
+       *              and the AI Guard service has blocking mode enabled (default: false).
+       * @returns Promise resolving to an Evaluation with the security decision and reasoning.
+       *          The promise rejects with AIGuardAbortError when `opts.block` is true and the evaluation result would block the request.
+       *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
+       */
+      evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+    }
   }
 
   /** @hidden */
@@ -1339,6 +1655,12 @@ declare namespace tracer {
     interface amqplib extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
+     */
+    interface anthropic extends Instrumentation {}
+
+    /**
      * Currently this plugin automatically instruments
      * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
      * This module uses graphql operations to service requests & thus generates graphql spans.
@@ -1377,12 +1699,6 @@ declare namespace tracer {
      */
     interface aws_sdk extends Instrumentation {
       /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
-      /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
        * @default false
@@ -1411,6 +1727,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * @azure/event-hubs module
+     */
+    interface azure_event_hubs extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * @azure/functions module.
     */
     interface azure_functions extends Instrumentation {}
@@ -1420,6 +1742,7 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
@@ -2492,7 +2815,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 
@@ -2636,6 +2962,15 @@ declare namespace tracer {
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+
+
+      /**
+       * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
+       * @param options The annotation context options.
+       * @param fn The callback over which to apply the annotation context options.
+       * @returns The result of the function.
+       */
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
@@ -2796,6 +3131,18 @@ declare namespace tracer {
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
       tags?: { [key: string]: any }
+    }
+
+    interface AnnotationContextOptions {
+      /**
+       * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * Set to override the span name for any spans annotated within the returned context.
+       */
+      name?: string,
     }
 
     /**

@@ -47,6 +47,7 @@ const {
   TELEMETRY_EVENT_FINISHED
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
+const log = require('../../dd-trace/src/log')
 
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
@@ -54,17 +55,17 @@ class PlaywrightPlugin extends CiPlugin {
   constructor (...args) {
     super(...args)
 
-    this._testSuites = new Map()
+    this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
-      modifiedTests,
+      modifiedFiles,
       onDone
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
       onDone({ isModified })
     })
 
@@ -146,7 +147,7 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
 
-      this._testSuites.set(testSuiteAbsolutePath, testSuiteSpan)
+      this._testSuiteSpansByTestSuiteAbsolutePath.set(testSuiteAbsolutePath, testSuiteSpan)
 
       return ctx.currentStore
     })
@@ -174,7 +175,10 @@ class PlaywrightPlugin extends CiPlugin {
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
-      if (!span) return
+      if (!span) {
+        log.error('ci:playwright:test:page-goto: test span not found')
+        return
+      }
 
       if (isRumActive) {
         span.setTag(TEST_IS_RUM_ACTIVE, 'true')
@@ -196,6 +200,55 @@ class PlaywrightPlugin extends CiPlugin {
           }])
         }
       }
+    })
+
+    this.addSub('ci:playwright:worker:report', (serializedTraces) => {
+      const traces = JSON.parse(serializedTraces)
+      const formattedTraces = []
+
+      for (const trace of traces) {
+        const formattedTrace = []
+        for (const span of trace) {
+          const formattedSpan = {
+            ...span,
+            span_id: id(span.span_id),
+            trace_id: id(span.trace_id),
+            parent_id: id(span.parent_id)
+          }
+          if (span.name === 'playwright.test') {
+            // TODO: remove this comment
+            // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
+            // so we don't need this re-serialization logic. This can be passed just once, since they're unique
+            // for a test session. They can be passed the same way `DD_PLAYWRIGHT_WORKER` is passed.
+            formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
+            formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+            formattedSpan.meta[TEST_COMMAND] = this.command
+            formattedSpan.meta[TEST_MODULE] = this.constructor.id
+            // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
+            const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
+              formattedSpan.meta.test_suite_absolute_path
+            )
+            if (testSuite) {
+              formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
+            }
+            // test_suite_absolute_path is just a hack because in the worker we don't have rootDir and repositoryRoot
+            // but if we pass those the same way we pass `DD_PLAYWRIGHT_WORKER` this is not necessary
+            const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
+            const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
+            // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
+            formattedSpan.meta[TEST_SUITE] = testSuitePath
+            formattedSpan.meta[TEST_SOURCE_FILE] = testSourceFile
+            formattedSpan.resource = `${testSuitePath}.${formattedSpan.meta[TEST_NAME]}`
+            delete formattedSpan.meta.test_suite_absolute_path
+          }
+          formattedTrace.push(formattedSpan)
+        }
+        formattedTraces.push(formattedTrace)
+      }
+
+      formattedTraces.forEach(trace => {
+        this.tracer._exporter.export(trace)
+      })
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -226,53 +279,6 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.currentStore = { ...store, span }
 
       return ctx.currentStore
-    })
-
-    this.addSub('ci:playwright:worker:report', (serializedTraces) => {
-      const traces = JSON.parse(serializedTraces)
-      const formattedTraces = []
-
-      for (const trace of traces) {
-        const formattedTrace = []
-        for (const span of trace) {
-          const formattedSpan = {
-            ...span,
-            span_id: id(span.span_id),
-            trace_id: id(span.trace_id),
-            parent_id: id(span.parent_id)
-          }
-          if (span.name === 'playwright.test') {
-            // TODO: remove this comment
-            // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
-            // so we don't need this re-serialization logic. This can be passed just once, since they're unique
-            // for a test session. They can be passed the same way `DD_PLAYWRIGHT_WORKER` is passed.
-            formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
-            formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
-            formattedSpan.meta[TEST_COMMAND] = this.command
-            formattedSpan.meta[TEST_MODULE] = this.constructor.id
-            // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
-            const testSuite = this._testSuites.get(formattedSpan.meta.test_suite_absolute_path)
-            if (testSuite) {
-              formattedSpan.meta[TEST_SUITE_ID] = testSuite.context().toSpanId()
-            }
-            // test_suite_absolute_path is just a hack because in the worker we don't have rootDir and repositoryRoot
-            // but if we pass those the same way we pass `DD_PLAYWRIGHT_WORKER` this is not necessary
-            const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
-            const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
-            // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
-            formattedSpan.meta[TEST_SUITE] = testSuitePath
-            formattedSpan.meta[TEST_SOURCE_FILE] = testSourceFile
-            formattedSpan.resource = `${testSuitePath}.${formattedSpan.meta[TEST_NAME]}`
-            delete formattedSpan.meta.test_suite_absolute_path
-          }
-          formattedTrace.push(formattedSpan)
-        }
-        formattedTraces.push(formattedTrace)
-      }
-
-      formattedTraces.forEach(trace => {
-        this.tracer._exporter.export(trace)
-      })
     })
 
     this.addSub('ci:playwright:test:finish', ({
@@ -391,11 +397,50 @@ class PlaywrightPlugin extends CiPlugin {
         this.tracer._exporter.flush(onDone)
       }
     })
+
+    this.addSub('ci:playwright:test:skip', ({
+      testName,
+      testSuiteAbsolutePath,
+      testSourceLine,
+      browserName,
+      isNew,
+      isDisabled,
+      isModified,
+      isQuarantined
+    }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(
+        testName,
+        testSuiteAbsolutePath,
+        testSuite,
+        testSourceFile,
+        testSourceLine,
+        browserName
+      )
+
+      span.setTag(TEST_STATUS, 'skip')
+
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+      }
+      if (isDisabled) {
+        span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+      }
+      if (isModified) {
+        span.setTag(TEST_IS_MODIFIED, 'true')
+      }
+      if (isQuarantined) {
+        span.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+      }
+
+      span.finish()
+    })
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
   startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
-    const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
+    const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
       [TEST_SOURCE_START]: testSourceLine

@@ -6,13 +6,22 @@ on:
     branches: [master]
   schedule:
     - cron: 0 4 * * *
+  workflow_dispatch:
+    inputs:
+      latest-version:
+        description: 'Node version to use'
+        required: false
+        type: string
+
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
   cancel-in-progress: true
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
+  LATEST_VERSION: ${{ inputs.latest-version }}
+
 
 jobs:
   lambda:
@@ -34,11 +43,31 @@ jobs:
         with:
           suffix: lambda
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   aws-sdk:
     strategy:
+      fail-fast: false
       matrix:
         node-version: [oldest, latest]
+        spec:
+          - client
+          - aws-sdk
+          - bedrockruntime
+          - dynamodb
+          - eventbridge
+          - kinesis
+          - lambda
+          - s3
+          - serverless-peer-service
+          - sns
+          - sqs
+          - stepfunctions
+          - util
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -49,10 +78,11 @@ jobs:
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
           FORCE_NONINTERACTIVE: 'true'
-          LAMBDA_EXECUTOR: local
           START_WEB: '0'
         ports:
           - 4566:4566
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock:rw
       # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
       # To-Do: Debug localstack / lambda and localstack / S3
       localstack-legacy:
@@ -72,6 +102,7 @@ jobs:
           EDGE_PORT_HTTP: 4567
     env:
       PLUGINS: aws-sdk
+      SPEC: ${{ matrix.spec }}
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -85,8 +116,40 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}
+          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
+
+  azure-event-hubs:
+    runs-on: ubuntu-latest
+    services:
+        azurite:
+          image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+          ports:
+            - "127.0.0.1:10000:10000"
+            - "127.0.0.1:10001:10001"
+            - "127.0.0.1:10002:10002"
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          ports:
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
+          env:
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
+            ACCEPT_EULA: "Y"
+    env:
+      PLUGINS: azure-event-hubs
+      SERVICES: azurite,azureeventhubsemulator
+    steps:
+        - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        - uses: ./.github/actions/plugins/test
+          with:
+            dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
     runs-on: ubuntu-latest
@@ -97,6 +160,22 @@ jobs:
               - "127.0.0.1:10000:10000"
               - "127.0.0.1:10001:10001"
               - "127.0.0.1:10002:10002"
+        azureeventhubsemulator:
+          image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
+          ports:
+            - "127.0.0.1:5673:5672"
+            - "127.0.0.1:9092:9092"
+          env:
+            BLOB_SERVER: azurite
+            METADATA_SERVER: azurite
+            ACCEPT_EULA: "Y"
+        azuresqledge:
+          image: mcr.microsoft.com/azure-sql-edge:1.0.7
+          ports:
+              - "127.0.0.1:1433:1433"
+          env:
+              ACCEPT_EULA: "Y"
+              MSSQL_SA_PASSWORD: "Localtestpass1!"
         azureservicebusemulator:
           image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
           ports:
@@ -106,23 +185,35 @@ jobs:
               ACCEPT_EULA: "Y"
               MSSQL_SA_PASSWORD: "Localtestpass1!"
               SQL_SERVER: azuresqledge
-        azuresqledge:
-          image: mcr.microsoft.com/azure-sql-edge:1.0.7
-          ports:
-              - "127.0.0.1:1433:1433"
-          env:
-              ACCEPT_EULA: "Y"
-              MSSQL_SA_PASSWORD: "Localtestpass1!"
     env:
       PLUGINS: azure-functions
-      SERVICES: azureservicebusemulator,azuresqledge
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/node/active-lts
+
+      - name: Copy emulator config files
+        run: |
+          docker cp \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json \
+          ${{ job.services.azureeventhubsemulator.id }}:/Eventhubs_Emulator/ConfigFiles/Config.json
+
+          docker cp \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json \
+          ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
+      - name: Restart emulators to pick up config changes
+        run : |
+          docker restart ${{ job.services.azureeventhubsemulator.id }}
+          docker restart ${{ job.services.azureservicebusemulator.id }}
+      - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
-      - run: npm install -g azure-functions-core-tools@4.1.0
+      - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
       - run: yarn test:plugins:ci
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+        if: always()
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -149,6 +240,8 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -163,3 +256,5 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}

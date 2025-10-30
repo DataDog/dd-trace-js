@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const rimraf = require('rimraf')
 
 const util = require('node:util')
 const os = require('node:os')
@@ -90,7 +89,7 @@ describe('Plugin', () => {
     })
 
     after((done) => {
-      rimraf(tmpdir, realFS, done)
+      realFS.rm(tmpdir, { force: true, recursive: true }, done)
       delete plugins.fs
     })
 
@@ -206,9 +205,9 @@ describe('Plugin', () => {
         describe('promises.open', () => {
           let fd
 
-          afterEach(() => {
-            if (typeof fd === 'number') {
-              realFS.closeSync(fd)
+          afterEach(async () => {
+            if (fd && typeof fd.close === 'function') {
+              await fd.close()
               fd = undefined
             }
           })
@@ -1635,7 +1634,6 @@ describe('Plugin', () => {
           afterEach(async () => {
             try {
               await filehandle.close()
-              realFS.closeSync(filehandle.fd)
             } catch (e) { /* */ }
             await fs.promises.unlink(filename)
           })

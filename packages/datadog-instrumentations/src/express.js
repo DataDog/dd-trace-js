@@ -3,8 +3,18 @@
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const {
+  setRouterMountPath,
+  markAppMounted,
+  normalizeRoutePaths,
+  wrapRouteMethodsAndPublish,
+  extractMountPaths,
+  hasRouterCycle,
+  collectRoutesFromRouter
+} = require('./helpers/router-helper')
 
 const handleChannel = channel('apm:express:request:handle')
+const routeAddedChannel = channel('apm:express:route:added')
 
 function wrapHandle (handle) {
   return function handleWithTrace (req, res) {
@@ -56,8 +66,80 @@ function wrapResponseRender (render) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'] }, express => {
+function wrapAppAll (all) {
+  return function wrappedAll (path, ...otherArgs) {
+    if (!routeAddedChannel.hasSubscribers) return all.call(this, path, ...otherArgs)
+
+    const paths = normalizeRoutePaths(path)
+
+    for (const p of paths) {
+      routeAddedChannel.publish({ method: '*', path: p })
+    }
+
+    return all.call(this, path, ...otherArgs)
+  }
+}
+
+// Wrap app.route() to instrument Route object
+function wrapAppRoute (route) {
+  return function wrappedRoute (path, ...otherArgs) {
+    const routeObj = route.call(this, path, ...otherArgs)
+
+    if (!routeAddedChannel.hasSubscribers) return routeObj
+
+    const paths = normalizeRoutePaths(path)
+
+    if (!paths.length) return routeObj
+
+    wrapRouteMethodsAndPublish(routeObj, paths, ({ method, path }) => {
+      routeAddedChannel.publish({ method, path })
+    })
+
+    return routeObj
+  }
+}
+
+function wrapAppUse (use) {
+  return function wrappedUse (...args) {
+    if (!args.length) return use.call(this)
+
+    // Get mount argument and use it to register each router against the exact paths Express will use.
+    const { mountPaths, startIdx } = extractMountPaths(args[0])
+    const pathsToRegister = mountPaths.length ? mountPaths : ['/']
+
+    for (let i = startIdx; i < args.length; i++) {
+      const router = args[i]
+
+      if (!router || typeof router !== 'function') continue
+
+      markAppMounted(router)
+
+      // Avoid enumerating routes for routers that contain cycles.
+      // Express will refuse those at runtime, but collecting them here could loop forever.
+      let skipCollection = false
+      if (routeAddedChannel.hasSubscribers) {
+        skipCollection = hasRouterCycle(router)
+      }
+
+      for (const mountPath of pathsToRegister) {
+        const normalizedMountPath = mountPath || '/'
+        setRouterMountPath(router, normalizedMountPath)
+
+        if (!skipCollection && routeAddedChannel.hasSubscribers) {
+          collectRoutesFromRouter(router, normalizedMountPath)
+        }
+      }
+    }
+
+    return use.apply(this, args)
+  }
+}
+
+addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
+  shimmer.wrap(express.application, 'all', wrapAppAll)
+  shimmer.wrap(express.application, 'route', wrapAppRoute)
+  shimmer.wrap(express.application, 'use', wrapAppUse)
 
   shimmer.wrap(express.response, 'json', wrapResponseJson)
   shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
@@ -69,7 +151,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 // Express 5 does not rely on router in the same way as v4 and should not be instrumented anymore.
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
-addHook({ name: 'express', versions: ['4'] }, express => {
+addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
@@ -131,12 +213,12 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'] }, express => {
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: ['lib/express.js'] }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })

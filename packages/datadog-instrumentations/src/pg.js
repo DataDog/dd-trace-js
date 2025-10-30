@@ -15,15 +15,19 @@ const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
 const { errorMonitor } = require('node:events')
 
-addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
-  shimmer.wrap(pg.Client.prototype, 'query', query => wrapQuery(query))
-  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
-  return pg
-})
-
-addHook({ name: 'pg', file: 'lib/native/index.js', versions: ['>=8.0.3'] }, Client => {
+addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
+})
+
+addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => {
+  shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
+  return Client
+})
+
+addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
+  return pg
 })
 
 function wrapQuery (query) {

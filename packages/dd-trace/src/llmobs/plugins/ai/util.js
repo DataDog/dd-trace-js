@@ -34,7 +34,7 @@ function getSpanTags (ctx) {
  * getOperation(span) // 'doGenerate'
  *
  * @param {import('../../../opentracing/span')} span
- * @returns {string}
+ * @returns {string | undefined}
  */
 function getOperation (span) {
   const name = span._name
@@ -45,18 +45,24 @@ function getOperation (span) {
 
 /**
  * Get the LLM token usage from the span tags
- * @param {Record<string, string>} tags
- * @returns {{inputTokens: number, outputTokens: number, totalTokens: number}}
+ * Supports both AI SDK v4 (promptTokens/completionTokens) and v5 (inputTokens/outputTokens)
+ * @template T extends {inputTokens: number, outputTokens: number, totalTokens: number}
+ * @param {T} tags
+ * @returns {Pick<T, 'inputTokens' | 'outputTokens' | 'totalTokens'>}
  */
 function getUsage (tags) {
   const usage = {}
-  const inputTokens = tags['ai.usage.promptTokens']
-  const outputTokens = tags['ai.usage.completionTokens']
+
+  // AI SDK v5 uses inputTokens/outputTokens, v4 uses promptTokens/completionTokens
+  // Check v5 properties first, fall back to v4
+  const inputTokens = tags['ai.usage.inputTokens'] ?? tags['ai.usage.promptTokens']
+  const outputTokens = tags['ai.usage.outputTokens'] ?? tags['ai.usage.completionTokens']
 
   if (inputTokens != null) usage.inputTokens = inputTokens
   if (outputTokens != null) usage.outputTokens = outputTokens
 
-  const totalTokens = inputTokens + outputTokens
+  // v5 provides totalTokens directly, v4 requires computation
+  const totalTokens = tags['ai.usage.totalTokens'] ?? (inputTokens + outputTokens)
   if (!Number.isNaN(totalTokens)) usage.totalTokens = totalTokens
 
   return usage
@@ -64,9 +70,10 @@ function getUsage (tags) {
 
 /**
  * Safely JSON parses a string value with a default fallback
+ * @template T typeof defaultValue
  * @param {string} str
- * @param {any} defaultValue
- * @returns {Record<string, any> | string | Array<any>}
+ * @param {T} defaultValue
+ * @returns {Record<string, unknown> | string | Array<unknown> | null | T}
  */
 function getJsonStringValue (str, defaultValue) {
   let maybeValue = defaultValue
@@ -81,7 +88,7 @@ function getJsonStringValue (str, defaultValue) {
 
 /**
  * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
- * @param {import('../../../opentracing/span')} span
+ * @param {Record<string, unknown>} tags
  * @returns {Record<string, string> | null}
  */
 function getModelMetadata (tags) {
@@ -167,6 +174,16 @@ function getToolCallResultContent (content) {
   }
 }
 
+/**
+ * Computes the LLM Observability `ai` span name
+ * @param {string} operation
+ * @param {string} functionId
+ * @returns {string}
+ */
+function getLlmObsSpanName (operation, functionId) {
+  return functionId ? `${functionId}.${operation}` : operation
+}
+
 module.exports = {
   getSpanTags,
   getOperation,
@@ -175,5 +192,6 @@ module.exports = {
   getModelMetadata,
   getGenerationMetadata,
   getToolNameFromTags,
-  getToolCallResultContent
+  getToolCallResultContent,
+  getLlmObsSpanName
 }

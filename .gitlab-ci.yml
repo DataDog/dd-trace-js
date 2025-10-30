@@ -4,10 +4,11 @@ stages:
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
   - macrobenchmarks
+  - macrobenchmarks-gate
+  - macrobenchmarks-notify
 
+# Config Registry CI jobs
 validate_supported_configurations_local_file:
-  rules:
-    - when: on_success
   extends: .validate_supported_configurations_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/supported-configurations.json"

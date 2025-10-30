@@ -1,17 +1,22 @@
+include:
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/notify-slo-breaches.template.yml'
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/check-slo-breaches.template.yml'
+
 .macrobenchmarks:
   stage: macrobenchmarks
   rules:
-    - if: ($NIGHTLY_BENCHMARKS || $CI_PIPELINE_SOURCE != "schedule") && $CI_COMMIT_REF_NAME == "master"
-      when: always
+    - when: always
     - when: manual
   tags: ["runner:apm-k8s-same-cpu"]
   needs: []
   interruptible: true
-  timeout: 1h
+  timeout: 15m # TODO: Fix worker queueing and reduce this.
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:js-hapi
   script:
     - git clone --branch js/hapi https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
-    - bp-runner bp-runner.yml --debug -t
+    - bp-runner bp-runner.$EXPERIMENT.yml --debug -t
   artifacts:
     name: "artifacts"
     when: always
@@ -20,13 +25,13 @@
     expire_in: 3 months
   variables:
     K6_OPTIONS_WARMUP_RATE: 500
-    K6_OPTIONS_WARMUP_DURATION: 1m
+    K6_OPTIONS_WARMUP_DURATION: 30s
     K6_OPTIONS_WARMUP_GRACEFUL_STOP: 10s
     K6_OPTIONS_WARMUP_PRE_ALLOCATED_VUS: 4
     K6_OPTIONS_WARMUP_MAX_VUS: 4
 
     K6_OPTIONS_NORMAL_OPERATION_RATE: 300
-    K6_OPTIONS_NORMAL_OPERATION_DURATION: 10m
+    K6_OPTIONS_NORMAL_OPERATION_DURATION: 3m
     K6_OPTIONS_NORMAL_OPERATION_GRACEFUL_STOP: 10s
     K6_OPTIONS_NORMAL_OPERATION_PRE_ALLOCATED_VUS: 4
     K6_OPTIONS_NORMAL_OPERATION_MAX_VUS: 4
@@ -58,14 +63,54 @@ baseline:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: baseline
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: baseline
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 only-tracing:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: only-tracing
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
 
 only-tracing-with-runtime-metrics-enabled:
   extends: .macrobenchmarks
   variables:
-    DD_BENCHMARKS_CONFIGURATION: only-tracing
+    DD_BENCHMARKS_CONFIGURATION: only-tracing-with-runtime-metrics-enabled
     DD_RUNTIME_METRICS_ENABLED: "true"
+    # Must be set to ensure consistent benchmark result naming and tagging
+    CI_JOB_NAME: only-tracing-with-runtime-metrics-enabled
+  parallel:
+    matrix:
+      - EXPERIMENT: normal-operation
+      - EXPERIMENT: high-load
+
+check-slo-breaches:
+  extends: .check-slo-breaches
+  stage: macrobenchmarks-gate
+  needs:
+    - baseline
+    - only-tracing
+    - only-tracing-with-runtime-metrics-enabled
+  artifacts:
+    name: "artifacts"
+    when: always
+    paths:
+      - platform/artifacts/
+    expire_in: 3 months
+
+notify-slo-breaches:
+  extends: .notify-slo-breaches
+  stage: macrobenchmarks-notify
+  needs:
+    - check-slo-breaches
+  variables:
+    CHANNEL: "notifications-apm-js"

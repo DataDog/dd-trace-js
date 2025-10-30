@@ -45,16 +45,21 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   let message = ''
   let inputTokens = 0
   let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
 
   for (const { chunk: { bytes } } of chunks) {
     const body = JSON.parse(Buffer.from(bytes).toString('utf8'))
 
     switch (modelProviderUpper) {
       case PROVIDER.AMAZON: {
-        message += body?.outputText
-
-        inputTokens = body?.inputTextTokenCount
-        outputTokens = body?.totalOutputTextTokenCount
+        if (body?.outputText) {
+          message += body?.outputText
+          inputTokens = body?.inputTextTokenCount
+          outputTokens = body?.totalOutputTextTokenCount
+        } else if (body?.contentBlockDelta?.delta?.text) {
+          message += body.contentBlockDelta.delta.text
+        }
 
         break
       }
@@ -100,6 +105,8 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     if (invocationMetrics) {
       inputTokens = invocationMetrics.inputTokenCount
       outputTokens = invocationMetrics.outputTokenCount
+      cacheReadTokens = invocationMetrics.cacheReadInputTokenCount
+      cacheWriteTokens = invocationMetrics.cacheWriteInputTokenCount
     }
   }
 
@@ -107,7 +114,9 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     message,
     role: 'assistant',
     inputTokens,
-    outputTokens
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   })
 }
 
@@ -118,7 +127,9 @@ class Generation {
     choiceId = '',
     role,
     inputTokens,
-    outputTokens
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -127,7 +138,9 @@ class Generation {
     this.role = role
     this.usage = {
       inputTokens,
-      outputTokens
+      outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens
     }
   }
 }
@@ -145,17 +158,16 @@ class RequestParams {
     stream = '',
     n
   } = {}) {
-    // stringify prompt as it could be a single prompt as well as a list of message objects
-    this.prompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt) || ''
-    this.temperature = temperature === undefined ? undefined : temperature
-    this.topP = topP === undefined ? undefined : topP
-    this.topK = topK === undefined ? undefined : topK
-    this.maxTokens = maxTokens === undefined ? undefined : maxTokens
+    this.prompt = prompt
+    this.temperature = temperature
+    this.topP = topP
+    this.topK = topK
+    this.maxTokens = maxTokens
     this.stopSequences = stopSequences || []
     this.inputType = inputType || ''
     this.truncate = truncate || ''
     this.stream = stream || ''
-    this.n = n === undefined ? undefined : n
+    this.n = n
   }
 }
 
@@ -224,17 +236,48 @@ function extractRequestParams (params, provider) {
       })
     }
     case PROVIDER.AMAZON: {
+      const prompt = requestBody.inputText
       if (modelId.includes('embed')) {
-        return new RequestParams({ prompt: requestBody.inputText })
+        return new RequestParams({ prompt })
+      } else if (prompt !== undefined) {
+        const textGenerationConfig = requestBody.textGenerationConfig || {}
+        return new RequestParams({
+          prompt,
+          temperature: textGenerationConfig.temperature,
+          topP: textGenerationConfig.topP,
+          maxTokens: textGenerationConfig.maxTokenCount,
+          stopSequences: textGenerationConfig.stopSequences
+        })
+      } else if (Array.isArray(requestBody.messages)) {
+        const inferenceConfig = requestBody.inferenceConfig || {}
+        const messages = []
+        if (Array.isArray(requestBody.system)) {
+          for (const sysMsg of requestBody.system) {
+            messages.push({
+              content: sysMsg.text,
+              role: 'system'
+            })
+          }
+        }
+        for (const message of requestBody.messages) {
+          const textBlocks = message.content?.filter(block => block.text) || []
+          if (textBlocks.length > 0) {
+            messages.push({
+              content: textBlocks.map(block => block.text).join(''),
+              role: message.role
+            })
+          }
+        }
+        return new RequestParams({
+          prompt: messages,
+          temperature: inferenceConfig.temperature,
+          topP: inferenceConfig.topP,
+          maxTokens: inferenceConfig.maxTokens,
+          stopSequences: inferenceConfig.stopSequences
+        })
       }
-      const textGenerationConfig = requestBody.textGenerationConfig || {}
-      return new RequestParams({
-        prompt: requestBody.inputText,
-        temperature: textGenerationConfig.temperature,
-        topP: textGenerationConfig.topP,
-        maxTokens: textGenerationConfig.maxTokenCount,
-        stopSequences: textGenerationConfig.stopSequences
-      })
+
+      return new RequestParams({ prompt })
     }
     case PROVIDER.ANTHROPIC: {
       let prompt = requestBody.prompt
@@ -340,14 +383,27 @@ function extractTextAndResponseReason (response, provider, modelName) {
         if (modelName.includes('embed')) {
           return new Generation({ message: body.embedding })
         }
-        const results = body.results || []
-        if (results.length > 0) {
-          const result = results[0]
+        if (body.results) {
+          const results = body.results || []
+          if (results.length > 0) {
+            const result = results[0]
+            return new Generation({
+              message: result.outputText,
+              finishReason: result.completionReason,
+              inputTokens: body.inputTextTokenCount,
+              outputTokens: result.tokenCount
+            })
+          }
+        } else if (body.output) {
+          const output = body.output || {}
           return new Generation({
-            message: result.outputText,
-            finishReason: result.completionReason,
-            inputTokens: body.inputTextTokenCount,
-            outputTokens: result.tokenCount
+            message: output.message?.content[0]?.text ?? 'Unsupported content type',
+            finishReason: body.stopReason,
+            role: output.message?.role,
+            inputTokens: body.usage?.inputTokens,
+            outputTokens: body.usage?.outputTokens,
+            cacheReadInputTokenCount: body.usage?.cacheReadInputTokenCount,
+            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount
           })
         }
         break

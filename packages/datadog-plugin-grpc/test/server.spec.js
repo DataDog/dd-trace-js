@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const getPort = require('get-port')
 
 const Readable = require('node:stream').Readable
 const path = require('node:path')
@@ -12,12 +11,12 @@ const agent = require('../../dd-trace/test/plugins/agent')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
 
-const nodeMajor = parseInt(process.versions.node.split('.')[0])
-const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
+const { NODE_MAJOR } = require('../../../version')
+const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   let grpc
-  let port
+  let port = 0
   let server
   let tracer
   let call
@@ -38,8 +37,9 @@ describe('Plugin', () => {
 
     return new Promise((resolve, reject) => {
       if (server.bindAsync) {
-        server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+        server.bindAsync('0.0.0.0:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
           if (err) return reject(err)
+          port = boundPort
 
           server.addService(TestService.service, service)
           server.start()
@@ -47,7 +47,7 @@ describe('Plugin', () => {
           resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
         })
       } else {
-        server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
+        port = server.bind('0.0.0.0:0', grpc.ServerCredentials.createInsecure())
         server.addService(TestService.service, service)
         server.start()
 
@@ -59,16 +59,13 @@ describe('Plugin', () => {
   describe('grpc/server', () => {
     beforeEach(() => {
       call = null
-      return getPort().then(newPort => {
-        port = newPort
-      })
     })
 
     afterEach(() => {
       server.forceShutdown()
     })
 
-    withVersions('grpc', pkgs, (version, pkg) => {
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })

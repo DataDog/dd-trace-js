@@ -20,7 +20,8 @@ const {
   NAME,
   PROPAGATED_PARENT_ID_KEY,
   ROOT_PARENT_ID,
-  CACHED_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -28,6 +29,7 @@ const {
   DECORATOR,
   PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
+const { storage } = require('./storage')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -96,6 +98,17 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    // apply annotation context
+    const annotationContext = storage.getStore()?.annotationContext
+
+    // apply annotation context tags
+    const tags = annotationContext?.tags
+    if (tags) this.tagSpanTags(span, tags)
+
+    // apply annotation context name
+    const annotationContextName = annotationContext?.name
+    if (annotationContextName) this._setTag(span, NAME, annotationContextName)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -145,8 +158,11 @@ class LLMObsTagger {
         case 'totalTokens':
           processedKey = TOTAL_TOKENS_METRIC_KEY
           break
-        case 'cachedTokens':
-          processedKey = CACHED_TOKENS_METRIC_KEY
+        case 'cacheReadTokens':
+          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWriteTokens':
+          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
           break
       }
 
@@ -264,6 +280,32 @@ class LLMObsTagger {
     return filteredToolCalls
   }
 
+  #filterToolResults (toolResults) {
+    if (!Array.isArray(toolResults)) {
+      toolResults = [toolResults]
+    }
+
+    const filteredToolResults = []
+    for (const toolResult of toolResults) {
+      if (typeof toolResult !== 'object') {
+        this.#handleFailure('Tool result must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { result, toolId, type } = toolResult
+      const toolResultObj = {}
+
+      const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
+      const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
+
+      if (condition1 && condition2 && condition3) {
+        filteredToolResults.push(toolResultObj)
+      }
+    }
+    return filteredToolResults
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -286,6 +328,7 @@ class LLMObsTagger {
 
       const { content = '', role } = message
       const toolCalls = message.toolCalls
+      const toolResults = message.toolResults
       const toolId = message.toolId
       const messageObj = { content }
 
@@ -301,6 +344,14 @@ class LLMObsTagger {
 
         if (filteredToolCalls.length) {
           messageObj.tool_calls = filteredToolCalls
+        }
+      }
+
+      if (toolResults) {
+        const filteredToolResults = this.#filterToolResults(toolResults)
+
+        if (filteredToolResults.length) {
+          messageObj.tool_results = filteredToolResults
         }
       }
 

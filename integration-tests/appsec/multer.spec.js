@@ -1,18 +1,16 @@
 'use strict'
 
-const { assert } = require('chai')
-const path = require('path')
 const axios = require('axios')
+const { assert } = require('chai')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+
+const path = require('node:path')
 
 const {
   createSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
-
-const { NODE_MAJOR } = require('../../version')
-
-const describe = NODE_MAJOR <= 16 ? globalThis.describe.skip : globalThis.describe
 
 describe('multer', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env

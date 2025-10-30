@@ -11,6 +11,7 @@ const PROVIDER = {
   MISTRAL: 'MISTRAL'
 }
 
+const systemPrompt = 'Please respond with one sentence.'
 const prompt = 'What is the capital of France?'
 const temperature = 0.5
 const maxTokens = 512
@@ -30,6 +31,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 98,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: '\nParis is the capital of France. France is a country in Western Europe, and Paris ' +
         'is its capital. Paris is one of the most populous cities in the European Union, ' +
         'with a population of more than 2 million people. It is also one of the most ' +
@@ -48,6 +51,44 @@ bedrockruntime.models = [
     }
   },
   {
+    provider: PROVIDER.AMAZON,
+    modelId: 'amazon.nova-pro-v1:0',
+    systemPrompt,
+    userPrompt: prompt,
+    requestBody: {
+      system: [{ text: systemPrompt }],
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              text: prompt,
+            }
+          ],
+        }
+      ],
+      inferenceConfig: {
+        maxTokens,
+        topP: 0.1,
+        topK: 20,
+        temperature
+      }
+    },
+    response: {
+      inputTokens: 13,
+      outputTokens: 7,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      text: 'The capital of France is Paris.'
+    },
+    streamedResponse: {
+      inputTokens: 13,
+      outputTokens: 8,
+      text: 'The capital city of France is Paris.'
+    },
+    outputRole: 'assistant'
+  },
+  {
     provider: PROVIDER.AI21,
     modelId: 'ai21.jamba-1-5-mini-v1:0',
     userPrompt: prompt,
@@ -62,6 +103,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 17,
       outputTokens: 8,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' The capital of France is Paris.'
     },
     outputRole: 'assistant'
@@ -78,6 +121,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 16,
       outputTokens: 11,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' The capital of France is Paris.'
     }
   },
@@ -104,6 +149,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 14,
       outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: 'The capital of France is Paris.'
     }
   },
@@ -119,6 +166,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 335,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
         ' is also the most populous city in the country. Paris has a rich history and' +
         ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
@@ -161,6 +210,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 7,
       outputTokens: 512,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: '**\nA) Berlin\nB) Paris\nC) London\nD) Rome\n\nAnswer: ' +
         'B) Paris\n\n**What is the largest planet in our solar system?**\nA) Earth\nB) ' +
         'Saturn\nC) Jupiter\nD) Uranus\n\nAnswer: C) Jupiter\n\n**What is the smallest ' +
@@ -220,6 +271,8 @@ bedrockruntime.models = [
     response: {
       inputTokens: 8,
       outputTokens: 129,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       text: ' Paris is the capital city of France. It ' +
         'is the most populous city in France and is considered one of the cultural, ' +
         'artistic, and intellectual centers of Europe. Paris is known for its iconic ' +
@@ -243,6 +296,71 @@ bedrockruntime.models = [
 bedrockruntime.modelConfig = {
   temperature,
   maxTokens
+}
+
+bedrockruntime.cacheWriteRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  userPrompt: prompt,
+  requestBody: {
+    temperature,
+    anthropic_version: 'bedrock-2023-05-31',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'You are a geography expert'.repeat(200) + prompt,
+            cache_control: {
+              type: 'ephemeral'
+            }
+          }
+        ],
+      }
+    ],
+    max_tokens: 10,
+  },
+  response: {
+    inputTokens: 1213,
+    outputTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 1209,
+    text: 'The capital of France is Paris.\n\nParis is'
+  },
+  outputRole: 'assistant'
+}
+bedrockruntime.cacheReadRequest = {
+  provider: PROVIDER.ANTHROPIC,
+  modelId: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+  userPrompt: 'What is the capital of Italy?',
+  requestBody: {
+    temperature,
+    anthropic_version: 'bedrock-2023-05-31',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'You are a geography expert'.repeat(200) + 'What is the capital of Italy?',
+            cache_control: {
+              type: 'ephemeral'
+            }
+          }
+        ],
+      }
+    ],
+    max_tokens: 10,
+  },
+  response: {
+    inputTokens: 1213,
+    outputTokens: 10,
+    cacheReadTokens: 1209,
+    cacheWriteTokens: 0,
+    text: 'The capital of Italy is Rome (Roma in Italian'
+  },
+  outputRole: 'assistant'
 }
 
 module.exports = bedrockruntime

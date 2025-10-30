@@ -26,7 +26,7 @@ jobs:
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: system_tests_binaries
           path: ./binaries/**/*
@@ -35,7 +35,9 @@ jobs:
     needs:
       - build-artifacts
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
-    secrets: inherit
+    secrets:
+      TEST_OPTIMIZATION_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     permissions:
       contents: read
       id-token: write
@@ -48,3 +50,4 @@ jobs:
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
+      push_to_test_optimization: true

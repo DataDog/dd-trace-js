@@ -53,6 +53,7 @@ const {
   DD_CAPABILITIES_IMPACTED_TESTS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
 
@@ -68,7 +69,8 @@ versions.forEach((version) => {
       sandbox = await createSandbox([
         `vitest@${version}`,
         `@vitest/coverage-istanbul@${version}`,
-        `@vitest/coverage-v8@${version}`
+        `@vitest/coverage-v8@${version}`,
+        'tinypool'
       ], true)
       cwd = sandbox.folder
     })
@@ -375,7 +377,7 @@ versions.forEach((version) => {
           const testSuite = events.find(event => event.type === 'test_suite_end').content
           assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
           assert.equal(testSuite.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
-        })
+        }, 25000)
 
       childProcess = exec(
         '../../node_modules/.bin/vitest run',
@@ -383,7 +385,7 @@ versions.forEach((version) => {
           cwd: `${cwd}/ci-visibility/subproject`,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             TEST_DIR: './vitest-test.mjs'
           },
           stdio: 'inherit'
@@ -398,7 +400,10 @@ versions.forEach((version) => {
     })
 
     // total code coverage only works for >=2.0.0
-    if (version === 'latest') {
+    // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
+    // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
+    // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
+    if (version === 'latest' && NODE_MAJOR >= 20) {
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
@@ -1261,6 +1266,8 @@ versions.forEach((version) => {
                 ddsource: 'dd_debugger',
                 level: 'error'
               })
+              assert.include(diLog.ddtags, 'git.repository_url:')
+              assert.include(diLog.ddtags, 'git.commit.sha:')
               assert.equal(diLog.debugger.snapshot.language, 'javascript')
               assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
                 a: {
@@ -1897,6 +1904,54 @@ versions.forEach((version) => {
             runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
           })
         })
+
+        it('does not crash if the request to get test management tests fails', async () => {
+          let testOutput = ''
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: false
+          })
+          receiver.setTestManagementTestsResponseCode(500)
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // it is not retried
+              assert.equal(tests.length, 1)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                DD_TRACE_DEBUG: '1'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
+            eventsPromise
+          ])
+          assert.include(testOutput, 'Test management tests could not be fetched')
+        })
       })
     }
 
@@ -2086,6 +2141,7 @@ versions.forEach((version) => {
             )
           })
       })
+
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
           receiver.setKnownTests({
@@ -2103,6 +2159,70 @@ versions.forEach((version) => {
           })
           runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
+      })
+    })
+
+    it('does not blow up when tinypool is used outside of a test', (done) => {
+      childProcess = exec('node ./ci-visibility/run-tinypool.mjs', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'pipe'
+      })
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', (code) => {
+        assert.include(testOutput, 'result 10')
+        assert.equal(code, 0)
+        done()
+      })
+    })
+
+    context('programmatic api', () => {
+      it('can report data using the vitest programmatic api', async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSessionEvent = events.find(event => event.type === 'test_session_end')
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
+
+            assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+            assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
+            assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
+            assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
+
+            const testSuite = testSuiteEvents.find(
+              suite => suite.content.resource ===
+                'test_suite.ci-visibility/vitest-tests-programmatic-api/test-programmatic-api.mjs'
+            )
+            assert.equal(testSuite.content.meta[TEST_STATUS], 'fail')
+
+            assert.equal(testEvents.length, 3)
+          })
+
+        childProcess = exec(
+          'node run-programmatic-api.mjs',
+          {
+            cwd: `${cwd}/ci-visibility/vitest-tests-programmatic-api`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: './test-programmatic-api*'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit')
+        ])
       })
     })
   })

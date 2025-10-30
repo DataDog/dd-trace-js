@@ -2,7 +2,7 @@
 
 const pkg = require('./pkg')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('./constants')
-const { getEnvironmentVariables } = require('./config-helper')
+const { getEnvironmentVariable: getEnv } = require('./config-helper')
 
 // eslint-disable-next-line @stylistic/max-len
 const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
@@ -11,21 +11,16 @@ const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:ap
 // eslint-disable-next-line @stylistic/max-len
 const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
 
-const {
-  AWS_LAMBDA_FUNCTION_NAME,
-  FUNCTION_NAME,
-  K_SERVICE,
-  WEBSITE_SITE_NAME
-} = getEnvironmentVariables()
-
-const service = AWS_LAMBDA_FUNCTION_NAME ||
-  FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
-  K_SERVICE || // Google Cloud Function Name set by newer runtimes
-  WEBSITE_SITE_NAME || // set by Azure Functions
+const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
+  getEnv('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
+  getEnv('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
+  getEnv('WEBSITE_SITE_NAME') || // set by Azure Functions
   pkg.name ||
   'node'
 
 module.exports = {
+  apiKey: undefined,
+  appKey: undefined,
   apmTracingEnabled: true,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
@@ -36,12 +31,14 @@ module.exports = {
   'appsec.blockedTemplateJson': undefined,
   'appsec.enabled': undefined,
   'appsec.eventTracking.mode': 'identification',
+  // TODO appsec.extendedHeadersCollection is deprecated, to delete in a major
   'appsec.extendedHeadersCollection.enabled': false,
   'appsec.extendedHeadersCollection.redaction': true,
   'appsec.extendedHeadersCollection.maxHeaders': 50,
   'appsec.obfuscatorKeyRegex': defaultWafObfuscatorKeyRegex,
   'appsec.obfuscatorValueRegex': defaultWafObfuscatorValueRegex,
   'appsec.rasp.enabled': true,
+  // TODO Deprecated, to delete in a major
   'appsec.rasp.bodyCollection': false,
   'appsec.rateLimit': 100,
   'appsec.rules': undefined,
@@ -55,6 +52,10 @@ module.exports = {
   baggageTagKeys: 'user.id,session.id,account.id',
   clientIpEnabled: false,
   clientIpHeader: null,
+  'cloudPayloadTagging.requestsEnabled': false,
+  'cloudPayloadTagging.responsesEnabled': false,
+  'cloudPayloadTagging.maxDepth': 10,
+  'cloudPayloadTagging.rules': [],
   'crashtracking.enabled': true,
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
@@ -68,8 +69,14 @@ module.exports = {
   'dynamicInstrumentation.redactionExcludedIdentifiers': [],
   'dynamicInstrumentation.uploadIntervalSeconds': 1,
   env: undefined,
+  'experimental.aiguard.enabled': false,
+  'experimental.aiguard.endpoint': undefined,
+  'experimental.aiguard.maxMessagesLength': 16,
+  'experimental.aiguard.maxContentSize': 512 * 1024,
+  'experimental.aiguard.timeout': 10_000, // ms
   'experimental.enableGetRumData': false,
   'experimental.exporter': undefined,
+  'experimental.flaggingProvider.enabled': false,
   flushInterval: 2000,
   flushMinSpans: 1000,
   gitMetadataEnabled: true,
@@ -94,6 +101,9 @@ module.exports = {
   'iast.telemetryVerbosity': 'INFORMATION',
   'iast.stackTrace.enabled': true,
   injectionEnabled: [],
+  'installSignature.id': null,
+  'installSignature.time': null,
+  'installSignature.type': null,
   instrumentationSource: 'manual',
   injectForce: null,
   isAzureFunction: false,
@@ -119,6 +129,17 @@ module.exports = {
   isTestManagementEnabled: false,
   isImpactedTestsEnabled: false,
   logInjection: true,
+  otelLogsEnabled: false,
+  otelUrl: undefined,
+  otelLogsUrl: undefined, // Will be computed using agent host
+  otelHeaders: undefined,
+  otelLogsHeaders: '',
+  otelProtocol: 'http/protobuf',
+  otelLogsProtocol: 'http/protobuf',
+  otelLogsTimeout: 10_000,
+  otelTimeout: 10_000,
+  otelLogsBatchTimeout: 5000,
+  otelLogsMaxExportBatchSize: 512,
   lookup: undefined,
   inferredProxyServicesEnabled: false,
   memcachedCommandEnabled: false,
@@ -171,7 +192,7 @@ module.exports = {
   'tracePropagationStyle.inject': ['datadog', 'tracecontext', 'baggage'],
   'tracePropagationStyle.extract': ['datadog', 'tracecontext', 'baggage'],
   'tracePropagationStyle.otelPropagators': false,
-  traceWebsocketMessagesEnabled: true,
+  traceWebsocketMessagesEnabled: false,
   traceWebsocketMessagesInheritSampling: true,
   traceWebsocketMessagesSeparateTraces: true,
   tracing: true,

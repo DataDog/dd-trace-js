@@ -8,6 +8,14 @@ const extractPackageAndModulePath = require(
   '../datadog-instrumentations/src/helpers/extract-package-and-module-path.js'
 )
 
+const { pathToFileURL, fileURLToPath } = require('url')
+const { processModule, isESMFile } = require('./src/utils.js')
+
+const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
+const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+
+let rewriter
+
 for (const hook of Object.values(hooks)) {
   if (typeof hook === 'object') {
     hook.fn()
@@ -28,11 +36,11 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
 const fs = require('fs')
+const { execSync } = require('child_process')
 
 const builtins = new Set()
 
@@ -42,14 +50,7 @@ for (const builtin of RAW_BUILTINS) {
 }
 
 const DEBUG = !!process.env.DD_TRACE_DEBUG
-
-// We don't want to handle any built-in packages
-// Those packages will still be handled via RITM
-// Attempting to instrument them would fail as they have no package.json file
-for (const pkg of INSTRUMENTED) {
-  if (builtins.has(pkg) || pkg.startsWith('node:')) continue
-  modulesOfInterest.add(pkg)
-}
+const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 module.exports.name = 'datadog-esbuild'
 
@@ -61,11 +62,67 @@ function isESMBuild (build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
+function getGitMetadata () {
+  const gitMetadata = {
+    repositoryURL: null,
+    commitSHA: null
+  }
+
+  try {
+    gitMetadata.repositoryURL = execSync('git config --get remote.origin.url', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      cwd: process.cwd()
+    }).trim()
+  } catch (e) {
+    if (DEBUG) {
+      console.warn('Warning: failed to get git repository URL:', e.message)
+    }
+  }
+
+  try {
+    gitMetadata.commitSHA = execSync('git rev-parse HEAD', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      cwd: process.cwd()
+    }).trim()
+  } catch (e) {
+    if (DEBUG) {
+      console.warn('Warning: failed to get git commit SHA:', e.message)
+    }
+  }
+
+  return gitMetadata
+}
+
 module.exports.setup = function (build) {
+  if (DD_IAST_ENABLED) {
+    const iastRewriter = require('../dd-trace/src/appsec/iast/taint-tracking/rewriter')
+    rewriter = iastRewriter.getRewriter()
+  }
+
+  const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
+    ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
-  if (isESMBuild(build)) {
-    build.initialOptions.banner ??= {}
-    build.initialOptions.banner.js ??= ''
+  build.initialOptions.banner ??= {}
+  build.initialOptions.banner.js ??= ''
+  if (DD_IAST_ENABLED) {
+    build.initialOptions.banner.js =
+      `globalThis.__DD_ESBUILD_IAST_${isSourceMapEnabled ? 'WITH_SM' : 'WITH_NO_SM'} = true;
+      ${isSourceMapEnabled ? `globalThis.__DD_ESBUILD_BASEPATH = '${require('../dd-trace/src/util').ddBasePath}';` : ''}
+${build.initialOptions.banner.js}`
+  }
+
+  try {
+    // eslint-disable-next-line n/no-unpublished-require
+    require.resolve('@openfeature/core')
+  } catch (error) {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@openfeature/core')
+  }
+
+  const esmBuild = isESMBuild(build)
+  if (esmBuild) {
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {
       build.initialOptions.banner.js = `import { createRequire as $dd_createRequire } from 'module';
 import { fileURLToPath as $dd_fileURLToPath } from 'url';
@@ -77,17 +134,35 @@ ${build.initialOptions.banner.js}`
     }
   }
 
+  // Get git metadata at build time and add it to the banner for both ESM and CommonJS builds
+  const gitMetadata = getGitMetadata()
+  if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
+    build.initialOptions.banner ??= {}
+    build.initialOptions.banner.js ??= ''
+
+    build.initialOptions.banner.js = `if (typeof process === 'object' && process !== null &&
+    process.env !== null && typeof process.env === 'object') {
+  ${gitMetadata.repositoryURL ? `process.env.DD_GIT_REPOSITORY_URL = '${gitMetadata.repositoryURL}';` : ''}
+  ${gitMetadata.commitSHA ? `process.env.DD_GIT_COMMIT_SHA = '${gitMetadata.commitSHA}';` : ''}
+}
+${build.initialOptions.banner.js}`
+
+    if (DEBUG) {
+      console.log('Info: automatically injected git metadata:')
+      console.log(`DD_GIT_REPOSITORY_URL: ${gitMetadata.repositoryURL || 'not available'}`)
+      console.log(`DD_GIT_COMMIT_SHA: ${gitMetadata.commitSHA || 'not available'}`)
+    }
+  } else if (DEBUG) {
+    console.warn('Warning: No git metadata available - skipping injection')
+  }
+
+  // first time is intercepted, proxy should be created, next time the original should be loaded
+  const interceptedESMModules = new Set()
+
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
-      return
-    }
-
-    // TODO: Should this also check for namespace === 'file'?
-    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
-      // This is local application code, not an instrumented package
-      if (DEBUG) console.log(`LOCAL: ${args.path}`)
       return
     }
 
@@ -102,7 +177,7 @@ ${build.initialOptions.banner.js}`
 
     let fullPathToModule
     try {
-      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
+      fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir, args.kind === 'import-statement')
     } catch (err) {
       if (DEBUG) {
         console.warn(`Warning: Unable to find "${args.path}".` +
@@ -110,6 +185,21 @@ ${build.initialOptions.banner.js}`
       }
       return
     }
+
+    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
+      // It is local application code, not an instrumented package
+      if (DEBUG) console.log(`APP: ${args.path}`)
+
+      return {
+        path: fullPathToModule,
+        pluginData: {
+          path: args.path,
+          full: fullPathToModule,
+          applicationFile: true
+        }
+      }
+    }
+
     const extracted = extractPackageAndModulePath(fullPathToModule)
 
     const internal = builtins.has(args.path)
@@ -117,8 +207,25 @@ ${build.initialOptions.banner.js}`
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
-      // The file namespace is used when requiring files from disk in userland
+      // Internal module like http/fs is imported and the build output is ESM
+      if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
 
+        return {
+          path: fullPathToModule,
+          pluginData: {
+            pkg: extracted?.pkg,
+            path: extracted?.path,
+            full: fullPathToModule,
+            raw: args.path,
+            pkgOfInterest: true,
+            kind: args.kind,
+            internal,
+            isESM: true
+          }
+        }
+      }
+      // The file namespace is used when requiring files from disk in userland
       let pathToPackageJson
       try {
         // we can't use require.resolve('pkg/package.json') as ESM modules don't make the file available
@@ -140,6 +247,11 @@ ${build.initialOptions.banner.js}`
 
       const packageJson = JSON.parse(fs.readFileSync(pathToPackageJson).toString())
 
+      const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
+      if (isESM && !interceptedESMModules.has(fullPathToModule)) {
+        fullPathToModule += ESM_INTERCEPTED_SUFFIX
+      }
+
       if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
@@ -152,63 +264,120 @@ ${build.initialOptions.banner.js}`
           full: fullPathToModule,
           raw: args.path,
           pkgOfInterest: true,
-          internal
+          kind: args.kind,
+          internal,
+          isESM
         }
       }
     }
   })
 
-  build.onLoad({ filter: /.*/ }, args => {
-    if (!args.pluginData?.pkgOfInterest) {
-      return
+  build.onLoad({ filter: /.*/ }, async args => {
+    if (args.pluginData?.pkgOfInterest) {
+      const data = args.pluginData
+
+      if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
+
+      const pkgPath = data.raw !== data.pkg
+        ? `${data.pkg}/${data.path}`
+        : data.pkg
+
+      // Read the content of the module file of interest
+      let contents
+
+      if (data.isESM) {
+        if (args.path.endsWith(ESM_INTERCEPTED_SUFFIX)) {
+          args.path = args.path.slice(0, -1 * ESM_INTERCEPTED_SUFFIX.length)
+
+          if (data.internal) {
+            args.path = args.path.slice(INTERNAL_ESM_INTERCEPTED_PREFIX.length)
+          }
+
+          interceptedESMModules.add(args.path)
+
+          const setters = await processModule({
+            path: args.path,
+            internal: data.internal,
+            context: { format: 'module' }
+          })
+
+          const iitmPath = require.resolve('import-in-the-middle/lib/register.js')
+          const toRegister = data.internal ? args.path : pathToFileURL(args.path)
+          // Mimic a Module object (https://tc39.es/ecma262/#sec-module-namespace-objects).
+          contents = `
+import { register } from ${JSON.stringify(iitmPath)};
+import * as namespace from ${JSON.stringify(args.path)};
+const _ = Object.create(null, { [Symbol.toStringTag]: { value: 'Module' } });
+const set = {};
+const get = {};
+
+${Array.from(setters.values()).join(';\n')};
+
+register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)});
+`
+        } else {
+          contents = fs.readFileSync(args.path, 'utf8')
+        }
+      } else {
+        const fileCode = fs.readFileSync(args.path, 'utf8')
+        contents = `
+        (function() {
+          ${fileCode}
+        })(...arguments);
+        {
+          const dc = require('dc-polyfill');
+          const ch = dc.channel('${CHANNEL}');
+          const mod = module.exports
+          const payload = {
+            module: mod,
+            version: '${data.version}',
+            package: '${data.pkg}',
+            path: '${pkgPath}'
+          };
+          ch.publish(payload);
+          module.exports = payload.module;
+      }
+      `
+      }
+
+      // https://esbuild.github.io/plugins/#on-load-results
+      return {
+        contents,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
+      }
     }
+    if (DD_IAST_ENABLED && args.pluginData?.applicationFile) {
+      const ext = path.extname(args.path).toLowerCase()
+      const isJs = /^\.(js|mjs|cjs)$/.test(ext)
+      if (!isJs) return
 
-    const data = args.pluginData
-
-    if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
-
-    const pkgPath = data.raw !== data.pkg
-      ? `${data.pkg}/${data.path}`
-      : data.pkg
-
-    // Read the content of the module file of interest
-    const fileCode = fs.readFileSync(args.path, 'utf8')
-
-    const contents = `
-      (function() {
-        ${fileCode}
-      })(...arguments);
-      {
-        const dc = require('dc-polyfill');
-        const ch = dc.channel('${CHANNEL}');
-        const mod = module.exports
-        const payload = {
-          module: mod,
-          version: '${data.version}',
-          package: '${data.pkg}',
-          path: '${pkgPath}'
-        };
-        ch.publish(payload);
-        module.exports = payload.module;
-    }
-    `
-
-    // https://esbuild.github.io/plugins/#on-load-results
-    return {
-      contents,
-      loader: 'js',
-      resolveDir: path.dirname(args.path)
+      if (DEBUG) console.log(`REWRITE: ${args.path}`)
+      const fileCode = fs.readFileSync(args.path, 'utf8')
+      const rewritten = rewriter.rewrite(fileCode, args.path, ['iast'])
+      return {
+        contents: rewritten.content,
+        loader: 'js',
+        resolveDir: path.dirname(args.path)
+      }
     }
   })
 }
 
 // @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve (path, directory) {
+function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path === '.') {
     path = './'
   } else if (path === '..') {
     path = '../'
   }
+  let conditions
+  if (usesImportStatement) {
+    conditions = new Set(['import', 'node'])
+  }
 
-  return require.resolve(path, { paths: [directory] })
+  if (path.startsWith('file://')) {
+    path = fileURLToPath(path)
+  }
+  return require.resolve(path, { paths: [directory], conditions })
 }

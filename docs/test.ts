@@ -262,7 +262,6 @@ const elasticsearchOptions: plugins.elasticsearch = {
 
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
-  splitByAwsService: false,
   batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},
@@ -305,9 +304,11 @@ const openSearchOptions: plugins.opensearch = {
 
 tracer.use('amqp10');
 tracer.use('amqplib');
+tracer.use('anthropic');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bunyan');
 tracer.use('couchbase');
@@ -686,3 +687,46 @@ llmobs.annotate(span, {
 
 // flush
 llmobs.flush()
+
+
+// AI Guard typings tests
+
+tracer.init({
+  experimental: {
+    aiguard: {
+      enabled: true,
+      endpoint: 'http://localhost',
+      maxMessagesLength: 22,
+      maxContentSize: 1024,
+      timeout: 1000
+    }
+  }
+})
+
+const aiguard = tracer.aiguard
+
+aiguard.evaluate([
+  { role: 'user', content: 'What is 2 + 2' },
+]).then(result => {
+  result.action && result.reason
+})
+
+aiguard.evaluate([
+  {
+    role: 'assistant',
+    tool_calls: [
+      {
+        id: 'call_1',
+        function: { name: 'calc', arguments: '{ "operator": "+", "args": [2, 2] }' }
+      },
+    ],
+  }
+]).then(result => {
+  result.action && result.reason
+})
+
+aiguard.evaluate([
+  { role: 'tool', tool_call_id: 'call_1', content: '5' },
+]).then(result => {
+  result.action && result.reason
+})

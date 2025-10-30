@@ -147,7 +147,7 @@ describe('telemetry logs', () => {
       it('should be called when an Error object is published to datadog:log:error', () => {
         const error = new Error('message')
         const stack = error.stack
-        errorLog.publish({ cause: error })
+        errorLog.publish({ cause: error, sendViaTelemetry: true })
 
         expect(logCollectorAdd)
           .to.be.calledOnceWith(match({
@@ -159,7 +159,7 @@ describe('telemetry logs', () => {
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {
-        errorLog.publish({ message: 'custom error message' })
+        errorLog.publish({ message: 'custom error message', sendViaTelemetry: true })
 
         expect(logCollectorAdd).to.be.calledOnceWith(match({
           message: 'custom error message',
@@ -169,13 +169,19 @@ describe('telemetry logs', () => {
       })
 
       it('should not be called when an invalid object is published to datadog:log:error', () => {
-        errorLog.publish({ invalid: 'field' })
+        errorLog.publish({ invalid: 'field', sendViaTelemetry: true })
 
         expect(logCollectorAdd).not.to.be.called
       })
 
       it('should not be called when an object without message and stack is published to datadog:log:error', () => {
         errorLog.publish(Log.parse(() => new Error('error')))
+
+        expect(logCollectorAdd).not.to.be.called
+      })
+
+      it('should not be called when an error contains sendViaTelemetry:false', () => {
+        errorLog.publish({ message: 'custom error message', sendViaTelemetry: false })
 
         expect(logCollectorAdd).not.to.be.called
       })

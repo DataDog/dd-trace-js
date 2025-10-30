@@ -75,6 +75,7 @@ versions.forEach((version) => {
       context(...args)
     }
   }
+
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
@@ -314,7 +315,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('early flake detection', () => {
-      it('retries new tests', (done) => {
+      it('retries new tests', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -333,7 +334,8 @@ versions.forEach((version) => {
                 // 'highest-level-describe  leading and trailing spaces    should work with passing tests',
                 'highest-level-describe  leading and trailing spaces    should work with skipped tests',
                 'highest-level-describe  leading and trailing spaces    should work with fixme',
-                'highest-level-describe  leading and trailing spaces    should work with annotated tests'
+                // it will be considered new
+                // 'highest-level-describe  leading and trailing spaces    should work with annotated tests'
               ],
               'skipped-suite-test.js': [
                 'should work with fixme root'
@@ -354,23 +356,56 @@ versions.forEach((version) => {
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const newTests = tests.filter(test =>
+            const newPassingTests = tests.filter(test =>
               test.resource.endsWith('should work with passing tests')
             )
-            newTests.forEach(test => {
+            newPassingTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
             })
+            assert.equal(
+              newPassingTests.length,
+              NUM_RETRIES_EFD + 1,
+              'passing test has not been retried the correct number of times'
+            )
+            const newAnnotatedTests = tests.filter(test =>
+              test.resource.endsWith('should work with annotated tests')
+            )
+            newAnnotatedTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+            assert.equal(
+              newAnnotatedTests.length,
+              NUM_RETRIES_EFD + 1,
+              'annotated test has not been retried the correct number of times'
+            )
 
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            // The only new tests are the passing and annotated tests
+            const totalNewTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(
+              totalNewTests.length,
+              newPassingTests.length + newAnnotatedTests.length,
+              'total new tests is not the sum of the passing and annotated tests'
+            )
 
-            assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+            // The only retried tests are the passing and annotated tests
+            const totalRetriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(
+              totalRetriedTests.length,
+              newPassingTests.length - 1 + newAnnotatedTests.length - 1,
+              'total retried tests is not the sum of the passing and annotated tests'
+            )
+            assert.equal(
+              totalRetriedTests.length,
+              NUM_RETRIES_EFD * 2,
+              'total retried tests is not the correct number of times'
+            )
 
-            retriedTests.forEach(test => {
+            totalRetriedTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
             })
 
             // all but one has been retried
-            assert.equal(retriedTests.length, newTests.length - 1)
+            assert.equal(totalRetriedTests.length, totalNewTests.length - 2)
           })
 
         childProcess = exec(
@@ -385,9 +420,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
 
       it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
@@ -700,6 +736,51 @@ versions.forEach((version) => {
           receiverPromise,
         ])
       })
+
+      it('does not run EFD if the percentage of new tests is too high', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            },
+            faulty_session_threshold: 0
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({ playwright: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 0)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+            })
+        ])
+      })
     })
 
     it('does not crash when maxFailures=1 and there is an error', (done) => {
@@ -1003,6 +1084,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('test management', () => {
+      const ATTEMPT_TO_FIX_NUM_RETRIES = 3
       context('attempt to fix', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
@@ -1011,6 +1093,11 @@ versions.forEach((version) => {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true
                       }
@@ -1042,27 +1129,30 @@ versions.forEach((version) => {
               }
 
               const attemptedToFixTests = tests.filter(
-                test => test.meta[TEST_NAME] === 'attempt to fix should attempt to fix failed test'
+                test => test.meta[TEST_NAME].startsWith('attempt to fix should attempt to fix')
               )
 
-              if (isAttemptingToFix) {
-                assert.equal(attemptedToFixTests.length, 4)
-              } else {
-                assert.equal(attemptedToFixTests.length, 1)
+              if (isDisabled) {
+                assert.equal(attemptedToFixTests.length, 2)
+                assert.isTrue(attemptedToFixTests.every(test =>
+                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+                ))
+                // if the test is disabled, there will be no retries
+                return
               }
 
-              if (isDisabled) {
-                const numDisabledTests = attemptedToFixTests.filter(test =>
-                  test.meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
-                ).length
-                assert.equal(numDisabledTests, attemptedToFixTests.length)
+              if (isAttemptingToFix) {
+                assert.equal(attemptedToFixTests.length, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+              } else {
+                assert.equal(attemptedToFixTests.length, 2)
               }
 
               if (isQuarantined) {
                 const numQuarantinedTests = attemptedToFixTests.filter(test =>
                   test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
                 ).length
-                assert.equal(numQuarantinedTests, attemptedToFixTests.length)
+                // quarantined tests still run and are retried
+                assert.equal(numQuarantinedTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
               }
 
               // Retried tests are in randomly order, so we just count number of tests
@@ -1088,21 +1178,24 @@ versions.forEach((version) => {
                 test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'false'
               ).length
 
+              // One of the tests is passing always
               if (isAttemptingToFix) {
-                assert.equal(countAttemptToFixTests, attemptedToFixTests.length)
-                assert.equal(countRetriedAttemptToFixTests, attemptedToFixTests.length - 1)
+                assert.equal(countAttemptToFixTests, 2 * (ATTEMPT_TO_FIX_NUM_RETRIES + 1))
+                assert.equal(countRetriedAttemptToFixTests, 2 * ATTEMPT_TO_FIX_NUM_RETRIES)
                 if (shouldAlwaysPass) {
                   assert.equal(testsMarkedAsFailedAllRetries, 0)
                   assert.equal(testsMarkedAsFailed, 0)
-                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                  assert.equal(testsMarkedAsPassedAllRetries, 2)
                 } else if (shouldFailSometimes) {
+                  // one test failed sometimes, the other always passed
                   assert.equal(testsMarkedAsFailedAllRetries, 0)
                   assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 0)
-                } else { // always fail
+                  assert.equal(testsMarkedAsPassedAllRetries, 1)
+                } else {
+                  // one test failed always, the other always passed
                   assert.equal(testsMarkedAsFailedAllRetries, 1)
                   assert.equal(testsMarkedAsFailed, 1)
-                  assert.equal(testsMarkedAsPassedAllRetries, 0)
+                  assert.equal(testsMarkedAsPassedAllRetries, 1)
                 }
               } else {
                 assert.equal(countAttemptToFixTests, 0)
@@ -1110,9 +1203,9 @@ versions.forEach((version) => {
                 assert.equal(testsMarkedAsFailedAllRetries, 0)
                 assert.equal(testsMarkedAsPassedAllRetries, 0)
               }
-            })
+            }, 25000)
 
-        const runAttemptToFixTest = (done, {
+        const runAttemptToFixTest = async ({
           isAttemptingToFix,
           isQuarantined,
           extraEnvVars,
@@ -1144,57 +1237,75 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isQuarantined || isDisabled || shouldAlwaysPass) {
-                // even though a test fails, the exit code is 0 because the test is quarantined
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isQuarantined || isDisabled || shouldAlwaysPass) {
+            // even though a test fails, the exit code is 0 because the test is quarantined
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can attempt to fix and mark last attempt as failed if every attempt fails', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true })
         })
 
-        it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldAlwaysPass: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, shouldAlwaysPass: true })
         })
 
-        it('can attempt to fix and not mark last attempt if attempts both pass and fail', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, shouldFailSometimes: true })
         })
 
-        it('does not attempt to fix tests if test management is not enabled', (done) => {
-          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+        it('does not attempt to fix tests if test management is not enabled', async () => {
+          receiver.setSettings({
+            test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done)
+          await runAttemptToFixTest()
         })
 
-        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
 
-          runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+          await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
 
-        it('does not fail retry if a test is quarantined', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not fail retry if a test is quarantined', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
           receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        quarantined: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
                         quarantined: true
@@ -1206,17 +1317,25 @@ versions.forEach((version) => {
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantined: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
         })
 
-        it('does not fail retry if a test is disabled', (done) => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+        it('does not fail retry if a test is disabled', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
           receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'attempt-to-fix-test.js': {
                   tests: {
                     'attempt to fix should attempt to fix failed test': {
+                      properties: {
+                        attempt_to_fix: true,
+                        disabled: true
+                      }
+                    },
+                    'attempt to fix should attempt to fix passed test': {
                       properties: {
                         attempt_to_fix: true,
                         disabled: true
@@ -1228,7 +1347,7 @@ versions.forEach((version) => {
             }
           })
 
-          runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabled: true })
+          await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
         })
       })
 
@@ -1272,9 +1391,9 @@ versions.forEach((version) => {
                 assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
                 assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
-            })
+            }, 25000)
 
-        const runDisableTest = (done, isDisabling, extraEnvVars) => {
+        const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
 
           childProcess = exec(
@@ -1291,34 +1410,34 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isDisabling) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isDisabling) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can disable tests', (done) => {
+        it('can disable tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, true)
+          await runDisableTest(true)
         })
 
-        it('fails if disable is not enabled', (done) => {
+        it('fails if disable is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runDisableTest(done, false)
+          await runDisableTest(false)
         })
 
-        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runDisableTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
@@ -1357,9 +1476,9 @@ versions.forEach((version) => {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
-            })
+            }, 25000)
 
-        const runQuarantineTest = (done, isQuarantining, extraEnvVars) => {
+        const runQuarantineTest = async (isQuarantining, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
 
           childProcess = exec(
@@ -1376,35 +1495,85 @@ versions.forEach((version) => {
             }
           )
 
-          childProcess.on('exit', (exitCode) => {
-            testAssertionsPromise.then(() => {
-              if (isQuarantining) {
-                assert.equal(exitCode, 0)
-              } else {
-                assert.equal(exitCode, 1)
-              }
-              done()
-            }).catch(done)
-          })
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            testAssertionsPromise
+          ])
+
+          if (isQuarantining) {
+            assert.equal(exitCode, 0)
+          } else {
+            assert.equal(exitCode, 1)
+          }
         }
 
-        it('can quarantine tests', (done) => {
+        it('can quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, true)
+          await runQuarantineTest(true)
         })
 
-        it('fails if quarantine is not enabled', (done) => {
+        it('fails if quarantine is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          runQuarantineTest(done, false)
+          await runQuarantineTest(false)
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', (done) => {
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
+      })
+
+      it('does not crash if the request to get test management tests fails', async () => {
+        let testOutput = ''
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false
+        })
+        receiver.setTestManagementTestsResponseCode(500)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // they are not retried
+            assert.equal(tests.length, 2)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              DD_TRACE_DEBUG: '1'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+          eventsPromise
+        ])
+        assert.include(testOutput, 'Test management tests could not be fetched')
       })
     })
 
@@ -1531,25 +1700,26 @@ versions.forEach((version) => {
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            const playwrightTest = events.find(event => event.type === 'test').content
-            if (isRedirecting) {
-              assert.notProperty(playwrightTest.meta, TEST_IS_RUM_ACTIVE)
-              assert.notProperty(playwrightTest.meta, TEST_BROWSER_VERSION)
-            } else {
-              assert.property(playwrightTest.meta, TEST_IS_RUM_ACTIVE, 'true')
-              assert.property(playwrightTest.meta, TEST_BROWSER_VERSION)
-            }
-            assert.include(playwrightTest.meta, {
-              [TEST_BROWSER_NAME]: 'chromium',
-              [TEST_TYPE]: 'browser'
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            tests.forEach(test => {
+              if (isRedirecting) {
+                // can't do assertions because playwright has been redirected
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.notProperty(test.meta, TEST_IS_RUM_ACTIVE)
+                assert.notProperty(test.meta, TEST_BROWSER_VERSION)
+              } else {
+                assert.propertyVal(test.meta, TEST_STATUS, 'pass')
+                assert.property(test.meta, TEST_IS_RUM_ACTIVE, 'true')
+                assert.property(test.meta, TEST_BROWSER_VERSION)
+              }
             })
           })
 
-      const runTest = (done, { isRedirecting }, extraEnvVars) => {
+      const runRumTest = async ({ isRedirecting }, extraEnvVars) => {
         const testAssertionsPromise = getTestAssertions({ isRedirecting })
 
         childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js active-test-span-rum-test.js',
+          './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
             env: {
@@ -1562,17 +1732,18 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
-      it('can correlate tests and RUM sessions', (done) => {
-        runTest(done, { isRedirecting: false })
+      it('can correlate tests and RUM sessions', async () => {
+        await runRumTest({ isRedirecting: false })
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', (done) => {
-        runTest(done, { isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async () => {
+        await runRumTest({ isRedirecting: true })
       })
     })
 
@@ -1611,7 +1782,8 @@ versions.forEach((version) => {
       beforeEach(() => {
         receiver.setKnownTests({
           playwright: {
-            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js': ['impacted test should be impacted']
+            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
+              ['impacted test should be impacted', 'impacted test 2 should be impacted 2']
           }
         })
       })
@@ -1631,6 +1803,13 @@ versions.forEach((version) => {
              test('should be impacted', async ({ page }) => {
                await expect(page.locator('.hello-world')).toHaveText([
                  'Hello Worldd'
+               ])
+             })
+           })
+           test.describe('impacted test 2', () => {
+             test('should be impacted 2', async ({ page }) => {
+               await expect(page.locator('.hello-world')).toHaveText([
+                 'Hello World'
                ])
              })
            })`
@@ -1661,18 +1840,18 @@ versions.forEach((version) => {
 
             assert.includeMembers(resourceNames,
               [
-                'impacted-test.js.impacted test should be impacted'
+                'impacted-test.js.impacted test should be impacted',
+                'impacted-test.js.impacted test 2 should be impacted 2'
               ]
             )
 
             const impactedTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js' &&
-              test.meta[TEST_NAME] === 'impacted test should be impacted')
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js')
 
             if (isEfd) {
-              assert.equal(impactedTests.length, NUM_RETRIES_EFD + 1) // Retries + original test
+              assert.equal(impactedTests.length, (NUM_RETRIES_EFD + 1) * 2) // Retries + original test
             } else {
-              assert.equal(impactedTests.length, 1)
+              assert.equal(impactedTests.length, 2)
             }
 
             for (const impactedTest of impactedTests) {
@@ -1690,10 +1869,9 @@ versions.forEach((version) => {
 
             if (isEfd) {
               const retriedTests = tests.filter(
-                test => test.meta[TEST_IS_RETRY] === 'true' &&
-                test.meta[TEST_NAME] === 'impacted test should be impacted'
+                test => test.meta[TEST_IS_RETRY] === 'true'
               )
-              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD * 2)
               let retriedTestNew = 0
               let retriedTestsWithReason = 0
               retriedTests.forEach(test => {
@@ -1704,13 +1882,12 @@ versions.forEach((version) => {
                   retriedTestsWithReason++
                 }
               })
-              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD : 0)
-              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD)
+              assert.equal(retriedTestNew, isNew ? NUM_RETRIES_EFD * 2 : 0)
+              assert.equal(retriedTestsWithReason, NUM_RETRIES_EFD * 2)
             }
           }, 25000)
 
-      const runImpactedTest = (
-        done,
+      const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
@@ -1731,29 +1908,30 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          testAssertionsPromise.then(done).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          testAssertionsPromise
+        ])
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', (done) => {
+        it('should be detected as impacted', async () => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
-          runImpactedTest(done, { isModified: true })
+          await runImpactedTest({ isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', (done) => {
+        it('should not be detected as impacted if disabled', async () => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
-          runImpactedTest(done, { isModified: false })
+          await runImpactedTest({ isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          (done) => {
+          async () => {
             receiver.setSettings({ impacted_tests_enabled: true })
 
-            runImpactedTest(done,
+            await runImpactedTest(
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
@@ -1761,7 +1939,7 @@ versions.forEach((version) => {
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', (done) => {
+        it('should be retried and marked both as new and modified', async () => {
           receiver.setKnownTests({
             playwright: {}
           })
@@ -1775,8 +1953,7 @@ versions.forEach((version) => {
             },
             known_tests_enabled: true
           })
-          runImpactedTest(
-            done,
+          await runImpactedTest(
             { isModified: true, isEfd: true, isNew: true }
           )
         })
@@ -1826,6 +2003,70 @@ versions.forEach((version) => {
 
         childProcess.on('exit', () => {
           receiverPromise.then(done).catch(done)
+        })
+      })
+    })
+
+    const fullyParallelConfigValue = [true, false]
+
+    fullyParallelConfigValue.forEach((parallelism) => {
+      context(`with fullyParallel=${parallelism}`, () => {
+        /**
+         * Due to a bug in the playwright plugin, durations of test suites that included skipped tests
+         * were not reported correctly, as they dragged out until the end of the test session.
+         * This test checks that a long suite, which makes the test session longer,
+         * does not affect the duration of a short suite, which is expected to finish earlier.
+         * This only happened with tests that included skipped tests.
+         */
+        it('should report the correct test suite duration when there are skipped tests', async () => {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.equal(testSuites.length, 2)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 3)
+
+              const skippedTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+              assert.propertyVal(
+                skippedTest.meta,
+                TEST_NAME,
+                'short suite should skip and not mess up the duration of the test suite'
+              )
+              const shortSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('short-suite-test.js'))
+              const longSuite = testSuites.find(suite => suite.meta[TEST_SUITE].endsWith('long-suite-test.js'))
+              // The values are not deterministic, so we can only assert that they're distant enough
+              // This checks that the long suite takes at least twice longer than the short suite
+              assert.isAbove(
+                Number(longSuite.duration),
+                Number(shortSuite.duration) * 2,
+                'The long test suite should take at least twice as long as the short suite, ' +
+                'but their durations are: \n' +
+                `- Long suite: ${Number(longSuite.duration) / 1e6}ms \n` +
+                `- Short suite: ${Number(shortSuite.duration) / 1e6}ms`
+              )
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-test-duration',
+                FULLY_PARALLEL: parallelism,
+                PLAYWRIGHT_WORKERS: 2
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          await Promise.all([
+            receiverPromise,
+            once(childProcess, 'exit')
+          ])
         })
       })
     })

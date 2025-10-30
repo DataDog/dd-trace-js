@@ -3,6 +3,10 @@
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
+const {
+  VITEST_WORKER_TRACE_PAYLOAD_CODE,
+  VITEST_WORKER_LOGS_PAYLOAD_CODE
+} = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -28,7 +32,10 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
-const impactedTestsCh = channel('ci:vitest:modified-tests')
+const modifiedFilesCh = channel('ci:vitest:modified-files')
+
+const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
+const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -40,8 +47,25 @@ const modifiedTasks = new WeakSet()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
+const workerProcesses = new WeakSet()
+let isFlakyTestRetriesEnabled = false
+let flakyTestRetriesCount = 0
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let isEarlyFlakeDetectionFaulty = false
+let isKnownTestsEnabled = false
+let isTestManagementTestsEnabled = false
+let isImpactedTestsEnabled = false
+let testManagementAttemptToFixRetries = 0
+let isDiEnabled = false
+let testCodeCoverageLinesTotal
+let isSessionStarted = false
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+
+function getTestCommand () {
+  return `vitest ${process.argv.slice(2).join(' ')}`
+}
 
 function waitForHitProbe () {
   return new Promise(resolve => {
@@ -68,7 +92,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      _ddModifiedTests: modifiedTests
+      _ddModifiedFiles: modifiedFiles
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -82,7 +106,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -97,7 +121,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       isImpactedTestsEnabled: false,
-      modifiedTests: {}
+      modifiedFiles: {}
     }
   }
 }
@@ -123,6 +147,14 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
+}
+
+function isCliApiPackage (vitestPackage) {
+  return vitestPackage.s?.name === 'startVitest'
+}
+
+function isTestPackage (testPackage) {
+  return testPackage.V?.name === 'VitestTestRunner'
 }
 
 function getSessionStatus (state) {
@@ -187,16 +219,6 @@ function getSortWrapper (sort, frameworkVersion) {
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
-    let isFlakyTestRetriesEnabled = false
-    let flakyTestRetriesCount = 0
-    let isEarlyFlakeDetectionEnabled = false
-    let earlyFlakeDetectionNumRetries = 0
-    let isEarlyFlakeDetectionFaulty = false
-    let isKnownTestsEnabled = false
-    let isTestManagementTestsEnabled = false
-    let isImpactedTestsEnabled = false
-    let testManagementAttemptToFixRetries = 0
-    let isDiEnabled = false
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
@@ -222,7 +244,9 @@ function getSortWrapper (sort, frameworkVersion) {
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
       } catch {
         log.warn('Could not send library configuration to workers.')
@@ -254,7 +278,9 @@ function getSortWrapper (sort, frameworkVersion) {
             // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
             // Note: setting this.ctx.config.provide directly does not work because it's cached
             try {
-              const workspaceProject = this.ctx.getCoreWorkspaceProject()
+              const workspaceProject = this.ctx.getCoreWorkspaceProject
+                ? this.ctx.getCoreWorkspaceProject()
+                : this.ctx.getRootProject()
               workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
               workspaceProject._provided._ddKnownTests = knownTests
               workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
@@ -272,7 +298,9 @@ function getSortWrapper (sort, frameworkVersion) {
 
     if (isDiEnabled) {
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
       } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
@@ -287,7 +315,9 @@ function getSortWrapper (sort, frameworkVersion) {
       } else {
         const testManagementTests = receivedTestManagementTests
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
@@ -298,21 +328,21 @@ function getSortWrapper (sort, frameworkVersion) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
       if (err) {
         log.error('Could not get modified tests.')
       } else {
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
-          workspaceProject._provided._ddModifiedTests = modifiedTests
+          workspaceProject._provided._ddModifiedFiles = modifiedFiles
         } catch {
           log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
         }
       }
     }
-
-    let testCodeCoverageLinesTotal
 
     if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
@@ -327,57 +357,107 @@ function getSortWrapper (sort, frameworkVersion) {
       })
     }
 
-    shimmer.wrap(this.ctx, 'exit', exit => async function () {
-      let onFinish
-
-      const flushPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
-      const failedSuites = this.state.getFailedFilepaths()
-      let error
-      if (failedSuites.length) {
-        error = new Error(`Test suites failed: ${failedSuites.length}.`)
-      }
-
-      testSessionFinishCh.publish({
-        status: getSessionStatus(this.state),
-        testCodeCoverageLinesTotal,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onFinish
-      })
-
-      await flushPromise
-
-      return exit.apply(this, arguments)
-    })
+    shimmer.wrap(this.ctx, 'exit', getFinishWrapper)
+    shimmer.wrap(this.ctx, 'close', getFinishWrapper)
 
     return sort.apply(this, arguments)
   }
 }
 
-function getCreateCliWrapper (vitestPackage, frameworkVersion) {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
+function getFinishWrapper (exitOrClose) {
+  let isClosed = false
+  return async function () {
+    if (isClosed) { // needed because exit calls close
+      return exitOrClose.apply(this, arguments)
     }
-    const processArgv = process.argv.slice(2).join(' ')
-    testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    return oldCreateCli.apply(this, arguments)
-  })
+    isClosed = true
+    let onFinish
+
+    const flushPromise = new Promise(resolve => {
+      onFinish = resolve
+    })
+    const failedSuites = this.state.getFailedFilepaths()
+    let error
+    if (failedSuites.length) {
+      error = new Error(`Test suites failed: ${failedSuites.length}.`)
+    }
+
+    testSessionFinishCh.publish({
+      status: getSessionStatus(this.state),
+      testCodeCoverageLinesTotal,
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      isTestManagementTestsEnabled,
+      onFinish
+    })
+
+    await flushPromise
+
+    return exitOrClose.apply(this, arguments)
+  }
+}
+
+function getCliOrStartVitestWrapper (frameworkVersion) {
+  return function (oldCliOrStartVitest) {
+    return function () {
+      if (!testSessionStartCh.hasSubscribers || isSessionStarted) {
+        return oldCliOrStartVitest.apply(this, arguments)
+      }
+      isSessionStarted = true
+      testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
+      return oldCliOrStartVitest.apply(this, arguments)
+    }
+  }
+}
+
+function getCreateCliWrapper (vitestPackage, frameworkVersion) {
+  shimmer.wrap(vitestPackage, 'c', getCliOrStartVitestWrapper(frameworkVersion))
 
   return vitestPackage
 }
 
-addHook({
-  name: 'vitest',
-  versions: ['>=1.6.0'],
-  file: 'dist/runners.js'
-}, (vitestPackage) => {
-  const { VitestTestRunner } = vitestPackage
+function threadHandler (thread) {
+  if (workerProcesses.has(thread.process)) {
+    return
+  }
+  workerProcesses.add(thread.process)
+  thread.process.on('message', (message) => {
+    if (message.__tinypool_worker_message__ && message.data) {
+      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        workerReportTraceCh.publish(message.data)
+      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+        workerReportLogsCh.publish(message.data)
+      }
+    }
+  })
+}
 
+addHook({
+  name: 'tinypool',
+  versions: ['>=1.0.0'],
+  file: 'dist/index.js'
+}, (TinyPool) => {
+  shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
+    // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
+    this.threads.forEach(threadHandler)
+    const runResult = await run.apply(this, arguments)
+    this.threads.forEach(threadHandler)
+    return runResult
+  })
+
+  return TinyPool
+})
+
+function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
+  if (!isCliApiPackage(cliApiPackage)) {
+    return cliApiPackage
+  }
+  shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+  return cliApiPackage
+}
+
+function wrapVitestTestRunner (VitestTestRunner) {
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
@@ -392,7 +472,7 @@ addHook({
       testManagementAttemptToFixRetries,
       testManagementTests,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -427,7 +507,7 @@ addHook({
 
     if (isImpactedTestsEnabled) {
       isModifiedCh.publish({
-        modifiedTests,
+        modifiedFiles,
         testSuiteAbsolutePath: task.file.filepath,
         onDone: (isImpacted) => {
           if (isImpacted) {
@@ -672,6 +752,30 @@ addHook({
 
       return result
     })
+}
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/test.*'
+}, (testPackage) => {
+  if (!isTestPackage(testPackage)) {
+    return testPackage
+  }
+
+  wrapVitestTestRunner(testPackage.V)
+
+  return testPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <4.0.0'],
+  file: 'dist/runners.js'
+}, (vitestPackage) => {
+  const { VitestTestRunner } = vitestPackage
+
+  wrapVitestTestRunner(VitestTestRunner)
 
   return vitestPackage
 })
@@ -744,6 +848,7 @@ addHook({
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
+// Following 3 wrappers are for test session start
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0 <2.0.5'],
@@ -755,6 +860,18 @@ addHook({
   versions: ['>=2.0.5'],
   filePattern: 'dist/chunks/cac.*'
 }, getCreateCliWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <2.0.5'],
+  filePattern: 'dist/vendor/cli-api.*'
+}, getStartVitestWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/cli-api.*'
+}, getStartVitestWrapper)
 
 // test suite start and finish
 // only relevant for workers
@@ -866,7 +983,6 @@ addHook({
 
     testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
 
-    // TODO: fix too frequent flushes
     await onFinishPromise
 
     return startTestsResponse
