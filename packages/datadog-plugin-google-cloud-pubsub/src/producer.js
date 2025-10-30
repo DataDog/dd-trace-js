@@ -5,7 +5,7 @@ const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastre
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   static id = 'google-cloud-pubsub'
-  static operation = 'request'
+  static operation = 'send'
 
   bindStart (ctx) {
     const { request, api, projectId } = ctx
@@ -17,7 +17,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const hasTraceContext = messages[0]?.attributes?.['x-datadog-trace-id']
 
     // Collect span links from messages 2-N (skip first - it becomes parent)
-    const spanLinkData = hasTraceContext 
+    const spanLinkData = hasTraceContex
       ? messages.slice(1).map(msg => this._extractSpanLink(msg.attributes)).filter(Boolean)
       : []
 
@@ -76,7 +76,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     // Add metadata to all messages
     messages.forEach((msg, i) => {
       msg.attributes = msg.attributes || {}
-      
+
       if (!hasTraceContext) {
         this.tracer.inject(batchSpan, 'text_map', msg.attributes)
       }
@@ -98,8 +98,8 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
       if (this.config.dsmEnabled) {
         const dataStreamsContext = this.tracer.setCheckpoint(
-          ['direction:out', `topic:${topic}`, 'type:google-pubsub'], 
-          batchSpan, 
+          ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
+          batchSpan,
           getHeadersSize(msg)
         )
         DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
@@ -128,15 +128,15 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     const lowerHex = BigInt(attrs['x-datadog-trace-id']).toString(16).padStart(16, '0')
     const spanIdHex = BigInt(attrs['x-datadog-parent-id']).toString(16).padStart(16, '0')
-    const traceIdHex = attrs['_dd.p.tid'] 
-      ? attrs['_dd.p.tid'] + lowerHex 
+    const traceIdHex = attrs['_dd.p.tid']
+      ? attrs['_dd.p.tid'] + lowerHex
       : lowerHex.padStart(32, '0')
 
     return {
       traceId: traceIdHex,
       spanId: spanIdHex,
-      samplingPriority: attrs['x-datadog-sampling-priority'] 
-        ? parseInt(attrs['x-datadog-sampling-priority'], 10) 
+      samplingPriority: attrs['x-datadog-sampling-priority']
+        ? Number.parseInt(attrs['x-datadog-sampling-priority'], 10)
         : undefined
     }
   }
@@ -148,7 +148,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     }
     if (data.traceIdUpper) carrier['_dd.p.tid'] = data.traceIdUpper
     if (data.samplingPriority) carrier['x-datadog-sampling-priority'] = String(data.samplingPriority)
-    
+
     return this.tracer.extract('text_map', carrier)
   }
 }
