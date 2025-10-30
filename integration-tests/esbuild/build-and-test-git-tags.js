@@ -27,7 +27,8 @@ esbuild.build({
     'mysql',
     'oracledb',
     'pg-query-stream',
-    'tedious'
+    'tedious',
+    '@yaacovcr/transform'
   ]
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT], {

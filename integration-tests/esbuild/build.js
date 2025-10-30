@@ -20,7 +20,8 @@ esbuild.build({
     'mysql',
     'oracledb',
     'pg-query-stream',
-    'tedious'
+    'tedious',
+    '@yaacovcr/transform'
   ]
 }).catch((err) => {
   console.error(err) // eslint-disable-line no-console
