@@ -7,17 +7,40 @@ const assert = require('assert')
 const http = require('http')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
-const OtlpTransformer = require('../../src/opentelemetry/metrics/otlp_transformer')
-const OtlpHttpMetricExporter = require('../../src/opentelemetry/metrics/otlp_http_metric_exporter')
+const { metrics } = require('@opentelemetry/api')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 
-describe('OTLP Metrics Export', () => {
-  let resourceAttributes
+describe('OpenTelemetry Meter Provider', () => {
+  let originalEnv
+  let httpStub
 
-  function mockOtlpExport (validator, protocol = 'protobuf') {
-    let capturedPayload; let capturedHeaders; let validatorCalled = false
+  function setupTracer (envOverrides = {}, setDefaultEnv = true) {
+    if (setDefaultEnv) {
+      process.env.DD_METRICS_OTEL_ENABLED = 'true'
+      process.env.DD_SERVICE = 'test-service'
+      process.env.DD_VERSION = '1.0.0'
+      process.env.DD_ENV = 'test'
+      process.env.OTEL_METRIC_EXPORT_INTERVAL = '100'
+      process.env.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT = '5000'
+    }
+    Object.assign(process.env, envOverrides)
 
-    sinon.stub(http, 'request').callsFake((options, callback) => {
+    const tracer = require('../../')
+    tracer._initialized = false
+    tracer.init()
+    return { tracer, meterProvider: metrics.getMeterProvider() }
+  }
+
+  function mockOtlpExport (validator) {
+    let capturedPayload, capturedHeaders
+    let validatorCalled = false
+
+    if (httpStub) {
+      httpStub.restore()
+      httpStub = null
+    }
+
+    httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
       const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
 
@@ -33,9 +56,16 @@ describe('OTLP Metrics Export', () => {
           ...baseMockReq,
           write: (data) => { capturedPayload = data },
           end: () => {
-            const decoded = protocol === 'json'
+            const contentType = capturedHeaders['Content-Type']
+            const isJson = contentType && contentType.includes('application/json')
+
+            const decoded = isJson
               ? JSON.parse(capturedPayload.toString())
-              : protoMetricsService.decode(capturedPayload)
+              : protoMetricsService.toObject(protoMetricsService.decode(capturedPayload), {
+                longs: Number,
+                defaults: false
+              })
+
             validator(decoded, capturedHeaders)
             validatorCalled = true
             if (responseHandlers.end) responseHandlers.end()
@@ -53,402 +83,766 @@ describe('OTLP Metrics Export', () => {
     }
   }
 
-  const allMetricTypes = [
-    {
-      name: 'http_requests_total',
-      type: 'counter',
-      data: [{
-        attributes: { method: 'GET', status_code: '200', endpoint: '/api/users' },
-        startTimeUnixNano: '1000000000',
-        timeUnixNano: '2000000000',
-        value: 42
-      }]
-    },
-    {
-      name: 'active_connections',
-      type: 'updowncounter',
-      data: [{ attributes: { protocol: 'http' }, timeUnixNano: '3000000000', value: -10.5 }]
-    },
-    {
-      name: 'http_request_duration_seconds',
-      type: 'histogram',
-      data: [{
-        attributes: { method: 'POST', endpoint: '/api/orders' },
-        startTimeUnixNano: '1000000000',
-        timeUnixNano: '2000000000',
-        count: 5,
-        sum: 0.2505,
-        min: 0.0105,
-        max: 0.1000,
-        bucketCounts: [1, 2, 1],
-        explicitBounds: [0.01, 0.05]
-      }]
-    },
-    {
-      name: 'memory_usage_bytes',
-      type: 'gauge',
-      data: [{ attributes: { instance: 'web-01' }, timeUnixNano: '4000000000', value: 75 }]
-    }
-  ].map(m => (
-    {
-      ...m,
-      instrumentationScope: {
-        name: 'webapp-metrics',
-        version: '1.0.0',
-        schemaUrl: 'https://opentelemetry.io/schemas/v1.28.0',
-        attributes: { 'scope.name': 'checkout' }
-      }
-    }))
-
   beforeEach(() => {
-    resourceAttributes = {
-      'service.name': 'ecommerce-api',
-      'service.version': '2.1.0',
-      'deployment.environment': 'production',
-      'host.name': 'web-server-01'
-    }
+    originalEnv = { ...process.env }
   })
 
-  afterEach(() => { sinon.restore() })
+  afterEach(async () => {
+    process.env = originalEnv
 
-  describe('Metric Transformation', () => {
-    it('transforms all metric types with correct protobuf and JSON serialization', () => {
-      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
-      const buffer = transformer.transformMetrics(allMetricTypes)
-      const decoded = protoMetricsService.decode(buffer)
+    const provider = metrics.getMeterProvider()
+    if (provider && provider.shutdown) {
+      await provider.shutdown()
+    }
+    metrics.disable()
 
-      const resource = decoded.resourceMetrics[0].resource
-      assert(resource.attributes.find(a => a.key === 'service.name').value.stringValue === 'ecommerce-api')
+    if (httpStub) {
+      httpStub.restore()
+      httpStub = null
+    }
+    sinon.restore()
 
-      const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics[0]
-      assert.strictEqual(scopeMetrics.scope.name, 'webapp-metrics')
-      assert.strictEqual(scopeMetrics.scope.version, '1.0.0')
-      assert.strictEqual(scopeMetrics.schemaUrl, 'https://opentelemetry.io/schemas/v1.28.0')
-      assert(scopeMetrics.scope.attributes.find(a => a.key === 'scope.name').value.stringValue === 'checkout')
+    await new Promise(resolve => setTimeout(resolve, 10))
+  })
 
-      const metrics = scopeMetrics.metrics
-      assert.strictEqual(metrics[0].sum.isMonotonic, true)
-      assert.strictEqual(metrics[1].sum.isMonotonic, false)
-      assert(metrics[2].histogram)
-      assert(metrics[3].gauge)
-
-      const jsonTransformer = new OtlpTransformer(resourceAttributes, 'http/json')
-      const jsonBuffer = jsonTransformer.transformMetrics(allMetricTypes)
-      const jsonDecoded = JSON.parse(jsonBuffer.toString())
-      const jsonScopeMetrics = jsonDecoded.resourceMetrics[0].scopeMetrics[0]
-      assert.strictEqual(jsonScopeMetrics.scope.name, 'webapp-metrics')
-      assert.strictEqual(jsonScopeMetrics.scope.version, '1.0.0')
-      assert.strictEqual(jsonScopeMetrics.schemaUrl, 'https://opentelemetry.io/schemas/v1.28.0')
-      assert(jsonScopeMetrics.scope.attributes.find(a => a.key === 'scope.name').value.stringValue === 'checkout')
-
-      const jsonMetrics = jsonScopeMetrics.metrics
-      assert.strictEqual(jsonMetrics[0].sum.dataPoints[0].asInt, 42)
-      assert.strictEqual(jsonMetrics[1].sum.dataPoints[0].asDouble, -10.5)
-      assert.strictEqual(jsonMetrics[2].histogram.dataPoints[0].count, 5)
-      assert.strictEqual(jsonMetrics[3].gauge.dataPoints[0].asInt, 75)
-    })
-
-    it('handles missing metric metadata and transforms complex attribute types to OTLP format', () => {
-      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
-
-      const minimal = [{ name: 'ping_count', type: 'counter', data: [{ timeUnixNano: '1000000000', value: 1 }] }]
-      const buffer = transformer.transformMetrics(minimal)
-      const decoded = protoMetricsService.decode(buffer)
-      const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-      assert.strictEqual(metric.description, '')
-      assert.strictEqual(metric.unit, '')
-
-      const complex = [{
-        name: 'user_login_events',
-        type: 'counter',
-        data: [{
-          attributes: {
-            user_agent: 'Mozilla/5.0',
-            session_count: 42,
-            success_rate: 3.14159,
-            authenticated: true,
-            roles: ['admin', 'user'],
-            metadata: { source: 'web-app' },
-            null: null,
-            undefined
-          },
-          timeUnixNano: '1000000000',
-          value: 1
-        }]
-      }]
-      const complexBuffer = transformer.transformMetrics(complex)
-      const complexDecoded = protoMetricsService.decode(complexBuffer)
-      const attrs = complexDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes
-      assert(attrs.find(a => a.key === 'user_agent').value.stringValue === 'Mozilla/5.0')
-      assert(attrs.find(a => a.key === 'success_rate').value.doubleValue === 3.14159)
-    })
-
-    it('handles optional startTimeUnixNano for gauges, missing histogram buckets, and null attributes in JSON mode',
-      () => {
-        const transformer = new OtlpTransformer(resourceAttributes, 'http/json')
-
-        const noStart = [
-          {
-            name: 'cpu_usage_percent',
-            type: 'gauge',
-            data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
-          }
-        ]
-        const buffer = transformer.transformMetrics(noStart)
-        const decoded = JSON.parse(buffer.toString())
-        assert.strictEqual(
-          decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0].startTimeUnixNano,
-          undefined
-        )
-
-        const minHist = [{
-          name: 'request_size_bytes',
-          type: 'histogram',
-          data: [{ attributes: {}, timeUnixNano: '1000000000', count: 3, sum: 15.5 }]
-        }]
-        const histBuffer = transformer.transformMetrics(minHist)
-        const histDecoded = JSON.parse(histBuffer.toString())
-        const histDp = histDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].histogram.dataPoints[0]
-        assert.deepStrictEqual(histDp.bucketCounts, [])
-        assert.deepStrictEqual(histDp.explicitBounds, [])
-
-        const nullAttrs = [{
-          name: 'system_errors_total',
-          type: 'counter',
-          data: [{ attributes: null, timeUnixNano: '1000000000', value: 1 }]
-        }]
-        const nullBuffer = transformer.transformMetrics(nullAttrs)
-        const nullDecoded = JSON.parse(nullBuffer.toString())
-        assert.deepStrictEqual(
-          nullDecoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0].attributes,
-          []
-        )
+  describe('Basic Functionality', () => {
+    it('exports counter metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        assert.strictEqual(metrics.length, 1)
+        assert.strictEqual(metrics[0].name, 'requests')
+        assert.strictEqual(metrics[0].sum.isMonotonic, true)
+        assert.strictEqual(metrics[0].sum.dataPoints[0].asDouble, 10.3)
       })
 
-    it('warns and falls back when unsupported gRPC protocol is used', () => {
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const counter = meter.createCounter('requests')
+      counter.add(5.1)
+      counter.add(5.2)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('exports histogram metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(histogram.name, 'duration')
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 1)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createHistogram('duration').record(100)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('ignores negative values and callback errors', (done) => {
+      let validated = false
+      const validator = mockOtlpExport((decoded) => {
+        const allMetrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        const histogram = allMetrics.find(m => m.name === 'size')
+        const counter = allMetrics.find(m => m.name === 'requests')
+        const gauge = allMetrics.find(m => m.name === 'memory')
+
+        // Only validate the export that has all three metrics (first export)
+        if (histogram && counter && gauge && !validated) {
+          assert.strictEqual(histogram.histogram.dataPoints[0].count, 2)
+          assert.strictEqual(histogram.histogram.dataPoints[0].sum, 300)
+          assert.strictEqual(counter.sum.dataPoints[0].asInt, 15)
+          assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 100)
+          validated = true
+        }
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+
+      const hist = meter.createHistogram('size')
+      hist.record(100)
+      hist.record(-50)
+      hist.record(200)
+      hist.record(-100)
+
+      const counter = meter.createCounter('requests')
+      counter.add(10)
+      counter.add(-5)
+      counter.add(5)
+
+      const gauge = meter.createObservableGauge('memory')
+      gauge.addCallback(() => { throw new Error('Callback error') })
+      gauge.addCallback((result) => result.observe(100))
+
+      setTimeout(() => {
+        assert(validated, 'Should have validated an export with all metrics')
+        validator()
+        done()
+      }, 150)
+    })
+
+    it('exports gauge metrics (last value wins)', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(gauge.name, 'temperature')
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 75)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const temp = meter.createGauge('temperature')
+      temp.record(72)
+      temp.record(75)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('exports updowncounter metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(updown.name, 'queue')
+        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 7)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const queue = meter.createUpDownCounter('queue')
+      queue.add(10)
+      queue.add(-3)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('exports observable gauge metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(gauge.name, 'memory')
+        const dp = gauge.gauge.dataPoints[0]
+        const value = dp.asDouble !== undefined ? dp.asDouble : dp.asInt
+        assert(value > 0)
+        assert.strictEqual(dp.attributes.find(a => a.key === 'type').value.stringValue, 'heap')
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const mem = meter.createObservableGauge('memory')
+      mem.addCallback((result) => result.observe(process.memoryUsage().heapUsed, { type: 'heap' }))
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('exports observable counter metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'connections')
+        assert.strictEqual(counter.sum.isMonotonic, true)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 42)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      const conn = meter.createObservableCounter('connections')
+      conn.addCallback((result) => result.observe(42))
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('exports observable updowncounter metrics', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(updown.name, 'tasks')
+        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 15)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      const tasks = meter.createObservableUpDownCounter('tasks')
+      tasks.addCallback((result) => result.observe(15))
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+  })
+
+  describe('Configuration', () => {
+    it('uses protobuf with numeric timestamps by default', (done) => {
+      const validator = mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
+        const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
+        assert.strictEqual(dataPoint.asInt, 5)
+        assert(dataPoint.timeUnixNano > 0)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test').add(5)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('uses JSON with string timestamps when configured', (done) => {
+      const validator = mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['Content-Type'], 'application/json')
+        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        const counter = metrics.find(m => m.name === 'counter')
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+        const histogram = metrics.find(m => m.name === 'histogram')
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 2)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 30)
+        const gauge = metrics.find(m => m.name === 'gauge')
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 100)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json' })
+      const meter = metrics.getMeter('app')
+      meter.createCounter('counter').add(5)
+      meter.createHistogram('histogram').record(10)
+      meter.createHistogram('histogram').record(20)
+      meter.createGauge('gauge').record(100)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('includes custom resource attributes and hostname when enabled', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const attrs = {}
+        decoded.resourceMetrics[0].resource.attributes.forEach(attr => {
+          attrs[attr.key] = attr.value.stringValue || attr.value.intValue
+        })
+        assert.strictEqual(attrs['service.name'], 'custom')
+        assert.strictEqual(attrs['service.version'], '2.0.0')
+        assert(attrs['host.name'], 'should include host.name')
+      })
+
+      setupTracer({ DD_SERVICE: 'custom', DD_VERSION: '2.0.0', DD_TRACE_REPORT_HOSTNAME: 'true' })
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test').add(1)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('supports multiple attributes and data points', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'api')
+        assert.strictEqual(counter.sum.dataPoints.length, 2)
+        const getDp = (method) => counter.sum.dataPoints.find(dp =>
+          dp.attributes.some(a => a.key === 'method' && a.value.stringValue === method)
+        )
+        assert.strictEqual(getDp('GET').asInt, 10)
+        assert.strictEqual(getDp('POST').asInt, 5)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const api = meter.createCounter('api')
+      api.add(10, { method: 'GET' })
+      api.add(5, { method: 'POST' })
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('encodes different attribute types and drops objects', (done) => {
+      let validated = false
+      const validator = mockOtlpExport((decoded) => {
+        if (validated) return
+        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        const getAttr = (dp, key) => dp.attributes.find(a => a.key === key)?.value
+        const counter = metrics.find(m => m.name === 'test')
+        if (!counter) return
+
+        const dp = counter.sum.dataPoints[0]
+        assert.strictEqual(getAttr(dp, 'str').stringValue, 'val')
+        assert.strictEqual(getAttr(dp, 'int').intValue, 42)
+        assert.strictEqual(getAttr(dp, 'double').doubleValue, 3.14)
+        assert.strictEqual(getAttr(dp, 'bool').boolValue, true)
+        assert.deepStrictEqual(getAttr(dp, 'arr').arrayValue.values.map(v => v.intValue || v.doubleValue), [1, 2, 3])
+        // Verify object attributes are dropped per OpenTelemetry spec
+        assert.strictEqual(getAttr(dp, 'obj'), undefined)
+        validated = true
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test').add(5, {
+        str: 'val',
+        int: 42,
+        double: 3.14,
+        bool: true,
+        arr: [1, 2, 3],
+        obj: { nested: 'dropped' }
+      })
+
+      setTimeout(() => {
+        assert(validated, 'Should have validated attributes')
+        validator()
+        done()
+      }, 150)
+    })
+  })
+
+  describe('Temporality', () => {
+    it('supports CUMULATIVE for counters', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'test')
+        assert.strictEqual(counter.sum.aggregationTemporality, 2)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 8)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      const counter = meter.createCounter('test')
+      counter.add(5)
+      counter.add(3)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('supports DELTA for counters', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'test')
+        assert.strictEqual(counter.sum.aggregationTemporality, 1)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test').add(5)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('LOWMEMORY uses DELTA for sync counters', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.sum.aggregationTemporality, 1)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY' })
+      const meter = metrics.getMeter('app')
+      meter.createCounter('sync').add(5)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('LOWMEMORY uses CUMULATIVE for observable counters', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.sum.aggregationTemporality, 2)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 10)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY' })
+      const meter = metrics.getMeter('app')
+      const obs = meter.createObservableCounter('obs')
+      obs.addCallback((result) => result.observe(10))
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('updowncounter always uses CUMULATIVE', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(updown.sum.aggregationTemporality, 2)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 5)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      const meter = metrics.getMeter('app')
+      meter.createUpDownCounter('updown').add(5)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('observable updowncounter always uses CUMULATIVE', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(updown.name, 'obs.updown')
+        assert.strictEqual(updown.sum.aggregationTemporality, 2)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 10)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      const meter = metrics.getMeter('app')
+      const obs = meter.createObservableUpDownCounter('obs.updown')
+      obs.addCallback((result) => result.observe(10))
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('histograms support DELTA temporality', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(histogram.histogram.aggregationTemporality, 1)
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 2)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 30)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      const meter = metrics.getMeter('app')
+      meter.createHistogram('latency').record(10)
+      meter.createHistogram('latency').record(20)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('histograms support CUMULATIVE temporality', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(histogram.histogram.aggregationTemporality, 2)
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 3)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 60)
+      })
+
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      meter.createHistogram('latency').record(10)
+      meter.createHistogram('latency').record(20)
+      meter.createHistogram('latency').record(30)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+  })
+
+  describe('Case Insensitivity', () => {
+    it('meter names are case-insensitive', () => {
+      setupTracer()
+      const meter1 = metrics.getMeter('MyApp')
+      const meter2 = metrics.getMeter('myapp')
+      assert.strictEqual(meter1, meter2)
+    })
+
+    it('metric names are case-insensitive', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'mymetric')
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 6)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const c1 = meter.createCounter('MyMetric')
+      const c2 = meter.createCounter('mymetric')
+      c1.add(1)
+      c2.add(2)
+      meter.createCounter('MYMETRIC').add(3)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('different instrument types with same name are distinct', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        assert.strictEqual(metrics.length, 2)
+        const counter = metrics.find(m => m.sum)
+        const histogram = metrics.find(m => m.histogram)
+        assert(counter, 'Should have counter')
+        assert(histogram, 'Should have histogram')
+        assert.strictEqual(counter.name, 'test')
+        assert.strictEqual(histogram.name, 'test')
+        assert.strictEqual(counter.sum.dataPoints.length, 1, 'Counter should have 1 data point')
+        assert.strictEqual(histogram.histogram.dataPoints.length, 1, 'Histogram should have 1 data point')
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('Test').add(5)
+      meter.createHistogram('TEST').record(100)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+  })
+
+  describe('Lifecycle', () => {
+    it('returns no-op meter after shutdown', async () => {
+      setupTracer()
+      const provider = metrics.getMeterProvider()
+      await provider.shutdown()
+
+      const meter = metrics.getMeter('test')
+      meter.createCounter('test').add(1)
+      meter.createUpDownCounter('test').add(1)
+      meter.createHistogram('test').record(1)
+      meter.createGauge('test').record(1)
+      meter.createObservableGauge('test').addCallback(() => {})
+      meter.createObservableCounter('test').addCallback(() => {})
+      meter.createObservableUpDownCounter('test').addCallback(() => {})
+    })
+
+    it('handles shutdown gracefully', async () => {
+      setupTracer()
+      const provider = metrics.getMeterProvider()
+      await provider.shutdown()
+      await provider.shutdown() // Second shutdown should be safe
+    })
+
+    it('handles forceFlush', async () => {
+      const validator = mockOtlpExport((decoded) => {
+        assert(decoded.resourceMetrics)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test').add(1)
+
+      const provider = metrics.getMeterProvider()
+      await provider.forceFlush()
+      validator()
+    })
+
+    it('encodes instrumentation scope attributes', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const scope = decoded.resourceMetrics[0].scopeMetrics[0].scope
+        assert.strictEqual(scope.name, 'my-app')
+        assert.strictEqual(scope.attributes.find(a => a.key === 'env').value.stringValue, 'production')
+        assert.strictEqual(scope.attributes.find(a => a.key === 'region').value.stringValue, 'us-east-1')
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('my-app', '1.0.0', {
+        attributes: { env: 'production', region: 'us-east-1' }
+      })
+      meter.createCounter('requests').add(10)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('removes callbacks from observable instruments', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const gauge = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(gauge.gauge.dataPoints[0].asInt, 200)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const gauge = meter.createObservableGauge('temperature')
+
+      const cb1 = (result) => result.observe(100)
+      const cb2 = (result) => result.observe(200)
+      gauge.addCallback(cb1)
+      gauge.addCallback(cb2)
+      gauge.removeCallback(cb1)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+  })
+
+  describe('Unimplemented Features', () => {
+    it('logs warning for meter batch callbacks', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
 
-      const transformer = new OtlpTransformer(resourceAttributes, 'grpc')
-      assert.strictEqual(transformer.protocol, 'http/protobuf')
-      assert(warnSpy.calledOnce)
-      assert(warnSpy.firstCall.args[0].includes('gRPC protocol is not supported'))
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.addBatchObservableCallback(() => {}, [])
+      meter.removeBatchObservableCallback(() => {}, [])
+
+      assert.strictEqual(warnSpy.callCount, 2)
+      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
+      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
 
       warnSpy.restore()
     })
+  })
 
-    it('uses separate protobuf fields for integer vs double metric values', () => {
-      const transformer = new OtlpTransformer(resourceAttributes, 'http/protobuf')
+  describe('Protocol Configuration', () => {
+    it('uses default protobuf protocol', () => {
+      const { meterProvider } = setupTracer({
+        OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: undefined,
+        OTEL_EXPORTER_OTLP_PROTOCOL: undefined
+      })
+      assert(meterProvider.reader)
+      assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
+    })
 
-      const mixedValues = [
-        {
-          name: 'database_connections_total',
-          type: 'counter',
-          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 42 }]
-        },
-        {
-          name: 'cache_hit_ratio',
-          type: 'counter',
-          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 3.14159 }]
-        }
-      ]
+    it('configures protocol from environment variable', () => {
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json' })
+      assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
+    })
 
-      const buffer = transformer.transformMetrics(mixedValues)
-      const decoded = protoMetricsService.decode(buffer)
-      const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+    it('prioritizes metrics-specific protocol over generic protocol', () => {
+      const { meterProvider } = setupTracer({
+        OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+      })
+      assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
+    })
 
-      const intValue = typeof metrics[0].sum.dataPoints[0].asInt === 'object'
-        ? metrics[0].sum.dataPoints[0].asInt.toNumber()
-        : metrics[0].sum.dataPoints[0].asInt
-      assert.strictEqual(intValue, 42)
-      assert.strictEqual(metrics[1].sum.dataPoints[0].asDouble, 3.14159)
+    it('logs warning and falls back to protobuf when gRPC protocol is set', () => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc' })
+      assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
+      const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
+        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
+      assert(warnSpy.calledWith(expectedMsg))
+      warnSpy.restore()
     })
   })
 
-  describe('HTTP Export', () => {
-    it('parses URLs and headers correctly', () => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://example.com:4318/custom?token=abc',
-        'x-api-key=secret',
-        5000,
-        'http/json',
-        resourceAttributes
-      )
-      assert.strictEqual(exporter.options.hostname, 'example.com')
-      assert.strictEqual(exporter.options.port, '4318')
-      assert.strictEqual(exporter.options.path, '/custom?token=abc')
-      assert.strictEqual(exporter.options.headers['Content-Type'], 'application/json')
-      assert.strictEqual(exporter.options.headers['x-api-key'], 'secret')
+  describe('Endpoint Configuration', () => {
+    it('configures OTLP endpoint from environment variable', () => {
+      const { meterProvider } = setupTracer({
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics'
+      })
+      assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
+      assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
+      assert.strictEqual(meterProvider.reader.exporter.options.port, '4321')
     })
 
-    it('successfully exports metrics via HTTP', (done) => {
-      const validator = mockOtlpExport((decoded, headers) => {
-        assert.strictEqual(headers['Content-Type'], 'application/x-protobuf')
-        assert.strictEqual(decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].name, 'api_calls_total')
+    it('prioritizes metrics-specific endpoint over generic endpoint', () => {
+      const { meterProvider } = setupTracer({
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4318/v1/metrics',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics'
       })
-
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-      const metrics = [{
-        name: 'api_calls_total',
-        type: 'counter',
-        instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' },
-        data: [{ attributes: {}, timeUnixNano: '2000000000', value: 1 }]
-      }]
-
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 0)
-        validator()
-        done()
-      })
+      assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
+      assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
+      assert.strictEqual(meterProvider.reader.exporter.options.port, '4318')
     })
 
-    it('returns success for empty metrics arrays and handles HTTP error responses', (done) => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
+    it('appends /v1/metrics to endpoint if not provided', () => {
+      process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'http://custom:4318'
+      const { meterProvider } = setupTracer()
+      assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
+    })
+  })
 
-      exporter.export([], (result) => {
-        assert.strictEqual(result.code, 0)
-
-        sinon.restore()
-        sinon.stub(http, 'request').callsFake((options, callback) => {
-          const responseHandlers = {}
-          const mockRes = {
-            statusCode: 500,
-            on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
-            setTimeout: () => mockRes
-          }
-          const mockReq = {
-            write: () => {},
-            end: () => {
-              if (responseHandlers.data) responseHandlers.data('Error')
-              if (responseHandlers.end) responseHandlers.end()
-            },
-            on: () => {},
-            once: () => {},
-            setTimeout: () => {}
-          }
-          callback(mockRes)
-          return mockReq
-        })
-
-        const testMetrics = [{
-          name: 'api_calls_total',
-          type: 'counter',
-          instrumentationScope: { name: 'webapp-metrics', version: '1.0.0', schemaUrl: '' },
-          data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
-        }]
-        exporter.export(testMetrics, (result) => {
-          assert.strictEqual(result.code, 1)
-          assert(result.error)
-          done()
-        })
-      })
+  describe('Headers Configuration', () => {
+    it('configures OTLP headers from environment variable', () => {
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_HEADERS: 'api-key=secret,env=prod' })
+      const exporter = meterProvider.reader.exporter
+      assert.strictEqual(exporter.options.headers['api-key'], 'secret')
+      assert.strictEqual(exporter.options.headers.env, 'prod')
     })
 
-    it('handles timeout and connection errors', (done) => {
-      sinon.stub(http, 'request').callsFake((options, callback) => {
-        const timeoutHandlers = {}
+    it('prioritizes metrics-specific headers over generic OTLP headers', () => {
+      const { meterProvider } = setupTracer({
+        OTEL_EXPORTER_OTLP_HEADERS: 'generic=value,shared=generic',
+        OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics'
+      })
+      const exporter = meterProvider.reader.exporter
+      assert.strictEqual(exporter.options.headers['metrics-specific'], 'value')
+      assert.strictEqual(exporter.options.headers.shared, 'metrics')
+      assert.strictEqual(exporter.options.headers.generic, undefined)
+    })
+  })
+
+  describe('Timeout Configuration', () => {
+    it('uses default timeout when not set', () => {
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: undefined })
+      assert.strictEqual(meterProvider.reader.exporter.options.timeout, 10000)
+    })
+
+    it('configures OTLP timeout from environment variable', () => {
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '1000' })
+      assert.strictEqual(meterProvider.reader.exporter.options.timeout, 1000)
+    })
+
+    it('prioritizes metrics-specific timeout over generic timeout', () => {
+      const { meterProvider } = setupTracer(
+        { OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '1000', OTEL_EXPORTER_OTLP_TIMEOUT: '2000' }
+      )
+      assert.strictEqual(meterProvider.reader.exporter.options.timeout, 1000)
+    })
+
+    it('falls back to generic timeout when metrics-specific not set', () => {
+      const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_TIMEOUT: '5000' })
+      assert.strictEqual(meterProvider.reader.exporter.options.timeout, 5000)
+    })
+  })
+
+  describe('Initialization', () => {
+    it('does not initialize when OTEL metrics are disabled', () => {
+      const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: undefined })
+      const { MeterProvider } = require('../../src/opentelemetry/metrics')
+
+      // Should return no-op provider when disabled, not our custom MeterProvider
+      assert.strictEqual(meterProvider instanceof MeterProvider, false)
+    })
+
+    it('handles shutdown correctly', () => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+
+      setupTracer()
+      const provider = metrics.getMeterProvider()
+      provider.shutdown()
+
+      const meter = provider.getMeter('test')
+      meter.createCounter('test').add(1)
+      meter.createHistogram('test').record(100)
+      meter.createUpDownCounter('test').add(5)
+      meter.createGauge('test').record(1)
+      const obsGauge = meter.createObservableGauge('test')
+      obsGauge.addCallback(() => {})
+      obsGauge.addCallback('not a function')
+
+      provider.register()
+      assert.strictEqual(warnSpy.callCount, 1)
+      assert.strictEqual(warnSpy.firstCall.args[0], 'Cannot register after shutdown')
+
+      warnSpy.restore()
+    })
+  })
+
+  describe('HTTP Export Behavior', () => {
+    it('handles timeout and error without network', (done) => {
+      const results = { timeout: false, error: false }
+      let requestCount = 0
+
+      if (httpStub) {
+        httpStub.restore()
+        httpStub = null
+      }
+
+      httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
+        requestCount++
+        assert(options.headers['Content-Length'] > 0)
+
+        const handlers = {}
         const mockReq = {
-          write: () => {},
-          end: () => {},
-          on: (event, handler) => { timeoutHandlers[event] = handler },
-          once: () => {},
-          setTimeout: () => {},
-          destroy: () => {}
+          write: sinon.stub(),
+          end: sinon.stub(),
+          on: (event, handler) => {
+            handlers[event] = handler
+            return mockReq
+          },
+          destroy: sinon.stub(),
+          setTimeout: sinon.stub()
         }
-        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
 
-        setTimeout(() => {
-          if (timeoutHandlers.timeout) timeoutHandlers.timeout()
-        }, 10)
+        if (requestCount === 1) {
+          setTimeout(() => { handlers.timeout && handlers.timeout(); results.timeout = true }, 10)
+        } else {
+          setTimeout(() => {
+            handlers.error && handlers.error(new Error('Refused'))
+            results.error = true
+          }, 10)
+        }
 
         return mockReq
       })
 
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        100,
-        'http/protobuf',
-        resourceAttributes
-      )
-      const metrics = [{
-        name: 'api_calls_total',
-        type: 'counter',
-        data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }]
-      }]
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('test1').add(1)
 
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 1)
-        assert(result.error)
+      setTimeout(() => {
+        meter.createCounter('test2').add(2)
+      }, 120)
+
+      setTimeout(() => {
+        assert(results.timeout)
+        assert(results.error)
         done()
-      })
-    })
-
-    it('parses header strings with empty values, spaces, and malformed entries', () => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        'key1=value1,key2=value with spaces,key3=',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-      assert.strictEqual(exporter.options.headers.key1, 'value1')
-      assert.strictEqual(exporter.options.headers.key2, 'value with spaces')
-      assert.strictEqual(exporter.options.headers.key3, undefined)
-    })
-
-    it('exposes telemetry and handles connection errors with logging', (done) => {
-      const exporter = new OtlpHttpMetricExporter(
-        'http://localhost:4318/',
-        '',
-        5000,
-        'http/protobuf',
-        resourceAttributes
-      )
-      const tags = exporter.telemetryTags
-      assert(Array.isArray(tags))
-      assert(tags.includes('protocol:http'))
-      assert(tags.includes('encoding:protobuf'))
-
-      sinon.restore()
-      sinon.stub(http, 'request').callsFake((options, callback) => {
-        const errorHandlers = {}
-        const mockReq = {
-          write: () => {},
-          end: () => {},
-          on: (event, handler) => { errorHandlers[event] = handler },
-          once: () => {},
-          setTimeout: () => {}
-        }
-        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
-
-        setTimeout(() => {
-          if (errorHandlers.error) errorHandlers.error(new Error('Connection failed'))
-        }, 10)
-
-        return mockReq
-      })
-
-      const metrics = [
-        { name: 'api_calls_total', type: 'counter', data: [{ attributes: {}, timeUnixNano: '1000000000', value: 1 }] }
-      ]
-      exporter.export(metrics, (result) => {
-        assert.strictEqual(result.code, 1)
-        assert(result.error)
-        done()
-      })
+      }, 300)
     })
   })
 })

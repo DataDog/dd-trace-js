@@ -78,8 +78,6 @@ class OtlpTransformerBase {
    * @protected
    */
   transformAttributes (attributes) {
-    if (!attributes) return []
-
     return Object.entries(attributes).map(([key, value]) => ({
       key,
       value: this.transformAnyValue(value)
@@ -103,6 +101,8 @@ class OtlpTransformerBase {
 
   /**
    * Transforms any value to OTLP AnyValue format.
+   * Supports: strings, numbers (int/double), booleans, arrays.
+   * Objects are filtered out by sanitizeAttributes before reaching this method.
    * @param {any} value - Value to transform
    * @returns {Object} OTLP AnyValue object
    * @protected
@@ -123,16 +123,8 @@ class OtlpTransformerBase {
           values: value.map(v => this.transformAnyValue(v))
         }
       }
-    } else if (value && typeof value === 'object') {
-      return {
-        kvlistValue: {
-          values: Object.entries(value).map(([k, v]) => ({
-            key: k,
-            value: this.transformAnyValue(v)
-          }))
-        }
-      }
     }
+    // Fallback for any unexpected types
     return { stringValue: String(value) }
   }
 

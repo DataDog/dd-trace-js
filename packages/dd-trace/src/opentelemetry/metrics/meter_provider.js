@@ -110,6 +110,7 @@ class MeterProvider {
       createCounter: () => ({ add: () => {} }),
       createUpDownCounter: () => ({ add: () => {} }),
       createHistogram: () => ({ record: () => {} }),
+      createGauge: () => ({ record: () => {} }),
       createObservableGauge: () => ({ addCallback: () => {} }),
       createObservableCounter: () => ({ addCallback: () => {} }),
       createObservableUpDownCounter: () => ({ addCallback: () => {} })
