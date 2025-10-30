@@ -302,6 +302,7 @@ const openSearchOptions: plugins.opensearch = {
   },
 };
 
+tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
