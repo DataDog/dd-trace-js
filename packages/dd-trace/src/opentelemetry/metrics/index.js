@@ -16,10 +16,10 @@ const os = require('os')
  * Key Components:
  * - MeterProvider: Main entry point for creating meters
  * - Meter: Provides methods to create metric instruments
- * - Instruments: Counter, UpDownCounter, Histogram, ObservableGauge
- * - PeriodicMetricReader: Collects and exports metrics at regular intervals
- * - OtlpHttpMetricExporter: Exports metrics via OTLP over HTTP
- * - OtlpTransformer: Transforms metrics to OTLP format
+ * - Instruments: Gauge, Counter, UpDownCounter, ObservableGauge, ObservableCounter, ObservableUpDownCounter, Histogram
+ * - PeriodicMetricReader: Collects and exports instruments (metrics) at regular intervals
+ * - OtlpHttpMetricExporter: Exports instruments (metrics) via OTLP over HTTP
+ * - OtlpTransformer: Transforms instruments (metrics) to OTLP format
  *
  * This is a custom implementation to avoid pulling in the full OpenTelemetry SDK,
  * based on OTLP Protocol v1.7.0. It supports both protobuf and JSON serialization
@@ -44,8 +44,6 @@ function initializeOpenTelemetryMetrics (config) {
     'deployment.environment': config.env
   }
 
-  // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
-  // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
   if (config.tags) {
     const filteredTags = { ...config.tags }
     delete filteredTags.service
@@ -54,12 +52,10 @@ function initializeOpenTelemetryMetrics (config) {
     Object.assign(resourceAttributes, filteredTags)
   }
 
-  // Add host.name if reportHostname is enabled
   if (config.reportHostname) {
     resourceAttributes['host.name'] = os.hostname()
   }
 
-  // Create OTLP exporter using resolved config values
   const exporter = new OtlpHttpMetricExporter(
     config.otelMetricsUrl,
     config.otelMetricsHeaders,
@@ -68,17 +64,14 @@ function initializeOpenTelemetryMetrics (config) {
     resourceAttributes
   )
 
-  // Create periodic reader for collecting and exporting metrics
   const reader = new PeriodicMetricReader(
     exporter,
     config.otelMetricsExportInterval,
     config.otelMetricsTemporalityPreference
   )
 
-  // Create meter provider with reader for Datadog Agent export
   const meterProvider = new MeterProvider({ reader })
 
-  // Register the meter provider globally with OpenTelemetry API
   meterProvider.register()
 }
 
