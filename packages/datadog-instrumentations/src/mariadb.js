@@ -97,7 +97,7 @@ function createWrapQueryCallback (options) {
         arguments[arguments.length - 1] = shimmer.wrapFunction(cb, wrapper)
       } else {
         arguments.length += 1
-        arguments[arguments.length - 1] = wrapper(cb)
+        arguments[arguments.length - 1] = wrapper()
       }
 
       return startCh.runStores(ctx, query, this, ...arguments)
