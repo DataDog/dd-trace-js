@@ -1,27 +1,31 @@
 'use strict'
 
 const acorn = require('acorn')
+const file = require('fs').readFileSync('./node_modules/express/lib/request.js', 'utf8')
 
-const code = `async function test () {
-  const foo = globalThis.query()
+// console.log('hello')
+acorn.parse(file)
 
-  return await foo
-}
+// const code = `async function test () {
+//   const foo = globalThis.query()
 
-foo()`
+//   return await foo
+// }
 
-const ast = acorn.parse(code, { ecmaVersion: 2020 })
+// foo()`
 
-console.log(ast.body)
+// const ast = acorn.parse(code, { ecmaVersion: 2020 })
 
-const before = code.slice(0, 24)
-const body = code.slice(24, 78)
-const after = code.slice(78)
+// console.log(ast.body)
 
-const prefix = 'const ctx = {};return tracingChannel(\'test\').tracePromise(ctx, async () => {'
-const suffix = '})'
+// const before = code.slice(0, 24)
+// const body = code.slice(24, 78)
+// const after = code.slice(78)
 
-const patched = before + prefix + body + suffix + after
+// const prefix = 'const ctx = {};return tracingChannel(\'test\').tracePromise(ctx, async () => {'
+// const suffix = '})'
 
-console.log(patched)
-console.log(acorn.parse(patched))
+// const patched = before + prefix + body + suffix + after
+
+// console.log(patched)
+// console.log(acorn.parse(patched))
