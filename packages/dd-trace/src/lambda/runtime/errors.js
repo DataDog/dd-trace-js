@@ -7,7 +7,10 @@
 
 class ExtendedError extends Error {
   constructor (reason) {
+    const { stackTraceLimit } = Error
+    Error.stackTraceLimit = 0
     super(reason)
+    Error.stackTraceLimit = stackTraceLimit
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }

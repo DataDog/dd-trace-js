@@ -1,17 +1,20 @@
 'use strict'
 
+const fs = require('node:fs')
+const path = require('node:path')
+const { inspect } = require('node:util')
+
+const { expect } = require('chai')
+const { satisfies } = require('semver')
+
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const fs = require('fs')
-const path = require('path')
 const tags = require('../../../ext/tags')
-const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { rawExpectedSchema } = require('./naming')
-const { satisfies } = require('semver')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -552,7 +555,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, inspect(error, { depth: 0 }))
               expect(traces[0][0].meta).to.have.property('component', 'http')
             })
             .then(done)
@@ -625,7 +628,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('error', 1)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, inspect(error, { depth: 0 }))
               expect(traces[0][0].meta).to.not.have.property('http.status_code')
               expect(traces[0][0].meta).to.have.property('component', 'http')
             })

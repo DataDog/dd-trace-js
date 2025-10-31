@@ -1,9 +1,12 @@
 'use strict'
 
+const { inspect } = require('node:util')
+
+const { expect } = require('chai')
+
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
-const { expect } = require('chai')
 const { rawExpectedSchema } = require('./naming')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../../version')
@@ -204,7 +207,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
               expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+              expect(traces[0][0].meta).to.have.property(ERROR_STACK, inspect(error, { depth: 0 }))
               expect(traces[0][0].meta).to.have.property('component', 'undici')
             })
             .then(done)

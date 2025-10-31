@@ -1,6 +1,9 @@
 'use strict'
 
+const { inspect } = require('util')
 const path = require('path')
+
+const { ERROR_STACK, ERROR_MESSAGE, ERROR_TYPE } = require('./constants')
 
 function isTrue (str) {
   str = String(str).toLowerCase()
@@ -83,7 +86,18 @@ function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   return makeLowercase ? envPluginName.toLowerCase() : envPluginName
 }
 
+function addErrorTagsToSpan (span, error) {
+  if (isError(error)) {
+    span.addTags({
+      [ERROR_TYPE]: error.name,
+      [ERROR_MESSAGE]: error.message || error.code,
+      [ERROR_STACK]: error.stack ? inspect(error, { depth: 0 }) : error.stack
+    })
+  }
+}
+
 module.exports = {
+  addErrorTagsToSpan,
   isTrue,
   isFalse,
   isError,

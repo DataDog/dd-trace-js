@@ -1,5 +1,7 @@
 'use strict'
 
+const { inspect } = require('node:util')
+
 const chai = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
@@ -407,7 +409,7 @@ describe('integrations', () => {
           error,
           errorType: 'Error',
           errorMessage: error.message,
-          errorStack: error.stack
+          errorStack: inspect(error, { depth: 0 })
         })
 
         expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
@@ -456,7 +458,7 @@ describe('integrations', () => {
           error,
           errorType: 'Error',
           errorMessage: error.message,
-          errorStack: error.stack
+          errorStack: inspect(error, { depth: 0 })
         })
 
         expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)

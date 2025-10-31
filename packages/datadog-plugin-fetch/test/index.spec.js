@@ -1,5 +1,7 @@
 'use strict'
 
+const util = require('node:util')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
@@ -226,7 +228,7 @@ describe('Plugin', function () {
           .assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
             expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, util.inspect(error, { depth: 0 }))
             expect(traces[0][0].meta).to.have.property('component', 'fetch')
           })
           .then(done)
