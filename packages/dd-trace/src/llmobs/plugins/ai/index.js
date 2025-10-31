@@ -8,7 +8,7 @@ const { channel } = require('dc-polyfill')
 const toolCreationCh = channel('dd-trace:vercel-ai:tool')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
-const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
+const { NAME } = require('../../constants/tags')
 const {
   getSpanTags,
   getOperation,
@@ -20,6 +20,8 @@ const {
   getToolCallResultContent,
   getLlmObsSpanName
 } = require('./util')
+
+const LLMObsTagger = require('../../tagger')
 
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
@@ -100,7 +102,19 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    return { kind, name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId']) }
+    const tags = getSpanTags(ctx)
+
+    const registerOptions = {
+      kind,
+      name: getLlmObsSpanName(operation, ctx.attributes['ai.telemetry.functionId'])
+    }
+
+    if (['embedding', 'llm'].includes(kind)) {
+      registerOptions.modelProvider = getModelProvider(tags)
+      registerOptions.modelName = tags['ai.model.id']
+    }
+
+    return registerOptions
   }
 
   /**
@@ -115,11 +129,6 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     if (!kind) return
 
     const tags = getSpanTags(ctx)
-
-    if (['embedding', 'llm'].includes(kind)) {
-      this._tagger._setTag(span, MODEL_NAME, tags['ai.model.id'])
-      this._tagger._setTag(span, MODEL_PROVIDER, getModelProvider(tags))
-    }
 
     switch (operation) {
       case 'embed':
@@ -246,7 +255,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
     const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName[toolCallId]
-    if (name) this._tagger._setTag(span, NAME, name)
+    if (name) LLMObsTagger.tagMap.get(span)[NAME] = name // one-time manual override for the tool name
 
     const input = tags['ai.toolCall.args']
     const output = tags['ai.toolCall.result']
