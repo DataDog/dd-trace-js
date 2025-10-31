@@ -107,8 +107,33 @@ function constructChatCompletionResponseFromStreamedChunks (chunks, n) {
   })
 }
 
+/**
+ * Constructs the entire response from a stream of OpenAI responses chunks.
+ * The responses API uses event-based streaming with delta chunks.
+ * @param {Array<Record<string, any>>} chunks
+ * @returns {Record<string, any>}
+ */
+function constructResponseResponseFromStreamedChunks (chunks) {
+  // The responses API streams events with different types:
+  // - response.output_text.delta: incremental text deltas
+  // - response.output_text.done: complete text for a content part
+  // - response.output_item.done: complete output item with role
+  // - response.done/response.incomplete/response.completed: final response with output array and usage
+
+  // Find the last chunk with a complete response object (status: done, incomplete, or completed)
+  const responseStatusSet = new Set(['done', 'incomplete', 'completed'])
+
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    const chunk = chunks[i]
+    if (chunk.response && responseStatusSet.has(chunk.response.status)) {
+      return chunk.response
+    }
+  }
+}
+
 module.exports = {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
-  constructChatCompletionResponseFromStreamedChunks
+  constructChatCompletionResponseFromStreamedChunks,
+  constructResponseResponseFromStreamedChunks
 }

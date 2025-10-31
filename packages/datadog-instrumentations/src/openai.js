@@ -23,6 +23,14 @@ const V4_PACKAGE_SHIMS = [
     streamedResponse: true
   },
   {
+    file: 'resources/responses/responses',
+    targetClass: 'Responses',
+    baseResource: 'responses',
+    methods: ['create'],
+    streamedResponse: true,
+    versions: ['>=4.87.0']
+  },
+  {
     file: 'resources/embeddings',
     targetClass: 'Embeddings',
     baseResource: 'embeddings',
