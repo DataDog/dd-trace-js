@@ -1260,13 +1260,9 @@ addHook({
   return workerPackage
 })
 
-addHook({
-  name: 'playwright',
-  file: 'lib/reporters/base.js',
-  versions: ['>=1.38.0']
-}, (reportersPackage) => {
-  // from https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
-  shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummary => function () {
+function generateSummaryWrapper (generateSummary) {
+  return function () {
+    // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
     const didNotRunTests = this.suite.allTests().filter(test =>
       test.outcome() === 'skipped' && (!test.results.length || test.expectedStatus !== 'skipped')
     )
@@ -1285,6 +1281,24 @@ addHook({
       })
     }
     return generateSummary.apply(this, arguments)
-  })
+  }
+}
+
+// If a playwright project B has a dependency on project A,
+// and project A fails, the tests in project B will not run.
+// This hook is used to report tests that did not run as skipped.
+// Note: this is different from tests skipped via test.skip() or test.fixme()
+addHook({
+  name: 'playwright',
+  file: 'lib/reporters/base.js',
+  versions: ['>=1.38.0']
+}, (reportersPackage) => {
+  // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
+  if (reportersPackage.TerminalReporter) {
+    shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  }
+  if (reportersPackage.BaseReporter) {
+    shimmer.wrap(reportersPackage.BaseReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  }
   return reportersPackage
 })
