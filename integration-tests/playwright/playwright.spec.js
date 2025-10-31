@@ -2070,5 +2070,39 @@ versions.forEach((version) => {
         })
       })
     })
+
+    contextNewVersions('playwright early bail', () => {
+      it('reports tests that did not run', async () => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.propertyVal(failedTest.meta, TEST_NAME, 'failing test fails and causes early bail')
+            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+            assert.propertyVal(didNotRunTest.meta, TEST_NAME, 'did not run because of early bail')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-did-not-run',
+              ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
+    })
   })
 })
