@@ -17,7 +17,7 @@
   ],
   [
     {
-      "CF_BRANCH": "origin/master",
+      "CF_BRANCH": "origin/main",
       "CF_BUILD_ID": "6410367cee516146a4c4c66e",
       "CF_BUILD_URL": "https://g.codefresh.io/build/6410367cee516146a4c4c66e",
       "CF_PIPELINE_NAME": "My simple project/Example Java Project Pipeline",
@@ -30,7 +30,7 @@
       "ci.pipeline.name": "My simple project/Example Java Project Pipeline",
       "ci.pipeline.url": "https://g.codefresh.io/build/6410367cee516146a4c4c66e",
       "ci.provider.name": "codefresh",
-      "git.branch": "master"
+      "git.branch": "main"
     }
   ],
   [

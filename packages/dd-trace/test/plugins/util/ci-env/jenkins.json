@@ -5,7 +5,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL_1": "https://jenkins.com/repo/sample.git",
       "GIT_URL_2": "https://jenkins.com/repo/otherSample.git",
@@ -20,7 +20,7 @@
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -31,7 +31,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -45,7 +45,7 @@
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -56,7 +56,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -70,7 +70,7 @@
       "ci.pipeline.number": "jenkins-pipeline-number",
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -81,7 +81,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -97,7 +97,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -108,7 +108,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -124,7 +124,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar~",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -135,7 +135,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -151,7 +151,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/~/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -162,7 +162,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
@@ -180,7 +180,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/not-my-home/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -191,7 +191,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
@@ -209,7 +209,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "~foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -220,7 +220,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "HOME": "/not-my-home",
@@ -238,7 +238,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/not-my-home",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -249,7 +249,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -265,7 +265,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -276,11 +276,11 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "refs/heads/master",
+      "GIT_BRANCH": "refs/heads/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
-      "JOB_NAME": "jobName/master",
+      "JOB_NAME": "jobName/main",
       "JOB_URL": "https://jenkins.com/job",
       "WORKSPACE": "/foo/bar"
     },
@@ -292,7 +292,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -303,7 +303,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "refs/heads/master",
+      "GIT_BRANCH": "refs/heads/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -319,7 +319,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -357,7 +357,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "refs/heads/master",
+      "GIT_BRANCH": "refs/heads/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
@@ -373,7 +373,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -384,11 +384,11 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "refs/heads/master",
+      "GIT_BRANCH": "refs/heads/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "https://jenkins.com/repo/sample.git",
       "JENKINS_URL": "jenkins",
-      "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2/master",
+      "JOB_NAME": "jobName/KEY1=VALUE1,KEY2=VALUE2/main",
       "JOB_URL": "https://jenkins.com/job",
       "WORKSPACE": "/foo/bar"
     },
@@ -400,7 +400,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://jenkins.com/repo/sample.git"
     }
@@ -461,7 +461,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
@@ -477,7 +477,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
@@ -488,7 +488,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
@@ -504,7 +504,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
@@ -515,7 +515,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user%E2%82%AC@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
@@ -531,7 +531,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
@@ -542,7 +542,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "http://user:pwd@hostname.com/repo.git",
       "JENKINS_URL": "jenkins",
@@ -558,7 +558,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "http://hostname.com/repo.git"
     }
@@ -569,7 +569,7 @@
       "BUILD_TAG": "jenkins-pipeline-id",
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
-      "GIT_BRANCH": "origin/master",
+      "GIT_BRANCH": "origin/main",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "GIT_URL": "git@hostname.com:org/repo.git",
       "JENKINS_URL": "jenkins",
@@ -585,7 +585,7 @@
       "ci.pipeline.url": "https://jenkins.com/pipeline",
       "ci.provider.name": "jenkins",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "git@hostname.com:org/repo.git"
     }

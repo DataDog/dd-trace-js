@@ -208,8 +208,8 @@ for (const workflow of workflows) {
     triggersError(workflow, 'The `pull_request` trigger should be blank')
   }
   if (!IGNORED_WORKFLOWS.trigger_push.includes(workflow) &&
-      triggers?.push?.branches?.[0] !== 'master') {
-    triggersError(workflow, 'The `push` trigger should run on master')
+      triggers?.push?.branches?.[0] !== 'main') {
+    triggersError(workflow, 'The `push` trigger should run on main')
   }
   if (!IGNORED_WORKFLOWS.trigger_schedule.includes(workflow) &&
       triggers?.schedule?.[0]?.cron !== '0 4 * * *') {
