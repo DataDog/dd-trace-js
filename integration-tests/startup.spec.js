@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   spawnProc,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
@@ -32,18 +33,16 @@ execArgvs.forEach(({ execArgv, skip }) => {
   describe(`startup ${execArgv.join(' ')}`, () => {
     let agent
     let proc
-    let sandbox
     let cwd
     let startupTestFile
+    let unsupportedTestFile
 
-    before(async () => {
-      sandbox = await createSandbox()
-      cwd = sandbox.folder
+    useSandbox(['d3-format@3.1.0'])
+
+    before(() => {
+      cwd = sandboxCwd()
       startupTestFile = path.join(cwd, 'startup/index.js')
-    })
-
-    after(async () => {
-      await sandbox.remove()
+      unsupportedTestFile = path.join(cwd, 'startup/unsupported.js')
     })
 
     context('programmatic', () => {
@@ -215,6 +214,15 @@ execArgvs.forEach(({ execArgv, skip }) => {
           assert.isArray(payload[0])
           assert.strictEqual(payload[0].length, 1)
           assert.propertyVal(payload[0][0], 'name', 'web.request')
+        })
+      })
+    })
+
+    context('with unsupported module', () => {
+      it('skips the unsupported module', async () => {
+        await spawnProc(unsupportedTestFile, {
+          cwd,
+          execArgv
         })
       })
     })

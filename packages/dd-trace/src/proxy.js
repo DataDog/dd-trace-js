@@ -164,7 +164,7 @@ class Tracer extends NoopProxy {
           rc.setProductHandler('FFE_FLAGS', (action, conf) => {
             // Feed UFC config directly to OpenFeature provider
             if (action === 'apply' || action === 'modify') {
-              this.openfeature._setConfiguration(conf.flag_configuration)
+              this.openfeature._setConfiguration(conf)
             }
           })
         }

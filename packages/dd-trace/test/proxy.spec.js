@@ -372,7 +372,7 @@ describe('TracerProxy', () => {
         proxy.openfeature // Trigger lazy loading
 
         const flagConfig = { flags: { 'test-flag': {} } }
-        handlers.get('FFE_FLAGS')('apply', { flag_configuration: flagConfig })
+        handlers.get('FFE_FLAGS')('apply', flagConfig)
 
         expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
       })
@@ -384,7 +384,7 @@ describe('TracerProxy', () => {
         proxy.openfeature // Trigger lazy loading
 
         const flagConfig = { flags: { 'modified-flag': {} } }
-        handlers.get('FFE_FLAGS')('modify', { flag_configuration: flagConfig })
+        handlers.get('FFE_FLAGS')('modify', flagConfig)
 
         expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
       })

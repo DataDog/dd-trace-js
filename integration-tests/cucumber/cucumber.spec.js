@@ -8,7 +8,8 @@ const fs = require('fs')
 const path = require('path')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -80,21 +81,12 @@ versions.forEach(version => {
 
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
-    let sandbox, cwd, receiver, childProcess, testOutput
+    let cwd, receiver, childProcess, testOutput
 
-    before(async function () {
-      // add an explicit timeout to make tests less flaky
-      this.timeout(50000)
+    useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
 
-      sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
-      cwd = sandbox.folder
-    })
-
-    after(async function () {
-      // add an explicit timeout to make tests less flaky
-      this.timeout(50000)
-
-      await sandbox.remove()
+    before(function () {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {
@@ -2546,6 +2538,52 @@ versions.forEach(version => {
 
           runTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
+      })
+
+      it('does not crash if the request to get test management tests fails', async () => {
+        let testOutput = ''
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false
+        })
+        receiver.setTestManagementTestsResponseCode(500)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // it is not retried
+            assert.equal(tests.length, 1)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TRACE_DEBUG: '1'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+          once(childProcess.stderr, 'end'),
+          eventsPromise
+        ])
+        assert.include(testOutput, 'Test management tests could not be fetched')
       })
     })
 

@@ -1,29 +1,22 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('WAF Metrics', () => {
-  let axios, sandbox, cwd, appFile
+  let axios, cwd, appFile
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  useSandbox(
+    ['express'],
+    false,
+    [path.join(__dirname, 'resources')]
+  )
 
-    sandbox = await createSandbox(
-      ['express'],
-      false,
-      [path.join(__dirname, 'resources')]
-    )
-
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'index.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   describe('WAF error metrics', () => {

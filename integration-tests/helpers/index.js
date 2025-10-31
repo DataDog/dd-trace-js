@@ -11,10 +11,13 @@ const path = require('path')
 const assert = require('assert')
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
-const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { BUN, withBun } = require('./bun')
 
+const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
+
+const { DEBUG } = process.env
 
 // This is set by the setShouldKill function
 let shouldKill
@@ -212,28 +215,36 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   }))
 }
 
+function log (...args) {
+  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
+}
+
+function error (...args) {
+  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
+}
+
 function execHelper (command, options) {
-  /* eslint-disable no-console */
   try {
-    console.log('Exec START: ', command)
+    log('Exec START: ', command)
     execSync(command, options)
-    console.log('Exec SUCCESS: ', command)
-  } catch (error) {
-    console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('yarn')) {
+    log('Exec SUCCESS: ', command)
+  } catch (execError) {
+    error('Exec ERROR: ', command, execError)
+    if (command.startsWith(BUN)) {
       try {
-        console.log('Exec RETRY START: ', command)
+        log('Exec RETRY BACKOFF: 60 seconds')
+        execSync('sleep 60')
+        log('Exec RETRY START: ', command)
         execSync(command, options)
-        console.log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCESS: ', command)
       } catch (retryError) {
-        console.error('Exec RETRY ERROR', command, retryError)
+        error('Exec RETRY ERROR', command, retryError)
         throw retryError
       }
     } else {
-      throw error
+      throw execError
     }
   }
-  /* eslint-enable no-console */
 }
 
 /**
@@ -242,9 +253,12 @@ function execHelper (command, options) {
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
  */
-
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+async function createSandbox (
+  dependencies = [],
+  isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'],
+  followUpCommand
+) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
@@ -257,7 +271,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
@@ -269,17 +283,29 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
+  const folder = path.join(sandboxRoot, id().toString())
+  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const deps = cappedDependencies.concat(`file:${out}`)
 
-  await fs.mkdir(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
+  await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
-  execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  const addFlags = ['--trust']
+  if (!existsSync(out)) {
+    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
+  }
 
-  execHelper(addCommand, addOptions)
+  if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
+    addFlags.push('--prefer-offline')
+  }
+
+  if (DEBUG !== 'true') {
+    addFlags.push('--silent')
+  }
+
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
+    ...addOptions,
+    timeout: 90_000
+  })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -337,7 +363,6 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  */
 /**
  * @overload
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedVariant] - The name of the named variant to use.
@@ -352,14 +377,13 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  * in the file that's different in each variant. There must always be a "default" variant,
  * whose value is the original text within the file that will be replaced.
  *
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = variants
+    const bindingName = namedVariant || variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
@@ -544,7 +568,8 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   additionalEnvArgs = additionalEnvArgs || {}
   let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: String(agentPort)
+    DD_TRACE_AGENT_PORT: String(agentPort),
+    DD_TRACE_FLUSH_INTERVAL: '0'
   })
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
@@ -570,16 +595,17 @@ function useEnv (env) {
 
 /**
  * @param {unknown[]} args
+ * @returns {object}
  */
 function useSandbox (...args) {
-  before(async () => {
+  before(async function () {
+    this.timeout(300_000)
     sandbox = await createSandbox(...args)
   })
 
-  after(() => {
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox.remove()
+  after(function () {
+    this.timeout(30_000)
+    return sandbox.remove()
   })
 }
 
@@ -660,7 +686,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
@@ -668,8 +693,8 @@ module.exports = {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   useEnv,
-  useSandbox,
-  sandboxCwd,
   setShouldKill,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 }

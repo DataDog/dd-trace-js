@@ -14,6 +14,7 @@ require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Auth
 require,@isaacs/ttlcache,ISC,Copyright (c) 2022-2023 - Isaac Z. Schlueter and Contributors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
+require,escape-string-regexp,MIT,Copyright Sindre Sorhus
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
@@ -50,6 +51,7 @@ dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contribut
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
 dev,body-parser,MIT,Copyright 2014 Jonathan Ong 2014-2015 Douglas Christopher Wilson
+dev,bun,MIT,Copyright contributors
 dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io
@@ -64,6 +66,8 @@ dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://si
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
+dev,mocha-multi-reporters,MIT,Copyright 2015-2019 Yousaf Nabi and Stanley Ng
+dev,mocha-junit-reporter,MIT, Copyright 2015 Michael Allen
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors

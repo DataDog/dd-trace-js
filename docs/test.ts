@@ -262,7 +262,6 @@ const elasticsearchOptions: plugins.elasticsearch = {
 
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
-  splitByAwsService: false,
   batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},
@@ -303,6 +302,7 @@ const openSearchOptions: plugins.opensearch = {
   },
 };
 
+tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');

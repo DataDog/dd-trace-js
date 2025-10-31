@@ -22,6 +22,8 @@ services:
       ACCEPT_EULA: "Y"
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
+    volumes:
+       - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:5300:5300"
@@ -152,7 +154,7 @@ services:
       - LAMBDA_EXECUTOR=local
   kafka:
     platform: linux/arm64
-    image: apache/kafka-native:3.8.0-rc2
+    image: apache/kafka-native:3.9.1
     ports:
       - "127.0.0.1:9092:9092"
       - "127.0.0.1:9093:9093"
