@@ -633,7 +633,7 @@ describe('Plugin', () => {
          * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
          * versions. In v5+, this is resolved as the tool name is not its index in the tools array, but its actual name.
          */
-        name: semifies(realVersion, '<4.0.2') ? 'toolCall' : MOCK_STRING,
+        name: semifies(realVersion, '<4.0.2') ? 'toolCall' : 'weather',
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
