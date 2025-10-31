@@ -17,6 +17,8 @@ const { BUN, withBun } = require('./bun')
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
 
+const { DEBUG } = process.env
+
 // This is set by the setShouldKill function
 let shouldKill
 
@@ -213,28 +215,36 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   }))
 }
 
+function log (...args) {
+  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
+}
+
+function error (...args) {
+  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
+}
+
 function execHelper (command, options) {
-  /* eslint-disable no-console */
   try {
-    console.log('Exec START: ', command)
+    log('Exec START: ', command)
     execSync(command, options)
-    console.log('Exec SUCCESS: ', command)
-  } catch (error) {
-    console.error('Exec ERROR: ', command, error)
+    log('Exec SUCCESS: ', command)
+  } catch (execError) {
+    error('Exec ERROR: ', command, execError)
     if (command.startsWith(BUN)) {
       try {
-        console.log('Exec RETRY START: ', command)
+        log('Exec RETRY BACKOFF: 60 seconds')
+        execSync('sleep 60')
+        log('Exec RETRY START: ', command)
         execSync(command, options)
-        console.log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY SUCESS: ', command)
       } catch (retryError) {
-        console.error('Exec RETRY ERROR', command, retryError)
+        error('Exec RETRY ERROR', command, retryError)
         throw retryError
       }
     } else {
-      throw error
+      throw execError
     }
   }
-  /* eslint-enable no-console */
 }
 
 /**
@@ -288,7 +298,14 @@ async function createSandbox (
     addFlags.push('--prefer-offline')
   }
 
-  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  if (DEBUG !== 'true') {
+    addFlags.push('--silent')
+  }
+
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
+    ...addOptions,
+    timeout: 90_000
+  })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -346,7 +363,6 @@ async function createSandbox (
  */
 /**
  * @overload
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedVariant] - The name of the named variant to use.
@@ -361,12 +377,11 @@ async function createSandbox (
  * in the file that's different in each variant. There must always be a "default" variant,
  * whose value is the original text within the file that will be replaced.
  *
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
     const bindingName = namedVariant || variants
     variants = {
@@ -580,16 +595,17 @@ function useEnv (env) {
 
 /**
  * @param {unknown[]} args
+ * @returns {object}
  */
 function useSandbox (...args) {
-  before(async () => {
+  before(async function () {
+    this.timeout(300_000)
     sandbox = await createSandbox(...args)
   })
 
-  after(() => {
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox.remove()
+  after(function () {
+    this.timeout(30_000)
+    return sandbox.remove()
   })
 }
 
@@ -670,7 +686,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
@@ -678,8 +693,8 @@ module.exports = {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   useEnv,
-  useSandbox,
-  sandboxCwd,
   setShouldKill,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 }

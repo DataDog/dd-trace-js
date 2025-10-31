@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -13,19 +14,11 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('restify', 'restify', '>3', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'restify@${version}'`],
-        false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'restify@${version}'`],
+      false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -37,7 +30,7 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
