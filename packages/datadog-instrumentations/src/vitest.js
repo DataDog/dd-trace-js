@@ -451,11 +451,7 @@ function threadHandler (thread) {
   })
 }
 
-addHook({
-  name: 'tinypool',
-  versions: ['>=1.0.0'],
-  file: 'dist/index.js'
-}, (TinyPool) => {
+function wrapTinyPoolRun (TinyPool) {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     this.threads.forEach(threadHandler)
@@ -463,6 +459,24 @@ addHook({
     this.threads.forEach(threadHandler)
     return runResult
   })
+}
+
+addHook({
+  name: 'tinypool',
+  // version from tinypool@0.8 was used in vitest@1.6.0
+  versions: ['>=0.8.0 <1.0.0'],
+  file: 'dist/esm/index.js'
+}, (TinyPool) => {
+  wrapTinyPoolRun(TinyPool)
+  return TinyPool
+})
+
+addHook({
+  name: 'tinypool',
+  versions: ['>=1.0.0'],
+  file: 'dist/index.js'
+}, (TinyPool) => {
+  wrapTinyPoolRun(TinyPool)
 
   return TinyPool
 })

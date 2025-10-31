@@ -50,7 +50,8 @@ const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  VITEST_POOL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
@@ -89,126 +90,138 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
-    it('can run and report tests', (done) => {
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+    const poolConfig = ['forks', 'threads']
 
-        metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+    poolConfig.forEach((poolConfig) => {
+      it(`can run and report tests with pool=${poolConfig}`, (done) => {
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
+
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+
+          if (poolConfig === 'threads') {
+            assert.equal(testSessionEvent.content.meta[VITEST_POOL], 'worker_threads')
+          } else {
+            assert.equal(testSessionEvent.content.meta[VITEST_POOL], 'child_process')
           }
-        })
 
-        const events = payloads.flatMap(({ payload }) => payload.events)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          const testEvents = events.filter(event => event.type === 'test')
 
-        const testSessionEvent = events.find(event => event.type === 'test_session_end')
-        const testModuleEvent = events.find(event => event.type === 'test_module_end')
-        const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-        const testEvents = events.filter(event => event.type === 'test')
+          assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
+          assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+          assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
+          assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
+          assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
+          assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
 
-        assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
-        assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-        assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
-        assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
-        assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
-        assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
-
-        const passedSuite = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-passed-suite.mjs'
-        )
-        assert.equal(passedSuite.content.meta[TEST_STATUS], 'pass')
-
-        const failedSuite = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-suite.mjs'
-        )
-        assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
-
-        const failedSuiteHooks = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs'
-        )
-        assert.equal(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
-
-        assert.includeMembers(testEvents.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
-          ]
-        )
-
-        const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
-
-        assert.includeMembers(
-          failedTests.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
-          ]
-        )
-
-        const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
-
-        assert.includeMembers(
-          skippedTests.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
-          ]
-        )
-
-        testEvents.forEach(test => {
-          assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
-          assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
-          assert.equal(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-        })
-
-        testSuiteEvents.forEach(testSuite => {
-          assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
-          assert.isTrue(
-            testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
+          const passedSuite = testSuiteEvents.find(
+            suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-passed-suite.mjs'
           )
-          assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
-          assert.exists(testSuite.content.metrics[DD_HOST_CPU_COUNT])
-        })
-        // TODO: check error messages
-      }).then(() => done()).catch(done)
+          assert.equal(passedSuite.content.meta[TEST_STATUS], 'pass')
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            DD_TEST_SESSION_NAME: 'my-test-session',
-            DD_SERVICE: undefined
-          },
-          stdio: 'pipe'
-        }
-      )
+          const failedSuite = testSuiteEvents.find(
+            suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-suite.mjs'
+          )
+          assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
+
+          const failedSuiteHooks = testSuiteEvents.find(
+            suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs'
+          )
+          assert.equal(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
+
+          assert.includeMembers(testEvents.map(test => test.content.resource),
+            [
+              'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+              '.test-visibility-failed-suite-first-describe can report failed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+              '.test-visibility-failed-suite-first-describe can report more',
+              'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+              '.test-visibility-failed-suite-second-describe can report passed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+              '.test-visibility-failed-suite-second-describe can report more',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
+            ]
+          )
+
+          const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
+
+          assert.includeMembers(
+            failedTests.map(test => test.content.resource),
+            [
+              'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+              '.test-visibility-failed-suite-first-describe can report failed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+              'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
+            ]
+          )
+
+          const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
+
+          assert.includeMembers(
+            skippedTests.map(test => test.content.resource),
+            [
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+              'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
+            ]
+          )
+
+          testEvents.forEach(test => {
+            assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
+            assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
+            assert.equal(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+          })
+
+          testSuiteEvents.forEach(testSuite => {
+            assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
+            assert.isTrue(
+              testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
+            )
+            assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
+            assert.exists(testSuite.content.metrics[DD_HOST_CPU_COUNT])
+          })
+          // TODO: check error messages
+        }).then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+              DD_TEST_SESSION_NAME: 'my-test-session',
+              POOL_CONFIG: poolConfig,
+              DD_SERVICE: undefined
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
     })
 
     context('flaky test retries', () => {
