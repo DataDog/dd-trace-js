@@ -685,7 +685,7 @@ describe('Plugin', () => {
 
             expect(queryText).to.equal(
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
-              `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
+              `traceparent='00-${traceId}-${spanId}-01'*/ SELECT $1::text as message`)
           })
         })
 

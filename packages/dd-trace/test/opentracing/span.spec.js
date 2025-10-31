@@ -10,6 +10,7 @@ require('../setup/core')
 
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const originalId = require('../../src/id')
 
 const startCh = channel('dd-trace:span:start')
 
@@ -35,7 +36,8 @@ describe('Span', () => {
     tracer = {}
 
     processor = {
-      process: sinon.stub()
+      process: sinon.stub(),
+      sample: sinon.stub()
     }
 
     prioritySampler = {
@@ -514,6 +516,20 @@ describe('Span', () => {
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         expect(span._spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
       })
+    })
+  })
+
+  describe('sample', () => {
+    it('should call the sample processor for sample decision', () => {
+      // Override id stub for this test to return a real Identifier object
+      id.onFirstCall().returns(originalId('1'))
+      id.onSecondCall().returns(originalId('1'))
+
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.sample()
+
+      expect(processor.sample).to.have.been.called
+      expect(span.context().toTraceparent()).to.equal('00-00000000000000000000000000000001-0000000000000001-00')
     })
   })
 })
