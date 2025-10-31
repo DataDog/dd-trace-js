@@ -260,7 +260,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const formattedToolCalls = []
     for (const toolCall of outputMessageToolCalls) {
-      const toolCallArgs = getJsonStringValue(toolCall.args, {})
+      const toolArgs = toolCall.args ?? toolCall.input
+      const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
       const name = this.findToolName(toolDescription)
       this.#toolCallIdsToName[toolCall.toolCallId] = name
@@ -269,7 +270,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
         arguments: toolCallArgs,
         name,
         toolId: toolCall.toolCallId,
-        type: 'function'
+        type: toolCall.toolCallType ?? 'function'
       })
     }
 
@@ -320,7 +321,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           const name = this.findToolName(toolDescription)
 
           toolCalls.push({
-            arguments: part.args,
+            arguments: part.args ?? part.input,
             name,
             toolId: part.toolCallId,
             type: 'function'
