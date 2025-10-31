@@ -1,4 +1,3 @@
-
 'use strict'
 
 const {
@@ -9,7 +8,6 @@ const { assert } = require('chai')
 
 describe('ESM', () => {
   let variants, proc, agent
-
 
   useSandbox(['url', 'express'], false,
     ['./packages/datadog-plugin-url/test/integration-test/*'])
