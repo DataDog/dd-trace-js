@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
@@ -38,7 +38,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
 
     beforeEach(async () => {
       requestCookie = sinon.stub()
-      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'cookie-parser-rules.json') } }))
+      appsec.enable(getConfig({ appsec: { enabled: true, rules: path.join(__dirname, 'cookie-parser-rules.json') } }))
     })
 
     afterEach(() => {

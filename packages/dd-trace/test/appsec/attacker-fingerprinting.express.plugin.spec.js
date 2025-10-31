@@ -6,7 +6,7 @@ const path = require('path')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express', 'express', expressVersion => {
@@ -40,7 +40,7 @@ withVersions('express', 'express', expressVersion => {
     })
 
     beforeEach(() => {
-      appsec.enable(new Config(
+      appsec.enable(getConfig(
         {
           appsec: {
             enabled: true,

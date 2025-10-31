@@ -5,7 +5,7 @@ const { assert } = require('chai')
 const agent = require('../plugins/agent')
 const tracer = require('../../../../index')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 
 describe('Attacker fingerprinting', () => {
   describe('SDK', () => {
@@ -21,7 +21,7 @@ describe('Attacker fingerprinting', () => {
     }
 
     before(() => {
-      appsec.enable(new Config({
+      appsec.enable(getConfig({
         enabled: true
       }))
     })

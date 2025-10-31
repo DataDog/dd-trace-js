@@ -8,7 +8,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
 const appsecTelemetry = require('../../../src/appsec/telemetry')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 
 describe('Appsec Rasp Telemetry metrics', () => {
   const wafVersion = '0.0.1'
@@ -31,7 +31,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
   describe('if enabled', () => {
     beforeEach(() => {
-      const config = new Config()
+      const config = getConfig()
       config.telemetry.enabled = true
       config.telemetry.metrics = true
 

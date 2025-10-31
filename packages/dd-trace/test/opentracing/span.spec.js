@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 const startCh = channel('dd-trace:span:start')
@@ -110,7 +110,7 @@ describe('Span', () => {
   })
 
   it('should generate new timing when the parent was extracted', () => {
-    const propagator = new TextMapPropagator(new Config())
+    const propagator = new TextMapPropagator(getConfig())
     const parent = propagator.extract({
       'x-datadog-trace-id': '1234',
       'x-datadog-parent-id': '5678'

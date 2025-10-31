@@ -8,7 +8,7 @@ require('../setup/core')
 
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
 
 const testLogChannel = channel('apm:test:log')
 
@@ -22,7 +22,7 @@ const config = {
   version: '1.2.3'
 }
 
-const tracer = new Tracer(new Config({
+const tracer = new Tracer(getConfig({
   logInjection: true,
   enabled: true,
   ...config

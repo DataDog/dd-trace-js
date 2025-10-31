@@ -1,21 +1,23 @@
 'use strict'
 
+const { EventEmitter } = require('node:events')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { EventEmitter } = require('node:events')
 
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')
-const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const iast = require('../../../src/appsec/iast')
 const rewriter = require('../../../src/appsec/iast/taint-tracking/rewriter')
 const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
 const vulnerabilities = require('../../../src/appsec/iast/vulnerabilities')
+
+const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
 
 describe('Overhead controller', () => {
   let oceContextKey, overheadController, web
@@ -31,7 +33,7 @@ describe('Overhead controller', () => {
       })
       oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
 
-      const config = new Config({
+      const config = getConfig({
         experimental: {
           iast: true
         }
@@ -434,7 +436,7 @@ describe('Overhead controller', () => {
         })
 
         it('should detect vulnerabilities only in one if max concurrent is 1', (done) => {
-          const config = new Config({
+          const config = getConfig({
             experimental: {
               iast: {
                 enabled: true,
@@ -486,7 +488,7 @@ describe('Overhead controller', () => {
         })
 
         it('should detect vulnerabilities in both if max concurrent is 2', (done) => {
-          const config = new Config({
+          const config = getConfig({
             experimental: {
               iast: {
                 enabled: true,
@@ -542,7 +544,7 @@ describe('Overhead controller', () => {
         it('should recovery requests budget', function (done) {
           // 3 in parallel => 2 detects - 1 not detects
           // on finish the first => launch 2 - should detect 1 more
-          const config = new Config({
+          const config = getConfig({
             experimental: {
               iast: {
                 enabled: true,
@@ -614,7 +616,7 @@ describe('Overhead controller', () => {
         })
 
         it('should add _dd.iast.enabled tag even when no vulnerability is detected', (done) => {
-          const config = new Config({
+          const config = getConfig({
             experimental: {
               iast: {
                 enabled: true,

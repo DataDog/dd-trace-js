@@ -5,7 +5,7 @@ const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
 const { match } = require('sinon')
@@ -26,7 +26,7 @@ describe('WAF Manager', () => {
   let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
-    config = new Config()
+    config = getConfig()
 
     limiterStub = {
       isAllowed: sinon.stub().returns(true)

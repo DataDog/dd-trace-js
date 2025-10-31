@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -29,11 +30,12 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const Config = require('../../src/config')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+
+const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
 
 const resultActions = {
   actions: {
@@ -1252,7 +1254,7 @@ describe('AppSec Index', function () {
 
       appsecNamespace.reset()
 
-      config = new Config({
+      config = getConfig({
         appsec: {
           enabled: true
         }
@@ -1350,7 +1352,7 @@ describe('IP blocking', function () {
   })
 
   beforeEach(() => {
-    appsec.enable(new Config({
+    appsec.enable(getConfig({
       appsec: {
         enabled: true,
         rasp: {
