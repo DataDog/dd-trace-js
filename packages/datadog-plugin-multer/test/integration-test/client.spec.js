@@ -1,7 +1,7 @@
 'use strict'
 
 const {
-  createSandbox, varySandbox,
+  useSandbox, sandboxCwd, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
@@ -10,18 +10,13 @@ const axios = require('axios')
 
 withVersions('multer', 'multer', version => {
   describe('ESM', () => {
-    let sandbox, variants, proc, agent
+    let variants, proc, agent
 
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'multer@${version}'`, 'express'], false,
-        ['./packages/datadog-plugin-multer/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'multer')
-    })
+    useSandbox([`'multer@${version}'`, 'express'], false,
+      ['./packages/datadog-plugin-multer/test/integration-test/*'])
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
+    before(function () {
+      variants = varySandbox('server.mjs', 'multer')
     })
 
     beforeEach(async () => {
@@ -35,7 +30,7 @@ withVersions('multer', 'multer', version => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.post(`${proc.url}/upload`, { key: 'value' })
         assert.equal(response.headers['x-counter'], '1')
       })
