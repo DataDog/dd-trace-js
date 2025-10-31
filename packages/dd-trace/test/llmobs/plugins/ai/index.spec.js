@@ -503,8 +503,7 @@ describe('Plugin', () => {
       })
     })
 
-    // TODO(sabrenner): Fix this test for v5.0.0 - tool "input" instead of "arguments" & parsing, streaming
-    it.skip('created a span for a tool call from a stream', async () => {
+    it('created a span for a tool call from a stream', async () => {
       let tools
       let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
@@ -628,15 +627,13 @@ describe('Plugin', () => {
         span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         /**
-         * MOCK_STRING used as the stream implementation for ai does not finish the initial llm spans
+         * Before ai@4.0.2, the stream implementation did not finish the initial llm spans
          * first to associate the tool call id with the tool itself (by matching descriptions).
          *
-         * Usually, this would mean the tool call name is 'toolCall'.
-         *
-         * However, because we used mocked responses, the second time this test is called, the tool call
-         * will have the name 'weather' instead. We just assert that the name exists and is a string to simplify.
+         * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
+         * versions. In v5+, this is resolved as the tool name is not its index in the tools array, but its actual name.
          */
-        name: MOCK_STRING,
+        name: semifies(realVersion, '<4.0.2') ? 'toolCall' : MOCK_STRING,
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),

@@ -260,7 +260,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const formattedToolCalls = []
     for (const toolCall of outputMessageToolCalls) {
-      const toolCallArgs = getJsonStringValue(toolCall.args) ?? getJsonStringValue(toolCall.input, {})
+      const toolArgs = toolCall.args ?? toolCall.input
+      const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
       const name = this.findToolName(toolDescription)
       this.#toolCallIdsToName[toolCall.toolCallId] = name
