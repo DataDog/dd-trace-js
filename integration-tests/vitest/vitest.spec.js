@@ -8,7 +8,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -63,20 +64,17 @@ const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
-    let sandbox, cwd, receiver, childProcess, testOutput
+    let cwd, receiver, childProcess, testOutput
 
-    before(async function () {
-      sandbox = await createSandbox([
-        `vitest@${version}`,
-        `@vitest/coverage-istanbul@${version}`,
-        `@vitest/coverage-v8@${version}`,
-        'tinypool'
-      ], true)
-      cwd = sandbox.folder
-    })
+    useSandbox([
+      `vitest@${version}`,
+      `@vitest/coverage-istanbul@${version}`,
+      `@vitest/coverage-v8@${version}`,
+      'tinypool'
+    ], true)
 
-    after(async () => {
-      await sandbox.remove()
+    before(function () {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {

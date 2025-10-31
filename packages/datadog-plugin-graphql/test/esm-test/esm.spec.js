@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -15,18 +16,10 @@ describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {
     let agent
     let proc
-    let sandbox
 
     withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
-      before(async function () {
-        this.timeout(50000)
-        sandbox = await createSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
-          './packages/datadog-plugin-graphql/test/esm-test/*'])
-      })
-
-      after(async function () {
-        await sandbox.remove()
-      })
+      useSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
+        './packages/datadog-plugin-graphql/test/esm-test/*'])
 
       beforeEach(async () => {
         agent = await new FakeAgent().start()
@@ -45,7 +38,7 @@ describe('Plugin (ESM)', () => {
         })
 
         proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
+          sandboxCwd(),
           'esm-graphql-server.mjs',
           agent.port,
           undefined,
@@ -84,7 +77,7 @@ describe('Plugin (ESM)', () => {
           })
 
           proc = await spawnPluginIntegrationTestProc(
-            sandbox.folder,
+            sandboxCwd(),
             'esm-graphql-yoga-server.mjs',
             agent.port,
             undefined,
