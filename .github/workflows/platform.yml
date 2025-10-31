@@ -24,6 +24,21 @@ env:
 # TODO: upstream jobs
 
 jobs:
+  ast-bench:
+    strategy:
+      # when one version fails, say 14, all the other versions are stopped
+      # setting fail-fast to false in an attempt to prevent this from happening
+      fail-fast: false
+      matrix:
+        impl: [acorn, orchestrion, oxc, swc]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: node -e "console.log('hello')"
+      - run: time node ${{ matrix.impl }}
+
   bun-pack:
     runs-on: ubuntu-latest
     steps:
