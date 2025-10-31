@@ -163,14 +163,13 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       const ctx = getTestContext(test)
 
       if (ctx) {
-        const originalFn = this.fn
         // we bind the test fn to the correct context
-        const newFn = function () {
+        const newFn = shimmer.wrapFunction(this.fn, originalFn => function () {
           return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
-        }
+        })
 
         // we store the original function, not to lose it
-        originalFns.set(newFn, originalFn)
+        originalFns.set(newFn, this.fn)
         this.fn = newFn
 
         wrappedFunctions.add(this.fn)

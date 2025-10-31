@@ -58,7 +58,7 @@ class WSReceiverPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (!Object.hasOwn(ctx, 'result')) return
+    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
 
     if (ctx.socket.spanContext) {
       ctx.span.addLink({

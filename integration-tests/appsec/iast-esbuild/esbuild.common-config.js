@@ -11,11 +11,7 @@ module.exports = {
   target: ['node18'],
   external: [
     '@datadog/native-iast-taint-tracking',
-    '@datadog/native-iast-rewriter',
-
-    // @openfeature/core is a peer dependency of @openfeature/server-sdk
-    // which is used by @datadog/openfeature-node-server
-    '@openfeature/core',
+    '@datadog/wasm-js-rewriter',
 
     // required if you encounter graphql errors during the build step
     // see https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling

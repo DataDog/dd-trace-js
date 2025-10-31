@@ -683,7 +683,7 @@ describe('reporter', () => {
           span.context()._tags = { '_dd.appsec.rasp.request_body_size.exceeded': 'true' }
 
           const res = {}
-          Reporter.finishRequest(req, res, {})
+          Reporter.finishRequest(req, res, {}, req.body)
 
           expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.request_body_size.exceeded', 'true')
         })

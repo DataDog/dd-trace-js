@@ -5,7 +5,7 @@ const assert = require('node:assert')
 
 const Axios = require('axios')
 
-const { createSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
 // A race condition exists where the tracer receives a probe via RC, before Node.js has had a chance to load all the JS
@@ -25,21 +25,13 @@ const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/d
 //
 // This test tries to trigger the race condition. However, it doesn't always happen, so it runs multiple times.
 describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
-  let sandbox
-
-  before(async function () {
-    sandbox = await createSandbox(
-      undefined,
-      undefined,
-      // Ensure the test scripts live in the root of the sandbox so they are always the shortest path when
-      // `findScriptFromPartialPath` is called
-      ['./integration-tests/debugger/target-app/re-evaluation/*']
-    )
-  })
-
-  after(async function () {
-    await sandbox?.remove()
-  })
+  useSandbox(
+    undefined,
+    undefined,
+    // Ensure the test scripts live in the root of the sandbox so they are always the shortest path when
+    // `findScriptFromPartialPath` is called
+    ['./integration-tests/debugger/target-app/re-evaluation/*']
+  )
 
   describe('Could not find source file', genTestsForSourceFile('unique-filename.js'))
 
@@ -115,7 +107,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
           agent.addRemoteConfig(rcConfig)
 
           spawnProc(sourceFile, {
-            cwd: sandbox.folder,
+            cwd: sandboxCwd(),
             env: {
               NODE_OPTIONS: '--import dd-trace/initialize.mjs',
               DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',

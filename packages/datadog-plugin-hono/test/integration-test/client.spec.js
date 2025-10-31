@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
   assertObjectContains,
@@ -12,19 +13,10 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm integration test', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('hono', 'hono', (range, _moduleName_, version) => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'hono@${range}'`, '@hono/node-server@1.15.0'], false,
-        ['./packages/datadog-plugin-hono/test/integration-test/*'])
-    })
-
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
+    useSandbox([`'hono@${range}'`, '@hono/node-server@1.15.0'], false,
+      ['./packages/datadog-plugin-hono/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -36,7 +28,7 @@ describe('esm integration test', () => {
     })
 
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, {
         VERSION: version
       })
       proc.url += '/hello'
@@ -48,7 +40,7 @@ describe('esm integration test', () => {
     }).timeout(50000)
 
     it('receives missing route trace', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined, {
         VERSION: version
       })
       proc.url += '/missing'

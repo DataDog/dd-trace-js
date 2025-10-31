@@ -10,6 +10,8 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const isDdTrace = iastFilter.isDdTrace
 
+const semifies = require('semifies')
+
 describe('Plugin', () => {
   let langchainOpenai
   let langchainAnthropic
@@ -114,9 +116,15 @@ describe('Plugin', () => {
         langchainTools = require(`../../../versions/@langchain/core@${version}`)
           .get('@langchain/core/tools')
 
-        MemoryVectorStore = require(`../../../versions/@langchain/core@${version}`)
-          .get('langchain/vectorstores/memory')
-          .MemoryVectorStore
+        if (semifies(realVersion, '>=1.0')) {
+          MemoryVectorStore = require('../../../versions/@langchain/classic@>=1.0')
+            .get('@langchain/classic/vectorstores/memory')
+            .MemoryVectorStore
+        } else {
+          MemoryVectorStore = require(`../../../versions/langchain@${version}`)
+            .get('langchain/vectorstores/memory')
+            .MemoryVectorStore
+        }
       })
 
       describe('llm', () => {

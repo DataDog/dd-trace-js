@@ -5,22 +5,20 @@ const path = require('path')
 const Axios = require('axios')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
 
 describe('Headers collection - Fastify', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async () => {
-    sandbox = await createSandbox(['fastify'])
-    cwd = sandbox.folder
+  useSandbox(['fastify'])
+
+  before(() => {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'appsec/data-collection/fastify.js')
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   beforeEach(async () => {

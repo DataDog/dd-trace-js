@@ -444,7 +444,12 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        providerOptions: {
+          openai: {
+            store: false
+          }
+        },
+        ...maxStepsArg
       })
 
       assert.ok(result.text, 'Expected result to be truthy')

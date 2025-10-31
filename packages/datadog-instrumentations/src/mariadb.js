@@ -82,12 +82,7 @@ function createWrapQueryCallback (options) {
 
       const cb = arguments[arguments.length - 1]
       const ctx = { sql, conf: options }
-
-      if (typeof cb !== 'function') {
-        arguments.length += 1
-      }
-
-      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (err) {
+      const wrapper = (cb) => function (err) {
         if (err) {
           ctx.error = err
           errorCh.publish(ctx)
@@ -96,7 +91,14 @@ function createWrapQueryCallback (options) {
         return typeof cb === 'function'
           ? finishCh.runStores(ctx, cb, this, ...arguments)
           : finishCh.publish(ctx)
-      })
+      }
+
+      if (typeof cb === 'function') {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, wrapper)
+      } else {
+        arguments.length += 1
+        arguments[arguments.length - 1] = wrapper()
+      }
 
       return startCh.runStores(ctx, query, this, ...arguments)
     }

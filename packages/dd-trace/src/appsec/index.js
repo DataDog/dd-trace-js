@@ -43,6 +43,7 @@ const { isInServerlessEnvironment } = require('../serverless')
 
 const responseAnalyzedSet = new WeakSet()
 const storedResponseHeaders = new WeakMap()
+const storedBodies = new WeakMap()
 
 let isEnabled = false
 let config
@@ -113,6 +114,11 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
+
+  if (!req.body) {
+    // do not store body if it is in req.body
+    storedBodies.set(req, body)
+  }
 
   const results = waf.run({
     persistent: {
@@ -200,11 +206,13 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   const storedHeaders = storedResponseHeaders.get(req) || {}
 
-  Reporter.finishRequest(req, res, storedHeaders)
+  const body = req.body || storedBodies.get(req)
+  Reporter.finishRequest(req, res, storedHeaders, body)
 
   if (storedHeaders) {
     storedResponseHeaders.delete(req)
   }
+  storedBodies.delete(req)
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {

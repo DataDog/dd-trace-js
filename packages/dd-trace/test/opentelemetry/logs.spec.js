@@ -12,7 +12,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
-const { protoLogsService } = require('../../src/opentelemetry/protos/protobuf_loader').getProtobufTypes()
+const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -576,7 +576,9 @@ describe('OpenTelemetry Logs', () => {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
       }
       const MockedExporter = proxyquire('../../src/opentelemetry/logs/otlp_http_log_exporter', {
-        '../../telemetry/metrics': telemetryMetrics
+        '../otlp/otlp_http_exporter_base': proxyquire('../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+          '../../telemetry/metrics': telemetryMetrics
+        })
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})

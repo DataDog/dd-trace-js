@@ -17,7 +17,9 @@ const nodeMajor = Number(process.versions.node.split('.')[0])
 
 const min = Number(requirePackageJson(path.join(__dirname, '..')).engines.node.match(/\d+/)[0])
 
-const hasIgnoreEngines = npmArgv &&
+// Most package managers don't support `npm_config_argv`, so we need a custom
+// flag to allow installing dd-trace on unsupported engines.
+const hasIgnoreEngines = process.env._DD_IGNORE_ENGINES === 'true' || npmArgv &&
   npmArgv.original &&
   npmArgv.original.includes('--ignore-engines')
 

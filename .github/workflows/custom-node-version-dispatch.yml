@@ -1,0 +1,71 @@
+name: Nightly and custom Node.js builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      node-version:
+        description: 'Node Version To Use'
+        required: true
+        type: number
+      apm-integrations:
+        description: 'APM Integration Tests'
+        required: false
+        default: true
+        type: boolean
+      apm-capabilities:
+        description: 'APM Capabilities Tests'
+        required: false
+        default: true
+        type: boolean
+      llmobs:
+        description: 'LLM-OBS Tests'
+        required: false
+        default: true
+        type: boolean
+      platform:
+        description: 'Platform Tests'
+        required: false
+        default: true
+        type: boolean
+      serverless:
+        description: 'Serverless Tests'
+        required: false
+        default: true
+        type: boolean
+      profiling:
+        description: 'Profiling Tests'
+        required: false
+        default: true
+        type: boolean
+      appsec:
+        description: 'AppSec Tests'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
+jobs:
+  run-nightly:
+    strategy:
+      matrix:
+        workflow:
+          - apm-integrations
+          - apm-capabilities
+          - llmobs
+          - platform
+          - serverless
+          - appsec
+          - profiling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ${{matrix.workflow }} workflow
+        if: ${{ inputs[matrix.workflow] }}
+        run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f latest-version=${{ inputs.node-version }}
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -8,25 +8,26 @@ const path = require('path')
 const { promisify } = require('util')
 const msgpack = require('@msgpack/msgpack')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
 
 describe('esbuild support for IAST', () => {
   describe('cjs', () => {
-    let proc, agent, sandbox, axios
+    let proc, agent, axios
     let applicationDir, bundledApplicationDir
 
+    useSandbox()
+
     before(async () => {
-      sandbox = await createSandbox([])
-      const cwd = sandbox.folder
+      const cwd = sandboxCwd()
       applicationDir = path.join(cwd, 'appsec/iast-esbuild')
 
       // Craft node_modules directory to ship native modules
       const craftedNodeModulesDir = path.join(applicationDir, 'tmp_node_modules')
       fs.mkdirSync(craftedNodeModulesDir)
       await exec('npm init -y', { cwd: craftedNodeModulesDir })
-      await exec('npm install @datadog/native-iast-rewriter @datadog/native-iast-taint-tracking', {
+      await exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
         cwd: craftedNodeModulesDir,
         timeout: 3e3
       })
@@ -47,10 +48,6 @@ describe('esbuild support for IAST', () => {
 
       // Copy crafted node_modules with native modules
       fs.cpSync(path.join(craftedNodeModulesDir, 'node_modules'), bundledApplicationDir, { recursive: true })
-    })
-
-    after(async () => {
-      await sandbox.remove()
     })
 
     function startServer (appFile, iastEnabled) {

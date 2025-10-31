@@ -5,7 +5,11 @@ module.exports = function set (object, path, value) {
   while (true) {
     const nextIndex = path.indexOf('.', index + 1)
     if (nextIndex === -1) {
-      object[path.slice(index + 1)] = value
+      if (index === -1) {
+        object[path] = value
+      } else {
+        object[path.slice(index + 1)] = value
+      }
       return
     }
     object = object[path.slice(index + 1, nextIndex)] ??= {}

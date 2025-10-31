@@ -19,6 +19,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
     })
 
     this.addSub('apm:express:route:added', ({ topOfStackFunc, layer }) => {
+      if (!layer) return
       if (layerTags.has(layer)) return
       layerTags.set(layer, entryTags(topOfStackFunc))
     })
@@ -30,6 +31,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
     })
 
     this.addSub('apm:router:route:added', ({ topOfStackFunc, layer }) => {
+      if (!layer) return
       if (layerTags.has(layer)) return
       layerTags.set(layer, entryTags(topOfStackFunc))
     })

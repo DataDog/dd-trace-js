@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,18 +13,11 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+
   // test against later versions because server.mjs uses newer package syntax
   withVersions('moleculer', 'moleculer', '>0.14.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'moleculer@${version}'`], false, [
-        './packages/datadog-plugin-moleculer/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox?.remove()
-    })
+    useSandbox([`'moleculer@${version}'`], false, [
+      './packages/datadog-plugin-moleculer/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +35,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'moleculer.action'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

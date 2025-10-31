@@ -37,7 +37,9 @@ for (const deprecation of Object.keys(deprecations)) {
 module.exports = {
   /**
    * Returns the environment variables that are supported by the tracer
-   * (including all non-Datadog/OTEL specific environment variables)
+   * (including all non-Datadog/OTEL specific environment variables).
+   *
+   * This should only be called once in config.js to avoid copying the object frequently.
    *
    * @returns {TracerEnv} The environment variables
    */
@@ -78,6 +80,7 @@ module.exports = {
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
+  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
   getEnvironmentVariable (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
         !supportedConfigurations[name]) {

@@ -422,7 +422,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, undefined)
     })
 
     it('should pass stored response headers to Reporter.finishRequest', () => {
@@ -467,7 +467,7 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders)
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders, undefined)
     })
 
     it('should not propagate incoming http end data with invalid framework properties', () => {
@@ -505,7 +505,7 @@ describe('AppSec Index', function () {
 
       expect(waf.run).to.have.not.been.called
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, undefined)
     })
 
     it('should propagate incoming http end data with express', () => {
@@ -555,7 +555,7 @@ describe('AppSec Index', function () {
           'server.request.query': { b: '2' }
         }
       }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {})
+      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, req.body)
     })
   })
 

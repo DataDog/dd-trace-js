@@ -8,20 +8,7 @@ const appsec = require('../../src/appsec')
 const axios = require('axios')
 const assert = require('assert')
 const msgpack = require('@msgpack/msgpack')
-
-function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
-  if (currentLevel === max) {
-    return {
-      [`s-${currentLevel}`]: `s-${currentLevel}`,
-      [`o-${currentLevel}`]: sheetValue
-    }
-  }
-
-  return {
-    [`s-${currentLevel}`]: `s-${currentLevel}`,
-    [`o-${currentLevel}`]: createDeepObject(sheetValue, currentLevel + 1, max)
-  }
-}
+const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
   before(() => {

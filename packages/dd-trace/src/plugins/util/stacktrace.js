@@ -1,11 +1,21 @@
 'use strict'
 
-const { relative, sep } = require('path')
+const { relative, sep, join } = require('path')
 
 const cwd = process.cwd()
 
 const NODE_MODULES_PATTERN_MIDDLE = `${sep}node_modules${sep}`
 const NODE_MODULES_PATTERN_START = `node_modules${sep}`
+
+/**
+ * We detect if we're running inside the dd-trace-js repo by checking if the
+ * current file path ends with the expected path structure from the repo root.
+ * This is needed for local and CI where dd-trace-js is not in node_modules.
+ * In production, these frames are already filtered by isNodeModulesFrame.
+ */
+const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
+  join(sep, 'dd-trace-js', 'packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
+)
 
 module.exports = {
   getCallSites,
@@ -90,6 +100,7 @@ function parseLine (stack, start, end) {
   [fileName, lineNumber, columnNumber, index] = result
 
   if (isNodeModulesFrame(fileName)) return
+  if (SHOULD_FILTER_DD_TRACE_INSTRUMENTAION && isDDInstrumentationFile(fileName)) return
 
   // parse method name
   let methodName, functionName
@@ -151,6 +162,10 @@ function isNodeModulesFrame (fileName) {
   const relativePath = relative(cwd, actualPath)
 
   return relativePath.startsWith(NODE_MODULES_PATTERN_START) || relativePath.includes(NODE_MODULES_PATTERN_MIDDLE)
+}
+
+function isDDInstrumentationFile (fileName) {
+  return fileName.includes(`packages${sep}datadog-instrumentations${sep}src`)
 }
 
 /**

@@ -6,16 +6,18 @@ const axios = require('axios')
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   spawnProc
 } = require('../helpers')
 
 describe('graphql', () => {
-  let sandbox, cwd, agent, webFile, proc
+  let cwd, agent, webFile, proc
 
-  before(async function () {
-    sandbox = await createSandbox(['@apollo/server', 'graphql'])
-    cwd = sandbox.folder
+  useSandbox(['@apollo/server', 'graphql'])
+
+  before(function () {
+    cwd = sandboxCwd()
     webFile = path.join(cwd, 'graphql/index.js')
   })
 
@@ -32,10 +34,6 @@ describe('graphql', () => {
   afterEach(async () => {
     proc.kill()
     await agent.stop()
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   it('should not report any attack', async () => {

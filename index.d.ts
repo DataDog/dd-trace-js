@@ -135,6 +135,11 @@ interface Tracer extends opentracing.Tracer {
   dogstatsd: tracer.DogStatsD;
 
   /**
+   * Data Streams manual checkpointer API.
+   */
+  dataStreamsCheckpointer: tracer.DataStreamsCheckpointer;
+
+  /**
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
@@ -176,6 +181,7 @@ interface Tracer extends opentracing.Tracer {
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
+  "ai": tracer.plugins.ai;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
@@ -1026,6 +1032,29 @@ declare namespace tracer {
     flush(): void
   }
 
+  /**
+   * Manual Data Streams Monitoring checkpointer API.
+   */
+  export interface DataStreamsCheckpointer {
+    /**
+     * Sets a produce checkpoint and injects the DSM context into the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param target The target of data (topic, exchange, stream name).
+     * @param carrier The carrier object to inject DSM context into.
+     */
+    setProduceCheckpoint (type: string, target: string, carrier: any): void;
+
+    /**
+     * Sets a consume checkpoint and extracts DSM context from the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param source The source of data (topic, exchange, stream name).
+     * @param carrier The carrier object to extract DSM context from.
+     * @param manualCheckpoint Whether this checkpoint was manually set. Defaults to true.
+     * @returns The DSM context associated with the current pathway.
+     */
+    setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
+  }
+
   export interface EventTrackingV2 {
     /**
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
@@ -1616,6 +1645,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
+     */
+    interface ai extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
      */
     interface amqp10 extends Instrumentation {}
@@ -1670,12 +1705,6 @@ declare namespace tracer {
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
-      /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
@@ -2793,7 +2822,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 
@@ -2937,6 +2969,15 @@ declare namespace tracer {
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+
+
+      /**
+       * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
+       * @param options The annotation context options.
+       * @param fn The callback over which to apply the annotation context options.
+       * @returns The result of the function.
+       */
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
@@ -3097,6 +3138,18 @@ declare namespace tracer {
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
       tags?: { [key: string]: any }
+    }
+
+    interface AnnotationContextOptions {
+      /**
+       * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * Set to override the span name for any spans annotated within the returned context.
+       */
+      name?: string,
     }
 
     /**

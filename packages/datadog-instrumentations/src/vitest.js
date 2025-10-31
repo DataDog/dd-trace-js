@@ -153,6 +153,10 @@ function isCliApiPackage (vitestPackage) {
   return vitestPackage.s?.name === 'startVitest'
 }
 
+function isTestPackage (testPackage) {
+  return testPackage.V?.name === 'VitestTestRunner'
+}
+
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
@@ -240,7 +244,9 @@ function getSortWrapper (sort, frameworkVersion) {
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
       } catch {
         log.warn('Could not send library configuration to workers.')
@@ -272,7 +278,9 @@ function getSortWrapper (sort, frameworkVersion) {
             // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
             // Note: setting this.ctx.config.provide directly does not work because it's cached
             try {
-              const workspaceProject = this.ctx.getCoreWorkspaceProject()
+              const workspaceProject = this.ctx.getCoreWorkspaceProject
+                ? this.ctx.getCoreWorkspaceProject()
+                : this.ctx.getRootProject()
               workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
               workspaceProject._provided._ddKnownTests = knownTests
               workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
@@ -290,7 +298,9 @@ function getSortWrapper (sort, frameworkVersion) {
 
     if (isDiEnabled) {
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
       } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
@@ -305,7 +315,9 @@ function getSortWrapper (sort, frameworkVersion) {
       } else {
         const testManagementTests = receivedTestManagementTests
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
@@ -321,7 +333,9 @@ function getSortWrapper (sort, frameworkVersion) {
         log.error('Could not get modified tests.')
       } else {
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
           workspaceProject._provided._ddModifiedFiles = modifiedFiles
         } catch {
@@ -443,13 +457,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   return cliApiPackage
 }
 
-addHook({
-  name: 'vitest',
-  versions: ['>=1.6.0'],
-  file: 'dist/runners.js'
-}, (vitestPackage) => {
-  const { VitestTestRunner } = vitestPackage
-
+function wrapVitestTestRunner (VitestTestRunner) {
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
@@ -744,6 +752,30 @@ addHook({
 
       return result
     })
+}
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/test.*'
+}, (testPackage) => {
+  if (!isTestPackage(testPackage)) {
+    return testPackage
+  }
+
+  wrapVitestTestRunner(testPackage.V)
+
+  return testPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <4.0.0'],
+  file: 'dist/runners.js'
+}, (vitestPackage) => {
+  const { VitestTestRunner } = vitestPackage
+
+  wrapVitestTestRunner(VitestTestRunner)
 
   return vitestPackage
 })
