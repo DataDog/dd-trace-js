@@ -123,7 +123,7 @@ function constructResponseResponseFromStreamedChunks (chunks) {
   // Find the last chunk with a complete response object (status: done, incomplete, or completed)
   for (let i = chunks.length - 1; i >= 0; i--) {
     const chunk = chunks[i]
-    if (chunk.response && ['done', 'incomplete', 'completed'].includes(chunk.response.status)) {
+    if (chunk.response && reponseStatusSet.has(chunk.response.status)) {
       return chunk.response
     }
   }
