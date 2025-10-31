@@ -60,6 +60,7 @@ let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let isSessionStarted = false
+let vitestPool = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -389,6 +390,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      vitestPool,
       onFinish
     })
 
@@ -418,11 +420,27 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
 }
 
 function threadHandler (thread) {
-  if (workerProcesses.has(thread.process)) {
+  const { runtime } = thread
+  let workerProcess
+  if (runtime === 'child_process') {
+    vitestPool = 'child_process'
+    workerProcess = thread.process
+  } else if (runtime === 'worker_threads') {
+    vitestPool = 'worker_threads'
+    workerProcess = thread.thread
+  } else {
+    vitestPool = 'unknown'
+  }
+  if (!workerProcess) {
+    log.error('Vitest error: could not get process or thread from TinyPool#run')
     return
   }
-  workerProcesses.add(thread.process)
-  thread.process.on('message', (message) => {
+
+  if (workerProcesses.has(workerProcess)) {
+    return
+  }
+  workerProcesses.add(workerProcess)
+  workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
         workerReportTraceCh.publish(message.data)
