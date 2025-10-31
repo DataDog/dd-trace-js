@@ -723,7 +723,7 @@ describe('integrations', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createResponse',
@@ -733,7 +733,7 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: {
+          metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -751,7 +751,7 @@ describe('integrations', () => {
             reasoning_tokens: 0,
             stream: false
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
 
         expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
@@ -775,7 +775,7 @@ describe('integrations', () => {
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createResponse',
@@ -785,7 +785,7 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: {
+          metrics: {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -803,7 +803,7 @@ describe('integrations', () => {
             reasoning_tokens: 0,
             stream: true
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
 
         expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
