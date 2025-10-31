@@ -377,8 +377,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }, {})
 
     // Add fields from response object (convert numbers to floats)
-    if (response.temperature !== undefined) metadata.temperature = Number.parseFloat(response.temperature)
-    if (response.top_p !== undefined) metadata.top_p = Number.parseFloat(response.top_p)
+    if (response.temperature !== undefined) metadata.temperature = Number(response.temperature)
+    if (response.top_p !== undefined) metadata.top_p = Number(response.top_p)
     if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) metadata.truncation = response.truncation
     if (response.text !== undefined) metadata.text = response.text
