@@ -221,6 +221,8 @@ describe('Remote Config index', () => {
       RemoteConfigCapabilities.ASM_CUSTOM_RULES,
       RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE,
       RemoteConfigCapabilities.ASM_TRUSTED_IPS,
+      RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES,
+      RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS,
       RemoteConfigCapabilities.ASM_EXCLUSION_DATA,
       RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT,
       RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT,
