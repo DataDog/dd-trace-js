@@ -1262,23 +1262,24 @@ addHook({
 
 function generateSummaryWrapper (generateSummary) {
   return function () {
-    // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
-    const didNotRunTests = this.suite.allTests().filter(test =>
-      test.outcome() === 'skipped' && (!test.results.length || test.expectedStatus !== 'skipped')
-    )
-    for (const test of didNotRunTests) {
-      const {
-        _requireFile: testSuiteAbsolutePath,
-        location: { line: testSourceLine },
-      } = test
-      const browserName = getBrowserNameFromProjects(sessionProjects, test)
+    for (const test of this.suite.allTests()) {
+      // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
+      const didNotRun = test.outcome() === 'skipped' &&
+        (!test.results.length || test.expectedStatus !== 'skipped')
+      if (didNotRun) {
+        const {
+          _requireFile: testSuiteAbsolutePath,
+          location: { line: testSourceLine },
+        } = test
+        const browserName = getBrowserNameFromProjects(sessionProjects, test)
 
-      testSkipCh.publish({
-        testName: getTestFullname(test),
-        testSuiteAbsolutePath,
-        testSourceLine,
-        browserName,
-      })
+        testSkipCh.publish({
+          testName: getTestFullname(test),
+          testSuiteAbsolutePath,
+          testSourceLine,
+          browserName,
+        })
+      }
     }
     return generateSummary.apply(this, arguments)
   }
@@ -1296,8 +1297,7 @@ addHook({
   // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
   if (reportersPackage.TerminalReporter) {
     shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummaryWrapper)
-  }
-  if (reportersPackage.BaseReporter) {
+  } else if (reportersPackage.BaseReporter) {
     shimmer.wrap(reportersPackage.BaseReporter.prototype, 'generateSummary', generateSummaryWrapper)
   }
   return reportersPackage
