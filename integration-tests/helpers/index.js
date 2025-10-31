@@ -256,8 +256,7 @@ function execHelper (command, options) {
 async function createSandbox (
   dependencies = [],
   isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'],
-  followUpCommand
+  integrationTestsPaths = ['./integration-tests/*']
 ) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
@@ -321,27 +320,9 @@ async function createSandbox (
     execHelper(`sync ${folder}`)
   }
 
-  if (followUpCommand) {
-    execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
-  }
-
+  // TODO: Remove this and call `initGitRepo` in individual tests.
   if (isGitRepo) {
-    execHelper('git init', { cwd: folder })
-    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    execHelper('git config user.email "john@doe.com"', { cwd: folder })
-    execHelper('git config user.name "John Doe"', { cwd: folder })
-    execHelper('git config commit.gpgsign false', { cwd: folder })
-
-    // Create a unique local bare repo for this test
-    const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
-    if (!existsSync(localRemotePath)) {
-      execHelper(`git init --bare ${localRemotePath}`)
-    }
-
-    execHelper('git add -A', { cwd: folder })
-    execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
-    execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    execHelper('git push --set-upstream origin HEAD', { cwd: folder })
+    initGitRepo()
   }
 
   return {
@@ -356,6 +337,27 @@ async function createSandbox (
       }
     }
   }
+}
+
+async function initGitRepo () {
+  const folder = sandbox.folder
+
+  execHelper('git init', { cwd: folder })
+  await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+  execHelper('git config user.email "john@doe.com"', { cwd: folder })
+  execHelper('git config user.name "John Doe"', { cwd: folder })
+  execHelper('git config commit.gpgsign false', { cwd: folder })
+
+  // Create a unique local bare repo for this test
+  const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
+  if (!existsSync(localRemotePath)) {
+    execHelper(`git init --bare ${localRemotePath}`)
+  }
+
+  execHelper('git add -A', { cwd: folder })
+  execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
+  execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
+  execHelper('git push --set-upstream origin HEAD', { cwd: folder })
 }
 
 /**
