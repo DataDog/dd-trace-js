@@ -40,13 +40,9 @@ describe('Dynamic Instrumentation', function () {
             regex: { type: 'RegExp', value: '/bar/i' },
             arr: {
               type: 'Array',
-              elements: [
-                { type: 'number', value: '1' },
-                { type: 'number', value: '2' },
-                { type: 'number', value: '3' },
-                { type: 'number', value: '4' },
-                { type: 'number', value: '5' },
-              ],
+              elements: Array.from({ length: 100 }, (_, i) => ({ type: 'number', value: (i + 1).toString() })),
+              notCapturedReason: 'collectionSize',
+              size: 200,
             },
             obj: {
               type: 'Object',
@@ -179,7 +175,7 @@ describe('Dynamic Instrumentation', function () {
               { type: 'number', value: '3' },
             ],
             notCapturedReason: 'collectionSize',
-            size: 5,
+            size: 200,
           })
 
           done()
@@ -234,6 +230,70 @@ describe('Dynamic Instrumentation', function () {
         })
 
         t.agent.addRemoteConfig(t.generateRemoteConfig({ captureSnapshot: true, capture: { maxFieldCount } }))
+      })
+
+      it('should capture a snapshot even if there is no capture object (DEBUG-4611)', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe } } }] }) => {
+          assert.strictEqual(probe.id, config.config.id)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxReferenceDepth if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.obj.fields.foo.fields.deep.fields.nested.notCapturedReason, 'depth')
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxReferenceDepth
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxLength if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.lstr.value.length, 255)
+          assert.strictEqual(locals.lstr.truncated, true)
+          assert.strictEqual(locals.lstr.size, 445)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxLength
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxCollectionSize if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { locals } = captures.lines[t.breakpoint.line]
+          assert.strictEqual(locals.arr.notCapturedReason, 'collectionSize')
+          assert.strictEqual(locals.arr.elements.length, 100)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxCollectionSize
+        t.agent.addRemoteConfig(config)
+      })
+
+      it('should use default value for maxFieldCount if not provided', function (done) {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+          const { raw } = captures.lines[t.breakpoint.line].locals.request.fields
+          assert.strictEqual(raw.notCapturedReason, 'fieldCount')
+          assert.strictEqual(Object.keys(raw.fields).length, 20)
+          assert.ok(raw.size > 20)
+          done()
+        })
+
+        const config = t.generateRemoteConfig({ captureSnapshot: true })
+        delete config.config.capture.maxFieldCount
+        t.agent.addRemoteConfig(config)
       })
     })
   })

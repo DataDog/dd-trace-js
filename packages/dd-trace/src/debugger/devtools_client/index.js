@@ -117,10 +117,10 @@ session.on('Debugger.paused', async ({ params }) => {
         }
 
         snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
-        maxReferenceDepth = highestOrUndefined(probe.capture.maxReferenceDepth, maxReferenceDepth)
-        maxCollectionSize = highestOrUndefined(probe.capture.maxCollectionSize, maxCollectionSize)
-        maxFieldCount = highestOrUndefined(probe.capture.maxFieldCount, maxFieldCount)
-        maxLength = highestOrUndefined(probe.capture.maxLength, maxLength)
+        maxReferenceDepth = highestOrUndefined(probe.capture?.maxReferenceDepth, maxReferenceDepth)
+        maxCollectionSize = highestOrUndefined(probe.capture?.maxCollectionSize, maxCollectionSize)
+        maxFieldCount = highestOrUndefined(probe.capture?.maxFieldCount, maxFieldCount)
+        maxLength = highestOrUndefined(probe.capture?.maxLength, maxLength)
       }
 
       if (probe.condition !== undefined) {
