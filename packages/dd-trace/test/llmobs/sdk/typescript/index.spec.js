@@ -1,12 +1,13 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const path = require('node:path')
 const { execSync } = require('node:child_process')
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   spawnProc
 } = require('../../../../../../integration-tests/helpers')
 const { assertLlmObsSpanEvent } = require('../../util')
@@ -69,21 +70,13 @@ const testCases = [
 describe('typescript', () => {
   let agent
   let proc
-  let sandbox
 
   for (const version of testVersions) {
     // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
     context(`with version ${version}`, () => {
-      before(async function () {
-        this.timeout(20000)
-        sandbox = await createSandbox(
-          [`typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
-        )
-      })
-
-      after(async () => {
-        await sandbox.remove()
-      })
+      useSandbox(
+        [`typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+      )
 
       beforeEach(async () => {
         agent = await new FakeAgent().start()
@@ -99,7 +92,7 @@ describe('typescript', () => {
         it(name, async function () {
           this.timeout(20000)
 
-          const cwd = sandbox.folder
+          const cwd = sandboxCwd()
 
           const results = {}
           const waiters = test.setup ? test.setup(agent, results) : []
