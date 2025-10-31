@@ -35,7 +35,8 @@ class Writer {
     // See cucumber code:
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
     if (process.send) { // it only works if process.send is available
-      const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
+      const isVitestWorker = !!getEnvironmentVariable('TINYPOOL_WORKER_ID') ||
+        !!getEnvironmentVariable('VITEST_FORKS_POOL_WORKER')
 
       const payload = isVitestWorker
         ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }

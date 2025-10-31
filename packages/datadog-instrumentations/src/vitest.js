@@ -158,6 +158,10 @@ function isTestPackage (testPackage) {
   return testPackage.V?.name === 'VitestTestRunner'
 }
 
+function hasForksPoolWorker (vitestPackage) {
+  return vitestPackage.f?.name === 'ForksPoolWorker'
+}
+
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
@@ -486,6 +490,33 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     return cliApiPackage
   }
   shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+
+  if (hasForksPoolWorker(cliApiPackage)) {
+    // function is async
+    shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
+      this.env.VITEST_FORKS_POOL_WORKER = '1'
+
+      return start.apply(this, arguments)
+    })
+    shimmer.wrap(cliApiPackage.f.prototype, 'on', on => function (event, callback) {
+      if (event !== 'message') {
+        return on.apply(this, arguments)
+      }
+      // we intercept our messages not to interfere
+      arguments[1] = function (message) {
+        if (message.type !== 'Buffer' && message.__tinypool_worker_message__) {
+          if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+            workerReportTraceCh.publish(message.data)
+          } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+            workerReportLogsCh.publish(message.data)
+          }
+          return // if we execute the callback it will crash, as the message is not supported by vitest
+        }
+        return callback.apply(this, arguments)
+      }
+      return on.apply(this, arguments)
+    })
+  }
   return cliApiPackage
 }
 
