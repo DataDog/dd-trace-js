@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   hookFile,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
@@ -14,26 +15,17 @@ const { NODE_MAJOR } = require('../../../../../version')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
   // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
   withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
-    before(async function () {
-      this.timeout(120_000)
-      sandbox = await createSandbox([
-        `@azure/functions@${version}`,
-        'azure-functions-core-tools@4',
-      ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
-    })
-
-    after(async function () {
-      this.timeout(60_000)
-      await sandbox.remove()
-    })
+    useSandbox([
+      `@azure/functions@${version}`,
+      'azure-functions-core-tools@4',
+    ],
+    false,
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+      './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -50,9 +42,9 @@ describe('esm', () => {
     // to figure out a way of automating this.
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -66,9 +58,9 @@ describe('esm', () => {
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest2', ({ headers, payload }) => {
         assert.strictEqual(payload.length, 2)

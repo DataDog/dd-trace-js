@@ -6,7 +6,7 @@ const path = require('path')
 const os = require('os')
 const { execSync } = require('child_process')
 
-const { createSandbox } = require('../helpers')
+const { sandboxCwd, useSandbox } = require('../helpers')
 
 const FIXED_COMMIT_MESSAGE = 'Test commit message for caching'
 const GET_COMMIT_MESSAGE_COMMAND_ARGS = ['log', '-1', '--pretty=format:%s']
@@ -24,14 +24,15 @@ function removeGitFromPath () {
 }
 
 describe('git-cache integration tests', () => {
-  let sandbox, cwd, gitCache, testRepoPath
+  let cwd, gitCache, testRepoPath
   let originalPath, originalCwd
   let cacheDir
   let originalCacheEnabled, originalCacheDir
 
-  before(async () => {
-    sandbox = await createSandbox([], true)
-    cwd = sandbox.folder
+  useSandbox([], true)
+
+  before(() => {
+    cwd = sandboxCwd()
     testRepoPath = cwd
 
     cacheDir = path.join(os.tmpdir(), 'dd-trace-git-cache-integration-test')
@@ -39,10 +40,6 @@ describe('git-cache integration tests', () => {
     originalCacheDir = process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR
 
     execSync(`git commit --allow-empty -m '${FIXED_COMMIT_MESSAGE}'`, { cwd: testRepoPath })
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   beforeEach(() => {

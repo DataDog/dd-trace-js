@@ -3,11 +3,12 @@
 const assert = require('node:assert')
 const { execSync } = require('node:child_process')
 
-const { describe, it, beforeEach, before, after, afterEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   spawnPluginIntegrationTestProc,
   assertObjectContains
 } = require('../../../../integration-tests/helpers')
@@ -16,20 +17,12 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('prisma', '@prisma/client', version => {
-    before(async function () {
-      this.timeout(100000)
-      sandbox = await createSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
-        './packages/datadog-plugin-prisma/test/integration-test/*',
-        './packages/datadog-plugin-prisma/test/schema.prisma'
-      ])
-    })
-
-    after(async () => {
-      await sandbox?.remove()
-    })
+    useSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
+      './packages/datadog-plugin-prisma/test/integration-test/*',
+      './packages/datadog-plugin-prisma/test/schema.prisma'
+    ])
 
     beforeEach(async function () {
       this.timeout(60000)
@@ -39,7 +32,7 @@ describe('esm', () => {
         './node_modules/.bin/prisma db push --accept-data-loss && ' +
         './node_modules/.bin/prisma generate',
         {
-          cwd: sandbox.folder, // Ensure the current working directory is where the schema is located
+          cwd: sandboxCwd(), // Ensure the current working directory is where the schema is located
           stdio: 'inherit'
         }
       )
@@ -72,7 +65,7 @@ describe('esm', () => {
       // TODO: Integrate the assertions into the spawn command by adding a
       // callback. It should end the process when the assertions are met. That
       // way we can remove the Promise.all and the procPromise.then().
-      const procPromise = spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, {
+      const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, {
         DD_TRACE_FLUSH_INTERVAL: '2000'
       })
 

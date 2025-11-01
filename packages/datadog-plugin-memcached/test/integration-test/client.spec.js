@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,19 +13,10 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('memcached', 'memcached', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'memcached@${version}'`], false, [
-        './packages/datadog-plugin-memcached/test/integration-test/*'])
-    })
-
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
+    useSandbox([`'memcached@${version}'`], false, [
+      './packages/datadog-plugin-memcached/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -42,7 +34,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'memcached.command'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(50000)

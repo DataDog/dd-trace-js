@@ -1,24 +1,20 @@
 'use strict'
 
-const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('ESM Security controls', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
   ['4', '5'].forEach(version => {
     describe(`With express v${version}`, () => {
-      before(async function () {
-        this.timeout(process.platform === 'win32' ? 90000 : 30000)
-        sandbox = await createSandbox([`express@${version}`])
-        cwd = sandbox.folder
-        appFile = path.join(cwd, 'appsec', 'esm-security-controls', 'index.mjs')
-      })
+      useSandbox([`express@${version}`])
 
-      after(async function () {
-        await sandbox.remove()
+      before(function () {
+        cwd = sandboxCwd()
+        appFile = path.join(cwd, 'appsec', 'esm-security-controls', 'index.mjs')
       })
 
       const nodeOptions = '--import dd-trace/initialize.mjs'

@@ -5,21 +5,18 @@ const { once } = require('events')
 
 const { assert } = require('chai')
 
-const { createSandbox } = require('../helpers')
+const { sandboxCwd, useSandbox } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
 const packageManagers = ['yarn', 'npm', 'pnpm']
 
 describe('test optimization startup', () => {
-  let sandbox, cwd, receiver, childProcess, processOutput
+  let cwd, receiver, childProcess, processOutput
 
-  before(async () => {
-    sandbox = await createSandbox(packageManagers, true)
-    cwd = sandbox.folder
-  })
+  useSandbox(packageManagers, true)
 
-  after(async () => {
-    await sandbox.remove()
+  before(() => {
+    cwd = sandboxCwd()
   })
 
   beforeEach(async function () {

@@ -3,18 +3,19 @@
 const { execSync } = require('node:child_process')
 const path = require('node:path')
 
-const { FakeAgent, createSandbox } = require('../helpers')
+const { FakeAgent, sandboxCwd, useSandbox } = require('../helpers')
 
 // This should switch to our withVersion helper. The order here currently matters.
 const esbuildVersions = ['latest', '0.16.12']
 
 esbuildVersions.forEach((version) => {
   describe('OpenFeature', () => {
-    let sandbox, agent, cwd
+    let agent, cwd
 
-    before(async () => {
-      sandbox = await createSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
-      cwd = sandbox.folder
+    useSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
+
+    before(() => {
+      cwd = sandboxCwd()
       // remove all node_modules and bun.lock file and install with yarn
       // TODO add this in createSandbox if it's need in more places
       execSync(`rm -rf ${path.join(cwd, 'node_modules')}`, { cwd })
@@ -26,10 +27,6 @@ esbuildVersions.forEach((version) => {
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-    })
-
-    after(() => {
-      sandbox.remove()
     })
 
     afterEach(() => {

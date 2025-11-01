@@ -9,7 +9,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -77,27 +78,26 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, () => {
-    let sandbox, cwd, receiver, childProcess, webAppPort, webPortWithRedirect
+    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
-    before(async function () {
-      // Usually takes under 30 seconds but sometimes the server is really slow.
-      this.timeout(300_000)
-      sandbox = await createSandbox([`@playwright/test@${version}`, 'typescript'], true)
-      cwd = sandbox.folder
+    useSandbox([`@playwright/test@${version}`, 'typescript'], true)
+
+    before(function (done) {
+      cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
       webAppServer.listen(0, () => {
         webAppPort = webAppServer.address().port
-      })
-      webAppServerWithRedirect.listen(0, () => {
-        webPortWithRedirect = webAppServerWithRedirect.address().port
+        webAppServerWithRedirect.listen(0, () => {
+          webPortWithRedirect = webAppServerWithRedirect.address().port
+          done()
+        })
       })
     })
 
     after(async () => {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
       await new Promise(resolve => webAppServerWithRedirect.close(resolve))
     })
@@ -2068,6 +2068,40 @@ versions.forEach((version) => {
             once(childProcess, 'exit')
           ])
         })
+      })
+    })
+
+    contextNewVersions('playwright early bail', () => {
+      it('reports tests that did not run', async () => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+            const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.propertyVal(failedTest.meta, TEST_NAME, 'failing test fails and causes early bail')
+            const didNotRunTest = tests.find(test => test.meta[TEST_STATUS] === 'skip')
+            assert.propertyVal(didNotRunTest.meta, TEST_NAME, 'did not run because of early bail')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-did-not-run',
+              ADD_EXTRA_PLAYWRIGHT_PROJECT: 'true'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
     })
   })

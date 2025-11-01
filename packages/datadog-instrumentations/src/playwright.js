@@ -68,6 +68,8 @@ let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 let rootDir = ''
+let sessionProjects = []
+
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
 function isValidKnownTests (receivedKnownTests) {
@@ -495,6 +497,7 @@ function dispatcherHook (dispatcherExport) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     // for older versions of playwright, `shouldCreateTestSpan` should always be true,
     // since the `_runTest` function wrapper is not available for older versions
@@ -535,6 +538,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -1254,4 +1258,47 @@ addHook({
   })
 
   return workerPackage
+})
+
+function generateSummaryWrapper (generateSummary) {
+  return function () {
+    for (const test of this.suite.allTests()) {
+      // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
+      const didNotRun = test.outcome() === 'skipped' &&
+        (!test.results.length || test.expectedStatus !== 'skipped')
+      if (didNotRun) {
+        const {
+          _requireFile: testSuiteAbsolutePath,
+          location: { line: testSourceLine },
+        } = test
+        const browserName = getBrowserNameFromProjects(sessionProjects, test)
+
+        testSkipCh.publish({
+          testName: getTestFullname(test),
+          testSuiteAbsolutePath,
+          testSourceLine,
+          browserName,
+        })
+      }
+    }
+    return generateSummary.apply(this, arguments)
+  }
+}
+
+// If a playwright project B has a dependency on project A,
+// and project A fails, the tests in project B will not run.
+// This hook is used to report tests that did not run as skipped.
+// Note: this is different from tests skipped via test.skip() or test.fixme()
+addHook({
+  name: 'playwright',
+  file: 'lib/reporters/base.js',
+  versions: ['>=1.38.0']
+}, (reportersPackage) => {
+  // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
+  if (reportersPackage.TerminalReporter) {
+    shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  } else if (reportersPackage.BaseReporter) {
+    shimmer.wrap(reportersPackage.BaseReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  }
+  return reportersPackage
 })

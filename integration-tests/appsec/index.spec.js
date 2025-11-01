@@ -4,23 +4,20 @@ const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const msgpack = require('@msgpack/msgpack')
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
-  let axios, sandbox, cwd, appFile, agent, proc, stdioHandler
+  let axios, cwd, appFile, agent, proc, stdioHandler
 
   function stdOutputHandler (data) {
     stdioHandler && stdioHandler(data)
   }
 
-  before(async () => {
-    sandbox = await createSandbox(['express', 'axios'])
-    cwd = sandbox.folder
-    appFile = path.join(cwd, 'appsec/rasp/index.js')
-  })
+  useSandbox(['express', 'axios'])
 
-  after(async () => {
-    await sandbox.remove()
+  before(() => {
+    cwd = sandboxCwd()
+    appFile = path.join(cwd, 'appsec/rasp/index.js')
   })
 
   function startServer (abortOnUncaughtException, collectRequestBody = false) {

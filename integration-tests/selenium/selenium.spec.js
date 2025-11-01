@@ -5,7 +5,8 @@ const { exec } = require('child_process')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -27,27 +28,27 @@ versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {
     let receiver
     let childProcess
-    let sandbox
     let cwd
     let webAppPort
 
-    before(async function () {
-      sandbox = await createSandbox([
-        'mocha',
-        'jest',
-        '@cucumber/cucumber',
-        'chai@v4',
-        `selenium-webdriver@${version}`
-      ])
-      cwd = sandbox.folder
+    useSandbox([
+      'mocha',
+      'jest',
+      '@cucumber/cucumber',
+      'chai@v4',
+      `selenium-webdriver@${version}`
+    ])
+
+    before(function (done) {
+      cwd = sandboxCwd()
 
       webAppServer.listen(0, () => {
         webAppPort = webAppServer.address().port
+        done()
       })
     })
 
     after(async function () {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
     })
 

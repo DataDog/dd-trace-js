@@ -2,9 +2,10 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -13,20 +14,15 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('amqplib', 'amqplib', '>=0.10.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'amqplib@${version}'`], false,
-        ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'amqplib', 'connect')
-    })
+    useSandbox([`'amqplib@${version}'`], false,
+      ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
 
-    after(async () => {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server.mjs', 'amqplib', 'connect')
     })
 
     beforeEach(async () => {
@@ -46,7 +42,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'amqp.command'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

@@ -4,7 +4,8 @@ const { assert } = require('chai')
 const path = require('path')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
   spawnProc,
   curlAndAssertMessage,
@@ -13,16 +14,13 @@ const {
 const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../../ext/priority')
 
 describe('Standalone ASM', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env
+  let cwd, startupTestFile, agent, proc, env
 
-  before(async () => {
-    sandbox = await createSandbox(['express'])
-    cwd = sandbox.folder
+  useSandbox(['express'])
+
+  before(() => {
+    cwd = sandboxCwd()
     startupTestFile = path.join(cwd, 'standalone-asm/index.js')
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   function assertKeep ({ meta, metrics }) {

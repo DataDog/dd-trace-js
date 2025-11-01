@@ -3,7 +3,8 @@
 const {
   FakeAgent,
   spawnProc,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage
 } = require('./helpers')
 const path = require('path')
@@ -32,20 +33,16 @@ execArgvs.forEach(({ execArgv, skip }) => {
   describe(`startup ${execArgv.join(' ')}`, () => {
     let agent
     let proc
-    let sandbox
     let cwd
     let startupTestFile
     let unsupportedTestFile
 
-    before(async () => {
-      sandbox = await createSandbox(['d3-format@3.1.0'])
-      cwd = sandbox.folder
+    useSandbox(['d3-format@3.1.0'])
+
+    before(() => {
+      cwd = sandboxCwd()
       startupTestFile = path.join(cwd, 'startup/index.js')
       unsupportedTestFile = path.join(cwd, 'startup/unsupported.js')
-    })
-
-    after(async () => {
-      await sandbox.remove()
     })
 
     context('programmatic', () => {

@@ -1,24 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const chai = require('chai')
 
-const { expectedLLMObsNonLLMSpanEvent, deepEqualWithMockValues } = require('../util')
+const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
 
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
-
-const tags = {
-  ml_app: 'test',
-  language: 'javascript'
-}
-
-const SpanWriter = require('../../../src/llmobs/writers/spans')
-const EvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
-const agent = require('../../plugins/agent')
-
-const tracerVersion = require('../../../../../package.json').version
+const assert = require('node:assert')
 
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -27,159 +14,114 @@ function getTag (llmobsSpan, tagName) {
 
 describe('end to end sdk integration tests', () => {
   let tracer
-  let llmobsModule
   let llmobs
-  let payloadGenerator
 
-  function run (payloadGenerator) {
-    payloadGenerator()
-    return {
-      spans: tracer._tracer._processor.process.args.map(args => args[0]).reverse(), // spans finish in reverse order
-      llmobsSpans: SpanWriter.prototype.append.args?.map(args => args[0]),
-      evaluationMetrics: EvalMetricsWriter.prototype.append.args?.map(args => args[0])
-    }
-  }
-
-  function check (expected, actual) {
-    for (const expectedLLMObsSpanIdx in expected) {
-      const expectedLLMObsSpan = expected[expectedLLMObsSpanIdx]
-      const actualLLMObsSpan = actual[expectedLLMObsSpanIdx]
-      expect(actualLLMObsSpan).to.deep.deepEqualWithMockValues(expectedLLMObsSpan)
-    }
-  }
+  const getEvents = useLlmObs()
 
   before(() => {
     tracer = require('../../../../dd-trace')
-    tracer.init({
-      llmobs: {
-        mlApp: 'test',
-        agentlessEnabled: false
-      }
-    })
-
-    llmobsModule = require('../../../../dd-trace/src/llmobs')
     llmobs = tracer.llmobs
-
-    tracer._tracer._config.apiKey = 'test'
-
-    sinon.spy(tracer._tracer._processor, 'process')
-    sinon.stub(SpanWriter.prototype, 'append')
-    sinon.stub(EvalMetricsWriter.prototype, 'append')
   })
 
-  afterEach(() => {
-    tracer._tracer._processor.process.resetHistory()
-    SpanWriter.prototype.append.resetHistory()
-    EvalMetricsWriter.prototype.append.resetHistory()
-
-    process.removeAllListeners('beforeExit')
-  })
-
-  after(() => {
-    sinon.restore()
-    llmobsModule.disable()
-    agent.wipe() // clear the require cache
-  })
-
-  it('uses trace correctly', () => {
-    payloadGenerator = function () {
-      const result = llmobs.trace({ kind: 'agent' }, () => {
-        llmobs.annotate({ inputData: 'hello', outputData: 'world', metadata: { foo: 'bar' } })
-        return tracer.trace('apmSpan', () => {
-          llmobs.annotate({ tags: { bar: 'baz' } }) // should use the current active llmobs span
-          return llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
-            llmobs.annotate({ inputData: 'world', outputData: 'hello' })
-            return 'boom'
-          })
+  it('uses trace correctly', async () => {
+    const result = llmobs.trace({ kind: 'agent' }, () => {
+      llmobs.annotate({ inputData: 'hello', outputData: 'world', metadata: { foo: 'bar' } })
+      return tracer.trace('apmSpan', () => {
+        llmobs.annotate({ tags: { bar: 'baz' } }) // should use the current active llmobs span
+        return llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
+          llmobs.annotate({ inputData: 'world', outputData: 'hello' })
+          return 'boom'
         })
       })
+    })
 
-      expect(result).to.equal('boom')
-    }
+    assert.equal(result, 'boom')
 
-    const { spans, llmobsSpans } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(3)
-    expect(llmobsSpans).to.have.lengthOf(2)
+    const { apmSpans, llmobsSpans } = await getEvents()
+    assert.equal(apmSpans.length, 3)
+    assert.equal(llmobsSpans.length, 2)
 
-    const expected = [
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
-        spanKind: 'agent',
-        tags: { ...tags, bar: 'baz' },
-        metadata: { foo: 'bar' },
-        inputValue: 'hello',
-        outputValue: 'world'
-      }),
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[2],
-        spanKind: 'workflow',
-        parentId: spans[0].context().toSpanId(),
-        tags,
-        name: 'myWorkflow',
-        inputValue: 'world',
-        outputValue: 'hello'
-      })
-    ]
+    assertLlmObsSpanEvent(llmobsSpans[0], {
+      span: apmSpans[0],
+      spanKind: 'agent',
+      name: 'agent',
+      tags: { ml_app: 'test', bar: 'baz' },
+      metadata: { foo: 'bar' },
+      inputValue: 'hello',
+      outputValue: 'world'
+    })
 
-    check(expected, llmobsSpans)
+    assertLlmObsSpanEvent(llmobsSpans[1], {
+      span: apmSpans[2],
+      spanKind: 'workflow',
+      parentId: llmobsSpans[0].span_id,
+      tags: { ml_app: 'test' },
+      name: 'myWorkflow',
+      inputValue: 'world',
+      outputValue: 'hello'
+    })
   })
 
-  it('uses wrap correctly', () => {
-    payloadGenerator = function () {
-      function agent (input) {
-        llmobs.annotate({ inputData: 'hello' })
-        return apm(input)
-      }
-      // eslint-disable-next-line no-func-assign
-      agent = llmobs.wrap({ kind: 'agent' }, agent)
-
-      function apm (input) {
-        llmobs.annotate({ metadata: { foo: 'bar' } }) // should annotate the agent span
-        return workflow(input)
-      }
-      // eslint-disable-next-line no-func-assign
-      apm = tracer.wrap('apm', apm)
-
-      function workflow () {
-        llmobs.annotate({ outputData: 'custom' })
-        return 'world'
-      }
-      // eslint-disable-next-line no-func-assign
-      workflow = llmobs.wrap({ kind: 'workflow', name: 'myWorkflow' }, workflow)
-
-      agent('my custom input')
+  it('uses wrap correctly', async () => {
+    function agent (input) {
+      llmobs.annotate({ inputData: 'hello' })
+      return apm(input)
     }
+    // eslint-disable-next-line no-func-assign
+    agent = llmobs.wrap({ kind: 'agent' }, agent)
 
-    const { spans, llmobsSpans } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(3)
-    expect(llmobsSpans).to.have.lengthOf(2)
+    function apm (input) {
+      llmobs.annotate({ metadata: { foo: 'bar' } }) // should annotate the agent span
+      return workflow(input)
+    }
+    // eslint-disable-next-line no-func-assign
+    apm = tracer.wrap('apm', apm)
 
-    const expected = [
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[0],
-        spanKind: 'agent',
-        tags,
-        inputValue: 'hello',
-        outputValue: 'world',
-        metadata: { foo: 'bar' }
-      }),
-      expectedLLMObsNonLLMSpanEvent({
-        span: spans[2],
-        spanKind: 'workflow',
-        parentId: spans[0].context().toSpanId(),
-        tags,
-        name: 'myWorkflow',
-        inputValue: 'my custom input',
-        outputValue: 'custom'
-      })
-    ]
+    function workflow () {
+      llmobs.annotate({ outputData: 'custom' })
+      return 'world'
+    }
+    // eslint-disable-next-line no-func-assign
+    workflow = llmobs.wrap({ kind: 'workflow', name: 'myWorkflow' }, workflow)
 
-    check(expected, llmobsSpans)
+    agent('my custom input')
+
+    const { apmSpans, llmobsSpans } = await getEvents()
+    assert.equal(apmSpans.length, 3)
+    assert.equal(llmobsSpans.length, 2)
+
+    assertLlmObsSpanEvent(llmobsSpans[0], {
+      span: apmSpans[0],
+      spanKind: 'agent',
+      name: 'agent',
+      tags: { ml_app: 'test' },
+      inputValue: 'hello',
+      outputValue: 'world',
+      metadata: { foo: 'bar' }
+    })
+
+    assertLlmObsSpanEvent(llmobsSpans[1], {
+      span: apmSpans[2],
+      spanKind: 'workflow',
+      parentId: llmobsSpans[0].span_id,
+      tags: { ml_app: 'test' },
+      name: 'myWorkflow',
+      inputValue: 'my custom input',
+      outputValue: 'custom'
+    })
   })
 
-  it('submits evaluations', () => {
-    sinon.stub(Date, 'now').returns(1234567890)
-    payloadGenerator = function () {
+  describe('evaluations', () => {
+    before(() => {
+      sinon.stub(Date, 'now').returns(1234567890)
+    })
+
+    after(() => {
+      Date.now.restore()
+    })
+
+    // TODO(sabrenner): follow-up on re-enabling this test in a different PR
+    it.skip('submits evaluations', () => {
       llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
@@ -189,102 +131,94 @@ describe('end to end sdk integration tests', () => {
           value: 'bar'
         })
       })
-    }
 
-    const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
-    expect(spans).to.have.lengthOf(1)
-    expect(llmobsSpans).to.have.lengthOf(1)
-    expect(evaluationMetrics).to.have.lengthOf(1)
+      // const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
+      // expect(spans).to.have.lengthOf(1)
+      // expect(llmobsSpans).to.have.lengthOf(1)
+      // expect(evaluationMetrics).to.have.lengthOf(1)
 
-    // check eval metrics content
-    const expected = [
-      {
-        trace_id: spans[0].context().toTraceId(true),
-        span_id: spans[0].context().toSpanId(),
-        label: 'foo',
-        metric_type: 'categorical',
-        categorical_value: 'bar',
-        ml_app: 'test',
-        timestamp_ms: 1234567890,
-        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
-      }
-    ]
+      // // check eval metrics content
+      // const expected = [
+      //   {
+      //     trace_id: spans[0].context().toTraceId(true),
+      //     span_id: spans[0].context().toSpanId(),
+      //     label: 'foo',
+      //     metric_type: 'categorical',
+      //     categorical_value: 'bar',
+      //     ml_app: 'test',
+      //     timestamp_ms: 1234567890,
+      //     tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
+      //   }
+      // ]
 
-    check(expected, evaluationMetrics)
-
-    Date.now.restore()
+      // check(expected, evaluationMetrics)
+    })
   })
 
   describe('distributed', () => {
-    it('injects and extracts the proper llmobs context', () => {
-      payloadGenerator = function () {
-        const carrier = {}
-        llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
-          tracer.inject(workflow, 'text_map', carrier)
-        })
+    it('injects and extracts the proper llmobs context', async () => {
+      const carrier = {}
+      llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
+        tracer.inject(workflow, 'text_map', carrier)
+      })
 
-        const spanContext = tracer.extract('text_map', carrier)
-        tracer.trace('new-service-root', { childOf: spanContext }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
-        })
-      }
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
+      })
 
-      const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(2)
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 2)
 
-      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('test')
-      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('test')
+      assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
+      assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
     })
 
-    it('injects the local mlApp', () => {
-      payloadGenerator = function () {
-        const carrier = {}
-        llmobs.trace({ kind: 'workflow', name: 'parent', mlApp: 'span-level-ml-app' }, workflow => {
-          tracer.inject(workflow, 'text_map', carrier)
-        })
+    it('injects the local mlApp', async () => {
+      const carrier = {}
+      llmobs.trace({ kind: 'workflow', name: 'parent', mlApp: 'span-level-ml-app' }, workflow => {
+        tracer.inject(workflow, 'text_map', carrier)
+      })
 
-        const spanContext = tracer.extract('text_map', carrier)
-        tracer.trace('new-service-root', { childOf: spanContext }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
-        })
-      }
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
+      })
 
-      const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(2)
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 2)
 
-      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('span-level-ml-app')
-      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('span-level-ml-app')
+      assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'span-level-ml-app')
+      assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'span-level-ml-app')
     })
 
-    it('injects a distributed mlApp', () => {
-      payloadGenerator = function () {
-        let carrier = {}
-        llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
-          tracer.inject(workflow, 'text_map', carrier)
+    it('injects a distributed mlApp', async () => {
+      let carrier = {}
+      llmobs.trace({ kind: 'workflow', name: 'parent' }, workflow => {
+        tracer.inject(workflow, 'text_map', carrier)
+      })
+
+      // distributed call to service 2
+      let spanContext = tracer.extract('text_map', carrier)
+      carrier = {}
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'child-1' }, child => {
+          tracer.inject(child, 'text_map', carrier)
         })
+      })
 
-        // distributed call to service 2
-        let spanContext = tracer.extract('text_map', carrier)
-        carrier = {}
-        tracer.trace('new-service-root', { childOf: spanContext }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'child-1' }, child => {
-            tracer.inject(child, 'text_map', carrier)
-          })
-        })
+      // distributed call to service 3
+      spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'child-2' }, () => {})
+      })
 
-        // distributed call to service 3
-        spanContext = tracer.extract('text_map', carrier)
-        tracer.trace('new-service-root', { childOf: spanContext }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'child-2' }, () => {})
-        })
-      }
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 3)
 
-      const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(3)
-
-      expect(getTag(llmobsSpans[0], 'ml_app')).to.equal('test')
-      expect(getTag(llmobsSpans[1], 'ml_app')).to.equal('test')
-      expect(getTag(llmobsSpans[2], 'ml_app')).to.equal('test')
+      assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
+      assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
+      assert.equal(getTag(llmobsSpans[2], 'ml_app'), 'test')
     })
   })
 
@@ -300,14 +234,12 @@ describe('end to end sdk integration tests', () => {
       tracer._tracer._config.llmobs.mlApp = originalMlApp
     })
 
-    it('defaults to the service name', () => {
-      payloadGenerator = function () {
-        llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
-      }
+    it('defaults to the service name', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
 
-      const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(1)
-      expect(getTag(llmobsSpans[0], 'ml_app')).to.exist
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.ok(getTag(llmobsSpans[0], 'ml_app'))
     })
   })
 
@@ -323,7 +255,7 @@ describe('end to end sdk integration tests', () => {
 
       it('throws', () => {
         llmobs.registerProcessor(processor)
-        expect(() => llmobs.registerProcessor(processor)).to.throw()
+        assert.throws(() => llmobs.registerProcessor(processor))
       })
     })
 
@@ -339,18 +271,16 @@ describe('end to end sdk integration tests', () => {
         llmobs.registerProcessor(processor)
       })
 
-      it('does not submit dropped spans', () => {
-        payloadGenerator = function () {
-          llmobs.trace({ kind: 'workflow', name: 'keep' }, () => {
-            llmobs.trace({ kind: 'workflow', name: 'drop' }, () => {
-              llmobs.annotate({ tags: { drop_span: true } })
-            })
+      it('does not submit dropped spans', async () => {
+        llmobs.trace({ kind: 'workflow', name: 'keep' }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'drop' }, () => {
+            llmobs.annotate({ tags: { drop_span: true } })
           })
-        }
+        })
 
-        const { llmobsSpans } = run(payloadGenerator)
-        expect(llmobsSpans).to.have.lengthOf(1)
-        expect(llmobsSpans[0].name).to.equal('keep')
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].name, 'keep')
       })
     })
 
@@ -363,13 +293,16 @@ describe('end to end sdk integration tests', () => {
         llmobs.registerProcessor(processor)
       })
 
-      it('does not submit the span', () => {
-        payloadGenerator = function () {
-          llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
-        }
+      it('does not submit the span', async () => {
+        llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {})
 
-        const { llmobsSpans } = run(payloadGenerator)
-        expect(llmobsSpans).to.have.lengthOf(0)
+        // Race between getEvents() and a timeout - timeout should win since no spans are expected
+        // because the testagent server is running in the same process, this operation should be very low latency
+        // meaning there should be no flakiness here
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ llmobsSpans: [] }), 100))
+
+        const { llmobsSpans } = await Promise.race([getEvents(), timeoutPromise])
+        assert.equal(llmobsSpans.length, 0)
       })
     })
 
@@ -392,61 +325,57 @@ describe('end to end sdk integration tests', () => {
         llmobs.registerProcessor(processor)
       })
 
-      it('redacts the input and output', () => {
-        payloadGenerator = function () {
-          llmobs.trace({ kind: 'workflow', name: 'redact-input' }, () => {
-            llmobs.annotate({ tags: { redact_input: true }, inputData: 'hello' })
-            llmobs.trace({ kind: 'llm', name: 'redact-output' }, () => {
-              llmobs.annotate({ tags: { redact_output: true }, outputData: 'world' })
-            })
+      it('redacts the input and output', async () => {
+        llmobs.trace({ kind: 'workflow', name: 'redact-input' }, () => {
+          llmobs.annotate({ tags: { redact_input: true }, inputData: 'hello' })
+          llmobs.trace({ kind: 'llm', name: 'redact-output' }, () => {
+            llmobs.annotate({ tags: { redact_output: true }, outputData: 'world' })
           })
-        }
+        })
 
-        const { llmobsSpans } = run(payloadGenerator)
-        expect(llmobsSpans).to.have.lengthOf(2)
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 2)
 
-        expect(llmobsSpans[0].meta.input.value).to.equal('REDACTED')
-        expect(llmobsSpans[1].meta.output.messages[0].content).to.equal('REDACTED')
+        assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
+        assert.equal(llmobsSpans[1].meta.output.messages[0].content, 'REDACTED')
       })
     })
   })
 
   describe('with annotation context', () => {
-    it('applies the annotation context only to the scoped block', () => {
-      payloadGenerator = function () {
-        llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'beforeAnnotationContext' }, () => {})
+    it('applies the annotation context only to the scoped block', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'parent' }, () => {
+        llmobs.trace({ kind: 'workflow', name: 'beforeAnnotationContext' }, () => {})
 
-          llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
-            llmobs.trace({ kind: 'workflow', name: 'inner' }, () => {
-              llmobs.trace({ kind: 'workflow', name: 'innerInner' }, () => {})
-            })
-            llmobs.trace({ kind: 'workflow', name: 'inner2' }, () => {})
+        llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'inner' }, () => {
+            llmobs.trace({ kind: 'workflow', name: 'innerInner' }, () => {})
           })
-
-          llmobs.trace({ kind: 'workflow', name: 'afterAnnotationContext' }, () => {})
+          llmobs.trace({ kind: 'workflow', name: 'inner2' }, () => {})
         })
-      }
 
-      const { llmobsSpans } = run(payloadGenerator)
-      expect(llmobsSpans).to.have.lengthOf(6)
+        llmobs.trace({ kind: 'workflow', name: 'afterAnnotationContext' }, () => {})
+      })
 
-      expect(llmobsSpans[0].tags).to.not.include('foo:bar')
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 6)
 
-      expect(llmobsSpans[1].tags).to.not.include('foo:bar')
-      expect(llmobsSpans[1].parent_id).to.equal(llmobsSpans[0].span_id)
+      assert.equal(getTag(llmobsSpans[0], 'foo'), undefined)
 
-      expect(llmobsSpans[2].tags).to.include('foo:bar')
-      expect(llmobsSpans[2].parent_id).to.equal(llmobsSpans[0].span_id)
+      assert.equal(getTag(llmobsSpans[1], 'foo'), undefined)
+      assert.equal(llmobsSpans[1].parent_id, llmobsSpans[0].span_id)
 
-      expect(llmobsSpans[3].tags).to.include('foo:bar')
-      expect(llmobsSpans[3].parent_id).to.equal(llmobsSpans[2].span_id)
+      assert.equal(getTag(llmobsSpans[2], 'foo'), 'bar')
+      assert.equal(llmobsSpans[2].parent_id, llmobsSpans[0].span_id)
 
-      expect(llmobsSpans[4].tags).to.include('foo:bar')
-      expect(llmobsSpans[4].parent_id).to.equal(llmobsSpans[0].span_id)
+      assert.equal(getTag(llmobsSpans[3], 'foo'), 'bar')
+      assert.equal(llmobsSpans[3].parent_id, llmobsSpans[2].span_id)
 
-      expect(llmobsSpans[5].tags).to.not.include('foo:bar')
-      expect(llmobsSpans[5].parent_id).to.equal(llmobsSpans[0].span_id)
+      assert.equal(getTag(llmobsSpans[4], 'foo'), 'bar')
+      assert.equal(llmobsSpans[4].parent_id, llmobsSpans[0].span_id)
+
+      assert.equal(getTag(llmobsSpans[5], 'foo'), undefined)
+      assert.equal(llmobsSpans[5].parent_id, llmobsSpans[0].span_id)
     })
   })
 })

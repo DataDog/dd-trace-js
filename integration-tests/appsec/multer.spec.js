@@ -2,29 +2,27 @@
 
 const axios = require('axios')
 const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const path = require('node:path')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
 
 describe('multer', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env
+  let cwd, startupTestFile, agent, proc, env
 
   ['1.4.4-lts.1', '1.4.5-lts.1'].forEach((version) => {
     describe(`v${version}`, () => {
-      before(async () => {
-        sandbox = await createSandbox(['express', `multer@${version}`])
-        cwd = sandbox.folder
-        startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
-      })
+      useSandbox(['express', `multer@${version}`])
 
-      after(async () => {
-        await sandbox.remove()
+      before(() => {
+        cwd = sandboxCwd()
+        startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
       })
 
       beforeEach(async () => {

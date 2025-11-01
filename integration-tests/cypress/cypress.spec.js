@@ -11,7 +11,8 @@ const execPromise = promisify(exec)
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -122,16 +123,17 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(80000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
     }
 
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
-      cwd = sandbox.folder
+      cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
@@ -144,7 +146,6 @@ moduleTypes.forEach(({
     })
 
     after(async () => {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
       if (secondWebAppServer) {
         await new Promise(resolve => secondWebAppServer.close(resolve))
