@@ -12,6 +12,7 @@ module.exports = {
   cookieParser: dc.channel('datadog:cookie-parser:read:finish'),
   expressMiddlewareError: dc.channel('apm:express:middleware:error'),
   expressProcessParams: dc.channel('datadog:express:process_params:start'),
+  expressResponseRenderStart: dc.channel('tracing:datadog:express:response:render:start'),
   expressSession: dc.channel('datadog:express-session:middleware:finish'),
   fastifyBodyParser: dc.channel('datadog:fastify:body-parser:finish'),
   fastifyCookieParser: dc.channel('datadog:fastify-cookie:read:finish'),
