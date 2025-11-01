@@ -17,7 +17,7 @@ const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
-const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
+const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 const format = require('../../src/format')
 
@@ -233,6 +233,13 @@ describe('OTel Span', () => {
 
     const context = span._ddSpan.context()
     expect(context._tags[RESOURCE_NAME]).to.equal('name')
+  })
+
+  it('should copy span kind to span.kind', () => {
+    const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
+
+    const context = span._ddSpan.context()
+    expect(context._tags[SPAN_KIND]).to.equal(kinds.CONSUMER)
   })
 
   it('should expose span context', () => {
