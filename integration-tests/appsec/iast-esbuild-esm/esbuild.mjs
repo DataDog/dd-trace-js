@@ -12,7 +12,7 @@ const outfileWithSm = path.join(__dirname, 'build', 'iast-enabled-with-sm.mjs')
 
 esbuild.build({
   ...esbuildCommonConfig,
-  outfile: 'build/iast-enabled-with-sm.mjs', //outfileWithSm,
+  outfile: outfileWithSm,
   sourcemap: true,
 }).catch((err) => {
   console.error(err)
@@ -23,7 +23,7 @@ const outfileWithoutSm = path.join(__dirname, 'build', 'iast-enabled-with-no-sm.
 
 esbuild.build({
   ...esbuildCommonConfig,
-  outfile: 'build/iast-enabled-with-no-sm.mjs', //outfileWithoutSm,
+  outfile: outfileWithoutSm,
   sourcemap: false,
 }).catch((err) => {
   console.error(err)

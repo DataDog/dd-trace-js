@@ -16,7 +16,7 @@ export default {
   target: ['node18'],
   external: [
     '@datadog/native-iast-taint-tracking',
-    '@datadog/native-iast-rewriter',
+    '@datadog/wasm-js-rewriter',
 
     // required if you encounter graphql errors during the build step
     // see https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling
@@ -25,4 +25,3 @@ export default {
     'graphql/utilities'
   ]
 }
-
