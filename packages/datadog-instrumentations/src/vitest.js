@@ -524,7 +524,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
       vitestPool = 'child_process'
-      this.env.DD_VITEST_FORKS_POOL_WORKER = '1'
+      this.env.DD_VITEST_WORKER = '1'
 
       return start.apply(this, arguments)
     })
@@ -535,7 +535,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(cliApiPackage.T.prototype, 'start', start => function () {
       vitestPool = 'worker_threads'
-      this.env.DD_VITEST_THREADS_POOL_WORKER = '1'
+      this.env.DD_VITEST_WORKER = '1'
       return start.apply(this, arguments)
     })
     shimmer.wrap(cliApiPackage.T.prototype, 'on', getWrappedOn)

@@ -29,7 +29,7 @@ function getInterprocessTraceCode () {
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('DD_VITEST_FORKS_POOL_WORKER')) {
+  if (getEnvironmentVariable('DD_VITEST_WORKER')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
@@ -50,7 +50,7 @@ function getInterprocessLogsCode () {
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('DD_VITEST_FORKS_POOL_WORKER')) {
+  if (getEnvironmentVariable('DD_VITEST_WORKER')) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
   return null
