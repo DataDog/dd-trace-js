@@ -31,6 +31,8 @@ class Writer {
   _sendPayload (data, onDone = () => {}) {
     // ## Jest
     // Only available when `child_process` is used for the jest worker.
+    // If worker_threads is used, this will not work
+    // TODO: make `jest` instrumentation compatible with worker_threads
     // https://github.com/facebook/jest/blob/bb39cb2c617a3334bf18daeca66bd87b7ccab28b/packages/jest-worker/README.md#experimental-worker
 
     // ## Cucumber
@@ -38,8 +40,8 @@ class Writer {
     // See cucumber code:
     // https://github.com/cucumber/cucumber-js/blob/5ce371870b677fe3d1a14915dc535688946f734c/src/runtime/parallel/run_worker.ts#L13
 
-    // Old because vitest@>=4 use DD_VITEST_WORKER and report arrays just like other frameworks
-    // Before vitest@>=4, we need the `__tinypool_worker_message__` shape, or tinypool will crash
+    // Old because vitest@>=4 uses `DD_VITEST_WORKER` and reports arrays just like other frameworks
+    // Before vitest@>=4, we need the `__tinypool_worker_message__` property, or tinypool will crash
     const isVitestWorkerOld = !!getEnvironmentVariable('TINYPOOL_WORKER_ID')
     const payload = isVitestWorkerOld
       ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
