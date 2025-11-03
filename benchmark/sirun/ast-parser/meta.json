@@ -2,7 +2,6 @@
   "name": "ast-parser",
   "run": "node .",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node .\"",
-  "setup": "bash -c \"yarn add --silent acorn oxc-parser @swc/core\"",
   "cachegrind": false,
   "instructions": true,
   "iterations": 20,

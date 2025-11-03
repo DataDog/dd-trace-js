@@ -10,7 +10,7 @@ const {
 } = process.env
 
 const code = `
-  import { useState } from 'react';
+  const { useState } = require('react');
 
   function MyComponent() {
     const [count, setCount] = useState(0);
@@ -27,7 +27,7 @@ if (USE_ACORN === 'true') {
   const { parse } = require('acorn')
 
   if (PARSE === 'true') {
-    parse(code)
+    parse(code, { ecmaVersion: 2020 })
   }
 }
 
