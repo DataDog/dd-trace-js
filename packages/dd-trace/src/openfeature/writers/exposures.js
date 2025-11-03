@@ -27,7 +27,7 @@ const {
 
 /**
  * @typedef {Object} ExposureContext
- * @property {string} service_name - Service name
+ * @property {string} service - Service name
  * @property {string} [version] - Service version
  * @property {string} [env] - Service environment
  */
@@ -127,7 +127,7 @@ class ExposuresWriter extends BaseFFEWriter {
    */
   _buildContext () {
     const context = {
-      service_name: this._config.service || 'unknown'
+      service: this._config.service || 'unknown'
     }
 
     // Only include version and env if they are defined
