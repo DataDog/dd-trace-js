@@ -75,7 +75,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.on('exposures', ({ payload, headers }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 
@@ -159,7 +159,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.on('exposures', ({ payload }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 

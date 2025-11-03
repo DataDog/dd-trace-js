@@ -178,7 +178,7 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload(events)
 
       expect(payload.context).to.deep.equal({
-        service_name: 'test-service',
+        service: 'test-service',
         version: '1.0.0',
         env: 'test'
       })
@@ -213,7 +213,7 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writerWithoutOptionals.makePayload(events)
 
       expect(payload.context).to.deep.equal({
-        service_name: 'test-service'
+        service: 'test-service'
       })
       expect(payload.context).to.not.have.property('version')
       expect(payload.context).to.not.have.property('env')
@@ -279,7 +279,7 @@ describe('OpenFeature Exposures Writer', () => {
       expect(parsedPayload).to.have.property('exposures')
       expect(parsedPayload.exposures).to.be.an('array').with.length(1)
       expect(parsedPayload.exposures[0].timestamp).to.exist
-      expect(parsedPayload.context.service_name).to.equal('test-service')
+      expect(parsedPayload.context.service).to.equal('test-service')
     })
 
     it('should empty buffer after flushing', () => {
