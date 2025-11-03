@@ -639,6 +639,102 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' }
         })
       })
+
+      it('submits a response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'What is the capital of France?',
+          max_output_tokens: 100,
+          temperature: 0.5,
+          stream: false
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What is the capital of France?' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 0.5,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
+            stream: false
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
+
+      it('submits a streamed response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const stream = await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true
+        })
+
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'))
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'Stream this please' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 50,
+            temperature: 0,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
+            stream: true
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
     })
   })
 })
