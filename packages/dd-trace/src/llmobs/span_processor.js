@@ -203,8 +203,8 @@ class LLMObsSpanProcessor {
   // This function can be reused for other fields if needed
   // Messages, Documents, and Metrics are safeguarded in `llmobs/tagger.js`
   #addObject (obj, carrier) {
-    const seenObjects = new WeakSet()
-    seenObjects.add(obj) // capture root object
+    // Capture root object by default
+    const seenObjects = new WeakSet([obj])
 
     const isCircular = value => {
       if (typeof value !== 'object') return false
