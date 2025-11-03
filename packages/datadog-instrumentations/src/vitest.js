@@ -158,6 +158,14 @@ function isTestPackage (testPackage) {
   return testPackage.V?.name === 'VitestTestRunner'
 }
 
+function hasForksPoolWorker (vitestPackage) {
+  return vitestPackage.f?.name === 'ForksPoolWorker'
+}
+
+function hasThreadsPoolWorker (vitestPackage) {
+  return vitestPackage.T?.name === 'ThreadsPoolWorker'
+}
+
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
@@ -481,11 +489,57 @@ addHook({
   return TinyPool
 })
 
+function getWrappedOn (on) {
+  return function (event, callback) {
+    if (event !== 'message') {
+      return on.apply(this, arguments)
+    }
+    // `arguments[1]` is the callback function, which
+    // we modify to intercept our messages to not interfere
+    // with vitest's own messages
+    arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
+      if (message.type !== 'Buffer' && Array.isArray(message)) {
+        const [interprocessCode, data] = message
+        if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+          workerReportTraceCh.publish(data)
+        } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+          workerReportLogsCh.publish(data)
+        }
+        // If we execute the callback vitest crashes, as the message is not supported
+        return
+      }
+      return callback.apply(this, arguments)
+    })
+    return on.apply(this, arguments)
+  }
+}
+
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (!isCliApiPackage(cliApiPackage)) {
     return cliApiPackage
   }
   shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+
+  if (hasForksPoolWorker(cliApiPackage)) {
+    // function is async
+    shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
+      vitestPool = 'child_process'
+      this.env.DD_VITEST_FORKS_POOL_WORKER = '1'
+
+      return start.apply(this, arguments)
+    })
+    shimmer.wrap(cliApiPackage.f.prototype, 'on', getWrappedOn)
+  }
+
+  if (hasThreadsPoolWorker(cliApiPackage)) {
+    // function is async
+    shimmer.wrap(cliApiPackage.T.prototype, 'start', start => function () {
+      vitestPool = 'worker_threads'
+      this.env.DD_VITEST_THREADS_POOL_WORKER = '1'
+      return start.apply(this, arguments)
+    })
+    shimmer.wrap(cliApiPackage.T.prototype, 'on', getWrappedOn)
+  }
   return cliApiPackage
 }
 

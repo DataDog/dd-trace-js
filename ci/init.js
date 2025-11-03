@@ -29,6 +29,7 @@ function detectTestWorkerType () {
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'
   if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) return 'playwright'
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) return 'vitest'
+  if (getEnvironmentVariable('DD_VITEST_FORKS_POOL_WORKER')) return 'vitest'
   return null
 }
 
