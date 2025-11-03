@@ -3,7 +3,9 @@ import './init.mjs'
 import express from 'express'
 
 import iastRouter from './iast/index.mjs'
-import randomJson from './random.json' assert { type: 'json' }
+
+// eslint-disable-next-line
+import randomJson from './random.json' with { type: 'json' }
 
 const app = express()
 
