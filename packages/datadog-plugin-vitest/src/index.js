@@ -345,7 +345,6 @@ class VitestPlugin extends CiPlugin {
         finishAllTraceSpans(testSuiteSpan)
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
-      // TODO: too frequent flush - find for method in worker to decrease frequency
       this.tracer._exporter.flush(onFinish)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
