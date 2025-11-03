@@ -32,7 +32,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
   const result = []
 
   for (const callsite of callSiteFrames) {
-    let filepath = callsite.file.startsWith('file://') ? fileURLToPath(callsite.file) : callsite.file
+    let filepath = callsite.file?.startsWith('file://') ? fileURLToPath(callsite.file) : callsite.file
 
     if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
       const callsiteLocation = {
