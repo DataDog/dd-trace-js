@@ -42,9 +42,9 @@ function filterOutFramesFromLibrary (callSiteList) {
     if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
       // bundled with SourceMap, get original file and line to discriminate if comes from dd-trace or not
       const callSiteLocation = {
-        path: callSite.getFileName(),
-        line: callSite.getLineNumber(),
-        column: callSite.getColumnNumber()
+        path: callSite.getTranslatedFileName?.() ?? callSite.getFileName?.(),
+        line: callSite.getTranslatedLineNumber?.() ?? callSite.getLineNumber?.(),
+        column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber?.()
       }
       const { path } = getOriginalPathAndLineFromSourceMap(callSiteLocation)
       return !path?.startsWith(ddBasePath)
@@ -68,9 +68,9 @@ function getCallsiteFrames (maxDepth = 32, constructorOpt = getCallsiteFrames, c
     const callSite = filteredFrames[index]
     indexedFrames.push({
       id: index,
-      file: callSite.getFileName(),
-      line: callSite.getLineNumber(),
-      column: callSite.getColumnNumber(),
+      file: callSite.getTranslatedFileName?.() ?? callSite.getFileName?.(),
+      line: callSite.getTranslatedLineNumber?.() ?? callSite.getLineNumber?.(),
+      column: callSite.getTranslatedColumnNumber?.() ?? callSite.getColumnNumber?.(),
       function: callSite.getFunctionName(),
       class_name: callSite.getTypeName(),
       isNative: callSite.isNative()
