@@ -2,6 +2,7 @@
 
 const path = require('path')
 const process = require('process')
+const { fileURLToPath } = require('url')
 const { ddBasePath } = require('../../util')
 const { getOriginalPathAndLineFromSourceMap } = require('./taint-tracking/rewriter')
 const pathLine = {
@@ -35,11 +36,12 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 
     if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
       const callsiteLocation = {
-        path: getRelativePath(filepath),
+        path: filepath.startsWith('file://') ? fileURLToPath(filepath) : filepath,
         line: callsite.line,
         column: callsite.column
       }
       const { path: originalPath, line, column } = getOriginalPathAndLineFromSourceMap(callsiteLocation)
+      // console.log(filepath, originalPath)
       callsite.path = filepath = originalPath
       callsite.line = line
       callsite.column = column
@@ -52,6 +54,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
+      //console.log('pushing callsite', callsite.path)
       result.push(callsite)
     }
   }
@@ -60,7 +63,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 }
 
 function getRelativePath (filepath) {
-  return filepath && path.relative(process.cwd(), filepath)
+  return filepath && path.relative(process.cwd(), filepath.startsWith('file://') ? fileURLToPath(filepath) : filepath)
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {
