@@ -32,16 +32,15 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
   const result = []
 
   for (const callsite of callSiteFrames) {
-    let filepath = callsite.file
+    let filepath = callsite.file.startsWith('file://') ? fileURLToPath(callsite.file) : callsite.file
 
     if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
       const callsiteLocation = {
-        path: filepath.startsWith('file://') ? fileURLToPath(filepath) : filepath,
+        path: filepath,
         line: callsite.line,
         column: callsite.column
       }
       const { path: originalPath, line, column } = getOriginalPathAndLineFromSourceMap(callsiteLocation)
-      // console.log(filepath, originalPath)
       callsite.path = filepath = originalPath
       callsite.line = line
       callsite.column = column
@@ -54,7 +53,6 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
-      //console.log('pushing callsite', callsite.path)
       result.push(callsite)
     }
   }
@@ -63,7 +61,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
 }
 
 function getRelativePath (filepath) {
-  return filepath && path.relative(process.cwd(), filepath.startsWith('file://') ? fileURLToPath(filepath) : filepath)
+  return filepath && path.relative(process.cwd(), filepath)
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {
