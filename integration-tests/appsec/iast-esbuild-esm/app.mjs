@@ -12,4 +12,3 @@ app.use('/iast', iastRouter)
 const server = app.listen(0, () => {
   process.send?.({ port: server.address().port })
 })
-
