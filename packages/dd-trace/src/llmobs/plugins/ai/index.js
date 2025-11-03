@@ -82,7 +82,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    * @param {string} toolDescription
    * @returns {string | undefined}
    */
-  findToolName (toolDescription) {
+  findToolName (toolName, toolDescription) {
+    if (Number.isNaN(Number.parseInt(toolName))) return toolName
+
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
       if (description === toolDescription && availableTool.id) {
@@ -263,7 +265,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
       const toolArgs = toolCall.args ?? toolCall.input
       const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
-      const name = this.findToolName(toolDescription)
+      const name = this.findToolName(toolCall.toolName, toolDescription)
       this.#toolCallIdsToName[toolCall.toolCallId] = name
 
       formattedToolCalls.push({
@@ -318,7 +320,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
           const toolDescription = toolsForModel?.find(tool => part.toolName === tool.name)?.description
-          const name = this.findToolName(toolDescription)
+          const name = this.findToolName(part.toolName, toolDescription)
 
           toolCalls.push({
             arguments: part.args ?? part.input,
