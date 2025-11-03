@@ -92,6 +92,8 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
+const VITEST_POOL = 'test.vitest.pool'
+
 const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
 const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
 
@@ -203,6 +205,7 @@ module.exports = {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
+  VITEST_POOL,
   CUCUMBER_IS_PARALLEL,
   MOCHA_IS_PARALLEL,
   TEST_TYPE,
