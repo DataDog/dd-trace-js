@@ -204,10 +204,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/flagging-core@0.1.0-preview.12":
-  version "0.1.0-preview.12"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.12.tgz#7e9ebc8096d6c7cb1c9135bed37e50a02ac27b77"
-  integrity sha512-3oI/8dNpGkZaYf77KJpZMNoYpnkwCq3Dgy0UChEz6JX2jtxbwv1sQFAaG1z078T/FwPnB2hMuO5zLXKkx53StA==
+"@datadog/flagging-core@0.1.0-preview.13":
+  version "0.1.0-preview.13"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.13.tgz#73fc80aeb21435fa2307f79f2d315b857616cd5d"
+  integrity sha512-DfQYeBgGvCerKx6coRiXMt0aXWJB8kRIsJhfdTKyejS9rfp6ZBjWc6dctKzhwMAQdpBiN42MEVXNt4Pdcmj1WA==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -238,12 +238,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@0.1.0-preview.12":
-  version "0.1.0-preview.12"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.12.tgz#5b2a4629a76f994995935f2b1a3bc7150d7999ca"
-  integrity sha512-bzh2zk84bobSyOzcF6wxzFIKcEQV2M2QP5nWLfDNOPl4tS/qxoTpi3hvT8a6TnPvXmSZrcfB2JUq54qaT3BnKw==
+"@datadog/openfeature-node-server@0.1.0-preview.13":
+  version "0.1.0-preview.13"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.13.tgz#355dacbbe927d29c903fb3c17d14dec7af34ba55"
+  integrity sha512-W7+Aff5Ex7EbNnH2P22zycSzIMIJ4+3DgSrSwxSguw9lvaj7rbnKmRv0G9q2kffbVymrUWEFkBEhqB+gRy9FLg==
   dependencies:
-    "@datadog/flagging-core" "0.1.0-preview.12"
+    "@datadog/flagging-core" "0.1.0-preview.13"
     "@openfeature/server-sdk" "~1.18.0"
 
 "@datadog/pprof@5.12.0":
