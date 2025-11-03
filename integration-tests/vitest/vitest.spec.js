@@ -52,7 +52,8 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
-  VITEST_POOL
+  VITEST_POOL,
+  TEST_IS_TEST_FRAMEWORK_WORKER
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
@@ -209,12 +210,20 @@ versions.forEach((version) => {
             )
 
             testEvents.forEach(test => {
+              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
+              if (poolConfig === 'forks') {
+                assert.equal(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+              }
               assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
               assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
               assert.equal(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             })
 
             testSuiteEvents.forEach(testSuite => {
+              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
+              if (poolConfig === 'forks') {
+                assert.equal(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+              }
               assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
               assert.isTrue(
                 testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
