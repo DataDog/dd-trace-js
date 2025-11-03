@@ -1,5 +1,6 @@
 * @DataDog/dd-trace-js
 
+/integration-tests/appsec/ @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
