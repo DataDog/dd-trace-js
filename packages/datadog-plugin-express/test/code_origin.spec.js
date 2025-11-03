@@ -102,6 +102,29 @@ describe('Plugin', () => {
               await assertCodeOrigin('/foo/bar', { line, method: 'testCase', type: 'Context' })
             })
 
+            it('should support .route() routes', async function testCase () {
+              app.get('/route_before', (req, res) => res.end())
+              const route = app.route('/foo')
+              const line = getNextLineNumber()
+              route.get((req, res) => {
+                res.end()
+              })
+              app.get('/route_after', (req, res) => res.end())
+              await assertCodeOrigin('/foo', { line, method: 'testCase', type: 'Context' })
+            })
+
+            it('should support Router routes', async function testCase () {
+              const router = express.Router()
+              app.get('/route_before', (req, res) => res.end())
+              const line = getNextLineNumber()
+              router.get('/bar', (req, res) => {
+                res.end()
+              })
+              app.use('/foo', router)
+              app.get('/route_after', (req, res) => res.end())
+              await assertCodeOrigin('/foo/bar', { line, method: 'testCase', type: 'Context' })
+            })
+
             it('should point to route handler even if passed through a middleware', async function testCase () {
               app.use((req, res, next) => {
                 next()

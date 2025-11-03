@@ -30,17 +30,49 @@ describe('telemetry log collector', () => {
     })
 
     it('should store logs with same message but different stack', () => {
-      const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 2\n${ddFrame}` })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 3\n${ddFrame}` })).to.be.true
+      const ddFrame1 = `at T (${ddBasePath}path/to/dd/file1.js:1:2)`
+      const ddFrame2 = `at T (${ddBasePath}path/to/dd/file2.js:3:4)`
+      const ddFrame3 = `at T (${ddBasePath}path/to/dd/file3.js:5:6)`
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame1}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame2}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame3}`,
+        errorType: 'Error'
+      })).to.be.true
     })
 
     it('should store logs with same message, same stack but different level', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      expect(logCollector.add({ message: 'Error 1', level: 'ERROR', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'WARN', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
-      expect(logCollector.add({ message: 'Error 1', level: 'DEBUG', stack_trace: `stack 1\n${ddFrame}` })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'ERROR',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'WARN',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
+      expect(logCollector.add({
+        message: 'Error 1',
+        level: 'DEBUG',
+        stack_trace: `Error: msg\n${ddFrame}`,
+        errorType: 'Error'
+      })).to.be.true
     })
 
     it('should not store logs with empty stack and \'Generic Error\' message', () => {
@@ -52,7 +84,7 @@ describe('telemetry log collector', () => {
       ).to.be.false
     })
 
-    it('should include original message and dd frames', () => {
+    it('should redact error message and include only dd frames', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
       const stack = new TypeError('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
@@ -73,11 +105,11 @@ describe('telemetry log collector', () => {
       expect(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: `TypeError: Error 1${EOL}${ddFrames}`
+        stack_trace: `TypeError: redacted${EOL}${ddFrames}`
       })).to.be.true
     })
 
-    it('should redact stack message if first frame is not a dd frame', () => {
+    it('should redact error message regardless of whether first frame is DD code', () => {
       const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
         at T (${ddBasePath}path/to/dd/file.js:1:2)`
       const stack = new TypeError('Error 1')
@@ -102,6 +134,31 @@ describe('telemetry log collector', () => {
         message: 'Error 1',
         level: 'ERROR',
         stack_trace: ddFrames
+      })).to.be.true
+    })
+
+    it('should redact multi-line error messages', () => {
+      const ddFrame = `at cachedExec (${ddBasePath}plugins/util/git-cache.js:96:17)`
+      const multiLineError = 'Error: Command failed: git rev-parse --abbrev-ref ' +
+        `--symbolic-full-name @{upstream}${EOL}fatal: HEAD does not point to a branch${EOL}${EOL}${ddFrame}`
+
+      const ddFrames = multiLineError
+        .split(EOL)
+        .filter(line => line.includes(ddBasePath))
+        .map(line => line.replace(ddBasePath, ''))
+        .join(EOL)
+
+      expect(logCollector.add({
+        message: 'Git plugin error',
+        level: 'ERROR',
+        stack_trace: multiLineError,
+        errorType: 'Error'
+      })).to.be.true
+
+      expect(logCollector.hasEntry({
+        message: 'Git plugin error',
+        level: 'ERROR',
+        stack_trace: `Error: redacted${EOL}${ddFrames}`
       })).to.be.true
     })
   })

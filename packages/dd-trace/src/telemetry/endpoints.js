@@ -4,6 +4,8 @@ const dc = require('dc-polyfill')
 const { sendData } = require('./send-data')
 
 const fastifyRouteCh = dc.channel('apm:fastify:route:added')
+const expressRouteCh = dc.channel('apm:express:route:added')
+const routerRouteCh = dc.channel('apm:router:route:added')
 
 let config
 let application
@@ -16,6 +18,7 @@ let updateRetryData
  * Map key is `${METHOD} ${PATH}`, value is { method, path }
  */
 const pendingEndpoints = new Map()
+const wildcardEndpoints = new Set()
 let flushScheduled = false
 let isFirstPayload = true
 
@@ -42,9 +45,28 @@ function onFastifyRoute (routeData) {
   if (!routeOptions?.path) return
 
   const methods = Array.isArray(routeOptions.method) ? routeOptions.method : [routeOptions.method]
-
   for (const method of methods) {
     recordEndpoint(method, routeOptions.path)
+  }
+}
+
+function onExpressRoute ({ method, path }) {
+  if (!method || !path) return
+
+  // If wildcard already recorded for this path, skip specific methods
+  if (wildcardEndpoints.has(path)) return
+
+  recordEndpoint(method, path)
+
+  // If this is a wildcard event, record it and mark path as wildcarded
+  if (method === '*') {
+    wildcardEndpoints.add(path)
+    return
+  }
+
+  // Express automatically adds HEAD support for GET routes
+  if (method.toUpperCase() === 'GET') {
+    recordEndpoint('HEAD', path)
   }
 }
 
@@ -108,10 +130,14 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
   updateRetryData = updateRetryDataFunction
 
   fastifyRouteCh.subscribe(onFastifyRoute)
+  expressRouteCh.subscribe(onExpressRoute)
+  routerRouteCh.subscribe(onExpressRoute)
 }
 
 function stop () {
   fastifyRouteCh.unsubscribe(onFastifyRoute)
+  expressRouteCh.unsubscribe(onExpressRoute)
+  routerRouteCh.unsubscribe(onExpressRoute)
 
   pendingEndpoints.clear()
   flushScheduled = false

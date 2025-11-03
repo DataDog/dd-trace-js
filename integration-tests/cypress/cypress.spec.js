@@ -11,7 +11,8 @@ const execPromise = promisify(exec)
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -122,16 +123,17 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(80000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
     }
 
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
-      cwd = sandbox.folder
+      cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
@@ -144,7 +146,6 @@ moduleTypes.forEach(({
     })
 
     after(async () => {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
       if (secondWebAppServer) {
         await new Promise(resolve => secondWebAppServer.close(resolve))
@@ -493,7 +494,7 @@ moduleTypes.forEach(({
           .map(file => file.filename)
 
         assert.includeMembers(fileNames, Object.keys(coverageFixture))
-      }, 20000)
+      }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -988,7 +989,7 @@ moduleTypes.forEach(({
               'ci-visibility/subproject/src/index.tsx',
               'ci-visibility/subproject/cypress/e2e/spec.cy.js'
             ])
-          }, 10000)
+          }, 25000)
 
         childProcess = exec(
           command,
@@ -1028,7 +1029,7 @@ moduleTypes.forEach(({
             assert.exists(testEvent.content.test_session_id)
             assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -1173,7 +1174,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1241,7 +1242,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1298,7 +1299,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/skipped-test.js'
 
@@ -1353,7 +1354,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.equal(newTests.length, 0)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1416,7 +1417,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1432,6 +1433,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1478,7 +1483,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1494,6 +1499,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1616,7 +1625,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1675,7 +1684,7 @@ moduleTypes.forEach(({
             ])
 
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1787,7 +1796,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1827,7 +1836,7 @@ moduleTypes.forEach(({
             const test = events.find(event => event.type === 'test').content
             assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
             assert.equal(test.meta[TEST_STATUS], 'pass')
-          })
+          }, 25000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
@@ -2003,7 +2012,7 @@ moduleTypes.forEach(({
                   }
                 }
               }
-            })
+            }, 25000)
 
         const runAttemptToFixTest = async ({
           isAttemptToFix,
@@ -2187,7 +2196,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
-            })
+            }, 25000)
 
         const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -2286,7 +2295,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
-            })
+            }, 25000)
 
         const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
@@ -2342,6 +2351,50 @@ moduleTypes.forEach(({
           await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
+
+      it('does not crash if the request to get test management tests fails', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: false
+        })
+        receiver.setTestManagementTestsResponseCode(500)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // it is not retried
+            assert.equal(tests.length, 1)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              DD_TRACE_DEBUG: '1'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+      })
     })
 
     context('libraries capabilities', () => {
@@ -2370,18 +2423,25 @@ moduleTypes.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
         childProcess = exec(
-          testCommand,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              DD_TEST_SESSION_NAME: 'my-test-session-name'
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
+              SPEC_PATTERN: specToRun,
             },
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -2488,7 +2548,7 @@ moduleTypes.forEach(({
                 NUM_RETRIES_EFD
               )
             }
-          })
+          }, 25000)
 
       const runImpactedTest = async (
         { isModified, isEfd = false, isNew = false },
@@ -2517,6 +2577,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),

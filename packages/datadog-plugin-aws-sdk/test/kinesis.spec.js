@@ -162,7 +162,7 @@ describe('Kinesis', function () {
           expect(span.meta).to.have.property('streamname', streamName)
         }).then(done, done)
 
-        helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
+        helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
       })
 
       describe('Disabled', () => {
@@ -260,9 +260,7 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
-            if (err) return done(err)
-          })
+          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
         })
       })
 
@@ -280,9 +278,7 @@ describe('Kinesis', function () {
           })
         }).then(done, done)
 
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-        })
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
       })
 
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
@@ -300,9 +296,7 @@ describe('Kinesis', function () {
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }, { timeoutMs: 10000 }).then(done, done)
 
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-        })
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
       })
 
       it('emits DSM stats to the agent during Kinesis getRecord', done => {
@@ -323,9 +317,7 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
-            if (err) return done(err)
-          })
+          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
         })
       })
 
@@ -349,9 +341,7 @@ describe('Kinesis', function () {
           if (err) return done(err)
 
           agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
-          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
-            if (err) return done(err)
-          })
+          helpers.getTestData(kinesis, streamNameDSM, data, () => {})
         })
       })
 

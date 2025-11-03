@@ -17,7 +17,7 @@ class WSClosePlugin extends TracingPlugin {
     if (!traceWebsocketMessagesEnabled) return
 
     const { code, data, socket, isPeerClose } = ctx
-    if (!socket.spanContext) return
+    if (!socket?.spanContext) return
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanContext.spanTags

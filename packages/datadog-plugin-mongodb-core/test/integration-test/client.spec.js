@@ -2,9 +2,10 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -13,19 +14,14 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
   // test against later versions because server.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'mongodb@${version}'`], false, [
-        './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'mongodb', 'MongoClient')
-    })
+    useSandbox([`'mongodb@${version}'`], false, [
+      './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
 
-    after(async function () {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server.mjs', 'mongodb', 'MongoClient')
     })
 
     beforeEach(async () => {
@@ -45,7 +41,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)
@@ -54,15 +50,11 @@ describe('esm', () => {
 
   // test against later versions because server2.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
-        './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server2.mjs', 'MongoDBCore')
-    })
+    useSandbox([`'mongodb-core@${version}'`], false, [
+      './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
 
-    after(async function () {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server2.mjs', 'MongoDBCore')
     })
 
     beforeEach(async () => {
@@ -82,7 +74,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)

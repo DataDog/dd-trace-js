@@ -5,22 +5,20 @@ const path = require('path')
 const Axios = require('axios')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
   spawnProc
 } = require('../helpers')
 
 describe('ASM Data collection', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
+
+  useSandbox(['express'])
 
   before(async () => {
-    sandbox = await createSandbox(['express'])
-    cwd = sandbox.folder
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'appsec/data-collection/index.js')
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   function startServer (extendedDataCollection) {
