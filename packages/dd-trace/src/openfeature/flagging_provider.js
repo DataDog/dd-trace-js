@@ -1,6 +1,6 @@
 'use strict'
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+const { DatadogNodeServerProvider } = require('./node-server/provider')
 const { channel } = require('dc-polyfill')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
@@ -31,7 +31,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * This method is called automatically when Remote Config delivers UFC updates.
    *
    * @internal
-   * @param {import('@datadog/openfeature-node-server').UniversalFlagConfigurationV1} ufc
+   * @param {import('./node-server/configuration/ufc-v1').UniversalFlagConfigurationV1} ufc
    * - Universal Flag Configuration object
    */
   _setConfiguration (ufc) {
