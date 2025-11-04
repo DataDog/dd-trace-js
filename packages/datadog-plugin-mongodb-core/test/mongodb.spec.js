@@ -614,6 +614,55 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with dbmPropagationMode full but sampling disabled', () => {
+        before(() => {
+          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'full'
+          })
+        })
+
+        after(() => {
+          tracer._tracer._prioritySampler.sample.restore()
+
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it(
+          'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
+          done => {
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+                const spanId = span.span_id.toString(16).padStart(16, '0')
+
+                expect(startSpy.called).to.be.true
+                const { comment } = startSpy.getCall(0).args[0].ops
+                expect(comment).to.include(`traceparent='00-${traceId}-${spanId}-00'`)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find({
+              _id: Buffer.from('1234')
+            }).toArray()
+          })
+      })
+
       describe('with heartbeatEnabled configuration', () => {
         describe('when heartbeat tracing is disabled via config', () => {
           before(() => {

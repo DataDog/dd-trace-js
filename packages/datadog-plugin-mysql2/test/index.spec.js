@@ -489,6 +489,23 @@ describe('Plugin', () => {
           })
         })
 
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+
+          const connect = connection.query('SELECT 1 + 1 AS solution', () => {
+            queryText = connect.sql
+          })
+        })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
@@ -564,6 +581,23 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
+            queryText = queryPool.sql
+          })
+        })
+
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = queryPool.sql
           })

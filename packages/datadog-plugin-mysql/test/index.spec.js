@@ -498,6 +498,19 @@ describe('Plugin', () => {
           })
         })
 
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
+          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            queryText = connection._protocol._queue[0].sql
+          })
+        })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
@@ -573,6 +586,19 @@ describe('Plugin', () => {
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          pool.query('SELECT 1 + 1 AS solution', () => {
+            queryText = pool._allConnections[0]._protocol._queue[0].sql
+          })
+        })
+
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          let queryText = ''
+
+          agent.assertSomeTraces(() => {
+            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
+          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+
           pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = pool._allConnections[0]._protocol._queue[0].sql
           })
