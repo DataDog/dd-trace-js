@@ -177,30 +177,6 @@ describe('format', () => {
       expect(trace.resource).to.equal('resource')
     })
 
-    it('should always add single span ingestion tags from options if present', () => {
-      spanContext._spanSampling = {
-        maxPerSecond: 5,
-        sampleRate: 1.0
-      }
-      trace = format(span)
-
-      expect(trace.metrics).to.include({
-        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
-        [SPAN_SAMPLING_MAX_PER_SECOND]: 5,
-        [SPAN_SAMPLING_RULE_RATE]: 1.0
-      })
-    })
-
-    it('should not add single span ingestion tags if options not present', () => {
-      trace = format(span)
-
-      expect(trace.metrics).to.not.have.keys(
-        SPAN_SAMPLING_MECHANISM,
-        SPAN_SAMPLING_MAX_PER_SECOND,
-        SPAN_SAMPLING_RULE_RATE
-      )
-    })
-
     it('should format span links', () => {
       span._links = [
         {

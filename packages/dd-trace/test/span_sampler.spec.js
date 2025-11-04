@@ -5,9 +5,18 @@ const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN, SPAN_SAMPLING_RULE_RATE, SPAN_SAMPLING_MAX_PER_SECOND } = require('../src/constants')
+
 require('./setup/core')
 
 const id = require('../src/id')
+
+function expectSamplingData(context, rate, max) {
+  const tags = context._tags
+  expect(tags[SPAN_SAMPLING_MECHANISM]).to.equal(SAMPLING_MECHANISM_SPAN)
+  expect(tags[SPAN_SAMPLING_RULE_RATE]).to.equal(rate)
+  expect(tags[SPAN_SAMPLING_MAX_PER_SECOND]).to.equal(max)
+}
 
 describe('span sampler', () => {
   const spies = {}
@@ -57,7 +66,7 @@ describe('span sampler', () => {
     } catch (err) { done(err) }
   })
 
-  it('adds _spanSampling when sampled successfully', () => {
+  it('adds sampling tags when sampled successfully', () => {
     const sampler = new SpanSampler({
       spanSamplingRules: [
         {
@@ -93,10 +102,7 @@ describe('span sampler', () => {
     expect(spies.sampleRate.get).to.be.called
     expect(spies.maxPerSecond.get).to.be.called
 
-    expect(spanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 5
-    })
+    expectSamplingData(spanContext, 1.0, 5)
   })
 
   it('should stop at first rule match', () => {
@@ -147,10 +153,7 @@ describe('span sampler', () => {
     expect(spies.sampleRate.get).to.be.called
     expect(spies.maxPerSecond.get).to.be.called
 
-    expect(spanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 5
-    })
+    expectSamplingData(spanContext, 1.0, 5)
   })
 
   it('should sample multiple spans with one rule', () => {
@@ -205,14 +208,8 @@ describe('span sampler', () => {
     expect(spies.sampleRate.get).to.be.called
     expect(spies.maxPerSecond.get).to.be.called
 
-    expect(firstSpanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 5
-    })
-    expect(secondSpanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 5
-    })
+    expectSamplingData(firstSpanContext, 1.0, 5)
+    expectSamplingData(secondSpanContext, 1.0, 5)
   })
 
   it('should sample mutiple spans with multiple rules', () => {
@@ -247,7 +244,8 @@ describe('span sampler', () => {
     const secondSpanContext = {
       ...firstSpanContext,
       _spanId: id('1234567812345679'),
-      _name: 'second operation'
+      _name: 'second operation',
+      _tags: {}
     }
 
     // Add spans for both to the context
@@ -273,13 +271,7 @@ describe('span sampler', () => {
     expect(spies.sampleRate.get).to.be.called
     expect(spies.maxPerSecond.get).to.be.called
 
-    expect(firstSpanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 5
-    })
-    expect(secondSpanContext._spanSampling).to.eql({
-      sampleRate: 1.0,
-      maxPerSecond: 3
-    })
+    expectSamplingData(firstSpanContext, 1.0, 5)
+    expectSamplingData(secondSpanContext, 1.0, 3)
   })
 })

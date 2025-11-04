@@ -7,10 +7,6 @@ const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
-const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
-const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
-const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const { MEASURED, BASE_SERVICE, ANALYTICS } = tags
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
@@ -55,13 +51,6 @@ function formatSpan (span) {
     duration: Math.round(span._duration * 1e6),
     links: []
   }
-}
-
-function setSingleSpanIngestionTags (span, options) {
-  if (!options) return
-  addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
-  addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
-  addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
 function extractSpanLinks (formattedSpan, span) {
@@ -164,7 +153,6 @@ function extractTags (formattedSpan, span) {
         addTag(formattedSpan.meta, formattedSpan.metrics, tag, value)
     }
   }
-  setSingleSpanIngestionTags(formattedSpan, context._spanSampling)
 
   addTag(formattedSpan.meta, formattedSpan.metrics, 'language', 'javascript')
   addTag(formattedSpan.meta, formattedSpan.metrics, PROCESS_ID, process.pid)

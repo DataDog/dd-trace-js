@@ -1,6 +1,7 @@
 'use strict'
 
 const { USER_KEEP, AUTO_KEEP } = require('../../../ext').priority
+const { SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN, SPAN_SAMPLING_RULE_RATE, SPAN_SAMPLING_MAX_PER_SECOND } = require('./constants')
 const SamplingRule = require('./sampling_rule')
 
 /**
@@ -46,10 +47,10 @@ class SpanSampler {
     for (const span of started) {
       const rule = this.findRule(span)
       if (rule && rule.sample(spanContext)) {
-        span.context()._spanSampling = {
-          sampleRate: rule.sampleRate,
-          maxPerSecond: rule.maxPerSecond
-        }
+        const tags = span.context()._tags;
+        tags[SPAN_SAMPLING_MECHANISM] = SAMPLING_MECHANISM_SPAN
+        tags[SPAN_SAMPLING_RULE_RATE] = rule.sampleRate
+        tags[SPAN_SAMPLING_MAX_PER_SECOND] = rule.maxPerSecond
       }
     }
   }
