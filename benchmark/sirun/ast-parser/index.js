@@ -1,6 +1,7 @@
 'use strict'
 
 /* eslint-disable import/no-extraneous-dependencies */
+/* eslint-disable n/no-extraneous-require */
 
 const {
   PARSE,
