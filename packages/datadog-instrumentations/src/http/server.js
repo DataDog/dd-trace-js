@@ -6,11 +6,6 @@ const {
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
-const httpNames = ['http', 'node:http']
-const httpsNames = ['https', 'node:https']
-
-// Generic HTTP server instrumentation - no product-specific logic
-
 const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
@@ -21,10 +16,12 @@ const startSetHeaderCh = channel('datadog:http:server:response:set-header:start'
 
 const requestFinishedSet = new WeakSet()
 
+const httpNames = ['http', 'node:http']
+const httpsNames = ['https', 'node:https']
+
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
-
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
@@ -57,7 +54,6 @@ function wrapResponseEmit (emit) {
     return emit.apply(this, arguments)
   }
 }
-
 function wrapEmit (emit) {
   return function (eventName, req, res) {
     if (!startServerCh.hasSubscribers) {
@@ -67,8 +63,8 @@ function wrapEmit (emit) {
     if (eventName === 'request') {
       res.req = req
 
-      // Publish start event for all HTTP requests (including PubSub/CloudEvent)
       const abortController = new AbortController()
+
       startServerCh.publish({ req, res, abortController })
 
       try {
@@ -225,6 +221,3 @@ function wrapEnd (end) {
     return end.apply(this, arguments)
   }
 }
-
-// Export the channel for plugins to use the same instance
-module.exports = { requestInterceptCh }

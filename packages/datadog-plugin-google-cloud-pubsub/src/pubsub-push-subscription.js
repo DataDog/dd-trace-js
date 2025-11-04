@@ -1,38 +1,37 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { getSharedChannel } = require('../../datadog-instrumentations/src/shared-channels')
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
 
   constructor (...args) {
     super(...args)
-    const channel = getSharedChannel('apm:http:server:request:intercept')
-    channel.subscribe(this.handleRequestIntercept.bind(this))
+
+    // Subscribe to HTTP start channel to intercept PubSub/CloudEvent requests
+    const startCh = channel('apm:http:server:request:start')
+    startCh.subscribe(({ req, res, abortController }) => {
+      this._handlePubSubRequest({ req, res, abortController })
+    })
   }
 
-  handleRequestIntercept (interceptData) {
-    const { req } = interceptData
-    const isPubSub = req.method === 'POST' && (
-      req.headers['user-agent']?.includes('APIs-Google') ||
-      req.headers['x-goog-pubsub-subscription-name'] ||
+  _handlePubSubRequest ({ req, res, abortController }) {
+    // Only check POST requests
+    if (req.method !== 'POST') return
+
+    const isPubSub = req.headers['user-agent']?.includes('APIs-Google') ||
       req.headers['x-goog-pubsub-message-id']
-    )
-    const isCloudEvent = req.method === 'POST' && req.headers['ce-specversion']
+
+    const isCloudEvent = req.headers['ce-specversion']
 
     if (!isPubSub && !isCloudEvent) return
 
-    interceptData.handled = true
-    this._processPubSubRequest(interceptData, isCloudEvent)
-  }
-
-  _processPubSubRequest ({ req, res, emit, server }, isCloudEvent) {
+    // Create HTTP span for push subscription
     const messageData = this._parseMessage(req, isCloudEvent)
     const parent = this._extractContext(messageData, req)
 
-    // Create HTTP span (no delivery span in Branch 1)
     const httpSpan = this.tracer.startSpan('http.request', {
       childOf: parent,
       tags: {
@@ -67,13 +66,13 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     context.tracer = this.tracer
     context.res = res
 
-    this.tracer.scope().activate(httpSpan, () => emit.call(server, 'request', req, res))
+    // Abort default HTTP instrumentation
+    if (abortController) abortController.abort()
   }
 
   _parseMessage (req, isCloudEvent) {
     // Check for unwrapped headers first
-    const hasPubSubHeaders = req.headers['x-goog-pubsub-subscription-name'] || 
-                              req.headers['x-goog-pubsub-message-id']
+    const hasPubSubHeaders = req.headers['x-goog-pubsub-message-id']
 
     if (hasPubSubHeaders) {
       const subscription = req.headers['x-goog-pubsub-subscription-name']

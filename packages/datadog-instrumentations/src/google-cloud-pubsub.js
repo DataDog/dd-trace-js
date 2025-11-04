@@ -15,7 +15,7 @@ try {
     const handler = new PushSubscriptionPlugin(tracer._tracer, {})
     handler.configure({})
   }
-} catch (err) {
+} catch {
   // Silent - push subscription plugin is optional
 }
 
