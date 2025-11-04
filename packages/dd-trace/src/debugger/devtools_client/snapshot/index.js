@@ -13,6 +13,10 @@ module.exports = {
   getLocalStateForCallFrame
 }
 
+function returnError () {
+  return new Error('Error getting local state')
+}
+
 async function getLocalStateForCallFrame (
   callFrame,
   {
@@ -37,7 +41,7 @@ async function getLocalStateForCallFrame (
     // TODO: We might be able to get part of the scope chain.
     // Consider if we could set errors just for the part of the scope chain that throws during collection.
     log.error('[debugger:devtools_client] Error getting local state for call frame', err)
-    return () => new Error('Error getting local state')
+    return returnError
   }
 
   // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`

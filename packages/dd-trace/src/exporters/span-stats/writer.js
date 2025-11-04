@@ -36,12 +36,11 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Lang': 'javascript',
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack'
-    }
+    },
+    protocol: url.protocol,
+    hostname: url.hostname,
+    port: url.port
   }
-
-  options.protocol = url.protocol
-  options.hostname = url.hostname
-  options.port = url.port
 
   log.debug('Request to the intake: %j', options)
 
