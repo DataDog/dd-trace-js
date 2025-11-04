@@ -29,6 +29,7 @@ fi
   cd ../../ &&
   npm install --global yarn || (sleep 60 && npm install --global yarn) \
     && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
+    && yarn add --silent acorn oxc-parser @swc/core
     && PLUGINS="bluebird|q|graphql|express" yarn services
 )
 
