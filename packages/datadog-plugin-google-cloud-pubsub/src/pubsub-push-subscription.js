@@ -4,8 +4,8 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { getSharedChannel } = require('../../datadog-instrumentations/src/shared-channels')
 
-class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
-  static get id () { return 'google-cloud-pubsub-transit-handler' }
+class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
+  static get id () { return 'google-cloud-pubsub-push-subscription' }
 
   constructor (...args) {
     super(...args)
@@ -157,4 +157,4 @@ class GoogleCloudPubsubTransitHandlerPlugin extends TracingPlugin {
   }
 }
 
-module.exports = GoogleCloudPubsubTransitHandlerPlugin
+module.exports = GoogleCloudPubsubPushSubscriptionPlugin
