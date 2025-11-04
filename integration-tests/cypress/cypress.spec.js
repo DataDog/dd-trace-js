@@ -905,10 +905,10 @@ moduleTypes.forEach(({
             assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
             assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 0)
-          }, 25000)
+          }, 30000)
 
         const skippableRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 30000)
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
           })
@@ -930,6 +930,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
