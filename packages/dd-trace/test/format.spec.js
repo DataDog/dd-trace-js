@@ -293,7 +293,7 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span)
+      trace = format(span, true)
 
       expect(trace.meta).to.include({
         chunk: 'test'
@@ -304,13 +304,29 @@ describe('format', () => {
       })
     })
 
+    it('should not extract trace chunk tags whens isNotChunkRoot', () => {
+      spanContext._trace.tags = {
+        chunk: 'test',
+        count: 1
+      }
+
+      trace = format(span, false)
+      expect(trace.meta).to.not.include({
+        chunk: 'test'
+      })
+
+      expect(trace.metrics).to.not.include({
+        count: 1
+      })
+    })
+
     it('should extract empty tags', () => {
       spanContext._trace.tags = {
         foo: '',
         count: 1
       }
 
-      trace = format(span)
+      trace = format(span, true)
 
       expect(trace.meta).to.include({
         foo: ''

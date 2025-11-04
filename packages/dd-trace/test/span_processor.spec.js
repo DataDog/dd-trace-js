@@ -115,7 +115,7 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('finished', [])
   })
 
-  it('should configure span sampler conrrectly', () => {
+  it('should configure span sampler correctly', () => {
     const config = {
       stats: { enabled: false },
       sampler: {
@@ -155,5 +155,17 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
     expect(exporter.export).not.to.have.been.called
+  })
+
+  it('should call format everytime a partial flush is triggered', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(activeSpan)
+
+    expect(trace).to.have.deep.property('started', [activeSpan])
+    expect(trace).to.have.deep.property('finished', [])
+    expect(format.callCount).to.equal(1)
   })
 })
