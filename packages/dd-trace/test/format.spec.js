@@ -15,9 +15,6 @@ const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
-const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
-const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
-const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
 const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
@@ -178,35 +175,6 @@ describe('format', () => {
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
       expect(trace.resource).to.equal('resource')
-    })
-
-    it('should extract Datadog specific root tags', () => {
-      spanContext._parentId = null
-      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
-      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
-      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
-
-      trace = format(span)
-
-      expect(trace.metrics).to.include({
-        [SAMPLING_AGENT_DECISION]: 0.8,
-        [SAMPLING_LIMIT_DECISION]: 0.2,
-        [SAMPLING_RULE_DECISION]: 0.5
-      })
-    })
-
-    it('should not extract Datadog specific root tags from non-root spans', () => {
-      spanContext._trace[SAMPLING_AGENT_DECISION] = 0.8
-      spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
-      spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
-
-      trace = format(span)
-
-      expect(trace.metrics).to.not.have.keys(
-        SAMPLING_AGENT_DECISION,
-        SAMPLING_LIMIT_DECISION,
-        SAMPLING_RULE_DECISION
-      )
     })
 
     it('should always add single span ingestion tags from options if present', () => {

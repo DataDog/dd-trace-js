@@ -3,8 +3,27 @@
 const util = require('util')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 
+const {
+  SAMPLING_RULE_DECISION,
+  SAMPLING_LIMIT_DECISION,
+  SAMPLING_AGENT_DECISION,
+  TOP_LEVEL_KEY
+} = require('../constants');
+
 // the lowercase, hex encoded upper 64 bits of a 128-bit trace id, if present
 const TRACE_ID_128 = '_dd.p.tid'
+
+function getChunkRoot (self) {
+  return self._trace.started[0]?.context() || self
+}
+
+function assignRootTag (self, prop, val) {
+  const chunkRoot = getChunkRoot(self)
+  if (!chunkRoot._parentId || chunkRoot._parentId.toString(10) === '0') {
+    chunkRoot._tags[SAMPLING_RULE_DECISION] = val
+    chunkRoot._tags[TOP_LEVEL_KEY] = 1
+  }
+}
 
 class DatadogSpanContext {
   constructor (props) {
@@ -27,7 +46,16 @@ class DatadogSpanContext {
     const self = this
     this._trace = props.trace || {
       started: [],
-      finished: []
+      finished: [],
+      set [SAMPLING_RULE_DECISION] (val) {
+        assignRootTag(self, SAMPLING_RULE_DECISION, val)
+      },
+      set [SAMPLING_LIMIT_DECISION] (val) {
+        assignRootTag(self, SAMPLING_LIMIT_DECISION, val)
+      },
+      set [SAMPLING_AGENT_DECISION] (val) {
+        assignRootTag(self, SAMPLING_AGENT_DECISION, val)
+      }
     }
     if (!props.trace) {
       Object.defineProperty(this._trace, 'tags', {

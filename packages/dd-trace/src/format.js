@@ -7,9 +7,6 @@ const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
-const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
-const SAMPLING_LIMIT_DECISION = constants.SAMPLING_LIMIT_DECISION
-const SAMPLING_AGENT_DECISION = constants.SAMPLING_AGENT_DECISION
 const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
@@ -17,7 +14,6 @@ const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
 const { MEASURED, BASE_SERVICE, ANALYTICS } = tags
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
-const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
 const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
@@ -37,7 +33,6 @@ function format (span) {
 
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
-  extractRootTags(formatted, span)
   extractTags(formatted, span)
 
   return formatted
@@ -176,19 +171,6 @@ function extractTags (formattedSpan, span) {
   addTag(formattedSpan.meta, formattedSpan.metrics, SAMPLING_PRIORITY_KEY, priority)
   addTag(formattedSpan.meta, formattedSpan.metrics, ORIGIN_KEY, origin)
   addTag(formattedSpan.meta, formattedSpan.metrics, HOSTNAME_KEY, hostname)
-}
-
-function extractRootTags (formattedSpan, span) {
-  const context = span.context()
-  const isLocalRoot = span === context._trace.started[0]
-  const parentId = context._parentId
-
-  if (!isLocalRoot || (parentId && parentId.toString(10) !== '0')) return
-
-  addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
-  addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
 function extractError (formattedSpan, error) {
