@@ -242,12 +242,9 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const cacheWriteTokens = usage.cache_creation_input_tokens
     const cacheReadTokens = usage.cache_read_input_tokens
 
-    const metrics = {}
-
-    metrics.inputTokens =
-      (inputTokens ?? 0) +
-      (cacheWriteTokens ?? 0) +
-      (cacheReadTokens ?? 0)
+    const metrics = {
+      inputTokens: (inputTokens ?? 0) + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0)
+    }
 
     if (outputTokens) metrics.outputTokens = outputTokens
     const totalTokens = metrics.inputTokens + (outputTokens ?? 0)
