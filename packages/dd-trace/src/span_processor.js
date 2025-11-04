@@ -46,6 +46,7 @@ class SpanProcessor {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
+
       let isChunkRoot = true
 
       for (const span of started) {

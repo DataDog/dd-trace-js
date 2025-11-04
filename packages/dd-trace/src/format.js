@@ -196,6 +196,7 @@ function extractChunkTags (formattedSpan, span, isChunkRoot) {
   const context = span.context()
 
   if (!isChunkRoot) return
+
   for (const [key, value] of Object.entries(context._trace.tags)) {
     addTag(formattedSpan.meta, formattedSpan.metrics, key, value)
   }
