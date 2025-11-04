@@ -74,7 +74,7 @@ describe('integrations', () => {
   }
 
   describe('langchain', () => {
-    const getEvents = useLlmObs({ plugin: 'langchain' })
+    const { getEvents } = useLlmObs({ plugin: 'langchain' })
 
     before(async () => {
       iastFilter.isDdTrace = file => {

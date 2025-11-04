@@ -3,7 +3,7 @@
 const { describe, it, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
-const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
+const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 
 const assert = require('node:assert')
 
@@ -16,7 +16,7 @@ describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
 
-  const getEvents = useLlmObs()
+  const { getEvents, getEvaluationMetrics } = useLlmObs()
 
   before(() => {
     tracer = require('../../../../dd-trace')
@@ -120,38 +120,37 @@ describe('end to end sdk integration tests', () => {
       Date.now.restore()
     })
 
-    // TODO(sabrenner): follow-up on re-enabling this test in a different PR
-    it.skip('submits evaluations', () => {
+    it('submits evaluations', async () => {
       llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
         llmobs.submitEvaluation(spanCtx, {
           label: 'foo',
           metricType: 'categorical',
-          value: 'bar'
+          value: 'bar',
+          tags: {
+            foo: 'bar'
+          }
         })
       })
 
-      // const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
-      // expect(spans).to.have.lengthOf(1)
-      // expect(llmobsSpans).to.have.lengthOf(1)
-      // expect(evaluationMetrics).to.have.lengthOf(1)
+      const { apmSpans, llmobsSpans } = await getEvents()
+      const llmobsEvaluationMetrics = await getEvaluationMetrics()
+      assert.equal(apmSpans.length, 1)
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsEvaluationMetrics.length, 1)
 
-      // // check eval metrics content
-      // const expected = [
-      //   {
-      //     trace_id: spans[0].context().toTraceId(true),
-      //     span_id: spans[0].context().toSpanId(),
-      //     label: 'foo',
-      //     metric_type: 'categorical',
-      //     categorical_value: 'bar',
-      //     ml_app: 'test',
-      //     timestamp_ms: 1234567890,
-      //     tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
-      //   }
-      // ]
-
-      // check(expected, evaluationMetrics)
+      assertLlmObsEvaluationMetric(llmobsEvaluationMetrics[0], {
+        traceId: llmobsSpans[0].trace_id,
+        spanId: llmobsSpans[0].span_id,
+        label: 'foo',
+        metricType: 'categorical',
+        mlApp: 'test',
+        value: 'bar',
+        tags: {
+          foo: 'bar'
+        }
+      })
     })
   })
 

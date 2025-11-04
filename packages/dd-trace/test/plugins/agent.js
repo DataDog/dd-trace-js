@@ -14,7 +14,8 @@ const { expect } = require('chai')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
-const llmobsHandlers = new Set()
+const llmobsSpanEventsHandlers = new Set()
+const llmobsEvaluationMetricsHandlers = new Set()
 let sockets = []
 let agent = null
 let listener = null
@@ -437,7 +438,15 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
-      llmobsHandlers.forEach(({ handler }) => {
+      llmobsSpanEventsHandlers.forEach(({ handler }) => {
+        handler(JSON.parse(req.body))
+      })
+      res.status(200).send()
+    })
+
+    // LLM Observability evaluations endpoint
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+      llmobsEvaluationMetricsHandlers.forEach(({ handler }) => {
         handler(JSON.parse(req.body))
       })
       res.status(200).send()
@@ -587,7 +596,18 @@ module.exports = {
    * @returns
    */
   useLlmobsTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+    return runCallbackAgainstTraces(callback, options, llmobsSpanEventsHandlers)
+  },
+
+  /**
+   * Use a callback handler for LLM Observability evaluation metrics.
+   * @param {RunCallbackAgainstTracesCallback} callback
+   * @param {RunCallbackAgainstTracesOptions} [options]
+   * @returns
+   */
+  useLlmobsEvaluationMetrics (callback, options) {
+    // these payloads are not traces but they're still just JSON payloads so this should be fine
+    return runCallbackAgainstTraces(callback, options, llmobsEvaluationMetricsHandlers)
   },
 
   /**
@@ -596,7 +616,8 @@ module.exports = {
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsHandlers.clear()
+    llmobsEvaluationMetricsHandlers.clear()
   },
 
   /**
@@ -625,7 +646,8 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsHandlers.clear()
+    llmobsEvaluationMetricsHandlers.clear()
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
