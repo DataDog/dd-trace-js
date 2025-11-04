@@ -121,7 +121,6 @@
     "version.js"
   ],
   "dependencies": {
-    "@apm-js-collab/code-transformer": "^0.8.2",
     "@datadog/libdatadog": "0.7.0",
     "@datadog/native-appsec": "10.3.0",
     "@datadog/native-iast-taint-tracking": "4.0.0",
