@@ -24,12 +24,24 @@ class DatadogSpanContext {
     this._traceparent = props.traceparent
     this._tracestate = props.tracestate
     this._noop = props.noop || null
+    const self = this
     this._trace = props.trace || {
       started: [],
-      finished: [],
-      tags: {}
+      finished: []
+    }
+    if (!props.trace) {
+      Object.defineProperty(this._trace, 'tags', {
+        enumerable: true,
+        get () {
+          return (self._trace.started[0]?.context() || self)._tags
+        }
+      })
     }
     this._otelSpanContext = undefined
+  }
+
+  setChunkTag (name, val) {
+    this._trace.started[0].setTag(name, val)
   }
 
   [util.inspect.custom] () {
