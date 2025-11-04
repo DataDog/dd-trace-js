@@ -91,7 +91,7 @@ describe('FlaggingProvider', () => {
 
   describe('inheritance', () => {
     it('should extend DatadogNodeServerProvider', () => {
-      const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+      const { DatadogNodeServerProvider } = require('../../src/openfeature/node-server/provider')
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       expect(provider).to.be.instanceOf(DatadogNodeServerProvider)

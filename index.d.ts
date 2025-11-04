@@ -1156,7 +1156,7 @@ declare namespace tracer {
   /**
    * Flagging Provider (OpenFeature-compatible).
    *
-   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Provides OpenFeature integration with Remote Config support for dynamic flag configuration.
    * Implements the OpenFeature Provider interface for flag evaluation.
    *
    * @beta This feature is in preview and not ready for production use
