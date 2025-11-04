@@ -17,14 +17,10 @@ const {
   TEST_NAME,
   TEST_SUITE,
   TEST_SOURCE_FILE,
-  TEST_SOURCE_START,
   TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   CI_APP_ORIGIN,
   JEST_TEST_RUNNER,
-  TEST_PARAMETERS,
-  TEST_CODE_OWNERS,
-  LIBRARY_VERSION,
   TEST_COMMAND,
   TEST_TOOLCHAIN,
   TEST_SUITE_ID,
@@ -32,8 +28,6 @@ const {
   TEST_MODULE_ID,
   TEST_MODULE
 } = require('../../dd-trace/src/plugins/util/test')
-
-const { version: ddTraceVersion } = require('../../../package.json')
 
 /**
  * The assertion timeout needs to be less than the test timeout,
@@ -106,101 +100,6 @@ describe('Plugin', function () {
           const loadedAgent = await loadAgent(moduleName, version, false, false)
           jestExecutable = loadedAgent.jestExecutable
           jestCommonOptions = loadedAgent.jestCommonOptions
-        })
-
-        it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
-          const tests = [
-            {
-              name: 'jest-test-suite tracer and active span are available',
-              status: 'pass',
-              extraTags: { 'test.add.stuff': 'stuff' }
-            },
-            { name: 'jest-test-suite done', status: 'pass' },
-            { name: 'jest-test-suite done fail', status: 'fail' },
-            { name: 'jest-test-suite done fail uncaught', status: 'fail' },
-            { name: 'jest-test-suite can do integration http', status: 'pass' },
-            {
-              name: 'jest-test-suite can do parameterized test',
-              status: 'pass',
-              parameters: { arguments: [1, 2, 3], metadata: {} }
-            },
-            {
-              name: 'jest-test-suite can do parameterized test',
-              status: 'pass',
-              parameters: { arguments: [2, 3, 5], metadata: {} }
-            },
-            { name: 'jest-test-suite promise passes', status: 'pass' },
-            { name: 'jest-test-suite promise fails', status: 'fail' },
-            { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
-            { name: 'jest-test-suite passes', status: 'pass' },
-            { name: 'jest-test-suite fails', status: 'fail' },
-            { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
-            { name: 'jest-test-suite skips', status: 'skip' },
-            { name: 'jest-test-suite skips todo', status: 'skip' },
-            { name: 'jest-circus-test-retry can retry', status: 'fail' },
-            { name: 'jest-circus-test-retry can retry', status: 'fail' },
-            { name: 'jest-circus-test-retry can retry', status: 'pass' }
-          ]
-
-          const assertionPromises = tests.map(({ name, status, error, parameters, extraTags }) => {
-            return agent.assertSomeTraces(trace => {
-              const testSpan = trace[0][0]
-              expect(testSpan.parent_id.toString()).to.equal('0')
-              expect(testSpan.meta).to.contain({
-                language: 'javascript',
-                service: 'test',
-                [ORIGIN_KEY]: CI_APP_ORIGIN,
-                [TEST_FRAMEWORK]: 'jest',
-                [TEST_NAME]: name,
-                [TEST_STATUS]: status,
-                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-test.js',
-                [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-test.js',
-                [TEST_TYPE]: 'test',
-                [JEST_TEST_RUNNER]: 'jest-circus',
-                [LIBRARY_VERSION]: ddTraceVersion,
-                [COMPONENT]: 'jest'
-              })
-              // reads from dd-trace-js' CODEOWNERS
-              expect(testSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
-
-              if (extraTags) {
-                expect(testSpan.meta).to.contain(extraTags)
-              }
-              if (error) {
-                expect(testSpan.meta[ERROR_MESSAGE]).to.include(error)
-              }
-              if (name === 'jest-test-suite can do integration http') {
-                const httpSpan = trace[0].find(span => span.name === 'http.request')
-                expect(httpSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-                expect(httpSpan.meta['http.url']).to.equal('http://test:123/')
-                expect(httpSpan.parent_id.toString()).to.equal(testSpan.span_id.toString())
-              }
-              if (parameters) {
-                expect(testSpan.meta[TEST_PARAMETERS]).to.equal(JSON.stringify(parameters))
-              }
-              expect(testSpan.type).to.equal('test')
-              expect(testSpan.name).to.equal('jest.test')
-              expect(testSpan.service).to.equal('test')
-              expect(testSpan.resource).to.equal(`packages/datadog-plugin-jest/test/jest-test.js.${name}`)
-              expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
-              expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-            }, {
-              timeoutMs: assertionTimeout,
-              spanResourceMatch: new RegExp(`${name}$`)
-            })
-          })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: 'jest-test.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
         })
 
         it('should detect an error in hooks', (done) => {

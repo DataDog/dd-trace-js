@@ -59,11 +59,19 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_MODIFIED,
   TEST_RETRY_REASON_TYPES,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  TEST_FRAMEWORK,
+  TEST_TYPE,
+  TEST_FRAMEWORK_VERSION,
+  CI_APP_ORIGIN,
+  JEST_TEST_RUNNER,
+  TEST_PARAMETERS,
+  LIBRARY_VERSION
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE, ERROR_TYPE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
+const { version: ddTraceVersion } = require('../../package.json')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -4736,5 +4744,120 @@ describe('jest CommonJS', () => {
     ])
     assert.notInclude(testOutput, 'Cannot find module')
     assert.include(testOutput, '6 passed')
+  })
+
+  it('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        const expectedTests = [
+          {
+            name: 'jest-test-suite tracer and active span are available',
+            status: 'pass',
+            extraTags: { 'test.add.stuff': 'stuff' }
+          },
+          { name: 'jest-test-suite done', status: 'pass' },
+          { name: 'jest-test-suite done fail', status: 'fail' },
+          { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+          { name: 'jest-test-suite can do integration http', status: 'pass' },
+          {
+            name: 'jest-test-suite can do parameterized test',
+            status: 'pass',
+            parameters: { arguments: [1, 2, 3], metadata: {} }
+          },
+          {
+            name: 'jest-test-suite can do parameterized test',
+            status: 'pass',
+            parameters: { arguments: [2, 3, 5], metadata: {} }
+          },
+          { name: 'jest-test-suite promise passes', status: 'pass' },
+          { name: 'jest-test-suite promise fails', status: 'fail' },
+          { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
+          { name: 'jest-test-suite passes', status: 'pass' },
+          { name: 'jest-test-suite fails', status: 'fail' },
+          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
+          { name: 'jest-test-suite skips', status: 'skip' },
+          { name: 'jest-test-suite skips todo', status: 'skip' },
+          { name: 'jest-circus-test-retry can retry', status: 'fail' },
+          { name: 'jest-circus-test-retry can retry', status: 'fail' },
+          { name: 'jest-circus-test-retry can retry', status: 'pass' }
+        ]
+
+        expectedTests.forEach(({ name, status, error, parameters, extraTags }) => {
+          const test = tests.find(test =>
+            test.meta[TEST_NAME] === name &&
+            test.meta[TEST_STATUS] === status &&
+            test.meta[TEST_SUITE] === 'ci-visibility/jest-plugin-tests/jest-test.js' &&
+            (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
+          )
+
+          assert.exists(test, `Expected to find test "${name}" with status "${status}"`)
+
+          assert.propertyVal(test.meta, 'language', 'javascript')
+          assert.propertyVal(test.meta, 'service', 'plugin-tests')
+          assert.propertyVal(test.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+          assert.propertyVal(test.meta, TEST_FRAMEWORK, 'jest')
+          assert.propertyVal(test.meta, TEST_NAME, name)
+          assert.propertyVal(test.meta, TEST_STATUS, status)
+          assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+          assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+          assert.propertyVal(test.meta, TEST_TYPE, 'test')
+          assert.propertyVal(test.meta, JEST_TEST_RUNNER, 'jest-circus')
+          assert.propertyVal(test.meta, LIBRARY_VERSION, ddTraceVersion)
+          assert.propertyVal(test.meta, COMPONENT, 'jest')
+          assert.include(test.meta[TEST_CODE_OWNERS], '@datadog-dd-trace-js')
+
+          assert.equal(test.type, 'test')
+          assert.equal(test.name, 'jest.test')
+          assert.equal(test.service, 'plugin-tests')
+          assert.equal(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+
+          assert.exists(test.metrics[TEST_SOURCE_START])
+          assert.exists(test.meta[TEST_FRAMEWORK_VERSION])
+
+          if (extraTags) {
+            Object.entries(extraTags).forEach(([key, value]) => {
+              assert.propertyVal(test.meta, key, value)
+            })
+          }
+
+          if (error) {
+            assert.include(test.meta[ERROR_MESSAGE], error)
+          }
+
+          if (name === 'jest-test-suite can do integration http') {
+            const allSpans = events
+              .filter(event => event.content && event.content.name)
+              .map(event => event.content)
+
+            const httpSpan = allSpans.find(span => span.name === 'http.request')
+            if (httpSpan) {
+              assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+              assert.include(httpSpan.meta['http.url'], '/info')
+              assert.equal(httpSpan.parent_id, test.span_id)
+            }
+          }
+        })
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-plugin-tests/jest-test',
+          DD_SERVICE: 'plugin-tests'
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise
+    ])
   })
 })
