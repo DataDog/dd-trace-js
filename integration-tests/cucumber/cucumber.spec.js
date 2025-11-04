@@ -1841,10 +1841,18 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: envVars,
+                  env: {
+                    ...envVars,
+                    DD_TRACE_DEBUG: '1',
+                    DD_TRACE_LOG_LEVEL: 'warn',
+                  },
                   stdio: 'pipe'
                 }
               )
+
+              // TODO: remove once we figure out flakiness
+              childProcess.stdout.pipe(process.stdout)
+              childProcess.stderr.pipe(process.stderr)
 
               childProcess.on('exit', () => {
                 Promise.all([eventsPromise, logsPromise]).then(() => {
