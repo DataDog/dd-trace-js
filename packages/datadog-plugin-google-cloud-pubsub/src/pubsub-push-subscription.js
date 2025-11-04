@@ -17,7 +17,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const { req } = interceptData
     const isPubSub = req.method === 'POST' && (
       req.headers['user-agent']?.includes('APIs-Google') ||
-      Object.keys(req.headers).some(k => k.toLowerCase().startsWith('x-goog-pubsub-'))
+      req.headers['x-goog-pubsub-subscription-name'] ||
+      req.headers['x-goog-pubsub-message-id']
     )
     const isCloudEvent = req.method === 'POST' && req.headers['ce-specversion']
 
@@ -71,7 +72,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   _parseMessage (req, isCloudEvent) {
     // Check for unwrapped headers first
-    const hasPubSubHeaders = Object.keys(req.headers).some(k => k.toLowerCase().startsWith('x-goog-pubsub-'))
+    const hasPubSubHeaders = req.headers['x-goog-pubsub-subscription-name'] || 
+                              req.headers['x-goog-pubsub-message-id']
 
     if (hasPubSubHeaders) {
       const subscription = req.headers['x-goog-pubsub-subscription-name']
