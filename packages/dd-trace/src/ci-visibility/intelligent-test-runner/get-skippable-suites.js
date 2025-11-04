@@ -13,8 +13,9 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES
 } = require('../../ci-visibility/telemetry')
+const { withCache } = require('../cache/request-cache')
 
-function getSkippableSuites ({
+function getSkippableSuitesUncached ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -116,5 +117,24 @@ function getSkippableSuites ({
     }
   })
 }
+
+// Wrap with cache - cache key based on service, env, repo, sha, configurations, and testLevel
+const getSkippableSuites = withCache(
+  'skippable-suites',
+  getSkippableSuitesUncached,
+  (params) => ({
+    service: params.service,
+    env: params.env,
+    repositoryUrl: params.repositoryUrl,
+    sha: params.sha,
+    testLevel: params.testLevel,
+    osVersion: params.osVersion,
+    osPlatform: params.osPlatform,
+    osArchitecture: params.osArchitecture,
+    runtimeName: params.runtimeName,
+    runtimeVersion: params.runtimeVersion,
+    custom: params.custom
+  })
+)
 
 module.exports = { getSkippableSuites }

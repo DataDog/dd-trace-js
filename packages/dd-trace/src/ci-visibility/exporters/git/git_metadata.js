@@ -31,6 +31,7 @@ const {
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
   TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES
 } = require('../../../ci-visibility/telemetry')
+const { withCache } = require('../../cache/request-cache')
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
@@ -63,7 +64,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
+function getCommitsToUploadUncached ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -124,6 +125,17 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     callback(null, commitsToUpload)
   })
 }
+
+// Wrap getCommitsToUpload with cache - cache key based on repository URL and SHA
+const getCommitsToUpload = withCache(
+  'commits-to-upload',
+  getCommitsToUploadUncached,
+  (params) => ({
+    repositoryUrl: params.repositoryUrl,
+    sha: params.latestCommits[0] // Use head commit SHA as cache key
+  })
+  // Uses default TTL of 2 hours
+)
 
 /**
  * This function uploads a git packfile
