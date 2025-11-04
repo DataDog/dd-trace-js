@@ -37,8 +37,9 @@ class LangChainLLMObsHandler {
       return message
     }
     try {
-      const messageContent = {}
-      messageContent.content = message.content || ''
+      const messageContent = {
+        content: message.content || ''
+      }
 
       const role = this.getRole(message)
       if (role) messageContent.role = role
