@@ -30,6 +30,8 @@ class SpanProcessor {
   }
 
   process (span) {
+    spanProcessCh.publish({ span })
+
     const spanContext = span.context()
     const active = []
     const formatted = []
@@ -57,8 +59,6 @@ class SpanProcessor {
           isChunkRoot = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
-
-          spanProcessCh.publish({ span })
         }
       }
 
