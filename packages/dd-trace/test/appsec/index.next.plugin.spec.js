@@ -16,6 +16,9 @@ describe('test suite', () => {
     }
 
     const realVersion = require(`../../../../versions/next@${version}`).version()
+    if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
+      return
+    }
 
     const tests = [
       {
