@@ -77,9 +77,8 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
-    this._spanContext = this._createContext(parent, fields)
+    this._spanContext = this._createContext(parent, fields, tags)
     this._spanContext._name = operationName
-    this._spanContext._tags = tags
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -328,7 +327,7 @@ class DatadogSpan {
     return sanitizedAttributes
   }
 
-  _createContext (parent, fields) {
+  _createContext (parent, fields, tags) {
     let spanContext
     let startTime
 
@@ -343,6 +342,7 @@ class DatadogSpan {
       if (!spanContext._trace.startTime) {
         startTime = dateNow()
       }
+      Object.assign(spanContext._tags, tags)
     } else if (parent) {
       spanContext = new SpanContext({
         traceId: parent._traceId,
@@ -351,7 +351,8 @@ class DatadogSpan {
         sampling: parent._sampling,
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
-        tracestate: parent._tracestate
+        tracestate: parent._tracestate,
+        tags
       })
 
       if (!spanContext._trace.startTime) {
@@ -362,7 +363,8 @@ class DatadogSpan {
       startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
+        tags
       })
       spanContext._trace.startTime = startTime
 

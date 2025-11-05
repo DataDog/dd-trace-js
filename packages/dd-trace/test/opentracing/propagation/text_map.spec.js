@@ -30,18 +30,21 @@ describe('TextMapPropagator', () => {
   let telemetryMetrics
 
   const createContext = (params = {}) => {
-    const trace = { started: [], finished: [], tags: {} }
-    const spanContext = new SpanContext({
+    const options = {
       traceId: id('123', 10),
       spanId: id('456', 10),
       isRemote: params.isRemote === undefined ? true : params.isRemote,
       baggageItems,
       ...params,
-      trace: {
+    }
+    if (params.trace) {
+      const trace = { started: [], finished: [], tags: {} }
+      options.trace = {
         ...trace,
         ...params.trace
       }
-    })
+    }
+    const spanContext = new SpanContext(options)
 
     return spanContext
   }
@@ -1201,10 +1204,8 @@ describe('TextMapPropagator', () => {
         expect(spanContext).to.deep.equal(createContext({
           traceId: id('00000000000002340000000000000123', 16),
           spanId: id('456', 16),
-          trace: {
-            tags: {
-              '_dd.p.tid': '0000000000000234'
-            }
+          tags: {
+            '_dd.p.tid': '0000000000000234'
           }
         }))
       })

@@ -86,6 +86,9 @@ describe('SpanContext', () => {
       _trace: {
         started: [],
         finished: [],
+        '_dd.rule_psr': undefined,
+        '_dd.limit_psr': undefined,
+        '_dd.agent_psr': undefined,
         tags: {}
       },
       _traceparent: undefined,

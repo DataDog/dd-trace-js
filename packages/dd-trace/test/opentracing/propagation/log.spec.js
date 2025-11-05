@@ -182,12 +182,8 @@ describe('LogPropagator', () => {
       expect(spanContext).to.deep.equal(new SpanContext({
         traceId: id('1234567812345678', 16),
         spanId: id('456', 10),
-        trace: {
-          started: [],
-          finished: [],
-          tags: {
-            '_dd.p.tid': '8765432187654321'
-          }
+        tags: {
+          '_dd.p.tid': '8765432187654321'
         }
       }))
     })
