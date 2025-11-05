@@ -7,6 +7,7 @@ const crypto = require('crypto')
 
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config-helper')
+const { isTrue } = require('../../util')
 
 // Cache TTL in milliseconds (default: 2 hours for a test session)
 const DEFAULT_CACHE_TTL = 2 * 60 * 60 * 1000
@@ -14,8 +15,7 @@ const DEFAULT_CACHE_TTL = 2 * 60 * 60 * 1000
 // Check if caching is enabled via environment variable
 function isCacheEnabled () {
   const cacheEnabled = getEnvironmentVariable('DD_CIVISIBILITY_CACHE_ENABLED')
-  // Cache is enabled by default unless explicitly set to false
-  return cacheEnabled !== 'false' && cacheEnabled !== '0'
+  return isTrue(cacheEnabled)
 }
 
 // Get cache directory - use custom dir or temp dir for session-scoped cache
