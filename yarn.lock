@@ -390,10 +390,10 @@
     resolve-from "^3.0.0"
     rimraf "^3.0.0"
 
-"@isaacs/ttlcache@^1.4.1":
-  version "1.4.1"
-  resolved "https://registry.yarnpkg.com/@isaacs/ttlcache/-/ttlcache-1.4.1.tgz#21fb23db34e9b6220c6ba023a0118a2dd3461ea2"
-  integrity sha512-RQgQ4uQ+pLbqXfOmieB91ejmLwvSgv9nLx6sT6sD83s7umBypgg+OIBOBbEUiJXrfpnp9j0mRhYYdzp9uqq3lA==
+"@isaacs/ttlcache@^2.0.1":
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/@isaacs/ttlcache/-/ttlcache-2.0.1.tgz#aa3fbd0ba0d715e754845237b827f8e9e323f038"
+  integrity sha512-yq2z+rXePnXTmZiC1ru4aMgRmjvHu8BJIZagF/R0Tck3ciGgNrrWd2eBh/vopK6cIBWIc4BH3Sfb84PEpzB6UA==
 
 "@istanbuljs/load-nyc-config@^1.0.0":
   version "1.1.0"
