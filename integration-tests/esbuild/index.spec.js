@@ -31,10 +31,10 @@ const esbuildVersions = ['0.16.12', maximumEsbuildVersion]
 const timeout = 1000 * 45
 
 esbuildVersions.forEach((version) => {
-  describe(`esbuild ${version}`, () => {
-    before(function () {
-      this.timeout(timeout)
+  describe(`esbuild ${version}`, function () {
+    this.timeout(timeout)
 
+    before(() => {
       process.chdir(TEST_DIR)
       execSync('npm install', {
         timeout
@@ -51,9 +51,7 @@ esbuildVersions.forEach((version) => {
       })
     })
 
-    it('works', function () {
-      this.timeout(timeout)
-
+    it('works', () => {
       execSync('npm run build')
 
       try {
@@ -68,49 +66,37 @@ esbuildVersions.forEach((version) => {
       }
     })
 
-    it('does not bundle modules listed in .external', function () {
-      this.timeout(timeout)
-
+    it('does not bundle modules listed in .external', () => {
       execSync('node ./build-and-test-skip-external.js', {
         timeout
       })
     })
 
-    it('handles typescript apps that import without file extensions', function () {
-      this.timeout(timeout)
-
+    it('handles typescript apps that import without file extensions', () => {
       execSync('node ./build-and-test-typescript.mjs', {
         timeout
       })
     })
 
-    it('handles the complex aws-sdk package with dynamic requires', function () {
-      this.timeout(timeout)
-
+    it('handles the complex aws-sdk package with dynamic requires', () => {
       execSync('node ./build-and-test-aws-sdk.js', {
         timeout
       })
     })
 
-    it('handles scoped node_modules', function () {
-      this.timeout(timeout)
-
+    it('handles scoped node_modules', () => {
       execSync('node ./build-and-test-koa.mjs', {
         timeout
       })
     })
 
-    it('handles instrumentations where the patching function is a property of the hook', function () {
-      this.timeout(timeout)
-
+    it('handles instrumentations where the patching function is a property of the hook', () => {
       execSync('node ./build-and-test-openai.js', {
         timeout
       })
     })
 
-    it('injects Git metadata into bundled applications', function () {
-      this.timeout(timeout)
-
+    it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout
       })
@@ -123,18 +109,14 @@ esbuildVersions.forEach((version) => {
         rmSync('./basic-test.mjs', { force: true })
       })
 
-      it('works', function () {
-        this.timeout(timeout)
-
+      it('works', () => {
         execSync('npm run build:esm')
         execSync('npm run built:esm', {
           timeout
         })
       })
 
-      it('should not override existing js banner', function () {
-        this.timeout(timeout)
-
+      it('should not override existing js banner', () => {
         execSync('node ./build-and-run.esm-unrelated-js-banner.mjs', {
           timeout
         })
@@ -143,9 +125,7 @@ esbuildVersions.forEach((version) => {
         assert.match(builtFile, /\/\* js test \*\//m)
       })
 
-      it('should contain the definitions when esm is inferred from outfile', function () {
-        this.timeout(timeout)
-
+      it('should contain the definitions when esm is inferred from outfile', () => {
         execSync('node ./build-and-run.esm-relying-in-extension.mjs', {
           timeout
         })
@@ -154,9 +134,7 @@ esbuildVersions.forEach((version) => {
         assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
       })
 
-      it('should contain the definitions when esm is inferred from format', function () {
-        this.timeout(timeout)
-
+      it('should contain the definitions when esm is inferred from format', () => {
         execSync('node ./build-and-run.esm-relying-in-format.mjs', {
           timeout
         })
@@ -165,9 +143,7 @@ esbuildVersions.forEach((version) => {
         assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
       })
 
-      it('should contain the definitions when format is inferred from out extension', function () {
-        this.timeout(timeout)
-
+      it('should contain the definitions when format is inferred from out extension', () => {
         execSync('node ./build-and-run.esm-relying-in-out-extension.mjs', {
           timeout
         })
@@ -176,9 +152,7 @@ esbuildVersions.forEach((version) => {
         assert.match(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
       })
 
-      it('should not contain the definitions when no esm is specified', function () {
-        this.timeout(timeout)
-
+      it('should not contain the definitions when no esm is specified', () => {
         execSync('node ./build.js', {
           timeout
         })
@@ -187,17 +161,13 @@ esbuildVersions.forEach((version) => {
         assert.doesNotMatch(builtFile, /globalThis\.__filename \?\?= \$dd_fileURLToPath\(import\.meta\.url\);/m)
       })
 
-      it('should not crash when it is already patched using global', function () {
-        this.timeout(timeout)
-
+      it('should not crash when it is already patched using global', () => {
         execSync('node ./build-and-run.esm-patched-global-banner.mjs', {
           timeout
         })
       })
 
-      it('should not crash when it is already patched using const', function () {
-        this.timeout(timeout)
-
+      it('should not crash when it is already patched using const', () => {
         execSync('node ./build-and-run.esm-patched-const-banner.mjs', {
           timeout
         })
