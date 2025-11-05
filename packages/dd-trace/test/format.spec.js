@@ -304,7 +304,7 @@ describe('format', () => {
       })
     })
 
-    it('should not extract trace chunk tags whens isNotChunkRoot', () => {
+    it('should not extract trace chunk tags when not chunk root', () => {
       spanContext._trace.tags = {
         chunk: 'test',
         count: 1
