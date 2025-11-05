@@ -627,20 +627,29 @@ function getCodeOwnersFileEntries (rootDir) {
   return entries.reverse()
 }
 
+const codeOwnersPerFileName = new Map()
+
 function getCodeOwnersForFilename (filename, entries) {
   if (!entries) {
     return null
+  }
+  if (codeOwnersPerFileName.has(filename)) {
+    return codeOwnersPerFileName.get(filename)
   }
   for (const entry of entries) {
     try {
       const isResponsible = ignore().add(entry.pattern).ignores(filename)
       if (isResponsible) {
-        return JSON.stringify(entry.owners)
+        const codeOwners = JSON.stringify(entry.owners)
+        codeOwnersPerFileName.set(filename, codeOwners)
+        return codeOwners
       }
     } catch {
+      codeOwnersPerFileName.set(filename, null)
       return null
     }
   }
+  codeOwnersPerFileName.set(filename, null)
   return null
 }
 
