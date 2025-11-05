@@ -3,6 +3,10 @@
 const pick = require('../../datadog-core/src/utils/src/pick')
 const log = require('../../dd-trace/src/log')
 
+function getEmptyObject () {
+  return {}
+}
+
 module.exports = {
   getMethodMetadata (path, kind) {
     const tags = {
@@ -57,6 +61,6 @@ module.exports = {
       log.error('Expected \'%s\' to be an array or function.', filter)
     }
 
-    return () => ({})
+    return getEmptyObject
   }
 }
