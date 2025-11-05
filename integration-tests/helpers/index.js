@@ -422,7 +422,7 @@ varySandbox.VARIANTS = ['default', 'star', 'destructure']
 function telemetryForwarder (shouldExpectTelemetryPoints = true) {
   process.env.DD_TELEMETRY_FORWARDER_PATH =
     path.join(__dirname, '..', 'telemetry-forwarder.sh')
-  process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
+  process.env.FORWARDER_OUT = path.join(__dirname, 'output', `forwarder-${Date.now()}.out`)
 
   let retries = 0
 
