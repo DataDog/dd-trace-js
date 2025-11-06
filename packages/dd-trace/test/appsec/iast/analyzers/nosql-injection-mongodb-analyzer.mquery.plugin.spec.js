@@ -6,6 +6,7 @@ const { describe } = require('mocha')
 const os = require('node:os')
 const path = require('node:path')
 const fs = require('node:fs')
+const semver = require('semver')
 
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
@@ -25,12 +26,15 @@ describe('nosql injection detection with mquery', () => {
       before(async () => {
         const id = require('../../../../src/id')
         dbName = id().toString()
-        const mongo = require(`../../../../../../versions/mongodb@${mongodbVersion}`).get()
+        const mongoRequire = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
+        const mongo = mongoRequire.get()
+        const mongoVersion = mongoRequire.version()
 
-        client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true
-        })
+        const connectionOptions = semver.satisfies(mongoVersion, '<4')
+          ? { useNewUrlParser: true, useUnifiedTopology: true }
+          : {}
+
+        client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`, connectionOptions)
         await client.connect()
 
         testCollection = client.db().collection('Test')
