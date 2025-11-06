@@ -1,52 +1,26 @@
-import regexpEscape from 'escape-string-regexp'
-import * as iitm from 'import-in-the-middle/hook.mjs'
-import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
-import configHelper from './packages/dd-trace/src/config-helper.js'
+import { Module } from 'module'
+import * as iitm from './packages/dd-trace/src/loaders/iitm.mjs'
+import * as rewriter from './packages/dd-trace/src/appsec/iast/taint-tracking/rewriter-esm.mjs'
 
-// For some reason `getEnvironmentVariable` is not otherwise available to ESM.
-const env = configHelper.getEnvironmentVariable
+// If `Module.register` is supported, the rewriter will be registered later
+// once the config object is available so that IAST can use it. This is not
+// needed in old versions of Node without `Module.require` because IAST is not
+// supported in those versions and for instrumentation we don't need the config
+// object so we can just load the hook right away in this file.
+const hasRewriter = Module.hasOwnProperty('register')
 
-function initialize (data = {}) {
-  data.include ??= []
-  data.exclude ??= []
-
-  addInstrumentations(data)
-  addSecurityControls(data)
-  addExclusions(data)
-
-  return iitm.initialize(data)
-}
-
-function addInstrumentations (data) {
-  const instrumentations = Object.keys(hooks)
-
-  for (const moduleName of instrumentations) {
-    data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
+const initialize = hasRewriter
+  ? iitm.initialize
+  : function initialize (data) {
+    iitm.initialize(data)
+    rewriter.initialize(data)
   }
-}
 
-function addSecurityControls (data) {
-  const securityControls = (env('DD_IAST_SECURITY_CONTROLS_CONFIGURATION') || '')
-    .split(';')
-    .map(sc => sc.trim().split(':')[2])
-    .filter(Boolean)
-    .map(sc => sc.trim())
-
-  for (const subpath of securityControls) {
-    data.include.push(new RegExp(regexpEscape(subpath)))
+const load = hasRewriter
+  ? iitm.load
+  : function load (url, context, nextLoad) {
+    iitm.load(url, context, (url, context) => rewriter.load(url, context, nextLoad))
   }
-}
 
-function addExclusions (data) {
-  data.exclude.push(
-    /middle/,
-    /langsmith/,
-    /openai\/_shims/,
-    /openai\/resources\/chat\/completions\/messages/,
-    /openai\/agents-core\/dist\/shims/,
-    /@anthropic-ai\/sdk\/_shims/
-  )
-}
-
-export { initialize }
-export { load, getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+export { initialize, load }
+export { getFormat, resolve, getSource } from './packages/dd-trace/src/loaders/iitm.mjs'
