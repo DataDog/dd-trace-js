@@ -43,8 +43,12 @@ updates:
       - semver-patch
     ignore:
       # Internal dependencies that we update manually
+      - dependency-name: "@datadog/libdatadog"
       - dependency-name: "@datadog/native-appsec"
       - dependency-name: "@datadog/native-iast-taint-tracking"
+      - dependency-name: "@datadog/native-metrics"
+      - dependency-name: "@datadog/pprof"
+      - dependency-name: "@datadog/sketches-js"
       - dependency-name: "@datadog/wasm-js-rewriter"
 
       - dependency-name: "@types/node"
@@ -91,12 +95,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-        exclude-patterns:
-          # Add entries that we should update manually.
-          - "@datadog/libdatadog"
-          - "@datadog/native-metrics"
-          - "@datadog/pprof"
-          - "@datadog/sketches-js"
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
