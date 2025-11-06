@@ -879,8 +879,7 @@ describe('reporter', () => {
       expect(span.addTags).to.have.been.calledOnceWithExactly({
         'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42',
-        'http.endpoint': '/path/:param'
+        'http.response.headers.content-length': '42'
       })
     })
 

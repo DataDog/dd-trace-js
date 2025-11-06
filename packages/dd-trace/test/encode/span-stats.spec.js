@@ -42,6 +42,8 @@ describe('span-stats-encode', () => {
       Resource: 'GET',
       Synthetics: false,
       HTTPStatusCode: 200,
+      HTTPMethod: 'GET',
+      HTTPEndpoint: '/users/:id',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -160,5 +162,16 @@ describe('span-stats-encode', () => {
     expect(decodedStat)
     expect(decodedStat.Service).to.equal(DEFAULT_SERVICE_NAME)
     expect(decodedStat.Name).to.equal(DEFAULT_SPAN_NAME)
+  })
+
+  it('should encode HTTPMethod and HTTPEndpoint', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    expect(decodedStat.HTTPMethod).to.equal('GET')
+    expect(decodedStat.HTTPEndpoint).to.equal('/users/:id')
   })
 })

@@ -27,6 +27,7 @@ const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
+const HTTP_ENDPOINT = tags.HTTP_ENDPOINT
 
 describe('plugins/util/web', () => {
   let web
@@ -933,44 +934,40 @@ describe('plugins/util/web', () => {
     })
   })
 
-  describe('obfuscateQs', () => {
-    const url = 'http://perdu.com/path/'
-    const qs = '?data=secret'
+  describe('http.endpoint tagging', () => {
+    it('should derive http.endpoint when no framework route is available', () => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: true })
+      req.method = 'GET'
+      req.url = '/api/orders/12345/items?foo=bar'
 
-    let config
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
 
-    beforeEach(() => {
-      config = {
-        queryStringObfuscation: /secret/gi
-      }
+      res.statusCode = 200
+      res.end()
+
+      expect(tags).to.not.have.property(HTTP_ROUTE)
+      expect(tags).to.have.property(HTTP_ENDPOINT, '/api/orders/{param:int}/items')
     })
 
-    it('should not obfuscate when passed false', () => {
-      config.queryStringObfuscation = false
+    it('should not set http.endpoint when resource renaming is disabled', () => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: false })
+      req.method = 'GET'
+      req.url = '/api/orders/12345/items'
 
-      const result = web.obfuscateQs(config, url + qs)
+      web.instrument(tracer, config, req, res, 'test.request', () => {
+        span = tracer.scope().active()
+        tags = span.context()._tags
+      })
 
-      expect(result).to.equal(url + qs)
-    })
+      res.statusCode = 200
+      res.end()
 
-    it('should not obfuscate when no querystring is found', () => {
-      const result = web.obfuscateQs(config, url)
-
-      expect(result).to.equal(url)
-    })
-
-    it('should remove the querystring if passed true', () => {
-      config.queryStringObfuscation = true
-
-      const result = web.obfuscateQs(config, url + qs)
-
-      expect(result).to.equal(url)
-    })
-
-    it('should obfuscate only the querystring part of the url', () => {
-      const result = web.obfuscateQs(config, url + 'secret/' + qs)
-
-      expect(result).to.equal(url + 'secret/?data=<redacted>')
+      expect(tags).to.not.have.property(HTTP_ENDPOINT)
+      expect(tags).to.not.have.property(HTTP_ROUTE)
+      expect(tags).to.have.property(RESOURCE_NAME, 'GET')
     })
   })
 })
