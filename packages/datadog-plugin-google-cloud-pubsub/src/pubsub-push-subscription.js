@@ -1,6 +1,8 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const SpanContext = require('../../dd-trace/src/opentracing/span_context')
+const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
 const { storage } = require('../../datadog-core')
 const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
@@ -40,8 +42,20 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const tracer = this.tracer || require('../../dd-trace')
     if (!tracer || !tracer._tracer) return
 
-    const parentContext = tracer._tracer.extract('text_map', messageData.attrs) || undefined
-    const deliverySpan = this._createDeliverySpan(messageData, parentContext, tracer)
+    const originalContext = this._extractContext(messageData, tracer)
+    const pubsubRequestContext = this._reconstructPubSubContext(messageData.attrs) || originalContext
+
+    const isSameTrace = originalContext && pubsubRequestContext &&
+      originalContext.toTraceId() === pubsubRequestContext.toTraceId()
+
+    const deliverySpan = this._createDeliverySpan(
+      messageData,
+      isSameTrace ? pubsubRequestContext : originalContext,
+      !isSameTrace, // Add span link only if different trace
+      tracer
+    )
+
+    // Finish delivery span when response completes
     const finishDelivery = () => {
       if (!deliverySpan.finished) {
         deliverySpan.finish()
@@ -70,7 +84,38 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return { message, subscription, attrs: req.headers, projectId, topicName }
   }
 
-  _createDeliverySpan (messageData, parentContext, tracer) {
+  _extractContext (messageData, tracer) {
+    // messageData.attrs is req.headers, so just extract from there
+    // Use the actual tracer instance (_tracer) for proper 128-bit trace ID extraction
+    return tracer._tracer.extract('text_map', messageData.attrs) || undefined
+  }
+
+  _reconstructPubSubContext (attrs) {
+    const traceIdLower = attrs['_dd.pubsub_request.trace_id']
+    const spanId = attrs['_dd.pubsub_request.span_id']
+    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
+
+    if (!traceIdLower || !spanId) return null
+
+    try {
+      const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
+      const traceId = id(traceId128, 16)
+      const parentId = id(spanId, 16)
+
+      const tags = {}
+      if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
+
+      return new SpanContext({
+        traceId,
+        spanId: parentId,
+        tags
+      })
+    } catch {
+      return null
+    }
+  }
+
+  _createDeliverySpan (messageData, parentContext, addSpanLink, tracer) {
     const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription.split('/').pop() || subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
@@ -95,6 +140,16 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
     this._addBatchMetadata(span, attrs)
+
+    // Add OpenTelemetry span link if needed
+    if (addSpanLink && parentContext) {
+      if (typeof span.addLink === 'function') {
+        span.addLink(parentContext, {})
+      } else {
+        span._links = span._links || []
+        span._links.push({ context: parentContext, attributes: {} })
+      }
+    }
 
     return span
   }
