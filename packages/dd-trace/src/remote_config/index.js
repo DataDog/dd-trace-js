@@ -6,6 +6,7 @@ const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const { setCollectionMode } = require('../appsec/user_tracking')
 const log = require('../log')
+const { updateConfig } = require('../telemetry')
 
 let rc
 
@@ -71,6 +72,14 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
     } else {
       appsec.disable()
     }
+
+    updateConfig([
+      {
+        name: 'appsec.enabled',
+        origin: action === 'apply' || action === 'modify' ? 'remote_config' : config.getOrigin('appsec.enabled'),
+        value: shouldEnable
+      }
+    ], config)
   }
 }
 
