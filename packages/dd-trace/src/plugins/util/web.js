@@ -280,7 +280,14 @@ const web = {
   startChildSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+
+    // Check async storage first - if there's a delivery span, use it as parent
+    // This ensures pubsub.delivery spans properly parent HTTP spans
+    const { storage } = require('../../../../datadog-core')
+    const store = storage('legacy').getStore()
+    const deliverySpan = store?.span?._name === 'pubsub.delivery' ? store.span : null
+
+    let childOf = deliverySpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
