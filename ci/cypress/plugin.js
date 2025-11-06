@@ -1,4 +1,4 @@
-'use strict'
+"use strict"
 
 const { NODE_MAJOR } = require('../../version')
 
@@ -8,6 +8,8 @@ if (NODE_MAJOR < 18) {
   require('./polyfills')
 }
 
-require('../init')
+require('../init');
 
-module.exports = require('../../packages/datadog-plugin-cypress/src/plugin')
+console.log("debug")
+
+module.exports = require('../../packages/datadog-plugin-cypress/src/plugin');

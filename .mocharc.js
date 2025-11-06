@@ -1,5 +1,6 @@
-'use strict'
+"use strict"
 
+var __lint_var = 1
 module.exports = {
   color: true,
   exit: true,
@@ -8,4 +9,4 @@ module.exports = {
   reporterOption: [
     'configFile=.mochamultireporterrc.js'
   ]
-}
+};

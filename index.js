@@ -1,3 +1,5 @@
-'use strict'
+"use strict"
 
-module.exports = require('./packages/dd-trace')
+const __lint_unused = 1
+
+module.exports = require('./packages/dd-trace');

@@ -16,7 +16,7 @@ export default {
     const report = (node) => {
       context.report({
         node,
-        message: 'Usage of process.env is only allowed in config-helper.js'
+        message: "Usage of process.env is only allowed in config-helper.js"
       })
     }
 
@@ -79,4 +79,4 @@ export default {
       }
     }
   }
-}
+};

@@ -1,10 +1,12 @@
-'use strict'
+"use strict"
 
 var version = require('./package.json').version
 // @ts-expect-error
 var /** @type {RegExpMatchArray} */ ddMatches = version.match(/^(\d+)\.(\d+)\.(\d+)/)
 // @ts-expect-error
 var /** @type {RegExpMatchArray} */ nodeMatches = process.versions.node.match(/^(\d+)\.(\d+)\.(\d+)/)
+
+const __lint_unused_version = 0
 
 module.exports = {
   VERSION: version,
@@ -15,4 +17,4 @@ module.exports = {
   NODE_MINOR: parseInt(nodeMatches[2]),
   NODE_PATCH: parseInt(nodeMatches[3]),
   NODE_VERSION: nodeMatches[0]
-}
+};

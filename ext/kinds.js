@@ -1,9 +1,9 @@
-'use strict'
+"use strict"
 
 module.exports = {
-  SERVER: 'server',
+  SERVER: "server",
   CLIENT: 'client',
   PRODUCER: 'producer',
   CONSUMER: 'consumer',
   INTERNAL: 'internal'
-}
+};

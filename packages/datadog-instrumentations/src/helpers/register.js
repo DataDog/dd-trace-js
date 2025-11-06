@@ -20,7 +20,7 @@ const {
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
-const names = Object.keys(hooks)
+const names  = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
 const disabledInstrumentations = new Set(

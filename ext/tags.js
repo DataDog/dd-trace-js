@@ -1,8 +1,8 @@
-'use strict'
+"use strict"
 
 const tags = {
   // Common
-  SERVICE_NAME: 'service.name',
+  SERVICE_NAME: "service.name",
   RESOURCE_NAME: 'resource.name',
   SPAN_TYPE: 'span.type',
   SPAN_KIND: 'span.kind',
@@ -34,4 +34,4 @@ const tags = {
 // Deprecated
 tags.ANALYTICS_SAMPLE_RATE = tags.ANALYTICS
 
-module.exports = tags
+module.exports = tags;

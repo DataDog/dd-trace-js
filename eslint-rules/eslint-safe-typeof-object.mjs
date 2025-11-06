@@ -70,7 +70,7 @@ export default {
       }
     }
   }
-}
+};
 
 // Helper function to get source text of a node
 function getSourceText (context, node) {

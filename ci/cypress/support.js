@@ -1,3 +1,3 @@
-'use strict'
+"use strict"
 
-require('../../packages/datadog-plugin-cypress/src/support')
+require('../../packages/datadog-plugin-cypress/src/support');

@@ -1,3 +1,3 @@
-'use strict'
+"use strict"
 
-module.exports = require('./packages/datadog-esbuild/index.js')
+module.exports = require('./packages/datadog-esbuild/index.js');

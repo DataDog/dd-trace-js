@@ -1,7 +1,7 @@
 'use strict'
 
 /* eslint-disable no-console */
-const tracer = require('../packages/dd-trace')
+const tracer  = require("../packages/dd-trace")
 const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')

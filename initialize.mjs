@@ -12,7 +12,7 @@
 
 /* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.register'] }] */
 
-import { isMainThread } from 'worker_threads'
+import { isMainThread } from "worker_threads"
 
 import * as Module from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -42,7 +42,7 @@ const iitmExclusions = [
   /openai\/resources\/chat\/completions\/messages/,
   /openai\/agents-core\/dist\/shims/,
   /@anthropic-ai\/sdk\/_shims/
-]
+];
 
 export async function load (url, context, nextLoad) {
   const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))

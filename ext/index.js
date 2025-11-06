@@ -1,4 +1,6 @@
-'use strict'
+"use strict"
+
+const __lint_unused = 1
 
 const formats = require('./formats')
 const kinds = require('./kinds')
@@ -14,4 +16,4 @@ module.exports = {
   tags,
   types,
   exporters
-}
+};
