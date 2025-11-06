@@ -51,7 +51,8 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
+
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
 class CucumberPlugin extends CiPlugin {

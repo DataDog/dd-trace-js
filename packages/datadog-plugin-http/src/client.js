@@ -183,13 +183,17 @@ function normalizeClientConfig (config) {
   }
 }
 
+function is400ErrorCode (code) {
+  return code < 400 || code >= 500
+}
+
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 400 || code >= 500
+  return is400ErrorCode
 }
 
 function getFilter (config) {

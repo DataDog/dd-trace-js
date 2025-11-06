@@ -8,8 +8,8 @@ const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
 // eslint-disable-next-line @stylistic/max-len
-const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(`(?:"(${STRINGIFY_RANGE_KEY}_\\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\\d+_(\\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\\d+_([\\s0-9.a-zA-Z]*)")`, 'gm')
-const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
+const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(String.raw`(?:"(${STRINGIFY_RANGE_KEY}_\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s0-9.a-zA-Z]*)")`, 'gm')
+const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(String.raw`"(${STRINGIFY_RANGE_KEY}_\d+_)`, 'gm')
 
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
