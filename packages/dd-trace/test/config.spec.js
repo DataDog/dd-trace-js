@@ -3090,6 +3090,89 @@ rules:
     })
   })
 
+  context('resourceRenamingEnabled', () => {
+    let originalResourceRenamingEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalResourceRenamingEnabled = process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalResourceRenamingEnabled !== undefined) {
+        process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = originalResourceRenamingEnabled
+      } else {
+        delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = new Config({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = new Config({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should enable when appsec is enabled via both env and options', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = new Config({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = new Config()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should remain false when appsec is disabled via options', () => {
+      const config = new Config({ appsec: { enabled: false } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+  })
+
   context('getOrigin', () => {
     let originalAppsecEnabled
 

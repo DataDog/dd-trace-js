@@ -16,7 +16,10 @@ const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 const {
   MEASURED,
-  HTTP_STATUS_CODE
+  HTTP_STATUS_CODE,
+  HTTP_ENDPOINT,
+  HTTP_ROUTE,
+  HTTP_METHOD
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -91,22 +94,62 @@ const {
 describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
-    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false')
+    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false,,')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    expect(key.toString()).to.equal('synthetic-span,service-name,resource-name,span-type,200,true')
+    expect(key.toString()).to.equal('synthetic-span,service-name,resource-name,span-type,200,true,,')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
-    expect(key.toString()).to.equal('error-span,service-name,resource-name,span-type,500,false')
+    expect(key.toString()).to.equal('error-span,service-name,resource-name,span-type,500,false,,')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    expect(key.toString()).to.equal(`${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false`)
+    expect(key.toString()).to.equal(`${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,`)
+  })
+
+  it('should include HTTP method and route in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'GET',
+        [HTTP_ROUTE]: '/users/:id'
+      }
+    }
+    const key = new SpanAggKey(span)
+    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+  })
+
+  it('should include HTTP method and endpoint in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'POST',
+        [HTTP_ENDPOINT]: '/users/{param:int}'
+      }
+    }
+    const key = new SpanAggKey(span)
+    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
+  })
+
+  it('should prioritize http.route over http.endpoint', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [HTTP_METHOD]: 'GET',
+        [HTTP_ROUTE]: '/users/:id',
+        [HTTP_ENDPOINT]: '/users/{param:int}'
+      }
+    }
+    const key = new SpanAggKey(span)
+    expect(key.toString()).to.equal('basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
   })
 })
 
@@ -127,6 +170,8 @@ describe('SpanAggStats', () => {
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
@@ -152,6 +197,8 @@ describe('SpanAggStats', () => {
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
@@ -177,6 +224,8 @@ describe('SpanAggStats', () => {
       Service: aggKey.service,
       HTTPStatusCode: aggKey.statusCode,
       Synthetics: aggKey.synthetics,
+      HTTPMethod: aggKey.method,
+      HTTPEndpoint: aggKey.endpoint,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
@@ -298,6 +347,8 @@ describe('SpanStatsProcessor', () => {
       Type: 'span-type',
       HTTPStatusCode: 200,
       Synthetics: false,
+      HTTPMethod: '',
+      HTTPEndpoint: '',
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
@@ -324,6 +375,8 @@ describe('SpanStatsProcessor', () => {
           Type: 'span-type',
           HTTPStatusCode: 200,
           Synthetics: false,
+          HTTPMethod: '',
+          HTTPEndpoint: '',
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
