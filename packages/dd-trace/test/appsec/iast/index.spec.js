@@ -13,8 +13,7 @@ const overheadController = require('../../../src/appsec/iast/overhead-controller
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
 const { testInRequest } = require('./utils')
 const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
+const { getConfigFresh } = require('../../helpers/config')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -49,7 +48,7 @@ describe('IAST Index', () => {
         const originalReleaseRequest = overheadController.releaseRequest
 
         beforeEach(() => {
-          iast.enable(getConfig({
+          iast.enable(getConfigFresh({
             experimental: {
               iast: {
                 enabled: true,
@@ -113,7 +112,7 @@ describe('IAST Index', () => {
     let appsecFsPlugin
     let analyzers
 
-    const config = getConfig({
+    const config = getConfigFresh({
       experimental: {
         iast: {
           enabled: true,

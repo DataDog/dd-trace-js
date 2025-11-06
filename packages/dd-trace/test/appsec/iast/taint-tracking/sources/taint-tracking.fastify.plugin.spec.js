@@ -3,7 +3,6 @@
 const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
-const proxyquire = require('proxyquire')
 
 const agent = require('../../../../plugins/agent')
 const { storage } = require('../../../../../../datadog-core')
@@ -15,8 +14,7 @@ const {
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../../../src/config', {})(options)
+const { getConfigFresh } = require('../../../../helpers/config')
 
 describe('URI sourcing with fastify', () => {
   let fastify
@@ -32,7 +30,7 @@ describe('URI sourcing with fastify', () => {
     })
 
     beforeEach(() => {
-      iast.enable(getConfig({
+      iast.enable(getConfigFresh({
         experimental: {
           iast: {
             enabled: true,
@@ -90,7 +88,7 @@ describe('Path params sourcing with fastify', () => {
     })
 
     beforeEach(() => {
-      iast.enable(getConfig({
+      iast.enable(getConfigFresh({
         experimental: {
           iast: {
             enabled: true,

@@ -5,7 +5,7 @@ const { assert } = require('chai')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const getConfig = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
@@ -27,7 +27,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     before(() => {
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: true
       }))
     })

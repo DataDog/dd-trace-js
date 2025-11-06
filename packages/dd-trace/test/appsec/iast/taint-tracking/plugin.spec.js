@@ -15,8 +15,7 @@ const {
   HTTP_REQUEST_URI,
   SQL_ROW_VALUE
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../../src/config', {})(options)
+const { getConfigFresh } = require('../../../helpers/config')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
 const queryReadFinishChannel = dc.channel('datadog:query:read:finish')
@@ -44,7 +43,7 @@ describe('IAST Taint tracking plugin', () => {
       './operations': sinon.spy(taintTrackingOperations),
       '../../../../../datadog-core': datadogCore
     })
-    const config = getConfig()
+    const config = getConfigFresh()
     taintTrackingPlugin.enable(config.iast)
   })
 
@@ -293,7 +292,7 @@ describe('IAST Taint tracking plugin', () => {
     describe('taint database sources', () => {
       it('Should not taint if config is set to 0', () => {
         taintTrackingPlugin.disable()
-        const config = getConfig()
+        const config = getConfigFresh()
         config.dbRowsToTaint = 0
         taintTrackingPlugin.enable(config)
 
@@ -396,7 +395,7 @@ describe('IAST Taint tracking plugin', () => {
       describe('with config set to 2', () => {
         beforeEach(() => {
           taintTrackingPlugin.disable()
-          const config = getConfig()
+          const config = getConfigFresh()
           config.dbRowsToTaint = 2
           taintTrackingPlugin.enable(config)
         })

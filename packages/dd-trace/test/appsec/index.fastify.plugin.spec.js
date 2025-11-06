@@ -8,14 +8,13 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const semver = require('semver')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
-const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+const { getConfigFresh } = require('../helpers/config')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -50,7 +49,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -115,7 +114,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     beforeEach(async () => {
       requestBody = sinon.stub()
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -223,7 +222,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json')
@@ -312,7 +311,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     beforeEach(async () => {
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json')
@@ -491,7 +490,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           beforeEach(async () => {
             requestCookie = sinon.stub()
             appsec.enable(
-              getConfig({
+              getConfigFresh({
                 appsec: {
                   enabled: true,
                   rules: path.join(__dirname, 'cookie-parser-rules.json')
@@ -584,7 +583,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       beforeEach(() => {
         uploadSpy = sinon.stub()
-        appsec.enable(getConfig({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'body-parser-rules.json')
@@ -682,7 +681,7 @@ describe('Api Security - Fastify', () => {
     })
 
     beforeEach(() => {
-      config = getConfig({
+      config = getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),

@@ -1,14 +1,16 @@
 'use strict'
 
-const getConfig = require('../../src/config')
-const path = require('path')
+const assert = require('node:assert')
+const path = require('node:path')
+
+const axios = require('axios')
+const msgpack = require('@msgpack/msgpack')
+
 const { withVersions } = require('../setup/mocha')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const axios = require('axios')
-const assert = require('assert')
-const msgpack = require('@msgpack/msgpack')
 const { createDeepObject } = require('./utils')
+const { getConfigFresh } = require('../helpers/config')
 
 describe('extended data collection', () => {
   before(() => {
@@ -68,7 +70,7 @@ describe('extended data collection', () => {
     })
 
     beforeEach(() => {
-      appsec.enable(getConfig(
+      appsec.enable(getConfigFresh(
         {
           appsec: {
             enabled: true,

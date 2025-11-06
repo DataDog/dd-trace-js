@@ -4,9 +4,8 @@ const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
+const { getConfigFresh } = require('../../helpers/config')
 
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
@@ -95,7 +94,7 @@ describe('sdk', () => {
 
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
-      const config = getConfig({})
+      const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub(),
         disable () {}
@@ -127,7 +126,7 @@ describe('sdk', () => {
     })
 
     it('does not enable llmobs if env var conflicts', () => {
-      const config = getConfig({})
+      const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub()
       }
@@ -150,7 +149,7 @@ describe('sdk', () => {
         disable: sinon.stub()
       }
 
-      const config = getConfig({
+      const config = getConfigFresh({
         llmobs: {}
       })
 

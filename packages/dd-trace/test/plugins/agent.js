@@ -370,6 +370,7 @@ module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
+   * @overload
    * @param {String|String[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]

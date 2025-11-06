@@ -7,15 +7,13 @@ const path = require('node:path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const semver = require('semver')
-const proxyquire = require('proxyquire')
 
 const { NODE_MAJOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
+const { getConfigFresh } = require('../../helpers/config')
 
 describe('RASP - lfi', () => {
   let axios
@@ -62,7 +60,7 @@ describe('RASP - lfi', () => {
           app(req, res)
         })
 
-        appsec.enable(getConfig({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
@@ -475,7 +473,7 @@ describe('RASP - lfi', () => {
         }
       })
 
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),

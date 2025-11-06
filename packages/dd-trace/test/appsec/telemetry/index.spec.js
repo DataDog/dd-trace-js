@@ -3,9 +3,8 @@
 const { assert } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 
-const getConfig = (options) => proxyquire.noPreserveCache()('../../../src/config', {})(options)
+const { getConfigFresh } = require('../../helpers/config')
 const appsecTelemetry = require('../../../src/appsec/telemetry')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
 
@@ -39,7 +38,7 @@ describe('appsec enabled metric', () => {
     })
 
     it('should not gauge nor interval', () => {
-      const config = getConfig()
+      const config = getConfigFresh()
       global.setInterval = sinon.stub()
 
       appsecTelemetry.enable(config)
@@ -54,7 +53,7 @@ describe('appsec enabled metric', () => {
     })
 
     it('should call to gauge.track metric when is enabled by remote config', () => {
-      const config = getConfig()
+      const config = getConfigFresh()
 
       appsecTelemetry.enable(config)
 
@@ -69,7 +68,7 @@ describe('appsec enabled metric', () => {
 
     it('should call to gauge.track metric when is enabled by environment variable', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
-      const config = getConfig()
+      const config = getConfigFresh()
 
       appsecTelemetry.enable(config)
 
@@ -83,7 +82,7 @@ describe('appsec enabled metric', () => {
     })
 
     it('should call to gauge.track metric when is enabled by code', () => {
-      const config = getConfig({ appsec: true })
+      const config = getConfigFresh({ appsec: true })
 
       appsecTelemetry.enable(config)
 
@@ -97,7 +96,7 @@ describe('appsec enabled metric', () => {
     })
 
     it('should call to gauge.track metric with unknown where is calculated', () => {
-      const config = getConfig({ appsec: true })
+      const config = getConfigFresh({ appsec: true })
       config.getOrigin = () => 'calculated'
 
       appsecTelemetry.enable(config)
@@ -116,7 +115,7 @@ describe('appsec enabled metric', () => {
       global.setInterval = sinon.stub()
       global.setInterval.returns({ unref })
 
-      const config = getConfig()
+      const config = getConfigFresh()
       config.telemetry.heartbeatInterval = 10_000 // in milliseconds
 
       appsecTelemetry.enable(config)

@@ -34,8 +34,7 @@ const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+const { getConfigFresh } = require('../helpers/config')
 
 const resultActions = {
   actions: {
@@ -1254,7 +1253,7 @@ describe('AppSec Index', function () {
 
       appsecNamespace.reset()
 
-      config = getConfig({
+      config = getConfigFresh({
         appsec: {
           enabled: true
         }
@@ -1352,7 +1351,7 @@ describe('IP blocking', function () {
   })
 
   beforeEach(() => {
-    appsec.enable(getConfig({
+    appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
         rasp: {

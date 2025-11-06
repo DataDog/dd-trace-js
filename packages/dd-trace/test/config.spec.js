@@ -1337,7 +1337,6 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
 
-    // eslint-disable-next-line no-new
     getConfig()
 
     expect(log.warn).to.have.been.calledWith('Use either the DD_TRACE_PROPAGATION_STYLE ' +
@@ -1349,7 +1348,6 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
 
-    // eslint-disable-next-line no-new
     getConfig()
 
     expect(log.warn).to.have.been.calledWith('Use either the DD_TRACE_PROPAGATION_STYLE ' +

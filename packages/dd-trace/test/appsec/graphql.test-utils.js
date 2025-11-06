@@ -10,7 +10,7 @@ const fs = require('node:fs')
 const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const getConfig = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 
 const schema = `
 directive @case(format: String) on FIELD
@@ -76,7 +76,7 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
 function graphqlCommonTests (config) {
   describe('Block with content', () => {
     beforeEach(() => {
-      appsec.enable(getConfig({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
+      appsec.enable(getConfigFresh({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
     })
 
     afterEach(() => {
@@ -151,10 +151,10 @@ function graphqlCommonTests (config) {
 
   describe('Block with custom content', () => {
     const blockedTemplateGraphql = path.join(__dirname, 'graphql.block.json')
-    const customGraphqlJson = fs.readFileSync(blockedTemplateGraphql)
+    const customGraphqlJson = fs.readFileSync(blockedTemplateGraphql, { encoding: 'utf8' })
 
     beforeEach(() => {
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'graphql-rules.json'),
@@ -181,7 +181,7 @@ function graphqlCommonTests (config) {
 
   describe('Block with redirect', () => {
     beforeEach(() => {
-      appsec.enable(getConfig({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'graphql-rules-redirect.json')

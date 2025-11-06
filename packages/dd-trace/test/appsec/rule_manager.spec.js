@@ -13,15 +13,14 @@ const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
 const blocking = require('../../src/appsec/blocking')
-
-const getConfig = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+const { getConfigFresh } = require('../helpers/config')
 
 describe('AppSec Rule Manager', () => {
   let config
 
   beforeEach(() => {
     clearAllRules()
-    config = getConfig()
+    config = getConfigFresh()
 
     sinon.stub(waf, 'init')
     sinon.stub(waf, 'destroy')
@@ -166,7 +165,7 @@ describe('AppSec Rule Manager', () => {
 
       RuleManager.clearAllRules()
 
-      config = getConfig()
+      config = getConfigFresh()
       RuleManager.loadRules(config.appsec)
       sinon.resetHistory()
     })

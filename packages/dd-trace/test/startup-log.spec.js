@@ -8,7 +8,7 @@ const os = require('node:os')
 
 require('./setup/core')
 
-const getConfig = require('../src/config')
+const { getConfigFresh } = require('./helpers/config')
 const SamplingRule = require('../src/sampling_rule')
 const tracerVersion = require('../../../package.json').version
 
@@ -125,7 +125,7 @@ describe('profiling_enabled', () => {
       } = require('../src/startup-log')
       process.env.DD_PROFILING_ENABLED = envVar
       process.env.DD_TRACE_STARTUP_LOGS = 'true'
-      setStartupLogConfig(getConfig())
+      setStartupLogConfig(getConfigFresh())
       setStartupLogPluginManager({ _pluginsByName: {} })
       startupLog()
       /* eslint-disable-next-line no-console */

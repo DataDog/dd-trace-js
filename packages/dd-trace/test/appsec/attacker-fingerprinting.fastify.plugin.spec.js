@@ -1,12 +1,13 @@
 'use strict'
 
+const path = require('node:path')
+
 const Axios = require('axios')
 const { assert } = require('chai')
-const path = require('path')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const getConfig = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
 withVersions('fastify', 'fastify', fastifyVersion => {
@@ -40,7 +41,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     })
 
     beforeEach(() => {
-      appsec.enable(getConfig(
+      appsec.enable(getConfigFresh(
         {
           appsec: {
             enabled: true,

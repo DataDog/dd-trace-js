@@ -6,7 +6,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 
 const agent = require('../../../../plugins/agent')
 const iast = require('../../../../../src/appsec/iast')
-const getConfig = require('../../../../../src/config')
+const { getConfigFresh } = require('../../../../helpers/config')
 const vulnerabilityReporter = require('../../../../../src/appsec/iast/vulnerability-reporter')
 const overheadController = require('../../../../../src/appsec/iast/overhead-controller')
 
@@ -70,7 +70,7 @@ async function makeGraphqlRequest (port, query, variables = {}) {
 function graphqlCommonTests (config) {
   describe('Graphql sources tests', () => {
     beforeEach(() => {
-      iast.enable(getConfig({
+      iast.enable(getConfigFresh({
         experimental: {
           iast: {
             enabled: true,
