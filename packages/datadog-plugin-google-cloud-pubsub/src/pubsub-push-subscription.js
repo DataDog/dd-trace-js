@@ -113,7 +113,35 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     // Set resource name using setTag (raw tracer doesn't support resource in startSpan options)
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
 
+    // Add batch metadata if present
+    this._addBatchMetadata(span, attrs)
+
     return span
+  }
+
+  _addBatchMetadata (span, attrs) {
+    const batchSize = attrs['_dd.batch.size']
+    const batchIndex = attrs['_dd.batch.index']
+
+    if (batchSize && batchIndex !== undefined) {
+      const size = Number.parseInt(batchSize, 10)
+      const index = Number.parseInt(batchIndex, 10)
+
+      span.setTag('pubsub.batch.message_count', size)
+      span.setTag('pubsub.batch.message_index', index)
+      span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
+
+      // Add parent pubsub.request span correlation for batch tracing
+      const requestTraceId = attrs['_dd.pubsub_request.trace_id']
+      const requestSpanId = attrs['_dd.pubsub_request.span_id']
+
+      if (requestTraceId) {
+        span.setTag('pubsub.batch.request_trace_id', requestTraceId)
+      }
+      if (requestSpanId) {
+        span.setTag('pubsub.batch.request_span_id', requestSpanId)
+      }
+    }
   }
 
   _extractProjectTopic (attrs, subscription) {
