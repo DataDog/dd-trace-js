@@ -1,8 +1,9 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const log = require('../../dd-trace/src/log')
+const { storage } = require('../../datadog-core')
 const { channel } = require('../../datadog-instrumentations/src/helpers/instrument')
-const web = require('../../dd-trace/src/plugins/util/web')
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   static get id () { return 'google-cloud-pubsub-push-subscription' }
@@ -10,136 +11,109 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    // Subscribe to HTTP start channel to intercept PubSub/CloudEvent requests
+    // Subscribe to HTTP start channel to intercept PubSub requests
+    // We run BEFORE HTTP plugin to set delivery span as active parent
     const startCh = channel('apm:http:server:request:start')
-    startCh.subscribe(({ req, res, abortController }) => {
-      this._handlePubSubRequest({ req, res, abortController })
+    startCh.subscribe(({ req, res }) => {
+      this._handlePubSubRequest({ req, res })
     })
   }
 
-  _handlePubSubRequest ({ req, res, abortController }) {
+  _handlePubSubRequest ({ req, res }) {
     // Only check POST requests
     if (req.method !== 'POST') return
 
-    const isPubSub = req.headers['user-agent']?.includes('APIs-Google') ||
-      req.headers['x-goog-pubsub-message-id']
+    // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
+    // NOTE: Only unwrapped headers will work. Standard wrapped format requires
+    // body parsing which hasn't happened yet at this point in the request lifecycle.
+    if (req.headers['x-goog-pubsub-message-id']) {
+      log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      this._createDeliverySpanAndActivate({ req, res })
+    }
+  }
 
-    const isCloudEvent = req.headers['ce-specversion']
+  _createDeliverySpanAndActivate ({ req, res }) {
+    const messageData = this._parseMessage(req)
+    if (!messageData) return // No valid message data
 
-    if (!isPubSub && !isCloudEvent) return
+    // Get tracer lazily - it will be initialized by the time requests arrive
+    const tracer = this.tracer || require('../../dd-trace')
+    if (!tracer || !tracer._tracer) return
 
-    // Create HTTP span for push subscription
-    const messageData = this._parseMessage(req, isCloudEvent)
-    const parent = this._extractContext(messageData, req)
+    const parentContext = this._extractContext(messageData, tracer)
+    const deliverySpan = this._createDeliverySpan(messageData, parentContext, tracer)
 
-    const httpSpan = this.tracer.startSpan('http.request', {
-      childOf: parent,
+    // Finish delivery span when response completes
+    const finishDelivery = () => {
+      if (!deliverySpan.finished) {
+        deliverySpan.finish()
+      }
+    }
+
+    res.once('finish', finishDelivery)
+    res.once('close', finishDelivery)
+    res.once('error', (err) => {
+      deliverySpan.setTag('error', err)
+      finishDelivery()
+    })
+
+    // Set delivery span as active in async storage
+    // HTTP plugin will create http.request span as child automatically
+    const store = storage('legacy').getStore()
+    storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
+  }
+
+  _parseMessage (req) {
+    // ONLY check for unwrapped headers - body parsing happens later in middleware
+    // This runs at apm:http:server:request:start, BEFORE express.json/body-parser
+    // Requires --push-no-wrapper-write-metadata flag on the push subscription
+    const subscription = req.headers['x-goog-pubsub-subscription-name']
+    const message = {
+      messageId: req.headers['x-goog-pubsub-message-id'],
+      publishTime: req.headers['x-goog-pubsub-publish-time']
+    }
+
+    const { projectId, topicName } = this._extractProjectTopic(req.headers, subscription)
+    return { message, subscription, attrs: req.headers, projectId, topicName }
+  }
+
+  _extractContext (messageData, tracer) {
+    // messageData.attrs is req.headers, so just extract from there
+    // Use the actual tracer instance (_tracer) for proper 128-bit trace ID extraction
+    return tracer._tracer.extract('text_map', messageData.attrs) || undefined
+  }
+
+  _createDeliverySpan (messageData, parentContext, tracer) {
+    const { message, subscription, topicName, attrs } = messageData
+
+    const subscriptionName = subscription.split('/').pop() || subscription
+
+    // Extract publish time from custom header (set by producer after gRPC call completes)
+    // This ensures delivery span starts AFTER grpc.client and represents full delivery latency
+    const publishStartTime = attrs['x-dd-publish-start-time']
+    const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
+
+    const span = tracer._tracer.startSpan('pubsub.delivery', {
+      childOf: parentContext,
+      startTime, // Start span at publish time (in milliseconds)
       tags: {
-        'http.method': req.method,
-        'http.url': `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}${req.url}`,
-        'span.kind': 'server',
-        component: 'http',
-        'pubsub.delivery_method': isCloudEvent ? 'eventarc' : 'push'
+        'span.kind': 'consumer',
+        component: 'google-cloud-pubsub',
+        'pubsub.method': 'delivery',
+        'pubsub.subscription': subscription,
+        'pubsub.message_id': message.messageId,
+        'pubsub.delivery_method': 'push',
+        'pubsub.topic': topicName,
+        service: this.config.service || `${tracer._tracer._service}-pubsub`,
+        '_dd.base_service': tracer._tracer._service,
+        '_dd.serviceoverride.type': 'integration'
       }
     })
-    httpSpan.setTag('service.name', this.tracer._service)
 
-    const finish = (err) => {
-      if (httpSpan && !httpSpan.finished) {
-        if (err) {
-          httpSpan.setTag('error', true)
-          if (err.message) httpSpan.setTag('error.message', err.message)
-        } else {
-          httpSpan.setTag('http.status_code', res.statusCode)
-          if (res.statusCode >= 400) httpSpan.setTag('error', true)
-        }
-        httpSpan.finish()
-      }
-    }
+    // Set resource name using setTag (raw tracer doesn't support resource in startSpan options)
+    span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
 
-    res.once('finish', () => finish())
-    res.once('close', () => finish())
-    res.once('error', finish)
-
-    const context = web.patch(req)
-    context.span = httpSpan
-    context.tracer = this.tracer
-    context.res = res
-
-    // Abort default HTTP instrumentation
-    if (abortController) abortController.abort()
-  }
-
-  _parseMessage (req, isCloudEvent) {
-    // Check for unwrapped headers first
-    const hasPubSubHeaders = req.headers['x-goog-pubsub-message-id']
-
-    if (hasPubSubHeaders) {
-      const subscription = req.headers['x-goog-pubsub-subscription-name']
-      const message = {
-        messageId: req.headers['x-goog-pubsub-message-id'],
-        publishTime: req.headers['x-goog-pubsub-publish-time'],
-        attributes: { ...req.headers }
-      }
-      const { projectId, topicName } = this._extractProjectTopic(message.attributes, subscription)
-      return { message, subscription, attrs: message.attributes, projectId, topicName }
-    }
-
-    // Fall back to body parsing
-    if (!req.body) return null
-
-    try {
-      if (isCloudEvent) {
-        const message = req.body.message || req.body
-        const attrs = message?.attributes && message.attributes !== null && typeof message.attributes === 'object'
-          ? { ...message.attributes }
-          : {}
-        const subscription = req.body.subscription || req.headers['ce-subscription'] || 'cloud-event-subscription'
-
-        // Add CloudEvent headers
-        if (!attrs.traceparent && (req.headers['ce-traceparent'] || req.headers.traceparent)) {
-          attrs.traceparent = req.headers['ce-traceparent'] || req.headers.traceparent
-        }
-        if (!attrs.tracestate && (req.headers['ce-tracestate'] || req.headers.tracestate)) {
-          attrs.tracestate = req.headers['ce-tracestate'] || req.headers.tracestate
-        }
-        if (req.headers['ce-source']) attrs['ce-source'] = req.headers['ce-source']
-        if (req.headers['ce-type']) attrs['ce-type'] = req.headers['ce-type']
-
-        const { projectId, topicName } = this._extractProjectTopic(attrs, subscription)
-        return { message, subscription, attrs, projectId, topicName }
-      }
-      const message = req.body.message
-      const subscription = req.body.subscription
-      const attrs = message?.attributes && message.attributes !== null && typeof message.attributes === 'object'
-        ? message.attributes
-        : {}
-
-      const { projectId, topicName } = this._extractProjectTopic(attrs, subscription)
-      return { message, subscription, attrs, projectId, topicName }
-    } catch {
-      return null
-    }
-  }
-
-  _extractContext (messageData, req) {
-    if (messageData?.attrs) {
-      const context = this.tracer.extract('text_map', messageData.attrs)
-      if (context) return context
-    }
-
-    // Fallback to headers
-    const carrier = {}
-    if (req.headers.traceparent) carrier.traceparent = req.headers.traceparent
-    if (req.headers.tracestate) carrier.tracestate = req.headers.tracestate
-    if (req.headers['ce-traceparent']) carrier.traceparent = req.headers['ce-traceparent']
-    if (req.headers['ce-tracestate']) carrier.tracestate = req.headers['ce-tracestate']
-
-    for (const k of ['x-datadog-trace-id', 'x-datadog-parent-id', 'x-datadog-sampling-priority', 'x-datadog-tags']) {
-      if (req.headers[k]) carrier[k] = req.headers[k]
-    }
-
-    return this.tracer.extract('text_map', carrier) || undefined
+    return span
   }
 
   _extractProjectTopic (attrs, subscription) {
