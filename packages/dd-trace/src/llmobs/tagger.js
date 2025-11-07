@@ -27,7 +27,11 @@ const {
   TOTAL_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY
+  PROPAGATED_ML_APP_KEY,
+  DEFAULT_PROMPT_NAME,
+  INTERNAL_CONTEXT_VARIABLE_KEYS,
+  INTERNAL_QUERY_VARIABLE_KEYS,
+  INPUT_PROMPT
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -109,6 +113,10 @@ class LLMObsTagger {
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+
+    // apply annotation context prompt
+    const annotationContextPrompt = annotationContext?.prompt
+    if (annotationContextPrompt) this.tagPrompt(span, annotationContextPrompt)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -187,6 +195,161 @@ class LLMObsTagger {
       Object.assign(currentTags, tags)
     } else {
       this._setTag(span, TAGS, tags)
+    }
+  }
+
+  /**
+   * Tags a prompt on an LLMObs span.
+   * @param {*} span
+   * @param {*} prompt
+   * @param {*} strictValidation
+   *   whether to validate the prompt against the strict schema, used for auto-instrumentation
+   * @returns
+   */
+  tagPrompt (span, prompt, strictValidation = false) {
+    if (!prompt || typeof prompt !== 'object') {
+      this.#handleFailure('Prompt must be an object.', 'invalid_prompt')
+      return
+    }
+
+    const spanKind = registry.get(span)?.[SPAN_KIND]
+    if (spanKind !== 'llm') {
+      this.#handleFailure('Prompt can only be annotated on LLM spans.', 'invalid_prompt')
+      return
+    }
+
+    const mlApp = registry.get(span)?.[ML_APP] // this should be defined at this point
+    const {
+      id,
+      version,
+      tags,
+      variables,
+      template,
+      contextVariables,
+      queryVariables,
+    } = prompt
+
+    if (strictValidation) {
+      if (id == null) {
+        this.#handleFailure('Prompt ID is required.', 'invalid_prompt')
+        return
+      }
+
+      if (template == null) {
+        this.#handleFailure('Prompt template is required.', 'invalid_prompt')
+        return
+      }
+    }
+
+    const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
+    const finalCtxVariablesKeys = contextVariables ?? ['context']
+    const finalQueryVariablesKeys = queryVariables ?? ['question']
+
+    // validate prompt id
+    if (typeof finalPromptId !== 'string') {
+      this.#handleFailure('Prompt ID must be a string.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt context variables keys
+    if (Array.isArray(finalCtxVariablesKeys)) {
+      for (const key of finalCtxVariablesKeys) {
+        if (typeof key !== 'string') {
+          this.#handleFailure('Prompt context variables keys must be an array of strings.', 'invalid_prompt')
+          return
+        }
+      }
+    } else if (finalCtxVariablesKeys) {
+      this.#handleFailure('Prompt context variables keys must be an array.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt query variables keys
+    if (Array.isArray(finalQueryVariablesKeys)) {
+      for (const key of finalQueryVariablesKeys) {
+        if (typeof key !== 'string') {
+          this.#handleFailure('Prompt query variables keys must be an array of strings.', 'invalid_prompt')
+          return
+        }
+      }
+    } else if (finalQueryVariablesKeys) {
+      this.#handleFailure('Prompt query variables keys must be an array.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt version
+    if (version && typeof version !== 'string') {
+      this.#handleFailure('Prompt version must be a string.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt tags
+    if (tags && (typeof tags !== 'object' || tags instanceof Map)) {
+      this.#handleFailure('Prompt tags must be an non-Map object.', 'invalid_prompt')
+      return
+    } else if (tags) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          this.#handleFailure('Prompt tags must be an object of string key-value pairs.', 'invalid_prompt')
+          return
+        }
+      }
+    }
+
+    // validate prompt template is either string or list of messages
+    if (template && !(typeof template === 'string' || Array.isArray(template))) {
+      this.#handleFailure('Prompt template must be a string or an array of messages.', 'invalid_prompt')
+      return
+    }
+
+    if (Array.isArray(template)) {
+      for (const message of template) {
+        if (typeof message !== 'object' || !message.role || !message.content) {
+          this.#handleFailure(
+            'Prompt chat template must be an array of objects with role and content properties.', 'invalid_prompt'
+          )
+          return
+        }
+      }
+    }
+
+    // validate variables are a string-string mapping
+    if (variables && (typeof variables !== 'object' || variables instanceof Map)) {
+      this.#handleFailure('Prompt variables must be an non-Map object.', 'invalid_prompt')
+      return
+    } else if (variables) {
+      for (const [key, value] of Object.entries(variables)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          this.#handleFailure('Prompt variables must be an object of string key-value pairs.', 'invalid_prompt')
+          return
+        }
+      }
+    }
+
+    const finalChatTemplate = []
+    if (template && typeof template === 'string') {
+      finalChatTemplate.push({ role: 'user', content: template })
+    } else if (template) {
+      for (const message of template) {
+        // copy only the role and content properties of the message
+        finalChatTemplate.push({ role: message.role, content: message.content })
+      }
+    }
+
+    const validatedPrompt = {}
+    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (version) validatedPrompt.version = version
+    if (variables) validatedPrompt.variables = variables
+    if (finalChatTemplate.length) validatedPrompt.chat_template = finalChatTemplate
+    if (tags) validatedPrompt.tags = tags
+    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    if (currentPrompt) {
+      Object.assign(currentPrompt, validatedPrompt)
+    } else {
+      this._setTag(span, INPUT_PROMPT, validatedPrompt)
     }
   }
 

@@ -248,7 +248,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -270,6 +270,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (tags) {
         this._tagger.tagSpanTags(span, tags)
+      }
+      if (prompt) {
+        this._tagger.tagPrompt(span, prompt)
       }
     } catch (e) {
       if (e.ddErrorTag) {
