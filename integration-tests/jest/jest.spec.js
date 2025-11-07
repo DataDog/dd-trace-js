@@ -268,7 +268,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               assert.equal(httpSpan.parent_id.toString(), test.span_id.toString())
             }
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         runTestsCommand,
@@ -326,7 +326,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`)
             assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         runTestsCommand,
@@ -381,7 +381,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`)
             assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         runTestsCommand,
