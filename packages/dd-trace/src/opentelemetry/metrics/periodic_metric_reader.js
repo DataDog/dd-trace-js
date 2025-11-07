@@ -1,6 +1,7 @@
 'use strict'
 
 const { METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS } = require('./constants')
+const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -23,6 +24,8 @@ class PeriodicMetricReader {
   #aggregator
   #cumulativeState
   #lastExportedState
+  #maxQueueSize
+  #droppedCount
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -30,8 +33,9 @@ class PeriodicMetricReader {
    * @param {OtlpHttpMetricExporter} exporter - Metric exporter for sending to Datadog Agent
    * @param {number} exportInterval - Export interval in milliseconds
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
+   * @param {number} maxQueueSize - Maximum number of measurements to queue before dropping
    */
-  constructor (exporter, exportInterval, temporalityPreference = 'DELTA') {
+  constructor (exporter, exportInterval, temporalityPreference = 'DELTA', maxQueueSize = 2048) {
     this.exporter = exporter
     this.#exportInterval = exportInterval
     this.#measurements = []
@@ -40,6 +44,8 @@ class PeriodicMetricReader {
     this.#timer = null
     this.#cumulativeState = new Map() // Tracks cumulative values across export cycles
     this.#lastExportedState = new Map() // Tracks last exported values for delta calculation
+    this.#maxQueueSize = maxQueueSize
+    this.#droppedCount = 0
     this.#startTimer()
   }
 
@@ -49,6 +55,10 @@ class PeriodicMetricReader {
    * @param {Object} measurement - The measurement data
    */
   record (measurement) {
+    if (this.#measurements.length >= this.#maxQueueSize) {
+      this.#droppedCount++
+      return
+    }
     this.#measurements.push(measurement)
   }
 
@@ -99,7 +109,27 @@ class PeriodicMetricReader {
     const allMeasurements = this.#measurements.splice(0)
 
     for (const instrument of this.#observableInstruments) {
-      allMeasurements.push(...instrument.collect())
+      if (allMeasurements.length >= this.#maxQueueSize) break
+
+      const observableMeasurements = instrument.collect()
+      const remainingCapacity = this.#maxQueueSize - allMeasurements.length
+
+      if (observableMeasurements.length <= remainingCapacity) {
+        allMeasurements.push(...observableMeasurements)
+      } else {
+        allMeasurements.push(...observableMeasurements.slice(0, remainingCapacity))
+        this.#droppedCount += observableMeasurements.length - remainingCapacity
+        break
+      }
+    }
+
+    if (this.#droppedCount > 0) {
+      log.warn(
+        `Metric queue exceeded limit (max: ${this.#maxQueueSize}). ` +
+        `Dropping ${this.#droppedCount} measurements. ` +
+        'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+      )
+      this.#droppedCount = 0
     }
 
     if (allMeasurements.length === 0) {

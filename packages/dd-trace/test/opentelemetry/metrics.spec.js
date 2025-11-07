@@ -843,6 +843,75 @@ describe('OpenTelemetry Meter Provider', () => {
     })
   })
 
+  describe('Queue Size Limits', () => {
+    function countDataPoints (metrics) {
+      return metrics.resourceMetrics[0].scopeMetrics[0].metrics.reduce((sum, m) => {
+        return sum + (m.sum?.dataPoints.length || m.gauge?.dataPoints.length || 0)
+      }, 0)
+    }
+
+    it('overflows with 4 synchronous measurements when max is 3', (done) => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      const validator = mockOtlpExport((metrics) => {
+        assert.strictEqual(countDataPoints(metrics), 3)
+        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
+      })
+
+      setupTracer(
+        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
+        false
+      )
+      const counter = metrics.getMeterProvider().getMeter('test').createCounter('test.counter')
+      for (let i = 0; i < 4; i++) counter.add(1, { idx: i })
+
+      setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+
+    it('overflows with 4 observable measurements when max is 3', (done) => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      const validator = mockOtlpExport((metrics) => {
+        assert.strictEqual(countDataPoints(metrics), 3)
+        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
+      })
+
+      setupTracer(
+        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
+        false
+      )
+      const gauge = metrics.getMeterProvider().getMeter('test').createObservableGauge('test.gauge')
+      gauge.addCallback((result) => { for (let i = 0; i < 4; i++) result.observe(i * 10, { idx: i }) })
+
+      setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+
+    it('overflows with 2 synchronous + 2 observable measurements when max is 3', (done) => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      let firstExport = true
+      const validator = mockOtlpExport((metrics) => {
+        if (!firstExport) return
+        firstExport = false
+        assert.strictEqual(countDataPoints(metrics), 3)
+        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
+      })
+
+      setupTracer(
+        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
+        false
+      )
+      const meter = metrics.getMeterProvider().getMeter('test')
+      const counter = meter.createCounter('test.counter')
+      const gauge = meter.createObservableGauge('test.gauge')
+      counter.add(1, { idx: 0 })
+      counter.add(1, { idx: 1 })
+      gauge.addCallback((result) => { result.observe(10, { idx: 0 }); result.observe(20, { idx: 1 }) })
+
+      setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+  })
+
   describe('HTTP Export Behavior', () => {
     it('handles timeout and error without network', (done) => {
       const results = { timeout: false, error: false }

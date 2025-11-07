@@ -67,7 +67,8 @@ function initializeOpenTelemetryMetrics (config) {
   const reader = new PeriodicMetricReader(
     exporter,
     config.otelMetricsExportInterval,
-    config.otelMetricsTemporalityPreference
+    config.otelMetricsTemporalityPreference,
+    config.otelMaxQueueSize
   )
 
   const meterProvider = new MeterProvider({ reader })
