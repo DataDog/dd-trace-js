@@ -140,7 +140,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
 
-      this.displayName = config.projectConfig?.displayName?.name
+      this.displayName = config.projectConfig?.displayName?.name || config.displayName
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
@@ -411,23 +411,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               originalHookFns.set(hook, hookFn)
             }
-            // The rule has a bug, see https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2164
-            // eslint-disable-next-line unicorn/consistent-function-scoping
-            const wrapperHook = function () {
+            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function () {
               return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
-            }
-            // If we don't do this, the timeout will not be triggered
-            Object.defineProperty(wrapperHook, 'length', { value: hookFn.length })
-            hook.fn = wrapperHook
+            })
+            hook.fn = newHookFn
           }
           const originalFn = event.test.fn
           originalTestFns.set(event.test, originalFn)
-          const wrapper = function () {
-            return testFnCh.runStores(ctx, () => originalFn.apply(this, arguments))
-          }
-          // If we don't do this, the timeout will be not be triggered
-          Object.defineProperty(wrapper, 'length', { value: originalFn.length })
-          event.test.fn = wrapper
+
+          const newFn = shimmer.wrapFunction(event.test.fn, testFn => function () {
+            return testFnCh.runStores(ctx, () => testFn.apply(this, arguments))
+          })
+
+          event.test.fn = newFn
         })
       }
 
@@ -1293,7 +1289,7 @@ addHook({
 
   shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
     const result = _createJestObjectFor.apply(this, arguments)
-    const suiteFilePath = this._testPath
+    const suiteFilePath = this._testPath || from
 
     shimmer.wrap(result, 'mock', mock => function (moduleName) {
       // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
@@ -1449,8 +1445,14 @@ addHook({
   file: 'build/workers/ChildProcessWorker.js'
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
-  shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
-  shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', onMessageWrapper)
+  if (ChildProcessWorker.prototype.send) {
+    shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
+  }
+  if (ChildProcessWorker.prototype._onMessage) {
+    shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', onMessageWrapper)
+  } else if (ChildProcessWorker.prototype.onMessage) {
+    shimmer.wrap(ChildProcessWorker.prototype, 'onMessage', onMessageWrapper)
+  }
   return childProcessWorker
 })
 

@@ -101,14 +101,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   useSandbox([
     `jest@${JEST_VERSION}`,
     'chai@v4',
-    'jest-jasmine2',
-    'jest-environment-jsdom',
+    `jest-jasmine2@${JEST_VERSION}`,
+    // jest-environment-jsdom is included in older versions of jest
+    JEST_VERSION === 'latest' && `jest-environment-jsdom@${JEST_VERSION}`,
+    // jest-circus is not included in older versions of jest
+    JEST_VERSION !== 'latest' && `jest-circus@${JEST_VERSION}`,
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
     '@fast-check/jest'
-  ], true)
+  ].filter(Boolean), true)
 
   before(function () {
     cwd = sandboxCwd()
@@ -161,6 +164,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       childProcess = fork(startupTestFile, {
         cwd,
         env: {
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
           DD_TRACE_AGENT_PORT: receiver.port,
           NODE_OPTIONS: '-r dd-trace/ci/init',
           DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
@@ -256,13 +260,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               assert.include(test.meta[ERROR_MESSAGE], error)
             }
 
+            // TODO: why did this work in jsdom before?
             if (name === 'jest-test-suite can do integration http') {
               const httpSpan = spans.find(span => span.name === 'http.request')
-              if (httpSpan) {
-                assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
-                assert.include(httpSpan.meta['http.url'], '/info')
-                assert.equal(httpSpan.parent_id, test.span_id)
-              }
+              assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+              assert.include(httpSpan.meta['http.url'], '/info')
+              assert.equal(httpSpan.parent_id.toString(), test.span_id.toString())
             }
           })
         })
@@ -273,9 +276,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...process.env,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
             NODE_OPTIONS: '-r dd-trace/ci/init',
             DD_TRACE_AGENT_PORT: receiver.port,
-            TESTS_TO_RUN: 'jest-plugin-tests/jest-test',
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
             DD_SERVICE: 'plugin-tests'
           },
           stdio: 'inherit'
@@ -330,6 +334,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...process.env,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
             DD_TRACE_AGENT_PORT: receiver.port,
             NODE_OPTIONS: '-r dd-trace/ci/init',
             TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
@@ -384,6 +389,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...process.env,
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
             DD_TRACE_AGENT_PORT: receiver.port,
             NODE_OPTIONS: '-r dd-trace/ci/init',
             TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
@@ -398,6 +404,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
+    // injectGlobals was added in jest@26
     onlyLatestIt('does not crash when injectGlobals is false', async () => {
       receiver.setInfoResponse({ endpoints: [] })
       const eventsPromise = receiver
@@ -657,10 +664,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           PROJECTS: JSON.stringify([{
-            testMatch: ['**/subproject-test*']
+            testMatch: ['**/subproject-test*'],
+            testRunner: 'jest-circus/runner',
           }])
         },
-        stdio: 'inherit'
+        stdio: 'pipe'
       }
     )
 
@@ -671,7 +679,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('works when sharding', (done) => {
+  // --shard was added in jest@28
+  onlyLatestIt('works when sharding', (done) => {
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.equal(testSuiteEvents.length, 3)
@@ -872,7 +881,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
     })
 
-    it('can work with Failed Test Replay', (done) => {
+    // older versions handle retries differently
+    onlyLatestIt('can work with Failed Test Replay', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -964,7 +974,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
+      // it's "100ms" or "100 ms" depending on the jest version
+      assert.match(testOutput, /Exceeded timeout of 100\s?ms for a test/)
       done()
     })
   })
@@ -1003,7 +1014,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
-    it('reports test suite errors when using off timing import', async () => {
+    onlyLatestIt('reports test suite errors when using off timing import', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1043,7 +1054,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
-    it('reports test suite errors when importing after environment is torn down', async () => {
+    onlyLatestIt('reports test suite errors when importing after environment is torn down', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1991,7 +2002,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             PROJECTS: JSON.stringify([{
-              testMatch: ['**/subproject-test*']
+              testMatch: ['**/subproject-test*'],
+              testEnvironment: 'node',
+              testRunner: 'jest-circus/runner',
             }])
           },
           stdio: 'inherit'
@@ -2548,7 +2561,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('works with snapshot tests', async () => {
+    // resetting snapshot state logic only works in latest versions
+    onlyLatestIt('works with snapshot tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
       receiver.setKnownTests({
@@ -2616,7 +2630,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.equal(exitCode, 0)
     })
 
-    it('works with jest-image-snapshot', async () => {
+    // resetting snapshot state logic only works in latest versions
+    onlyLatestIt('works with jest-image-snapshot', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
       receiver.setKnownTests({
@@ -2797,7 +2812,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
     // happy-dom>=19 can only be used with CJS from node 20 and above
-    const happyDomTest = NODE_MAJOR < 20 ? it.skip : it
+    const happyDomTest = NODE_MAJOR < 20 ? it.skip : onlyLatestIt
     happyDomTest('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -2930,7 +2945,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('does not retry when it.failing is used', (done) => {
+    // it.failing was added in jest@29
+    onlyLatestIt('does not retry when it.failing is used', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -3126,7 +3142,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
-      it('works with snapshot tests', async () => {
+      onlyLatestIt('works with snapshot tests', async () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
         receiver.setKnownTests({
@@ -3392,7 +3408,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
+    onlyLatestIt('does not activate DI if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3441,7 +3457,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+    onlyLatestIt('does not activate DI if remote settings are disabled', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: false
@@ -3488,7 +3504,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('runs retries with dynamic instrumentation', (done) => {
+    onlyLatestIt('runs retries with DI', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3574,7 +3590,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('runs retries with dynamic instrumentation in parallel mode', (done) => {
+    onlyLatestIt('runs retries with DI in parallel mode', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3663,7 +3679,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('does not crash if the retry does not hit the breakpoint', (done) => {
+    onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3710,7 +3726,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('does not wait for breakpoint for a passed test', (done) => {
+    onlyLatestIt('does not wait for breakpoint for a passed test', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -4117,7 +4133,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
 
-      it('works with snapshot tests', async () => {
+      onlyLatestIt('works with snapshot tests', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -4178,7 +4194,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
-      it('works with snapshot tests when every attempt passes', async () => {
+      onlyLatestIt('works with snapshot tests when every attempt passes', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -4232,7 +4248,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.equal(exitCode, 0)
       })
 
-      it('works with image snapshot tests', async () => {
+      onlyLatestIt('works with image snapshot tests', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -4311,7 +4327,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           )
         })
 
-        it('works with snapshot tests', async () => {
+        onlyLatestIt('works with snapshot tests', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           receiver.setTestManagementTests({
@@ -4988,7 +5004,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('fast-check', () => {
-    it('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
+    onlyLatestIt('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -5014,7 +5030,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
-    it('should not remove seed if @fast-check/jest is not used', async () => {
+    onlyLatestIt('should not remove seed if @fast-check/jest is not used', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
