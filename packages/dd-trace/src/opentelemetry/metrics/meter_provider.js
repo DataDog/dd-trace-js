@@ -5,6 +5,7 @@ const Meter = require('./meter')
 const log = require('../../log')
 const { context } = require('@opentelemetry/api')
 const ContextManager = require('../context_manager')
+const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Meter} Meter
@@ -50,7 +51,7 @@ class MeterProvider {
       return this.#createNoOpMeter()
     }
     const normalizedName = name.toLowerCase()
-    const attrsKey = JSON.stringify(attributes)
+    const attrsKey = stableStringify(attributes)
     const key = `${normalizedName}@${version}@${schemaUrl}@${attrsKey}`
     let meter = this.#meters.get(key)
     if (!meter) {

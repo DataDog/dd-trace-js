@@ -44,8 +44,8 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
 
     let dataPointCount = 0
     for (const metric of metrics) {
-      if (metric.data) {
-        dataPointCount += metric.data.length
+      if (metric.dataPointMap) {
+        dataPointCount += metric.dataPointMap.length
       }
     }
 

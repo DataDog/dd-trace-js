@@ -138,7 +138,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     switch (metric.type) {
       case METRIC_TYPES.HISTOGRAM:
         result.histogram = {
-          dataPoints: metric.data.map(dp => ({
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => ({
             attributes: this.transformAttributes(dp.attributes),
             startTimeUnixNano: dp.startTimeUnixNano,
             timeUnixNano: dp.timeUnixNano,
@@ -158,7 +158,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       case METRIC_TYPES.UPDOWNCOUNTER:
       case METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER:
         result.sum = {
-          dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp)),
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp)),
           aggregationTemporality: temporality,
           isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER
         }
@@ -166,7 +166,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
       case METRIC_TYPES.GAUGE:
         result.gauge = {
-          dataPoints: metric.data.map(dp => this.#transformNumberDataPoint(dp))
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp))
         }
         break
     }
@@ -192,7 +192,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     switch (metric.type) {
       case METRIC_TYPES.HISTOGRAM:
         result.histogram = {
-          dataPoints: metric.data.map(dp => ({
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => ({
             attributes: this.attributesToJson(dp.attributes),
             startTimeUnixNano: String(dp.startTimeUnixNano),
             timeUnixNano: String(dp.timeUnixNano),
@@ -212,7 +212,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       case METRIC_TYPES.UPDOWNCOUNTER:
       case METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER:
         result.sum = {
-          dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp)),
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#numberDataPointToJson(dp)),
           aggregationTemporality: temporalityStr,
           isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER
         }
@@ -220,7 +220,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
       case METRIC_TYPES.GAUGE:
         result.gauge = {
-          dataPoints: metric.data.map(dp => this.#numberDataPointToJson(dp))
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#numberDataPointToJson(dp))
         }
         break
     }

@@ -7,6 +7,22 @@ const log = require('../../log')
  */
 
 /**
+ * Stable serialization of OpenTelemetry Attributes.
+ * Attributes support primitives and arrays of primitives, not deeply nested objects.
+ * @param {Attributes} attributes - Attributes to serialize
+ * @returns {string} Stable string representation
+ */
+function stableStringify (attributes) {
+  if (attributes == null || typeof attributes !== 'object') {
+    return JSON.stringify(attributes)
+  }
+
+  const sortedKeys = Object.keys(attributes).sort()
+  const pairs = sortedKeys.map(key => `${key}:${JSON.stringify(attributes[key])}`)
+  return pairs.join(',')
+}
+
+/**
  * Base class for OTLP transformers.
  *
  * This implementation provides common functionality for transforming
@@ -45,7 +61,7 @@ class OtlpTransformerBase {
 
     for (const item of items) {
       const instrumentationScope = item.instrumentationScope || { name: '', version: '', schemaUrl: '', attributes: {} }
-      const attrsKey = JSON.stringify(instrumentationScope.attributes || {})
+      const attrsKey = stableStringify(instrumentationScope.attributes || {})
       const key = `${instrumentationScope.name}@${instrumentationScope.version}@` +
         `${instrumentationScope.schemaUrl}@${attrsKey}`
 
@@ -153,3 +169,4 @@ class OtlpTransformerBase {
 }
 
 module.exports = OtlpTransformerBase
+module.exports.stableStringify = stableStringify

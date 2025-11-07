@@ -408,14 +408,15 @@ app.listen(3000)
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
 - `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
-- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs (default: `http://localhost:4318`)
-- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format for logs (default: `{}`)
-- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
-- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs (default: `10000`)
-- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
-- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum logs per metric interval (default: `2048`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/logs` appended (default: `http://localhost:4318/v1/logs`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers for logs in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch export delay in milliseconds (default: `5000`)
+- `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum logs to queue before dropping (default: `2048`)
 
-Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
 
@@ -465,15 +466,16 @@ cpuGauge.addCallback((result) => {
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
 - `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
-- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics (default: `http://localhost:4318/v1/metrics`)
-- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers in JSON format for metrics (default: `{}`)
-- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics (default: `http/protobuf`)
-- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics (default: `10000`)
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/metrics` appended (default: `http://localhost:4318/v1/metrics`)
+- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers for metrics in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
 - `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `10000`)
-- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Configures aggregation temporality for metrics on the basis of instrument kind. Options: `CUMULATIVE`, `DELTA`, `LOWMEMORY` (default: `DELTA`). See [OpenTelemetry spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/#additional-environment-variable-configuration) for details. 
-- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries.
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Aggregation temporality preference. Options: `CUMULATIVE`, `DELTA`, `LOWMEMORY` (default: `DELTA`). See [OpenTelemetry spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/#additional-environment-variable-configuration) for details
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum metrics to queue before dropping (default: `2048`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries
 
-Metrics are collected periodically and exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. All metrics use delta aggregation temporality to match Datadog's data model. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 

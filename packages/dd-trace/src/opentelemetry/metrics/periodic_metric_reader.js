@@ -2,6 +2,7 @@
 
 const { METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS } = require('./constants')
 const log = require('../../log')
+const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -17,15 +18,15 @@ const log = require('../../log')
  * @class PeriodicMetricReader
  */
 class PeriodicMetricReader {
-  #measurements
-  #observableInstruments
-  #timer
+  #measurements = []
+  #observableInstruments = []
+  #cumulativeState = new Map()
+  #lastExportedState = new Map()
+  #droppedCount = 0
+  #timer = null
   #exportInterval
   #aggregator
-  #cumulativeState
-  #lastExportedState
   #maxQueueSize
-  #droppedCount
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -35,17 +36,11 @@ class PeriodicMetricReader {
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
    * @param {number} maxQueueSize - Maximum number of measurements to queue before dropping
    */
-  constructor (exporter, exportInterval, temporalityPreference = 'DELTA', maxQueueSize = 2048) {
+  constructor (exporter, exportInterval, temporalityPreference, maxQueueSize) {
     this.exporter = exporter
     this.#exportInterval = exportInterval
-    this.#measurements = []
-    this.#observableInstruments = []
     this.#aggregator = new MetricAggregator(temporalityPreference)
-    this.#timer = null
-    this.#cumulativeState = new Map() // Tracks cumulative values across export cycles
-    this.#lastExportedState = new Map() // Tracks last exported values for delta calculation
     this.#maxQueueSize = maxQueueSize
-    this.#droppedCount = 0
     this.#startTimer()
   }
 
@@ -152,12 +147,11 @@ class PeriodicMetricReader {
  * @private
  */
 class MetricAggregator {
+  #startTime = Number(process.hrtime.bigint())
   #temporalityPreference
-  #startTime
 
   constructor (temporalityPreference = TEMPORALITY.DELTA) {
     this.#temporalityPreference = temporalityPreference
-    this.#startTime = Number(process.hrtime.bigint())
   }
 
   #getTemporality (type) {
@@ -201,23 +195,22 @@ class MetricAggregator {
 
       const scopeKey = this.#getScopeKey(instrumentationScope)
       const metricKey = `${scopeKey}:${name}:${type}`
-      const attrKey = JSON.stringify(attributes)
+      const attrKey = stableStringify(attributes)
       const stateKey = this.#getStateKey(scopeKey, name, type, attrKey)
 
-      if (!metricsMap.has(metricKey)) {
-        metricsMap.set(metricKey, {
+      let metric = metricsMap.get(metricKey)
+      if (!metric) {
+        metric = {
           name,
           description,
           unit,
           type,
           instrumentationScope,
           temporality: this.#getTemporality(type),
-          data: [],
           dataPointMap: new Map()
-        })
+        }
+        metricsMap.set(metricKey, metric)
       }
-
-      const metric = metricsMap.get(metricKey)
 
       if (type === METRIC_TYPES.COUNTER || type === METRIC_TYPES.UPDOWNCOUNTER) {
         this.#aggregateSum(metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState)
@@ -254,7 +247,7 @@ class MetricAggregator {
       if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
         const scopeKey = this.#getScopeKey(metric.instrumentationScope)
 
-        for (const dataPoint of metric.data) {
+        for (const dataPoint of metric.dataPointMap.values()) {
           const stateKey = this.#getStateKey(scopeKey, metric.name, metric.type, dataPoint.attrKey)
 
           if (metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER) {
@@ -284,8 +277,6 @@ class MetricAggregator {
           }
         }
       }
-
-      delete metric.dataPointMap
     }
   }
 
@@ -294,7 +285,6 @@ class MetricAggregator {
 
     if (!dataPoint) {
       dataPoint = { attributes, attrKey, ...createInitialDataPoint() }
-      metric.data.push(dataPoint)
       metric.dataPointMap.set(attrKey, dataPoint)
     }
 
