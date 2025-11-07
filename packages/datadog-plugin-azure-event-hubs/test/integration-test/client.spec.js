@@ -1,8 +1,5 @@
 'use strict'
 
-const { assert, expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
 const {
   FakeAgent,
   sandboxCwd,
@@ -11,11 +8,11 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const { assert, expect } = require('chai')
 
 const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
 
-// TODO: Fix this test / esm issue
-describe.skip('esm', () => {
+describe('esm', () => {
   let agent
   let proc
 
