@@ -49,13 +49,13 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
       }
     }
 
-    const telemetryTags = [...this.telemetryTags, `points:${dataPointCount}`]
-    this.recordTelemetry('otel.metrics_export_attempts', 1, telemetryTags)
+    const additionalTags = [`points:${dataPointCount}`]
+    this.recordTelemetry('otel.metrics_export_attempts', 1, additionalTags)
 
     const payload = this.transformer.transformMetrics(metrics)
     this.sendPayload(payload, (result) => {
       if (result.code === 0) {
-        this.recordTelemetry('otel.metrics_export_successes', 1, telemetryTags)
+        this.recordTelemetry('otel.metrics_export_successes', 1, additionalTags)
       }
       resultCallback(result)
     })

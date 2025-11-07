@@ -111,9 +111,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       scopeMetrics.push({
         scope,
         schemaUrl,
-        metrics: metricsInScope.map(metric =>
-          isJson ? this.#transformMetricToJson(metric) : this.#transformMetric(metric)
-        )
+        metrics: metricsInScope.map(metric => this.#transformMetric(metric, isJson))
       })
     }
 
@@ -121,34 +119,30 @@ class OtlpTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Transforms a single metric to protobuf format.
+   * Transforms a single metric to protobuf or JSON format.
    * @private
+   * @param {Object} metric - The metric to transform
+   * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
    */
-  #transformMetric (metric) {
+  #transformMetric (metric, isJson = false) {
     const result = {
       name: metric.name,
       description: metric.description || '',
       unit: metric.unit || ''
     }
 
-    const temporality = metric.temporality === TEMPORALITY.CUMULATIVE
-      ? AGGREGATION_TEMPORALITY_CUMULATIVE
-      : AGGREGATION_TEMPORALITY_DELTA
+    const isCumulative = metric.temporality === TEMPORALITY.CUMULATIVE
+    let temporality
+    if (isJson) {
+      temporality = isCumulative ? 'AGGREGATION_TEMPORALITY_CUMULATIVE' : 'AGGREGATION_TEMPORALITY_DELTA'
+    } else {
+      temporality = isCumulative ? AGGREGATION_TEMPORALITY_CUMULATIVE : AGGREGATION_TEMPORALITY_DELTA
+    }
 
     switch (metric.type) {
       case METRIC_TYPES.HISTOGRAM:
         result.histogram = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => ({
-            attributes: this.transformAttributes(dp.attributes),
-            startTimeUnixNano: dp.startTimeUnixNano,
-            timeUnixNano: dp.timeUnixNano,
-            count: dp.count,
-            sum: dp.sum,
-            bucketCounts: dp.bucketCounts || [],
-            explicitBounds: dp.explicitBounds || [],
-            min: dp.min,
-            max: dp.max
-          })),
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformHistogramDataPoint(dp, isJson)),
           aggregationTemporality: temporality
         }
         break
@@ -158,7 +152,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       case METRIC_TYPES.UPDOWNCOUNTER:
       case METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER:
         result.sum = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp)),
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp, isJson)),
           aggregationTemporality: temporality,
           isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER
         }
@@ -166,7 +160,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
       case METRIC_TYPES.GAUGE:
         result.gauge = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp))
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp, isJson))
         }
         break
     }
@@ -175,89 +169,54 @@ class OtlpTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Transforms a single metric to JSON format.
+   * Transforms a histogram data point.
    * @private
    */
-  #transformMetricToJson (metric) {
-    const result = {
-      name: metric.name,
-      description: metric.description || '',
-      unit: metric.unit || ''
+  #transformHistogramDataPoint (dp, isJson) {
+    const attributes = isJson
+      ? this.attributesToJson(dp.attributes)
+      : this.transformAttributes(dp.attributes)
+
+    const dataPoint = {
+      attributes,
+      startTimeUnixNano: dp.startTimeUnixNano,
+      timeUnixNano: dp.timeUnixNano,
+      count: dp.count,
+      sum: dp.sum,
+      bucketCounts: dp.bucketCounts || [],
+      explicitBounds: dp.explicitBounds || [],
+      min: dp.min,
+      max: dp.max
     }
 
-    const temporalityStr = metric.temporality === TEMPORALITY.CUMULATIVE
-      ? 'AGGREGATION_TEMPORALITY_CUMULATIVE'
-      : 'AGGREGATION_TEMPORALITY_DELTA'
-
-    switch (metric.type) {
-      case METRIC_TYPES.HISTOGRAM:
-        result.histogram = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => ({
-            attributes: this.attributesToJson(dp.attributes),
-            startTimeUnixNano: String(dp.startTimeUnixNano),
-            timeUnixNano: String(dp.timeUnixNano),
-            count: dp.count || 0,
-            sum: dp.sum,
-            bucketCounts: dp.bucketCounts || [],
-            explicitBounds: dp.explicitBounds || [],
-            min: dp.min,
-            max: dp.max
-          })),
-          aggregationTemporality: temporalityStr,
-        }
-        break
-
-      case METRIC_TYPES.COUNTER:
-      case METRIC_TYPES.OBSERVABLECOUNTER:
-      case METRIC_TYPES.UPDOWNCOUNTER:
-      case METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER:
-        result.sum = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#numberDataPointToJson(dp)),
-          aggregationTemporality: temporalityStr,
-          isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER
-        }
-        break
-
-      case METRIC_TYPES.GAUGE:
-        result.gauge = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#numberDataPointToJson(dp))
-        }
-        break
+    if (isJson) {
+      dataPoint.startTimeUnixNano = String(dataPoint.startTimeUnixNano)
+      dataPoint.timeUnixNano = String(dataPoint.timeUnixNano)
+      dataPoint.count = dataPoint.count || 0
     }
 
-    return result
+    return dataPoint
   }
 
   /**
-   * Transforms a number data point to protobuf format.
+   * Transforms a number data point to protobuf or JSON format.
    * @private
    */
-  #transformNumberDataPoint (dataPoint) {
+  #transformNumberDataPoint (dataPoint, isJson) {
+    const attributes = isJson
+      ? this.attributesToJson(dataPoint.attributes)
+      : this.transformAttributes(dataPoint.attributes)
+    const timeUnixNano = isJson
+      ? String(dataPoint.timeUnixNano)
+      : dataPoint.timeUnixNano
+
     const result = {
-      attributes: this.transformAttributes(dataPoint.attributes),
-      timeUnixNano: dataPoint.timeUnixNano,
+      attributes,
+      timeUnixNano
     }
 
     if (dataPoint.startTimeUnixNano) {
-      result.startTimeUnixNano = dataPoint.startTimeUnixNano
-    }
-
-    this.#assignNumberValue(result, dataPoint.value)
-    return result
-  }
-
-  /**
-   * Transforms a number data point to JSON format.
-   * @private
-   */
-  #numberDataPointToJson (dataPoint) {
-    const result = {
-      attributes: this.attributesToJson(dataPoint.attributes),
-      timeUnixNano: String(dataPoint.timeUnixNano)
-    }
-
-    if (dataPoint.startTimeUnixNano) {
-      result.startTimeUnixNano = String(dataPoint.startTimeUnixNano)
+      result.startTimeUnixNano = isJson ? String(dataPoint.startTimeUnixNano) : dataPoint.startTimeUnixNano
     }
 
     this.#assignNumberValue(result, dataPoint.value)

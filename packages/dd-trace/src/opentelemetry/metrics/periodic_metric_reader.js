@@ -19,7 +19,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 class PeriodicMetricReader {
   #measurements = []
-  #observableInstruments = []
+  #observableInstruments = new Set()
   #cumulativeState = new Map()
   #lastExportedState = new Map()
   #droppedCount = 0
@@ -63,9 +63,7 @@ class PeriodicMetricReader {
    * @param {ObservableGauge} instrument - The observable instrument to register
    */
   registerObservableInstrument (instrument) {
-    if (!this.#observableInstruments.includes(instrument)) {
-      this.#observableInstruments.push(instrument)
-    }
+    this.#observableInstruments.add(instrument)
   }
 
   /**
@@ -103,7 +101,7 @@ class PeriodicMetricReader {
   #collectAndExport (callback = () => {}) {
     const allMeasurements = this.#measurements.splice(0)
 
-    for (const instrument of this.#observableInstruments) {
+    for (const instrument of this.#observableInstruments.values()) {
       if (allMeasurements.length >= this.#maxQueueSize) break
 
       const observableMeasurements = instrument.collect()
