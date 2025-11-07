@@ -34,6 +34,10 @@ if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
 
+if (process.env.DO_NOT_INJECT_GLOBALS) {
+  options.injectGlobals = false
+}
+
 jest.runCLI(
   options,
   options.projects

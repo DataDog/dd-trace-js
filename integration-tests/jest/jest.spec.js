@@ -87,8 +87,11 @@ const expectedCoverageFiles = [
 ]
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
+const JEST_VERSION = process.env.JEST_VERSION || 'latest'
+const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+
 // TODO: add ESM tests
-describe('jest CommonJS', () => {
+describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
   let childProcess
   let cwd
@@ -96,7 +99,7 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   useSandbox([
-    'jest',
+    `jest@${JEST_VERSION}`,
     'chai@v4',
     'jest-jasmine2',
     'jest-environment-jsdom',
@@ -394,132 +397,18 @@ describe('jest CommonJS', () => {
         eventsPromise
       ])
     })
-  })
 
-  const nonLegacyReportingOptions = ['agentless', 'evp proxy']
-
-  nonLegacyReportingOptions.forEach((reportingOption) => {
-    it(`can run and report tests with ${reportingOption}`, (done) => {
-      const envVars = reportingOption === 'agentless'
-        ? getCiVisAgentlessConfig(receiver.port)
-        : getCiVisEvpProxyConfig(receiver.port)
-      if (reportingOption === 'evp proxy') {
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      }
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
-        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
-
-        metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
-        })
-
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-        const moduleEventContent = events.find(event => event.type === 'test_module_end').content
-        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-        const resourceNames = tests.map(span => span.resource)
-
-        assert.includeMembers(resourceNames,
-          [
-            'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-            'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-          ]
-        )
-        assert.equal(suites.length, 2)
-        assert.exists(sessionEventContent)
-        assert.exists(moduleEventContent)
-
-        assert.include(testOutput, expectedStdout)
-
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
-          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-          // Can read DD_TAGS
-          assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
-          assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
-          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
-        })
-
-        suites.forEach(testSuite => {
-          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
-          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
-          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
-        })
-
-        done()
-      })
-
-      childProcess = fork(startupTestFile, {
-        cwd,
-        env: {
-          ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session',
-          DD_SERVICE: undefined
-        },
-        stdio: 'pipe'
-      })
-      childProcess.stdout.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-      childProcess.stderr.on('data', (chunk) => {
-        testOutput += chunk.toString()
-      })
-    })
-
-    it('should create events for session, suite and test', async () => {
-      const envVars = reportingOption === 'agentless'
-        ? getCiVisAgentlessConfig(receiver.port)
-        : getCiVisEvpProxyConfig(receiver.port)
-      if (reportingOption === 'evp proxy') {
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      }
-
+    onlyLatestIt('does not crash when injectGlobals is false', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
       const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-          const testModuleEvent = events.find(event => event.type === 'test_module_end').content
-          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
-          const testEvent = events.find(event => event.type === 'test').content
-
-          assert.exists(testSessionEvent)
-          assert.equal(testSessionEvent.meta[TEST_STATUS], 'pass')
-          assert.exists(testSessionEvent[TEST_SESSION_ID])
-          assert.exists(testSessionEvent.meta[TEST_COMMAND])
-          assert.notExists(testSessionEvent[TEST_SUITE_ID])
-          assert.notExists(testSessionEvent[TEST_MODULE_ID])
-
-          assert.exists(testModuleEvent)
-          assert.equal(testModuleEvent.meta[TEST_STATUS], 'pass')
-          assert.exists(testModuleEvent[TEST_SESSION_ID])
-          assert.exists(testModuleEvent[TEST_MODULE_ID])
-          assert.exists(testModuleEvent.meta[TEST_COMMAND])
-          assert.notExists(testModuleEvent[TEST_SUITE_ID])
-
-          assert.exists(testSuiteEvent)
-          assert.equal(testSuiteEvent.meta[TEST_STATUS], 'pass')
-          assert.equal(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-          assert.exists(testSuiteEvent.meta[TEST_COMMAND])
-          assert.exists(testSuiteEvent.meta[TEST_MODULE])
-          assert.exists(testSuiteEvent[TEST_SUITE_ID])
-          assert.exists(testSuiteEvent[TEST_SESSION_ID])
-          assert.exists(testSuiteEvent[TEST_MODULE_ID])
-
-          assert.exists(testEvent)
-          assert.equal(testEvent.meta[TEST_STATUS], 'pass')
-          assert.equal(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
-          assert.equal(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-          assert.exists(testEvent.meta[TEST_COMMAND])
-          assert.exists(testEvent.meta[TEST_MODULE])
-          assert.exists(testEvent[TEST_SUITE_ID])
-          assert.exists(testEvent[TEST_SESSION_ID])
-          assert.exists(testEvent[TEST_MODULE_ID])
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpan = payloads
+            .flatMap(({ payload }) => payload.flatMap(trace => trace))
+            .find(span => span.type === 'test')
+          assert.exists(testSpan, 'Expected to find test span')
+          assert.propertyVal(testSpan.meta, TEST_NAME, 'jest-inject-globals will be run')
+          assert.propertyVal(testSpan.meta, TEST_STATUS, 'pass')
+          assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-inject-globals.js')
         })
 
       childProcess = exec(
@@ -527,8 +416,11 @@ describe('jest CommonJS', () => {
         {
           cwd,
           env: {
-            ...envVars,
-            TESTS_TO_RUN: 'jest-plugin-tests/jest-test-suite'
+            ...process.env,
+            DD_TRACE_AGENT_PORT: receiver.port,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-inject-globals',
+            DO_NOT_INJECT_GLOBALS: true
           },
           stdio: 'inherit'
         }
@@ -538,6 +430,153 @@ describe('jest CommonJS', () => {
         once(childProcess, 'exit'),
         eventsPromise
       ])
+    })
+  })
+
+  const nonLegacyReportingOptions = ['agentless', 'evp proxy']
+
+  nonLegacyReportingOptions.forEach((reportingOption) => {
+    context(`reporting via (${reportingOption})`, () => {
+      it('can run and report tests', (done) => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
+
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+          const moduleEventContent = events.find(event => event.type === 'test_module_end').content
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+            ]
+          )
+          assert.equal(suites.length, 2)
+          assert.exists(sessionEventContent)
+          assert.exists(moduleEventContent)
+
+          assert.include(testOutput, expectedStdout)
+
+          tests.forEach(testEvent => {
+            assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+            assert.exists(testEvent.metrics[TEST_SOURCE_START])
+            assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+            // Can read DD_TAGS
+            assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
+            assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+            assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
+          })
+
+          suites.forEach(testSuite => {
+            assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+            assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+            assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
+          })
+
+          done()
+        })
+
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: {
+            ...envVars,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      })
+
+      it('should create events for session, suite and test', async () => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            const testModuleEvent = events.find(event => event.type === 'test_module_end').content
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+            const testEvent = events.find(event => event.type === 'test').content
+
+            assert.exists(testSessionEvent)
+            assert.equal(testSessionEvent.meta[TEST_STATUS], 'pass')
+            assert.exists(testSessionEvent[TEST_SESSION_ID])
+            assert.exists(testSessionEvent.meta[TEST_COMMAND])
+            assert.notExists(testSessionEvent[TEST_SUITE_ID])
+            assert.notExists(testSessionEvent[TEST_MODULE_ID])
+
+            assert.exists(testModuleEvent)
+            assert.equal(testModuleEvent.meta[TEST_STATUS], 'pass')
+            assert.exists(testModuleEvent[TEST_SESSION_ID])
+            assert.exists(testModuleEvent[TEST_MODULE_ID])
+            assert.exists(testModuleEvent.meta[TEST_COMMAND])
+            assert.notExists(testModuleEvent[TEST_SUITE_ID])
+
+            assert.exists(testSuiteEvent)
+            assert.equal(testSuiteEvent.meta[TEST_STATUS], 'pass')
+            assert.equal(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
+            assert.exists(testSuiteEvent.meta[TEST_COMMAND])
+            assert.exists(testSuiteEvent.meta[TEST_MODULE])
+            assert.exists(testSuiteEvent[TEST_SUITE_ID])
+            assert.exists(testSuiteEvent[TEST_SESSION_ID])
+            assert.exists(testSuiteEvent[TEST_MODULE_ID])
+
+            assert.exists(testEvent)
+            assert.equal(testEvent.meta[TEST_STATUS], 'pass')
+            assert.equal(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
+            assert.equal(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
+            assert.exists(testEvent.meta[TEST_COMMAND])
+            assert.exists(testEvent.meta[TEST_MODULE])
+            assert.exists(testEvent[TEST_SUITE_ID])
+            assert.exists(testEvent[TEST_SESSION_ID])
+            assert.exists(testEvent[TEST_MODULE_ID])
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              TESTS_TO_RUN: 'jest-plugin-tests/jest-test-suite'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
+      })
     })
   })
 

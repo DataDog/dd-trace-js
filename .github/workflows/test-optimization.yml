@@ -72,7 +72,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:playwright
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-mocha:
     strategy:
@@ -92,14 +92,35 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:mocha
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
+
+  integration-jest:
+    strategy:
+      matrix:
+        version: [oldest, latest]
+        jest-version: [24.8.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:jest
+        env:
+          NODE_OPTIONS: "-r ./ci/init"
+          JEST_VERSION: ${{ matrix.jest-version }}
 
   integration-ci:
     strategy:
       matrix:
         version: [oldest, latest]
-        framework: [cucumber, selenium, jest]
+        framework: [cucumber, selenium]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -133,7 +154,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:${{ matrix.framework }}
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-cypress:
     strategy:
@@ -144,7 +165,7 @@ jobs:
         # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
-        module-type: ['commonJS', 'esm']
+        module-type: ["commonJS", "esm"]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -160,7 +181,7 @@ jobs:
       - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
 
@@ -182,7 +203,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:vitest
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   plugin-cucumber:
     runs-on: ubuntu-latest
@@ -210,29 +231,7 @@ jobs:
         with:
           suffix: plugins-${{ github.job }}
       - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
-
-  # TODO: fix performance issues and test more Node versions
-  plugin-jest:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: jest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a # v2.0.0
         if: always()
         with:
           api_key: ${{ secrets.DD_API_KEY }}
