@@ -9,18 +9,11 @@ import * as rewriter from './packages/dd-trace/src/appsec/iast/taint-tracking/re
 // object so we can just load the hook right away in this file.
 const hasRewriter = Module.hasOwnProperty('register')
 
-const initialize = hasRewriter
-  ? iitm.initialize
-  : function initialize (data) {
-    iitm.initialize(data)
-    rewriter.initialize(data)
-  }
-
 const load = hasRewriter
   ? iitm.load
   : function load (url, context, nextLoad) {
-    iitm.load(url, context, (url, context) => rewriter.load(url, context, nextLoad))
+    return iitm.load(url, context, (url, context) => rewriter.load(url, context, nextLoad))
   }
 
-export { initialize, load }
-export { getFormat, resolve, getSource } from './packages/dd-trace/src/loaders/iitm.mjs'
+export { load }
+export { getFormat, initialize, resolve, getSource } from './packages/dd-trace/src/loaders/iitm.mjs'

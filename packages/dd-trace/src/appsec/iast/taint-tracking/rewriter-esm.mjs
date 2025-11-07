@@ -3,6 +3,7 @@ import { URL } from 'url'
 import { getName } from '../telemetry/verbosity.js'
 import { isDdTrace, isPrivateModule } from './filter.js'
 import constants from './constants.js'
+import orchestrion from '../../../../../datadog-instrumentations/src/orchestrion-config/index.js'
 
 const currentUrl = new URL(import.meta.url)
 const ddTraceDir = path.join(currentUrl.pathname, '..', '..', '..', '..', '..', '..')
@@ -31,7 +32,6 @@ export async function initialize (data) {
 export async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
 
-  if (!port) return result
   if (!result.source) return result
   if (url.includes(ddTraceDir) || url.includes('iitm=true')) return result
 
@@ -49,12 +49,19 @@ export async function load (url, context, nextLoad) {
     } else {
       passes = ['orchestrion']
     }
+
+    if (!rewriter) {
+      const iastRewriter = await import('@datadog/wasm-js-rewriter')
+      const { NonCacheRewriter } = iastRewriter.default
+      rewriter = new NonCacheRewriter({ orchestrion })
+    }
+
     const rewritten = rewriter.rewrite(result.source.toString(), url, passes)
 
     if (rewritten?.content) {
       result.source = rewritten.content || result.source
       const data = { url, rewritten }
-      port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
+      port?.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
     }
   } catch (e) {
     const newErrObject = {
@@ -66,7 +73,7 @@ export async function load (url, context, nextLoad) {
       level: 'error',
       messages: ['[ASM] Error rewriting file %s', url, newErrObject]
     }
-    port.postMessage({
+    port?.postMessage({
       type: constants.LOG_MESSAGE,
       data
     })
