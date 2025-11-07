@@ -518,10 +518,11 @@ moduleTypes.forEach(({
     context('intelligent test runner', () => {
       it('can report git metadata', async () => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
-          ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
+          ({ url }) => url.endsWith('/api/v2/git/repository/search_commits'),
+          25000
         )
         const packfileRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'), 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -540,6 +541,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
@@ -629,13 +634,13 @@ moduleTypes.forEach(({
           }, 25000)
 
         const coverageRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'), 25000)
           .then(coverageRequest => {
             assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
           })
 
         const skippableRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000)
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
           })
@@ -657,6 +662,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -683,7 +692,7 @@ moduleTypes.forEach(({
 
         receiver.assertPayloadReceived(() => {
           hasRequestedSkippable = true
-        }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable')).catch(() => {})
+        }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000).catch(() => {})
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -712,6 +721,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -788,6 +801,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -857,6 +874,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -884,10 +905,10 @@ moduleTypes.forEach(({
             assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
             assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 0)
-          }, 25000)
+          }, 30000)
 
         const skippableRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 30000)
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
           })
@@ -909,6 +930,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1002,6 +1027,10 @@ moduleTypes.forEach(({
             stdio: 'inherit'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1434,10 +1463,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -1499,10 +1524,6 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1591,6 +1612,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -2052,6 +2077,10 @@ moduleTypes.forEach(({
               stdio: 'pipe'
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
