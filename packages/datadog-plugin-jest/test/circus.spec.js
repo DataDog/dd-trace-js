@@ -8,16 +8,13 @@ const semver = require('semver')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
-  TEST_FRAMEWORK,
   TEST_NAME,
   TEST_SUITE,
-  TEST_SOURCE_FILE,
   TEST_STATUS,
-  CI_APP_ORIGIN,
   TEST_COMMAND,
   TEST_TOOLCHAIN,
   TEST_SUITE_ID,
@@ -97,47 +94,6 @@ describe('Plugin', function () {
           const loadedAgent = await loadAgent(moduleName, version, false, false)
           jestExecutable = loadedAgent.jestExecutable
           jestCommonOptions = loadedAgent.jestCommonOptions
-        })
-
-        it('should work with focused tests', (done) => {
-          const tests = [
-            { name: 'jest-test-focused will be skipped', status: 'skip' },
-            { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
-            { name: 'jest-test-focused can do focused test', status: 'pass' }
-          ]
-
-          const assertionPromises = tests.map(({ name, status }) => {
-            return agent.assertSomeTraces(trace => {
-              const testSpan = trace[0].find(span => span.type === 'test')
-              expect(testSpan.parent_id.toString()).to.equal('0')
-              expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-              expect(testSpan.meta).to.contain({
-                language: 'javascript',
-                service: 'test',
-                [TEST_NAME]: name,
-                [TEST_STATUS]: status,
-                [TEST_FRAMEWORK]: 'jest',
-                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-                [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-focus.js',
-                [COMPONENT]: 'jest'
-              })
-            }, {
-              timeoutMs: assertionTimeout,
-              spanResourceMatch: new RegExp(`${name}$`)
-            })
-          })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: 'jest-focus.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
         })
 
         // option available from 26.5.0:

@@ -335,6 +335,60 @@ describe('jest CommonJS', () => {
         eventsPromise
       ])
     })
+
+    it('should work with focused tests', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const tests = [
+        { name: 'jest-test-focused will be skipped', status: 'skip' },
+        { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
+        { name: 'jest-test-focused can do focused test', status: 'pass' }
+      ]
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          tests.forEach(({ name, status }) => {
+            const testSpan = testSpans.find(span =>
+              span.resource === `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`
+            )
+
+            assert.exists(testSpan, `Expected to find test "${name}"`)
+            assert.propertyVal(testSpan.meta, 'language', 'javascript')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(testSpan.meta, TEST_NAME, name)
+            assert.propertyVal(testSpan.meta, TEST_STATUS, status)
+            assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-focus.js')
+            assert.propertyVal(testSpan.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-focus.js')
+            assert.propertyVal(testSpan.meta, COMPONENT, 'jest')
+            assert.equal(testSpan.type, 'test')
+            assert.equal(testSpan.name, 'jest.test')
+            assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`)
+            assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            DD_TRACE_AGENT_PORT: receiver.port,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
   })
 
   const nonLegacyReportingOptions = ['agentless', 'evp proxy']
