@@ -280,7 +280,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             NODE_OPTIONS: '-r dd-trace/ci/init',
             DD_TRACE_AGENT_PORT: receiver.port,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
-            DD_SERVICE: 'plugin-tests'
+            DD_SERVICE: 'plugin-tests',
+            DD_TRACE_DEBUG: 1,
           },
           stdio: 'inherit'
         }
