@@ -844,57 +844,42 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Queue Size Limits', () => {
-    function countDataPoints (metrics) {
-      return metrics.resourceMetrics[0].scopeMetrics[0].metrics.reduce((sum, m) => {
-        return sum + (m.sum?.dataPoints.length || m.gauge?.dataPoints.length || 0)
-      }, 0)
+    function countMetrics (metrics) {
+      return metrics.resourceMetrics[0].scopeMetrics[0].metrics.length
     }
 
-    it('overflows with 4 synchronous measurements when max is 3', (done) => {
+    it('overflows with 4 synchronous metrics when max is 3', (done) => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
       const validator = mockOtlpExport((metrics) => {
-        assert.strictEqual(countDataPoints(metrics), 3)
-        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
+        assert.strictEqual(countMetrics(metrics), 3)
+        assert(warnSpy.getCalls().some(call =>
+          call.args[0].includes('Metric queue exceeded limit (max: 3)')
+        ))
       })
 
       setupTracer(
-        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
-        false
+        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' }
+        , false
       )
-      const counter = metrics.getMeterProvider().getMeter('test').createCounter('test.counter')
-      for (let i = 0; i < 4; i++) counter.add(1, { idx: i })
+      const meter = metrics.getMeterProvider().getMeter('test')
+      meter.createCounter('counter.1').add(1)
+      meter.createCounter('counter.2').add(2)
+      meter.createCounter('counter.3').add(3)
+      meter.createCounter('counter.4').add(4)
 
       setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
     })
 
-    it('overflows with 4 observable measurements when max is 3', (done) => {
+    it('overflows with 4 observable metrics when max is 3', (done) => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
+      let callCount = 0
       const validator = mockOtlpExport((metrics) => {
-        assert.strictEqual(countDataPoints(metrics), 3)
-        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
-      })
-
-      setupTracer(
-        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
-        false
-      )
-      const gauge = metrics.getMeterProvider().getMeter('test').createObservableGauge('test.gauge')
-      gauge.addCallback((result) => { for (let i = 0; i < 4; i++) result.observe(i * 10, { idx: i }) })
-
-      setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
-    })
-
-    it('overflows with 2 synchronous + 2 observable measurements when max is 3', (done) => {
-      const log = require('../../src/log')
-      const warnSpy = sinon.spy(log, 'warn')
-      let firstExport = true
-      const validator = mockOtlpExport((metrics) => {
-        if (!firstExport) return
-        firstExport = false
-        assert.strictEqual(countDataPoints(metrics), 3)
-        assert(warnSpy.firstCall.args[0].includes('Dropping 1 measurements'))
+        if (++callCount === 1) {
+          assert.strictEqual(countMetrics(metrics), 3)
+          assert(warnSpy.getCalls().some(call => call.args[0].includes('Metric queue exceeded limit')))
+        }
       })
 
       setupTracer(
@@ -902,13 +887,71 @@ describe('OpenTelemetry Meter Provider', () => {
         false
       )
       const meter = metrics.getMeterProvider().getMeter('test')
-      const counter = meter.createCounter('test.counter')
-      const gauge = meter.createObservableGauge('test.gauge')
-      counter.add(1, { idx: 0 })
-      counter.add(1, { idx: 1 })
-      gauge.addCallback((result) => { result.observe(10, { idx: 0 }); result.observe(20, { idx: 1 }) })
+      meter.createObservableGauge('gauge.1').addCallback((result) => result.observe(10))
+      meter.createObservableGauge('gauge.2').addCallback((result) => result.observe(20))
+      meter.createObservableGauge('gauge.3').addCallback((result) => result.observe(30))
+      meter.createObservableGauge('gauge.4').addCallback((result) => result.observe(40))
 
       setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+
+    it('overflows with 2 synchronous + 2 observable metrics when max is 3', (done) => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      let firstExport = true
+      const validator = mockOtlpExport((metrics) => {
+        if (!firstExport) return
+        firstExport = false
+        assert.strictEqual(countMetrics(metrics), 3)
+        assert(warnSpy.getCalls().some(call => call.args[0].includes('Metric queue exceeded limit')))
+      })
+
+      setupTracer(
+        { DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '100', OTEL_BSP_MAX_QUEUE_SIZE: '3' },
+        false
+      )
+      const meter = metrics.getMeterProvider().getMeter('test')
+      meter.createCounter('counter.1').add(1)
+      meter.createCounter('counter.2').add(2)
+      meter.createObservableGauge('gauge.1').addCallback((result) => result.observe(10))
+      meter.createObservableGauge('gauge.2').addCallback((result) => result.observe(20))
+
+      setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
+    })
+
+    it('drops measurements when MAX_MEASUREMENT_QUEUE_SIZE is exceeded', (done) => {
+      const log = require('../../src/log')
+      const warnSpy = sinon.spy(log, 'warn')
+      let firstExport = true
+
+      const validator = mockOtlpExport((metrics) => {
+        if (!firstExport) return
+        firstExport = false
+
+        const exportedMetrics = metrics.resourceMetrics[0].scopeMetrics[0].metrics
+        assert(!exportedMetrics.find(m => m.name === 'counter.overflow'))
+        assert(!exportedMetrics.find(m => m.name === 'gauge.overflow'))
+        const counter1Metric = exportedMetrics.find(m => m.name === 'counter.sync')
+        assert(counter1Metric, 'counter.sync should be exported')
+        assert.strictEqual(counter1Metric.sum.dataPoints.length, 1048576)
+        assert(warnSpy.getCalls().some(call =>
+          call.args[0].includes('Metric queue exceeded limit') &&
+          call.args[0].includes('max: 1048576') &&
+          call.args[0].includes('Dropping 2 measurements')
+        ))
+      })
+
+      setupTracer({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '10000' }, false)
+      const meter = metrics.getMeterProvider().getMeter('test')
+      const counter = meter.createCounter('counter.sync')
+
+      for (let i = 0; i < 1048576; i++) counter.add(1, { id: `${i}` })
+
+      meter.createCounter('counter.overflow').add(1)
+      meter.createObservableGauge('gauge.overflow').addCallback((result) => result.observe(1))
+
+      metrics.getMeterProvider().forceFlush()
+      setTimeout(() => { validator(); warnSpy.restore(); done() }, 100)
     })
   })
 

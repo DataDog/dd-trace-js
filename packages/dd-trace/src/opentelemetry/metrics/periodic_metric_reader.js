@@ -48,6 +48,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @class PeriodicMetricReader
  */
 class PeriodicMetricReader {
+  MAX_MEASUREMENT_QUEUE_SIZE = 1_048_576 // arbitrary limit to prevent memory exhaustion
   #measurements = []
   #observableInstruments = new Set()
   #cumulativeState = new Map()
@@ -56,7 +57,6 @@ class PeriodicMetricReader {
   #timer = null
   #exportInterval
   #aggregator
-  #maxQueueSize
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -66,11 +66,10 @@ class PeriodicMetricReader {
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
    * @param {number} maxQueueSize - Maximum number of measurements to queue before dropping
    */
-  constructor (exporter, exportInterval, temporalityPreference, maxQueueSize) {
+  constructor (exporter, exportInterval, temporalityPreference, maxBatchedQueueSize) {
     this.exporter = exporter
     this.#exportInterval = exportInterval
-    this.#aggregator = new MetricAggregator(temporalityPreference)
-    this.#maxQueueSize = maxQueueSize
+    this.#aggregator = new MetricAggregator(temporalityPreference, maxBatchedQueueSize)
     this.#startTimer()
   }
 
@@ -80,7 +79,7 @@ class PeriodicMetricReader {
    * @param {Measurement} measurement - The measurement data
    */
   record (measurement) {
-    if (this.#measurements.length >= this.#maxQueueSize) {
+    if (this.#measurements.length >= this.MAX_MEASUREMENT_QUEUE_SIZE) {
       this.#droppedCount++
       return
     }
@@ -145,25 +144,28 @@ class PeriodicMetricReader {
     const allMeasurements = this.#measurements.splice(0)
 
     for (const instrument of this.#observableInstruments.values()) {
-      if (allMeasurements.length >= this.#maxQueueSize) break
-
       const observableMeasurements = instrument.collect()
-      const remainingCapacity = this.#maxQueueSize - allMeasurements.length
+
+      if (allMeasurements.length >= this.MAX_MEASUREMENT_QUEUE_SIZE) {
+        // Queue is full, count all these measurements as dropped
+        this.#droppedCount += observableMeasurements.length
+        continue
+      }
+
+      const remainingCapacity = this.MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
 
       if (observableMeasurements.length <= remainingCapacity) {
         allMeasurements.push(...observableMeasurements)
       } else {
         allMeasurements.push(...observableMeasurements.slice(0, remainingCapacity))
         this.#droppedCount += observableMeasurements.length - remainingCapacity
-        break
       }
     }
 
     if (this.#droppedCount > 0) {
       log.warn(
-        `Metric queue exceeded limit (max: ${this.#maxQueueSize}). ` +
-        `Dropping ${this.#droppedCount} measurements. ` +
-        'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+        `Metric queue exceeded limit (max: ${this.MAX_MEASUREMENT_QUEUE_SIZE}). ` +
+        `Dropping ${this.#droppedCount} measurements. `
       )
       this.#droppedCount = 0
     }
@@ -190,9 +192,11 @@ class PeriodicMetricReader {
 class MetricAggregator {
   #startTime = Number(process.hrtime.bigint())
   #temporalityPreference
+  #maxBatchedQueueSize
 
-  constructor (temporalityPreference = TEMPORALITY.DELTA) {
+  constructor (temporalityPreference, maxBatchedQueueSize) {
     this.#temporalityPreference = temporalityPreference
+    this.#maxBatchedQueueSize = maxBatchedQueueSize
   }
 
   /**
@@ -255,6 +259,14 @@ class MetricAggregator {
 
       let metric = metricsMap.get(metricKey)
       if (!metric) {
+        if (metricsMap.size >= this.#maxBatchedQueueSize) {
+          log.warn(
+            `Metric queue exceeded limit (max: ${this.#maxBatchedQueueSize}). ` +
+            `Dropping metric: ${metricKey}, value: ${value}. ` +
+            'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+          )
+          continue
+        }
         metric = {
           name,
           description,
