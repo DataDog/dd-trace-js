@@ -8,19 +8,12 @@ const semver = require('semver')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { COMPONENT } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_NAME,
   TEST_SUITE,
-  TEST_STATUS,
-  TEST_COMMAND,
-  TEST_TOOLCHAIN,
-  TEST_SUITE_ID,
-  TEST_SESSION_ID,
-  TEST_MODULE_ID,
-  TEST_MODULE
+  TEST_STATUS
 } = require('../../dd-trace/src/plugins/util/test')
 
 /**
@@ -121,100 +114,6 @@ describe('Plugin', function () {
             )
           })
         }
-      })
-
-      const initOptions = ['agentless', 'evp proxy']
-
-      initOptions.forEach(option => {
-        describe(`reporting through ${option}`, () => {
-          beforeEach(async () => {
-            const isAgentlessTest = option === 'agentless'
-            const isEvpProxyTest = option === 'evp proxy'
-
-            const loadedAgent = await loadAgent(moduleName, version, isAgentlessTest, isEvpProxyTest)
-            jestExecutable = loadedAgent.jestExecutable
-            jestCommonOptions = loadedAgent.jestCommonOptions
-          })
-
-          it('should create events for session, suite and test', (done) => {
-            const events = [
-              {
-                type: 'test_session_end',
-                status: 'pass',
-                spanResourceMatch: /^test_session/
-              },
-              {
-                type: 'test_suite_end',
-                status: 'pass',
-                suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-                spanResourceMatch: /^test_suite/
-              },
-              {
-                name: 'jest-test-suite-visibility works',
-                suite: 'packages/datadog-plugin-jest/test/jest-test-suite.js',
-                status: 'pass',
-                type: 'test',
-                spanResourceMatch: /jest-test-suite-visibility works$/
-              }
-            ]
-
-            const assertionPromises = events.map(({ name, suite, status, type, spanResourceMatch }) => {
-              return agent.assertSomeTraces((agentlessPayload, request) => {
-                if (option === 'evp proxy') {
-                  expect(request.headers['x-datadog-evp-subdomain']).to.equal('citestcycle-intake')
-                  expect(request.path).to.equal('/evp_proxy/v2/api/v2/citestcycle')
-                } else {
-                  expect(request.path).to.equal('/api/v2/citestcycle')
-                }
-                const { events } = agentlessPayload
-                const span = events.find(event => event.type === type).content
-                expect(span.meta[TEST_STATUS]).to.equal(status)
-                expect(span.meta[COMPONENT]).to.equal('jest')
-                if (type === 'test_session_end') { // session and module come in the same payload
-                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                  expect(span.meta[TEST_TOOLCHAIN]).not.to.equal(undefined)
-                  expect(span[TEST_SUITE_ID]).to.equal(undefined)
-                  expect(span[TEST_MODULE_ID]).to.equal(undefined)
-                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-                  const testModuleSpan = events.find(event => event.type === 'test_module_end').content
-                  expect(testModuleSpan[TEST_SUITE_ID]).to.equal(undefined)
-                  expect(testModuleSpan[TEST_MODULE_ID]).not.to.equal(undefined)
-                  expect(testModuleSpan[TEST_SESSION_ID]).not.to.equal(undefined)
-                  expect(testModuleSpan.meta[TEST_MODULE]).not.to.equal(undefined)
-                }
-                if (type === 'test_suite_end') {
-                  expect(span.meta[TEST_SUITE]).to.equal(suite)
-                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                  expect(span.meta[TEST_MODULE]).not.to.equal(undefined)
-                  expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
-                }
-                if (type === 'test') {
-                  expect(span.meta[TEST_SUITE]).to.equal(suite)
-                  expect(span.meta[TEST_NAME]).to.equal(name)
-                  expect(span.meta[TEST_COMMAND]).not.to.equal(undefined)
-                  expect(span.meta[TEST_MODULE]).not.to.equal(undefined)
-                  expect(span[TEST_SUITE_ID]).not.to.equal(undefined)
-                  expect(span[TEST_SESSION_ID]).not.to.equal(undefined)
-                  expect(span[TEST_MODULE_ID]).not.to.equal(undefined)
-                }
-              }, { timeoutMs: assertionTimeout, spanResourceMatch })
-            })
-
-            Promise.all(assertionPromises).then(() => done()).catch(done)
-
-            const options = {
-              ...jestCommonOptions,
-              testRegex: 'jest-test-suite.js'
-            }
-
-            jestExecutable.runCLI(
-              options,
-              options.projects
-            )
-          })
-        })
       })
     })
   })
