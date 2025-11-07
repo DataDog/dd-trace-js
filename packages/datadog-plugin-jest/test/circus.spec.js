@@ -8,19 +8,16 @@ const semver = require('semver')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
-  TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
   TEST_SOURCE_FILE,
-  TEST_FRAMEWORK_VERSION,
   TEST_STATUS,
   CI_APP_ORIGIN,
-  JEST_TEST_RUNNER,
   TEST_COMMAND,
   TEST_TOOLCHAIN,
   TEST_SUITE_ID,
@@ -100,55 +97,6 @@ describe('Plugin', function () {
           const loadedAgent = await loadAgent(moduleName, version, false, false)
           jestExecutable = loadedAgent.jestExecutable
           jestCommonOptions = loadedAgent.jestCommonOptions
-        })
-
-        it('should detect an error in hooks', (done) => {
-          const tests = [
-            { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
-            { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
-          ]
-          const assertionPromises = tests.map(({ name, error }) => {
-            return agent.assertSomeTraces(trace => {
-              const testSpan = trace[0][0]
-              expect(testSpan.parent_id.toString()).to.equal('0')
-              expect(testSpan.meta).to.contain({
-                language: 'javascript',
-                service: 'test',
-                [ORIGIN_KEY]: CI_APP_ORIGIN,
-                [TEST_FRAMEWORK]: 'jest',
-                [TEST_NAME]: name,
-                [TEST_STATUS]: 'fail',
-                [TEST_SUITE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
-                [TEST_SOURCE_FILE]: 'packages/datadog-plugin-jest/test/jest-hook-failure.js',
-                [TEST_TYPE]: 'test',
-                [JEST_TEST_RUNNER]: 'jest-circus',
-                [COMPONENT]: 'jest'
-              })
-              expect(testSpan.meta[ERROR_MESSAGE]).to.equal(error)
-              expect(testSpan.type).to.equal('test')
-              expect(testSpan.name).to.equal('jest.test')
-              expect(testSpan.service).to.equal('test')
-              expect(testSpan.resource).to.equal(
-                `packages/datadog-plugin-jest/test/jest-hook-failure.js.${name}`
-              )
-              expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-            }, {
-              timeoutMs: assertionTimeout,
-              spanResourceMatch: new RegExp(`${name}$`)
-            })
-          })
-
-          Promise.all(assertionPromises).then(() => done()).catch(done)
-
-          const options = {
-            ...jestCommonOptions,
-            testRegex: 'jest-hook-failure.js'
-          }
-
-          jestExecutable.runCLI(
-            options,
-            options.projects
-          )
         })
 
         it('should work with focused tests', (done) => {

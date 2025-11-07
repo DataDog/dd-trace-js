@@ -279,6 +279,62 @@ describe('jest CommonJS', () => {
         eventsPromise
       ])
     })
+
+    it('should detect an error in hooks', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const tests = [
+        { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
+        { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
+      ]
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          tests.forEach(({ name, error }) => {
+            const testSpan = testSpans.find(span =>
+              span.resource === `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`
+            )
+
+            assert.exists(testSpan, `Expected to find test "${name}"`)
+            assert.propertyVal(testSpan.meta, 'language', 'javascript')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(testSpan.meta, TEST_NAME, name)
+            assert.propertyVal(testSpan.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-hook-failure.js')
+            assert.propertyVal(testSpan.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-hook-failure.js')
+            assert.propertyVal(testSpan.meta, TEST_TYPE, 'test')
+            assert.propertyVal(testSpan.meta, JEST_TEST_RUNNER, 'jest-circus')
+            assert.propertyVal(testSpan.meta, COMPONENT, 'jest')
+            assert.equal(testSpan.meta[ERROR_MESSAGE], error)
+            assert.equal(testSpan.type, 'test')
+            assert.equal(testSpan.name, 'jest.test')
+            assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`)
+            assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            DD_TRACE_AGENT_PORT: receiver.port,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
   })
 
   const nonLegacyReportingOptions = ['agentless', 'evp proxy']
