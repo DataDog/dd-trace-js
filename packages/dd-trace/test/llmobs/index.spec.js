@@ -8,7 +8,7 @@ const proxyquire = require('proxyquire')
 
 const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
 
-const spanProcessCh = channel('dd-trace:span:process')
+const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -260,7 +260,7 @@ describe('module', () => {
 
     expect(injectCh.hasSubscribers).to.be.false
     expect(evalMetricAppendCh.hasSubscribers).to.be.false
-    expect(spanProcessCh.hasSubscribers).to.be.false
+    expect(spanFinishCh.hasSubscribers).to.be.false
     expect(flushCh.hasSubscribers).to.be.false
   })
 })

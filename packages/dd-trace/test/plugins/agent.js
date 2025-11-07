@@ -14,7 +14,7 @@ const { expect } = require('chai')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
-const llmobsHandlers = new Set()
+let llmobsSpanEventsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -437,9 +437,7 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
-      llmobsHandlers.forEach(({ handler }) => {
-        handler(JSON.parse(req.body))
-      })
+      llmobsSpanEventsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
@@ -581,13 +579,17 @@ module.exports = {
   },
 
   /**
-   * Use a callback handler for LLM Observability traces.
-   * @param {RunCallbackAgainstTracesCallback} callback
-   * @param {RunCallbackAgainstTracesOptions} [options]
-   * @returns
+   * Get the LLM Observability span events requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<Object>} The LLM Observability span events requests.
    */
-  useLlmobsTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+  getLlmObsSpanEventsRequests (clear = false) {
+    const requests = llmobsSpanEventsRequests
+    if (clear) {
+      llmobsSpanEventsRequests = []
+    }
+
+    return requests
   },
 
   /**
@@ -596,7 +598,7 @@ module.exports = {
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
   },
 
   /**
@@ -625,7 +627,6 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
