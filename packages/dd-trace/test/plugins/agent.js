@@ -11,6 +11,7 @@ const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
+const proxyquire = require('proxyquire')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -396,7 +397,17 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    tracer = require('../..')
+    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    const proxy = proxyquire('../../src/proxy', {
+      './config': getConfigFresh
+    })
+    const TracerProxy = proxyquire('../../src', {
+      './proxy': proxy
+    })
+    tracer = proxyquire('../../', {
+      './src': TracerProxy
+    })
+
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
