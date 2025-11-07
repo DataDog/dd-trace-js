@@ -10,6 +10,9 @@ const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AG
 
 /**
  * @typedef {import('@./instruments').Instrument} Instrument
+ * @typedef {import('./periodic_metric_reader').AggregatedMetric} AggregatedMetric
+ * @typedef {import('./periodic_metric_reader').NumberDataPoint} NumberDataPoint
+ * @typedef {import('./periodic_metric_reader').HistogramDataPoint} HistogramDataPoint
  */
 
 /**
@@ -83,7 +86,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Creates scope metrics grouped by instrumentation scope.
    * @param {Array} metrics - Array of metrics to transform
    * @param {boolean} isJson - Whether to format for JSON output
-   * @returns {Object[]} Array of scope metric objects
+   * @returns {AggregatedMetric[]} Array of scope metric objects
    * @private
    */
   #transformScope (metrics, isJson = false) {
@@ -121,8 +124,9 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms a single metric to protobuf or JSON format.
    * @private
-   * @param {Object} metric - The metric to transform
+   * @param {AggregatedMetric} metric - The metric to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
+   * @returns {Object} - The metric transformed to OTLP protobuf or JSON format
    */
   #transformMetric (metric, isJson = false) {
     const result = {
@@ -171,6 +175,9 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms a histogram data point.
    * @private
+   * @param {HistogramDataPoint} dp - The histogram data point to transform
+   * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
+   * @returns {Object} The histogram data point transformed to OTLP protobuf format
    */
   #transformHistogramDataPoint (dp, isJson) {
     const attributes = isJson
@@ -201,6 +208,9 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms a number data point to protobuf or JSON format.
    * @private
+   * @param {NumberDataPoint} dataPoint - The number data point to transform
+   * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
+   * @returns {Object} The number data point transformed to OTLP protobuf format
    */
   #transformNumberDataPoint (dataPoint, isJson) {
     const attributes = isJson
@@ -226,6 +236,9 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Assigns the appropriate value field (asInt or asDouble) based on the value type.
    * @private
+   * @param {NumberDataPoint} dataPoint - The number data point to assign a value to
+   * @param {number} value - The value to assign
+   * @returns {void}
    */
   #assignNumberValue (dataPoint, value) {
     if (Number.isInteger(value)) {

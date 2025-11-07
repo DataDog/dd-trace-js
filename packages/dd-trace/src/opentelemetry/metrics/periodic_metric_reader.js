@@ -7,13 +7,43 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
+ * @typedef {import('./instruments').Measurement} Measurement
+ *
+ * @typedef {Object} NumberDataPoint
+ * @property {Attributes} attributes - Metric attributes
+ * @property {string} attrKey - Stable stringified key for attributes
+ * @property {number} timeUnixNano - Timestamp in nanoseconds
+ * @property {number} startTimeUnixNano - Start timestamp for cumulative metrics
+ * @property {number} value - Metric value
+ *
+ * @typedef {Object} HistogramDataPoint
+ * @property {Attributes} attributes - Metric attributes
+ * @property {string} attrKey - Stable stringified key for attributes
+ * @property {number} timeUnixNano - Timestamp in nanoseconds
+ * @property {number} startTimeUnixNano - Start timestamp
+ * @property {number} count - Number of observations
+ * @property {number} sum - Sum of all observations
+ * @property {number} min - Minimum value observed
+ * @property {number} max - Maximum value observed
+ * @property {number[]} bucketCounts - Count per histogram bucket
+ * @property {number[]} explicitBounds - Histogram bucket boundaries
+ *
+ * @typedef {Object} AggregatedMetric
+ * @property {string} name - Metric name
+ * @property {string} description - Metric description
+ * @property {string} unit - Metric unit
+ * @property {string} type - Metric type from METRIC_TYPES
+ * @property {InstrumentationScope} instrumentationScope - Instrumentation scope
+ * @property {string} temporality - Temporality from TEMPORALITY constants
+ * @property {Map<string, NumberDataPoint|HistogramDataPoint>} dataPointMap - Map of attribute keys to data points
+ *
  */
 
 /**
  * PeriodicMetricReader collects and exports metrics at a regular interval.
  *
  * This implementation follows the OpenTelemetry JavaScript SDK MetricReader pattern:
- * https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk_metrics.PeriodicExportingMetricReader.html
+ * https://open-telemetry.github.io/opentelemetry-js/classes/_opentelemetry_sdk-metrics.PeriodicExportingMetricReader.html
  *
  * @class PeriodicMetricReader
  */
@@ -47,7 +77,7 @@ class PeriodicMetricReader {
   /**
    * Records a measurement from a synchronous instrument.
    *
-   * @param {Object} measurement - The measurement data
+   * @param {Measurement} measurement - The measurement data
    */
   record (measurement) {
     if (this.#measurements.length >= this.#maxQueueSize) {
@@ -83,6 +113,10 @@ class PeriodicMetricReader {
     this.forceFlush()
   }
 
+  /**
+   * Starts the periodic export timer.
+   * @private
+   */
   #startTimer () {
     if (this.#timer) return
 
@@ -91,6 +125,10 @@ class PeriodicMetricReader {
     }, this.#exportInterval).unref()
   }
 
+  /**
+   * Clears the periodic export timer.
+   * @private
+   */
   #clearTimer () {
     if (this.#timer) {
       clearInterval(this.#timer)
@@ -98,6 +136,11 @@ class PeriodicMetricReader {
     }
   }
 
+  /**
+   * Collects measurements and exports metrics.
+   * @private
+   * @param {Function} [callback] - Called after export completes
+   */
   #collectAndExport (callback = () => {}) {
     const allMeasurements = this.#measurements.splice(0)
 
@@ -152,6 +195,12 @@ class MetricAggregator {
     this.#temporalityPreference = temporalityPreference
   }
 
+  /**
+   * Gets the temporality for a given metric type.
+   * @private
+   * @param {string} type - Metric type from METRIC_TYPES
+   * @returns {string} Temporality from TEMPORALITY
+   */
   #getTemporality (type) {
     // UpDownCounter and Observable UpDownCounter always use CUMULATIVE
     if (type === METRIC_TYPES.UPDOWNCOUNTER || type === METRIC_TYPES.OBSERVABLEUPDOWNCOUNTER) {
@@ -176,6 +225,14 @@ class MetricAggregator {
     }
   }
 
+  /**
+   * Aggregates measurements into metrics.
+   * @private
+   * @param {Measurement[]} measurements - The measurements to aggregate
+   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @returns {AggregatedMetric[]} The aggregated metrics
+   */
   aggregate (measurements, cumulativeState, lastExportedState) {
     const metricsMap = new Map()
 
@@ -226,20 +283,48 @@ class MetricAggregator {
     return metrics
   }
 
+  /**
+   * Gets unique identifier for a given instrumentation scope.
+   * @private
+   * @param {InstrumentationScope} instrumentationScope - The instrumentation scope
+   * @returns {string} - The scope identifier
+   */
   #getScopeKey (instrumentationScope) {
     return `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
   }
 
+  /**
+   * Gets unique identifier for a given metric.
+   * @private
+   * @param {string} scopeKey - The scope identifier
+   * @param {string} name - The metric name
+   * @param {string} type - The metric type from METRIC_TYPES
+   * @param {string} attrKey - The attribute key
+   * @returns {string} - The metric identifier
+   */
   #getStateKey (scopeKey, name, type, attrKey) {
     return `${scopeKey}:${name}:${type}:${attrKey}`
   }
 
+  /**
+   * Checks if a given metric type is a delta type.
+   * @private
+   * @param {string} type - The metric type from METRIC_TYPES
+   * @returns {boolean} - True if the metric type is a delta type
+   */
   #isDeltaType (type) {
     return type === METRIC_TYPES.COUNTER ||
            type === METRIC_TYPES.OBSERVABLECOUNTER ||
            type === METRIC_TYPES.HISTOGRAM
   }
 
+  /**
+   * Applies delta temporality to the metrics.
+   * @private
+   * @param {AggregatedMetric[]} metrics - The metrics to apply delta temporality to
+   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @returns {void}
+   */
   #applyDeltaTemporality (metrics, lastExportedState) {
     for (const metric of metrics) {
       if (metric.temporality === TEMPORALITY.DELTA && this.#isDeltaType(metric.type)) {
@@ -278,6 +363,15 @@ class MetricAggregator {
     }
   }
 
+  /**
+   * Finds or creates a data point for a given metric.
+   * @private
+   * @param {AggregatedMetric} metric - The metric to find or create a data point for
+   * @param {Attributes} attributes - The attributes of the metric
+   * @param {string} attrKey - The attribute key
+   * @param {Function} createInitialDataPoint - Function to create an initial data point
+   * @returns {NumberDataPoint|HistogramDataPoint} - The data point
+   */
   #findOrCreateDataPoint (metric, attributes, attrKey, createInitialDataPoint) {
     let dataPoint = metric.dataPointMap.get(attrKey)
 
@@ -289,6 +383,18 @@ class MetricAggregator {
     return dataPoint
   }
 
+  /**
+   * Records the sum of all values for a given metric.
+   * Creates a new data point if it doesn't exist.
+   * @private
+   * @param {AggregatedMetric} metric - The metric to aggregate a sum for
+   * @param {number} value - The value to aggregate
+   * @param {Attributes} attributes - The attributes of the metric
+   * @param {string} attrKey - The attribute key
+   * @param {number} timestamp - The timestamp of the measurement
+   * @param {string} stateKey - The state key
+   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   */
   #aggregateSum (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
@@ -310,6 +416,16 @@ class MetricAggregator {
     dataPoint.timeUnixNano = timestamp
   }
 
+  /**
+   * Overwrites the last recorded value for a given metric or
+   * creates a new data point if it doesn't exist.
+   * @private
+   * @param {AggregatedMetric} metric - The metric to aggregate a last value for
+   * @param {number} value - The value to aggregate
+   * @param {Attributes} attributes - The attributes of the metric
+   * @param {string} attrKey - The attribute key
+   * @param {number} timestamp - The timestamp of the measurement
+   */
   #aggregateLastValue (metric, value, attributes, attrKey, timestamp) {
     const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       timeUnixNano: timestamp,
@@ -320,6 +436,20 @@ class MetricAggregator {
     dataPoint.timeUnixNano = timestamp
   }
 
+  /**
+   * Aggregates histogram values by distributing them into buckets.
+   * Tracks count, sum, min, max, and per-bucket counts and creates
+   * a new data point if it doesn't exist.
+   * @private
+   * @param {AggregatedMetric} metric - The metric to aggregate a histogram for
+   * @param {number} value - The value to aggregate
+   * @param {Attributes} attributes - The attributes of the metric
+   * @param {string} attrKey - The attribute key
+   * @param {number} timestamp - The timestamp of the measurement
+   * @param {string} stateKey - The state key
+   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @returns {void}
+   */
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {

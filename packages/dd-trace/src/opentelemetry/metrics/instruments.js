@@ -9,6 +9,18 @@ const { METRIC_TYPES } = require('./constants')
  */
 
 /**
+ * @typedef {Object} Measurement
+ * @property {string} name - Instrument name
+ * @property {string} description - Instrument description
+ * @property {string} unit - Measurement unit
+ * @property {InstrumentationScope} instrumentationScope - Instrumentation scope
+ * @property {string} type - Metric type from METRIC_TYPES
+ * @property {number} value - Measured value
+ * @property {Attributes} attributes - Sanitized metric attributes
+ * @property {number} timestamp - Timestamp in nanoseconds
+ */
+
+/**
  * Base class for all metric instruments.
  *
  * @private
@@ -22,6 +34,13 @@ class Instrument {
     this.reader = reader
   }
 
+  /**
+   * Creates a measurement object for recording metric values.
+   * @param {string} type - Metric type from METRIC_TYPES
+   * @param {number} value - Numeric value to record
+   * @param {Attributes} attributes - Key-value pairs for metric dimensions
+   * @returns {Measurement} Measurement object with metadata and timestamp
+   */
   createMeasurement = (type, value, attributes) => {
     return {
       name: this.name,
@@ -123,7 +142,7 @@ class ObservableInstrument extends Instrument {
   /**
    * Collects observations from all callbacks. Errors are silently ignored.
    *
-   * @returns {Array<Object>} Array of measurements
+   * @returns {Array<Measurement>} Array of measurements
    */
   collect () {
     const observations = []
