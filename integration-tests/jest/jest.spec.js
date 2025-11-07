@@ -117,52 +117,167 @@ describe('jest CommonJS', () => {
     await receiver.stop()
   })
 
-  it('can run tests and report tests with the APM protocol (old agents)', (done) => {
-    receiver.setInfoResponse({ endpoints: [] })
-    receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
-      const testSpans = payload.flatMap(trace => trace)
-      const resourceNames = testSpans.map(span => span.resource)
+  context('older versions of the agent (APM protocol)', () => {
+    it('can run tests and report tests', (done) => {
+      receiver.setInfoResponse({ endpoints: [] })
+      receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
+        const testSpans = payload.flatMap(trace => trace)
+        const resourceNames = testSpans.map(span => span.resource)
 
-      assert.includeMembers(resourceNames,
-        [
-          'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-          'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-        ]
+        assert.includeMembers(resourceNames,
+          [
+            'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+            'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+          ]
+        )
+
+        const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
+        assert.isTrue(areAllTestSpans)
+
+        assert.include(testOutput, expectedStdout)
+
+        // Can read DD_TAGS
+        testSpans.forEach(testSpan => {
+          assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
+          assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
+        })
+
+        testSpans.forEach(testSpan => {
+          assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testSpan.metrics[TEST_SOURCE_START])
+        })
+
+        done()
+      })
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: receiver.port,
+          NODE_OPTIONS: '-r dd-trace/ci/init',
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+        },
+        stdio: 'pipe'
+      })
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+    })
+
+    it('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const spans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const expectedTests = [
+            {
+              name: 'jest-test-suite tracer and active span are available',
+              status: 'pass',
+              extraTags: { 'test.add.stuff': 'stuff' }
+            },
+            { name: 'jest-test-suite done', status: 'pass' },
+            { name: 'jest-test-suite done fail', status: 'fail' },
+            { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+            { name: 'jest-test-suite can do integration http', status: 'pass' },
+            {
+              name: 'jest-test-suite can do parameterized test',
+              status: 'pass',
+              parameters: { arguments: [1, 2, 3], metadata: {} }
+            },
+            {
+              name: 'jest-test-suite can do parameterized test',
+              status: 'pass',
+              parameters: { arguments: [2, 3, 5], metadata: {} }
+            },
+            { name: 'jest-test-suite promise passes', status: 'pass' },
+            { name: 'jest-test-suite promise fails', status: 'fail' },
+            { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
+            { name: 'jest-test-suite passes', status: 'pass' },
+            { name: 'jest-test-suite fails', status: 'fail' },
+            { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
+            { name: 'jest-test-suite skips', status: 'skip' },
+            { name: 'jest-test-suite skips todo', status: 'skip' },
+            { name: 'jest-circus-test-retry can retry', status: 'fail' },
+            { name: 'jest-circus-test-retry can retry', status: 'fail' },
+            { name: 'jest-circus-test-retry can retry', status: 'pass' }
+          ]
+
+          expectedTests.forEach(({ name, status, error, parameters, extraTags }) => {
+            const test = spans.find(test =>
+              test.meta[TEST_NAME] === name &&
+              test.meta[TEST_STATUS] === status &&
+              test.meta[TEST_SUITE] === 'ci-visibility/jest-plugin-tests/jest-test.js' &&
+              (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
+            )
+
+            assert.exists(test, `Expected to find test "${name}" with status "${status}"`)
+
+            assert.propertyVal(test.meta, 'language', 'javascript')
+            assert.propertyVal(test.meta, 'service', 'plugin-tests')
+            assert.propertyVal(test.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(test.meta, TEST_NAME, name)
+            assert.propertyVal(test.meta, TEST_STATUS, status)
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, JEST_TEST_RUNNER, 'jest-circus')
+            assert.propertyVal(test.meta, LIBRARY_VERSION, ddTraceVersion)
+            assert.propertyVal(test.meta, COMPONENT, 'jest')
+            assert.include(test.meta[TEST_CODE_OWNERS], '@datadog-dd-trace-js')
+
+            assert.equal(test.type, 'test')
+            assert.equal(test.name, 'jest.test')
+            assert.equal(test.service, 'plugin-tests')
+            assert.equal(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+
+            assert.exists(test.metrics[TEST_SOURCE_START])
+            assert.exists(test.meta[TEST_FRAMEWORK_VERSION])
+
+            if (extraTags) {
+              Object.entries(extraTags).forEach(([key, value]) => {
+                assert.propertyVal(test.meta, key, value)
+              })
+            }
+
+            if (error) {
+              assert.include(test.meta[ERROR_MESSAGE], error)
+            }
+
+            if (name === 'jest-test-suite can do integration http') {
+              const httpSpan = spans.find(span => span.name === 'http.request')
+              if (httpSpan) {
+                assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+                assert.include(httpSpan.meta['http.url'], '/info')
+                assert.equal(httpSpan.parent_id, test.span_id)
+              }
+            }
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            DD_TRACE_AGENT_PORT: receiver.port,
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-test',
+            DD_SERVICE: 'plugin-tests'
+          },
+          stdio: 'inherit'
+        }
       )
 
-      const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
-      assert.isTrue(areAllTestSpans)
-
-      assert.include(testOutput, expectedStdout)
-
-      // Can read DD_TAGS
-      testSpans.forEach(testSpan => {
-        assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
-        assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
-      })
-
-      testSpans.forEach(testSpan => {
-        assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-        assert.exists(testSpan.metrics[TEST_SOURCE_START])
-      })
-
-      done()
-    })
-
-    childProcess = fork(startupTestFile, {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: receiver.port,
-        NODE_OPTIONS: '-r dd-trace/ci/init',
-        DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
-      },
-      stdio: 'pipe'
-    })
-    childProcess.stdout.on('data', (chunk) => {
-      testOutput += chunk.toString()
-    })
-    childProcess.stderr.on('data', (chunk) => {
-      testOutput += chunk.toString()
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
     })
   })
 
@@ -4744,120 +4859,5 @@ describe('jest CommonJS', () => {
     ])
     assert.notInclude(testOutput, 'Cannot find module')
     assert.include(testOutput, '6 passed')
-  })
-
-  it('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
-    const eventsPromise = receiver
-      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-        const expectedTests = [
-          {
-            name: 'jest-test-suite tracer and active span are available',
-            status: 'pass',
-            extraTags: { 'test.add.stuff': 'stuff' }
-          },
-          { name: 'jest-test-suite done', status: 'pass' },
-          { name: 'jest-test-suite done fail', status: 'fail' },
-          { name: 'jest-test-suite done fail uncaught', status: 'fail' },
-          { name: 'jest-test-suite can do integration http', status: 'pass' },
-          {
-            name: 'jest-test-suite can do parameterized test',
-            status: 'pass',
-            parameters: { arguments: [1, 2, 3], metadata: {} }
-          },
-          {
-            name: 'jest-test-suite can do parameterized test',
-            status: 'pass',
-            parameters: { arguments: [2, 3, 5], metadata: {} }
-          },
-          { name: 'jest-test-suite promise passes', status: 'pass' },
-          { name: 'jest-test-suite promise fails', status: 'fail' },
-          { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
-          { name: 'jest-test-suite passes', status: 'pass' },
-          { name: 'jest-test-suite fails', status: 'fail' },
-          { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
-          { name: 'jest-test-suite skips', status: 'skip' },
-          { name: 'jest-test-suite skips todo', status: 'skip' },
-          { name: 'jest-circus-test-retry can retry', status: 'fail' },
-          { name: 'jest-circus-test-retry can retry', status: 'fail' },
-          { name: 'jest-circus-test-retry can retry', status: 'pass' }
-        ]
-
-        expectedTests.forEach(({ name, status, error, parameters, extraTags }) => {
-          const test = tests.find(test =>
-            test.meta[TEST_NAME] === name &&
-            test.meta[TEST_STATUS] === status &&
-            test.meta[TEST_SUITE] === 'ci-visibility/jest-plugin-tests/jest-test.js' &&
-            (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
-          )
-
-          assert.exists(test, `Expected to find test "${name}" with status "${status}"`)
-
-          assert.propertyVal(test.meta, 'language', 'javascript')
-          assert.propertyVal(test.meta, 'service', 'plugin-tests')
-          assert.propertyVal(test.meta, ORIGIN_KEY, CI_APP_ORIGIN)
-          assert.propertyVal(test.meta, TEST_FRAMEWORK, 'jest')
-          assert.propertyVal(test.meta, TEST_NAME, name)
-          assert.propertyVal(test.meta, TEST_STATUS, status)
-          assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-test.js')
-          assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-test.js')
-          assert.propertyVal(test.meta, TEST_TYPE, 'test')
-          assert.propertyVal(test.meta, JEST_TEST_RUNNER, 'jest-circus')
-          assert.propertyVal(test.meta, LIBRARY_VERSION, ddTraceVersion)
-          assert.propertyVal(test.meta, COMPONENT, 'jest')
-          assert.include(test.meta[TEST_CODE_OWNERS], '@datadog-dd-trace-js')
-
-          assert.equal(test.type, 'test')
-          assert.equal(test.name, 'jest.test')
-          assert.equal(test.service, 'plugin-tests')
-          assert.equal(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
-
-          assert.exists(test.metrics[TEST_SOURCE_START])
-          assert.exists(test.meta[TEST_FRAMEWORK_VERSION])
-
-          if (extraTags) {
-            Object.entries(extraTags).forEach(([key, value]) => {
-              assert.propertyVal(test.meta, key, value)
-            })
-          }
-
-          if (error) {
-            assert.include(test.meta[ERROR_MESSAGE], error)
-          }
-
-          if (name === 'jest-test-suite can do integration http') {
-            const allSpans = events
-              .filter(event => event.content && event.content.name)
-              .map(event => event.content)
-
-            const httpSpan = allSpans.find(span => span.name === 'http.request')
-            if (httpSpan) {
-              assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
-              assert.include(httpSpan.meta['http.url'], '/info')
-              assert.equal(httpSpan.parent_id, test.span_id)
-            }
-          }
-        })
-      })
-
-    childProcess = exec(
-      runTestsCommand,
-      {
-        cwd,
-        env: {
-          ...getCiVisAgentlessConfig(receiver.port),
-          TESTS_TO_RUN: 'jest-plugin-tests/jest-test',
-          DD_SERVICE: 'plugin-tests'
-        },
-        stdio: 'inherit'
-      }
-    )
-
-    await Promise.all([
-      once(childProcess, 'exit'),
-      eventsPromise
-    ])
   })
 })
