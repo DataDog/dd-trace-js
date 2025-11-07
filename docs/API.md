@@ -413,7 +413,7 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 - `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
 - `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs (default: `10000`)
 - `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
-- `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum logs per metric interval (default: `2048`)
 
 Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
@@ -470,7 +470,7 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 - `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics (default: `http/protobuf`)
 - `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics (default: `10000`)
 - `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `10000`)
-- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Temporality preference (default: `DELTA`)
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Configures aggregation temporality for metrics on the basis of instrument kind. Options: `CUMULATIVE`, `DELTA`, `LOWMEMORY` (default: `DELTA`). See [OpenTelemetry spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/#additional-environment-variable-configuration) for details. 
 - `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries.
 
 Metrics are collected periodically and exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. All metrics use delta aggregation temporality to match Datadog's data model. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).

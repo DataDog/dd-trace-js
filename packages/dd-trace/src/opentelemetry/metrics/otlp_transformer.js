@@ -90,7 +90,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     const groupedMetrics = this.groupByInstrumentationScope(metrics)
     const scopeMetrics = []
 
-    for (const [, metricsInScope] of groupedMetrics) {
+    for (const metricsInScope of groupedMetrics.values()) {
       const firstMetric = metricsInScope[0]
       const instrumentationScope = firstMetric.instrumentationScope || {}
       const { name = '', version = '', schemaUrl = '', attributes = {} } = instrumentationScope

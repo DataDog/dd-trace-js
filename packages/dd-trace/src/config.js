@@ -583,6 +583,7 @@ class Config {
       OTEL_EXPORTER_OTLP_TIMEOUT,
       OTEL_BSP_SCHEDULE_DELAY,
       OTEL_BSP_MAX_EXPORT_BATCH_SIZE,
+      OTEL_BSP_MAX_QUEUE_SIZE,
       OTEL_METRIC_EXPORT_INTERVAL
     } = source
 
@@ -610,12 +611,20 @@ class Config {
     this.#setString(target, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || target.otelHeaders)
     this.#setString(target, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
     this.#setString(target, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || target.otelProtocol)
-    target.otelTimeout = maybeInt(OTEL_EXPORTER_OTLP_TIMEOUT)
-    target.otelLogsTimeout = maybeInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT) || target.otelTimeout
-    target.otelLogsBatchTimeout = maybeInt(OTEL_BSP_SCHEDULE_DELAY)
-    target.otelLogsMaxExportBatchSize = maybeInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE)
+    const otelTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TIMEOUT, 'OTEL_EXPORTER_OTLP_TIMEOUT')
+    if (otelTimeout !== undefined) {
+      target.otelTimeout = otelTimeout
+    }
+    const otelLogsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT')
+    target.otelLogsTimeout = otelLogsTimeout === undefined ? target.otelTimeout : otelLogsTimeout
+    const otelBatchTimeout = nonNegInt(OTEL_BSP_SCHEDULE_DELAY, 'OTEL_BSP_SCHEDULE_DELAY', false)
+    if (otelBatchTimeout !== undefined) {
+      target.otelBatchTimeout = otelBatchTimeout
+    }
+    target.otelMaxExportBatchSize = nonNegInt(OTEL_BSP_MAX_EXPORT_BATCH_SIZE, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE', false)
+    target.otelMaxQueueSize = nonNegInt(OTEL_BSP_MAX_QUEUE_SIZE, 'OTEL_BSP_MAX_QUEUE_SIZE', false)
 
-    const otelMetricsExporter = String(OTEL_METRICS_EXPORTER).toLowerCase() !== 'none'
+    const otelMetricsExporter = !OTEL_METRICS_EXPORTER || OTEL_METRICS_EXPORTER.toLowerCase() !== 'none'
     this.#setBoolean(target, 'otelMetricsEnabled', DD_METRICS_OTEL_ENABLED && otelMetricsExporter)
     // Set OpenTelemetry metrics configuration with specific _METRICS_ vars
     // taking precedence over generic _EXPORTERS_ vars
@@ -624,9 +633,11 @@ class Config {
     }
     this.#setString(target, 'otelMetricsHeaders', OTEL_EXPORTER_OTLP_METRICS_HEADERS || target.otelHeaders)
     this.#setString(target, 'otelMetricsProtocol', OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || target.otelProtocol)
-    target.otelMetricsTimeout = maybeInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT) || target.otelTimeout
-    target.otelMetricsExportTimeout = maybeInt(OTEL_METRIC_EXPORT_TIMEOUT)
-    target.otelMetricsExportInterval = maybeInt(OTEL_METRIC_EXPORT_INTERVAL)
+    const otelMetricsTimeout = nonNegInt(OTEL_EXPORTER_OTLP_METRICS_TIMEOUT, 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT')
+    target.otelMetricsTimeout = otelMetricsTimeout === undefined ? target.otelTimeout : otelMetricsTimeout
+    target.otelMetricsExportTimeout = nonNegInt(OTEL_METRIC_EXPORT_TIMEOUT, 'OTEL_METRIC_EXPORT_TIMEOUT')
+    target.otelMetricsExportInterval = nonNegInt(OTEL_METRIC_EXPORT_INTERVAL, 'OTEL_METRIC_EXPORT_INTERVAL', false)
+
     // Parse temporality preference (default to DELTA for Datadog)
     if (OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) {
       const temporalityPref = OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.toUpperCase()
@@ -1518,6 +1529,16 @@ function maybeInt (number) {
 function maybeFloat (number) {
   const parsed = Number.parseFloat(number)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function nonNegInt (value, envVarName, allowZero = true) {
+  const parsed = maybeInt(value)
+  if (parsed === undefined) return undefined
+  if (parsed < 0 || (parsed === 0 && !allowZero)) {
+    log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
+    return undefined
+  }
+  return parsed
 }
 
 function getAgentUrl (url, options) {

@@ -138,8 +138,9 @@ module.exports = {
   otelLogsProtocol: 'http/protobuf',
   otelLogsTimeout: 10_000,
   otelTimeout: 10_000,
-  otelLogsBatchTimeout: 5000,
-  otelLogsMaxExportBatchSize: 512,
+  otelBatchTimeout: 5000,
+  otelMaxExportBatchSize: 512,
+  otelMaxQueueSize: 2048,
   otelMetricsEnabled: false,
   otelMetricsUrl: undefined, // Will be computed using agent host
   otelMetricsHeaders: '',

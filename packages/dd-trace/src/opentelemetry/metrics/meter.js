@@ -1,6 +1,6 @@
 'use strict'
 
-const packageVersion = require('../../../../../package.json').version
+const { version: packageVersion } = require('../../../../../package.json')
 const {
   Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
 } = require('./instruments')
@@ -26,8 +26,7 @@ const { METRIC_TYPES } = require('./constants')
  */
 class Meter {
   #instrumentationScope
-  #instruments
-
+  #instruments = new Map()
   /**
    * Creates a new Meter instance.
    *
@@ -38,27 +37,41 @@ class Meter {
    * @param {string} [instrumentationScope.schemaUrl] - Schema URL
    * @param {Object} [instrumentationScope.attributes] - Attributes for the instrumentation scope
    */
-  constructor (meterProvider, instrumentationScope) {
+  constructor (
+    meterProvider,
+    { name = 'dd-trace-js', version = packageVersion, schemaUrl = '', attributes = {} } = {}
+  ) {
     this.meterProvider = meterProvider
     this.#instrumentationScope = {
-      name: instrumentationScope?.name || 'dd-trace-js',
-      version: instrumentationScope?.version || packageVersion,
-      schemaUrl: instrumentationScope?.schemaUrl || '',
-      attributes: instrumentationScope?.attributes || {}
+      name,
+      version,
+      schemaUrl,
+      attributes,
     }
-    this.#instruments = new Map()
   }
 
-  #getOrCreateInstrument (name, type, InstrumentClass, options = {}) {
+  /**
+   * Gets an existing instrument or creates a new one if it doesn't exist.
+   * Instruments are cached by type and normalized (lowercase) name.
+   *
+   * @private
+   * @param {string} name - Instrument name (will be normalized to lowercase)
+   * @param {string} type - Instrument type (e.g., 'counter', 'histogram', 'gauge')
+   * @param {Function} InstrumentClass - Constructor for the instrument type
+   * @param {Object} [options] - Instrument options (description, unit, etc.)
+   * @returns {Object} The instrument instance (new or cached)
+   */
+  #getOrCreateInstrument (name, type, InstrumentClass, options) {
     const normalizedName = name.toLowerCase()
     const key = `${type}:${normalizedName}`
-    if (!this.#instruments.has(key)) {
-      const instrument = new InstrumentClass(
+    let instrument = this.#instruments.get(key)
+    if (!instrument) {
+      instrument = new InstrumentClass(
         normalizedName, options, this.#instrumentationScope, this.meterProvider.reader
       )
       this.#instruments.set(key, instrument)
     }
-    return this.#instruments.get(key)
+    return instrument
   }
 
   /**

@@ -21,9 +21,8 @@ const ContextManager = require('../context_manager')
  * @implements {import('@opentelemetry/api').MeterProvider}
  */
 class MeterProvider {
-  #meters
-  #contextManager
-
+  #meters = new Map()
+  #contextManager = new ContextManager()
   /**
    * Creates a new MeterProvider instance with a single reader for Datadog Agent export.
    *
@@ -33,8 +32,6 @@ class MeterProvider {
    */
   constructor (options = {}) {
     this.reader = options.reader
-    this.#meters = new Map()
-    this.#contextManager = new ContextManager()
     this.isShutdown = false
   }
 
@@ -48,22 +45,19 @@ class MeterProvider {
    * @param {Object} [options.attributes] - Attributes for the instrumentation scope
    * @returns {Meter} Meter instance
    */
-  getMeter (name, version = '', options = {}) {
+  getMeter (name, version = '', { schemaUrl = '', attributes = {} } = {}) {
     if (this.isShutdown) {
       return this.#createNoOpMeter()
     }
-
     const normalizedName = name.toLowerCase()
-    const meterVersion = version || ''
-    const schemaUrl = options?.schemaUrl || ''
-    const attributes = options?.attributes || {}
     const attrsKey = JSON.stringify(attributes)
-    const key = `${normalizedName}@${meterVersion}@${schemaUrl}@${attrsKey}`
-
-    if (!this.#meters.has(key)) {
-      this.#meters.set(key, new Meter(this, { name: normalizedName, version: meterVersion, schemaUrl, attributes }))
+    const key = `${normalizedName}@${version}@${schemaUrl}@${attrsKey}`
+    let meter = this.#meters.get(key)
+    if (!meter) {
+      meter = new Meter(this, { name: normalizedName, version, schemaUrl, attributes })
+      this.#meters.set(key, meter)
     }
-    return this.#meters.get(key)
+    return meter
   }
 
   /**

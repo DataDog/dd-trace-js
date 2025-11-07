@@ -2,7 +2,8 @@
 
 const { sanitizeAttributes } = require('@opentelemetry/core')
 const { context } = require('@opentelemetry/api')
-const packageVersion = require('../../../../../package.json').version
+const { version } = require('../../../../../package.json')
+
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/api').SpanContext} SpanContext
@@ -40,7 +41,7 @@ class Logger {
     const scope = instrumentationScope || instrumentationLibrary
     this.#instrumentationScope = {
       name: scope?.name || 'dd-trace-js',
-      version: scope?.version || packageVersion,
+      version: scope?.version || version,
       schemaUrl: scope?.schemaUrl || '',
     }
   }

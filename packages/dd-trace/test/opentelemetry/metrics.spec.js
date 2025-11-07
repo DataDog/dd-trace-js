@@ -14,7 +14,7 @@ describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
   let httpStub
 
-  function setupTracer (envOverrides = {}, setDefaultEnv = true) {
+  function setupTracer (envOverrides, setDefaultEnv = true) {
     if (setDefaultEnv) {
       process.env.DD_METRICS_OTEL_ENABLED = 'true'
       process.env.DD_SERVICE = 'test-service'
@@ -87,12 +87,12 @@ describe('OpenTelemetry Meter Provider', () => {
     originalEnv = { ...process.env }
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     process.env = originalEnv
 
     const provider = metrics.getMeterProvider()
     if (provider && provider.shutdown) {
-      await provider.shutdown()
+      provider.shutdown()
     }
     metrics.disable()
 
@@ -101,8 +101,6 @@ describe('OpenTelemetry Meter Provider', () => {
       httpStub = null
     }
     sinon.restore()
-
-    await new Promise(resolve => setTimeout(resolve, 10))
   })
 
   describe('Basic Functionality', () => {
@@ -708,7 +706,7 @@ describe('OpenTelemetry Meter Provider', () => {
     })
 
     it('appends /v1/metrics to endpoint if not provided', () => {
-      process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'http://custom:4318'
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom:4318'
       const { meterProvider } = setupTracer()
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
     })
@@ -755,6 +753,59 @@ describe('OpenTelemetry Meter Provider', () => {
     it('falls back to generic timeout when metrics-specific not set', () => {
       const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_TIMEOUT: '5000' })
       assert.strictEqual(meterProvider.reader.exporter.options.timeout, 5000)
+    })
+  })
+
+  describe('NonNegInt Configuration Validation', () => {
+    let log, warnSpy
+
+    beforeEach(() => {
+      log = require('../../src/log')
+      warnSpy = sinon.spy(log, 'warn')
+    })
+
+    afterEach(() => {
+      warnSpy.restore()
+    })
+
+    it('rejects zero for metrics configs with allowZero=false', () => {
+      setupTracer({
+        OTEL_BSP_SCHEDULE_DELAY: '0',
+        OTEL_METRIC_EXPORT_INTERVAL: '0',
+        OTEL_BSP_MAX_QUEUE_SIZE: '0',
+        OTEL_EXPORTER_OTLP_TIMEOUT: '0',
+        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '0',
+        OTEL_METRIC_EXPORT_TIMEOUT: '0',
+        OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
+      }, false)
+      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/)))
+      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
+      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/)))
+      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
+    })
+
+    it('rejects negative values for all configs', () => {
+      setupTracer({
+        OTEL_EXPORTER_OTLP_TIMEOUT: '-1',
+        OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: '-1',
+        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: '-1',
+        OTEL_METRIC_EXPORT_TIMEOUT: '-1',
+        OTEL_METRIC_EXPORT_INTERVAL: '-1',
+        OTEL_BSP_SCHEDULE_DELAY: '-1',
+        OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
+        OTEL_BSP_MAX_QUEUE_SIZE: '-1'
+      }, false)
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/)))
     })
   })
 
