@@ -210,16 +210,6 @@ describe('Plugin', () => {
         })
       })
 
-      describe('span:sample', () => {
-        it('should call underlying api', () => {
-          testChannel({
-            name: 'span:sample',
-            fn: span.sample,
-            self: dummySpan
-          })
-        })
-      })
-
       describe('span:addLink', () => {
         it('should call underlying api', () => {
           testChannel({

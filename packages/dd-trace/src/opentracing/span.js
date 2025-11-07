@@ -278,10 +278,6 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
-  sample () {
-    this._processor.sample(this)
-  }
-
   _sanitizeAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 

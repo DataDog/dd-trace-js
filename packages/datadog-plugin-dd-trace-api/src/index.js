@@ -96,7 +96,6 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     handleEvent('span:addTags')
     handleEvent('span:finish')
     handleEvent('span:addLink')
-    handleEvent('span:sample')
     handleEvent('scope')
     handleEvent('scope:activate')
     handleEvent('scope:active')
