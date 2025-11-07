@@ -178,7 +178,7 @@ function enableRewriter (telemetryVerbosity) {
       shimPrepareStackTrace()
       if (!globalThis.__DD_ESBUILD_IAST_WITH_SM && !globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
         // Avoid rewriting twice when application has been bundled
-        // shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+        shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
       }
     }
 
