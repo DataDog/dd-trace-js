@@ -1,22 +1,31 @@
 import 'dd-trace/init.js'
 import express from 'express'
 import knex from 'knex'
-import dc from 'dc-polyfill'
+import { AsyncLocalStorage } from 'async_hooks'
 
-const startRawQueryCh = dc.channel('datadog:knex:raw:start')
 let counter = 0
-startRawQueryCh.subscribe(() => {
-  counter += 1
-})
-
+const asyncStore = new AsyncLocalStorage()
 const app = express()
 
-const db = knex({ client: 'pg' })
+const db = knex({
+  client: 'sqlite3',
+  connection: { filename: ':memory:' }
+})
 
 app.get('/', (req, res) => {
-  db.raw('select 1')
-  res.setHeader('X-Counter', counter)
-  res.end('ok')
+  const store = 'knex-test-store'
+
+  asyncStore.run(store, () => {
+    db.raw('PRAGMA user_version')
+      .then(() => {
+        if (asyncStore.getStore() === store) {
+          counter += 1
+        }
+        res.setHeader('X-Counter', counter)
+        res.end('ok')
+      })
+      .catch(() => {})
+  })
 })
 
 const server = app.listen(0, () => {

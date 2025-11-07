@@ -11,7 +11,7 @@ withVersions('knex', 'knex', version => {
   describe('ESM', () => {
     let variants, proc, agent
 
-    useSandbox([`'knex@${version}'`, 'express'], false,
+    useSandbox([`'knex@${version}'`, 'express', 'sqlite3'], false,
       ['./packages/datadog-plugin-knex/test/integration-test/*'])
 
     before(function () {
