@@ -627,6 +627,7 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
+    llmobsSpanEventsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
