@@ -129,8 +129,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('older versions of the agent (APM protocol)', () => {
-    it('can run tests and report tests', (done) => {
+    let oldApmProtocolEnvVars = {}
+    beforeEach(() => {
       receiver.setInfoResponse({ endpoints: [] })
+      oldApmProtocolEnvVars = {
+        ...process.env,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+        DD_TRACE_AGENT_PORT: receiver.port,
+        NODE_OPTIONS: '-r dd-trace/ci/init',
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
+      }
+    })
+    it('can run tests and report tests', (done) => {
       receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
         const testSpans = payload.flatMap(trace => trace)
         const resourceNames = testSpans.map(span => span.resource)
@@ -180,7 +190,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it.only('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
-      receiver.setInfoResponse({ endpoints: [] })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
           const spans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
@@ -276,13 +285,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: {
-            ...process.env,
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-            NODE_OPTIONS: '-r dd-trace/ci/init',
-            DD_TRACE_AGENT_PORT: receiver.port,
+            ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
             DD_SERVICE: 'plugin-tests',
-            DD_TRACE_DEBUG: 1,
           },
           stdio: 'inherit'
         }
@@ -298,8 +303,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('should detect an error in hooks', async () => {
-      receiver.setInfoResponse({ endpoints: [] })
-
       const tests = [
         { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
         { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
@@ -338,10 +341,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: {
-            ...process.env,
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-            DD_TRACE_AGENT_PORT: receiver.port,
-            NODE_OPTIONS: '-r dd-trace/ci/init',
+            ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
           },
           stdio: 'inherit'
@@ -355,8 +355,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     it('should work with focused tests', async () => {
-      receiver.setInfoResponse({ endpoints: [] })
-
       const tests = [
         { name: 'jest-test-focused will be skipped', status: 'skip' },
         { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
@@ -393,10 +391,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: {
-            ...process.env,
-            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-            DD_TRACE_AGENT_PORT: receiver.port,
-            NODE_OPTIONS: '-r dd-trace/ci/init',
+            ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
           },
           stdio: 'inherit'
@@ -411,7 +406,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     // injectGlobals was added in jest@26
     onlyLatestIt('does not crash when injectGlobals is false', async () => {
-      receiver.setInfoResponse({ endpoints: [] })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
           const testSpan = payloads
@@ -428,9 +422,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         {
           cwd,
           env: {
-            ...process.env,
-            DD_TRACE_AGENT_PORT: receiver.port,
-            NODE_OPTIONS: '-r dd-trace/ci/init',
+            ...oldApmProtocolEnvVars,
             TESTS_TO_RUN: 'jest-plugin-tests/jest-inject-globals',
             DO_NOT_INJECT_GLOBALS: true
           },
