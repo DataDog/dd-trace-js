@@ -190,7 +190,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it.only('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
+    it('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
           const spans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
@@ -292,9 +292,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           stdio: 'inherit'
         }
       )
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
 
       await Promise.all([
         once(childProcess, 'exit'),

@@ -144,7 +144,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
-      console.log('repositoryRoot:', repositoryRoot)
 
       // TODO: could we grab testPath from `this.getVmContext().expect.getState()` instead?
       // so we don't rely on context being passed (some custom test environment do not pass it)
