@@ -134,6 +134,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.setInfoResponse({ endpoints: [] })
       oldApmProtocolEnvVars = {
         ...process.env,
+        GITHUB_WORKSPACE: '', // so the repository root is not assigned to dd-trace-js
         DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         DD_TRACE_AGENT_PORT: receiver.port,
         NODE_OPTIONS: '-r dd-trace/ci/init',
