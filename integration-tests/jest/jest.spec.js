@@ -217,6 +217,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             { name: 'jest-circus-test-retry can retry', status: 'fail' },
             { name: 'jest-circus-test-retry can retry', status: 'pass' }
           ]
+          console.log('all spans:', JSON.stringify(spans, null, 2))
 
           expectedTests.forEach(({ name, status, error, parameters, extraTags }) => {
             const test = spans.find(test =>
