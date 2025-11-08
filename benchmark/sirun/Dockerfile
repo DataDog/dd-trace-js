@@ -43,6 +43,7 @@ WORKDIR /opt/insecure-bank-js
 RUN git checkout 2003d9085a6e9a679e31fd88719e4de030d6855f
 RUN . $NVM_DIR/nvm.sh \
     && npm ci \
+    && npm install --silent acorn oxc-parser @swc/core \
     && npm cache clean --force
 
 WORKDIR /app
