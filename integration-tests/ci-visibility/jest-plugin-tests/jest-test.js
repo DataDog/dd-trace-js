@@ -43,13 +43,11 @@ describe('jest-test-suite', () => {
   })
 
   it('can do integration http', (done) => {
-    setTimeout(() => {
-      const req = http.request(`${ENDPOINT_URL}/info`, { agent: false }, (res) => {
-        expect(res.statusCode).toEqual(200)
-        done()
-      })
-      req.end()
-    }, 100)
+    const req = http.request(`${ENDPOINT_URL}/info`, { agent: false }, (res) => {
+      expect(res.statusCode).toEqual(200)
+      done()
+    })
+    req.end()
   })
   // only run for jest-circus tests
   if (jest.retryTimes) {

@@ -1445,9 +1445,7 @@ addHook({
   file: 'build/workers/ChildProcessWorker.js'
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
-  if (ChildProcessWorker.prototype.send) {
-    shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
-  }
+  shimmer.wrap(ChildProcessWorker.prototype, 'send', sendWrapper)
   if (ChildProcessWorker.prototype._onMessage) {
     shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', onMessageWrapper)
   } else if (ChildProcessWorker.prototype.onMessage) {
