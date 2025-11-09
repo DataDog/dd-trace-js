@@ -216,7 +216,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     testAgentReq.write(JSON.stringify(req.body, replacer))
     testAgentReq.end()
   }
-
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
@@ -328,8 +327,11 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     resolve = _resolve
     reject = _reject
   })
-
+  console.log(`[assertSomeTraces] Setting up handler with timeout: ${options.timeoutMs || 1000}ms`)
   const rejectionTimeout = setTimeout(() => {
+    console.log(`[assertSomeTraces] TIMEOUT reached after ${options.timeoutMs || 1000}ms`)
+    console.log(`[assertSomeTraces] Handler was invoked ${invocationCount} times`)
+    console.log(`[assertSomeTraces] Error captured:`, error?.message || 'none')
     if (error) reject(error)
   }, options.timeoutMs || 1000)
 
@@ -337,20 +339,27 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     handler,
     spanResourceMatch: options.spanResourceMatch
   }
-
+  const startTime = performance.now()
+  let invocationCount = 0
   /**
    * @type {TracesCallback | AgentlessCallback}
   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
+    invocationCount++
+    // eslint-disable-next-line @stylistic/max-len
+    console.log(`[assertSomeTraces] Handler invoked (attempt #${invocationCount}) -- ${performance.now() - startTime}`)
 
     try {
+      console.log(`[assertSomeTraces] Running callback against traces...`)
       const result = callback(...args)
+      console.log(`[assertSomeTraces] Callback succeeded! Resolving promise.`)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
     } catch (e) {
+      console.log(`[assertSomeTraces] Callback failed:`, e.message)
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
         reject(e)
@@ -542,7 +551,11 @@ module.exports = {
    * @returns Promise
    */
   assertSomeTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, traceHandlers)
+    const startTime = performance.now()
+    console.log('Entered into assertSomeTraces')
+    const result = runCallbackAgainstTraces(callback, options, traceHandlers)
+    console.log('Exited assertSomeTraces', performance.now() - startTime)
+    return result
   },
 
   /**
