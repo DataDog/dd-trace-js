@@ -18,7 +18,7 @@ const NODE_VERSION = process.versions.node
 const supported = {}
 
 function rewrite (content, filename, format) {
-  if (!content) return
+  if (!content) return content
 
   let ast
 
