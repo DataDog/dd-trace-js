@@ -16,6 +16,7 @@ const instrumentations = require('./instrumentations.json')
 const NODE_VERSION = process.versions.node
 
 const supported = {}
+const disabled = new Set()
 
 function rewrite (content, filename, format) {
   if (!content) return content
@@ -26,6 +27,7 @@ function rewrite (content, filename, format) {
     const { astQuery, moduleName, versionRange, filePath, channelName, engines } = inst
     const transform = transforms[inst.operator]
 
+    if (disabled.has(moduleName)) continue
     if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
     if (!transform) continue
     if (engines && !semifies(NODE_VERSION, engines)) continue
@@ -41,6 +43,10 @@ function rewrite (content, filename, format) {
   }
 
   return ast ? generate(ast) : content
+}
+
+function disable (instrumentation) {
+  disabled.add(instrumentation)
 }
 
 function satisfies (filename, filePath, versions) {
@@ -96,4 +102,4 @@ function functionQuery (inst) {
   return queries.join(', ')
 }
 
-module.exports = { rewrite }
+module.exports = { rewrite, disable }
