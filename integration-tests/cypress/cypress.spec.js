@@ -23,7 +23,9 @@ const {
   TEST_STATUS,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
+  TEST_TYPE,
   TEST_TOOLCHAIN,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
@@ -63,7 +65,7 @@ const {
   TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
@@ -129,10 +131,10 @@ moduleTypes.forEach(({
       testCommand = testCommand(version)
     }
 
+    // cypress-fail-fast is required as an incompatible plugin
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
 
     before(async () => {
-      // cypress-fail-fast is required as an incompatible plugin
       cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
@@ -174,6 +176,95 @@ moduleTypes.forEach(({
         // eslint-disable-next-line no-console
         console.warn('Receiver stop timed out:', error.message)
       }
+    })
+
+    it('instruments tests with the APM protocol (old agents)', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const passedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          const failedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
+          )
+
+          assert.exists(passedTestSpan, 'passed test span should exist')
+          assert.equal(passedTestSpan.name, 'cypress.test')
+          assert.equal(passedTestSpan.resource, 'cypress/e2e/basic-pass.js.basic pass suite can pass')
+          assert.equal(passedTestSpan.type, 'test')
+          assert.equal(passedTestSpan.meta[TEST_STATUS], 'pass')
+          assert.equal(passedTestSpan.meta[TEST_NAME], 'basic pass suite can pass')
+          assert.equal(passedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-pass.js')
+          assert.equal(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(passedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(passedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(passedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-pass.js')
+          assert.exists(passedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(passedTestSpan.meta[COMPONENT])
+          assert.exists(passedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(passedTestSpan.meta.customTag, 'customValue')
+          assert.equal(passedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(passedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+
+          assert.exists(failedTestSpan, 'failed test span should exist')
+          assert.equal(failedTestSpan.name, 'cypress.test')
+          assert.equal(failedTestSpan.resource, 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+          assert.equal(failedTestSpan.type, 'test')
+          assert.equal(failedTestSpan.meta[TEST_STATUS], 'fail')
+          assert.equal(failedTestSpan.meta[TEST_NAME], 'basic fail suite can fail')
+          assert.equal(failedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-fail.js')
+          assert.equal(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(failedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(failedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(failedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-fail.js')
+          assert.exists(failedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(failedTestSpan.meta[COMPONENT])
+          assert.exists(failedTestSpan.meta[ERROR_MESSAGE])
+          assert.include(failedTestSpan.meta[ERROR_MESSAGE], 'expected')
+          assert.exists(failedTestSpan.meta[ERROR_TYPE])
+          assert.exists(failedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(failedTestSpan.meta.customTag, 'customValue')
+          assert.equal(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(failedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+          // Tags added after failure should not be present because test failed
+          assert.notProperty(failedTestSpan.meta, 'addTagsAfterFailure')
+        }, 60000)
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const specToRun = 'cypress/e2e/basic-*.js'
+
+      // For Cypress 6.7.0, we need to override the --spec flag that's hardcoded in testCommand
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: specToRun
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     if (version === '6.7.0') {
