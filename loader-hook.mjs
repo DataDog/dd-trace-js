@@ -2,6 +2,7 @@ import regexpEscapeModule from './packages/node_modules/escape-string-regexp/ind
 import * as iitm from 'import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
+import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 
 const regexpEscape = regexpEscapeModule.default
 
@@ -17,6 +18,10 @@ function initialize (data = {}) {
   addExclusions(data)
 
   return iitm.initialize(data)
+}
+
+function load (url, context, nextLoad) {
+  return rewriterLoader.load(url, context, (url, context) => iitm.load(url, context, nextLoad))
 }
 
 function addInstrumentations (data) {
@@ -50,5 +55,5 @@ function addExclusions (data) {
   )
 }
 
-export { initialize }
-export { load, getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+export { initialize, load }
+export { getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
