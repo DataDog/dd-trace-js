@@ -4,9 +4,6 @@
 // - Supports an `engines` field to filter a Node version range.
 // - Supports an `astQuery` field to filter AST nodes with an esquery query.
 
-const { parse } = require('meriyah')
-const { generate } = require('astring')
-const esquery = require('esquery')
 const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('semifies')
@@ -18,6 +15,10 @@ const NODE_VERSION = process.versions.node
 
 const supported = {}
 const disabled = new Set()
+
+let parse
+let generate
+let esquery
 
 function rewrite (content, filename, format) {
   if (!content) return content
@@ -34,6 +35,10 @@ function rewrite (content, filename, format) {
       if (!transform) continue
       if (engines && !semifies(NODE_VERSION, engines)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
+
+      parse ??= require('meriyah').parse
+      generate ??= require('astring').generate
+      esquery ??= require('esquery')
 
       try {
         ast ??= parse(content.toString(), { loc: true, module: format === 'module' })
