@@ -11,6 +11,7 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('semifies')
 const transforms = require('./transforms')
+const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations.json')
 
 const NODE_VERSION = process.versions.node
@@ -21,28 +22,37 @@ const disabled = new Set()
 function rewrite (content, filename, format) {
   if (!content) return content
 
-  let ast
+  try {
+    let ast
 
-  for (const inst of instrumentations) {
-    const { astQuery, moduleName, versionRange, filePath, channelName, engines } = inst
-    const transform = transforms[inst.operator]
+    for (const inst of instrumentations) {
+      const { astQuery, moduleName, versionRange, filePath, channelName, engines } = inst
+      const transform = transforms[inst.operator]
 
-    if (disabled.has(moduleName)) continue
-    if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
-    if (!transform) continue
-    if (engines && !semifies(NODE_VERSION, engines)) continue
-    if (!satisfies(filename, filePath, versionRange)) continue
+      if (disabled.has(moduleName)) continue
+      if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
+      if (!transform) continue
+      if (engines && !semifies(NODE_VERSION, engines)) continue
+      if (!satisfies(filename, filePath, versionRange)) continue
 
-    ast ??= parse(content.toString(), { loc: true, module: format === 'module' })
+      try {
+        ast ??= parse(content.toString(), { loc: true, module: format === 'module' })
+      } catch (e) {
+        log.error(e)
+      }
 
-    const query = astQuery || functionQuery(inst)
-    const selector = esquery.parse(query)
-    const state = { channelName, format, moduleName }
+      const query = astQuery || functionQuery(inst)
+      const selector = esquery.parse(query)
+      const state = { channelName, format, moduleName }
 
-    esquery.traverse(ast, selector, (...args) => transform(state, ...args))
+      esquery.traverse(ast, selector, (...args) => transform(state, ...args))
+    }
+
+    return ast ? generate(ast) : content
+  } catch (e) {
+    log.error(e)
+    return content
   }
-
-  return ast ? generate(ast) : content
 }
 
 function disable (instrumentation) {
