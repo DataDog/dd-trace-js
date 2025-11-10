@@ -526,15 +526,19 @@ module.exports = {
    * @param {Function} handler
    */
   subscribe (handler) {
-    traceHandlers.add(handler)
+    traceHandlers.add({ handler })
   },
 
   /**
-   * Remove a handler (TODO: THIS DOES NOTHING)
+   * Remove a handler
    * @param {Function} handler
    */
   unsubscribe (handler) {
-    traceHandlers.delete(handler)
+    for (const traceHandler of traceHandlers) {
+      if (traceHandler.handler === handler) {
+        traceHandlers.delete(traceHandler)
+      }
+    }
   },
 
   /**
