@@ -262,7 +262,7 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           const startTime = Date.now()
-          const waitTime = 200
+          const waitTime = 200 + (nativeMetrics ? 0 : 200)
           let iterations = 0
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
