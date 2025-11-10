@@ -41,7 +41,7 @@ class Instrument {
    * @param {Attributes} attributes - Key-value pairs for metric dimensions
    * @returns {Measurement} Measurement object with metadata and timestamp
    */
-  createMeasurement = (type, value, attributes) => {
+  createMeasurement (type, value, attributes) {
     return {
       name: this.name,
       description: this.description,
