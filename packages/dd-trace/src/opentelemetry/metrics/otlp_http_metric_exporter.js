@@ -5,7 +5,7 @@ const OtlpTransformer = require('./otlp_transformer')
 
 /**
  * @typedef {import('@opentelemetry/resources').Resource} Resource
- * @typedef {import('@./instruments').Instrument} Instrument
+ * @typedef {import('./periodic_metric_reader').AggregatedMetric} AggregatedMetric
  */
 
 /**
@@ -31,28 +31,28 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
   /**
    * Exports metrics via OTLP over HTTP.
    *
-   * @param {Array<Instrument>} metrics - Array of metric data to export
+   * @param {Map<string, AggregatedMetric>} metrics - Map of metric data to export
    * @param {Function} resultCallback - Callback function for export result
    *
    * @returns {void}
    */
   export (metrics, resultCallback) {
-    if (metrics.length === 0) {
+    if (metrics.size === 0) {
       resultCallback({ code: 0 })
       return
     }
 
     let dataPointCount = 0
-    for (const metric of metrics) {
+    for (const metric of metrics.values()) {
       if (metric.dataPointMap) {
-        dataPointCount += metric.dataPointMap.length
+        dataPointCount += metric.dataPointMap.size
       }
     }
 
     const additionalTags = [`points:${dataPointCount}`]
     this.recordTelemetry('otel.metrics_export_attempts', 1, additionalTags)
 
-    const payload = this.transformer.transformMetrics(metrics)
+    const payload = this.transformer.transformMetrics(metrics.values())
     this.sendPayload(payload, (result) => {
       if (result.code === 0) {
         this.recordTelemetry('otel.metrics_export_successes', 1, additionalTags)

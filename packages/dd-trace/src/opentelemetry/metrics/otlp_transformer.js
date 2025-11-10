@@ -9,7 +9,6 @@ const AGGREGATION_TEMPORALITY_DELTA = protoAggregationTemporality.values.AGGREGA
 const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_CUMULATIVE
 
 /**
- * @typedef {import('@./instruments').Instrument} Instrument
  * @typedef {import('./periodic_metric_reader').AggregatedMetric} AggregatedMetric
  * @typedef {import('./periodic_metric_reader').NumberDataPoint} NumberDataPoint
  * @typedef {import('./periodic_metric_reader').HistogramDataPoint} HistogramDataPoint
@@ -37,7 +36,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Transforms metrics to OTLP format based on the configured protocol.
-   * @param {Array<Instrument>} metrics - Array of metric data to transform
+   * @param {Iterable<AggregatedMetric>} metrics - Iterable of metric data to transform
    * @returns {Buffer} Transformed metrics in the appropriate format
    */
   transformMetrics (metrics) {
@@ -49,7 +48,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Transforms metrics to protobuf format.
-   * @param {Array} metrics - Array of metrics to transform
+   * @param {Iterable<AggregatedMetric>} metrics - Iterable of metrics to transform
    * @returns {Buffer} Protobuf-encoded metrics
    * @private
    */
@@ -84,9 +83,9 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Creates scope metrics grouped by instrumentation scope.
-   * @param {Array} metrics - Array of metrics to transform
+   * @param {Iterable<AggregatedMetric>} metrics - Iterable of metrics to transform
    * @param {boolean} isJson - Whether to format for JSON output
-   * @returns {AggregatedMetric[]} Array of scope metric objects
+   * @returns {Array<Object>} Array of scope metric objects
    * @private
    */
   #transformScope (metrics, isJson = false) {

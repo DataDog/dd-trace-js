@@ -143,11 +143,10 @@ class PeriodicMetricReader {
   #collectAndExport (callback = () => {}) {
     const allMeasurements = this.#measurements.splice(0)
 
-    for (const instrument of this.#observableInstruments.values()) {
+    for (const instrument of this.#observableInstruments) {
       const observableMeasurements = instrument.collect()
 
       if (allMeasurements.length >= this.MAX_MEASUREMENT_QUEUE_SIZE) {
-        // Queue is full, count all these measurements as dropped
         this.#droppedCount += observableMeasurements.length
         continue
       }
@@ -235,7 +234,7 @@ class MetricAggregator {
    * @param {Measurement[]} measurements - The measurements to aggregate
    * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
    * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
-   * @returns {AggregatedMetric[]} The aggregated metrics
+   * @returns {Iterable<AggregatedMetric>} The aggregated metrics
    */
   aggregate (measurements, cumulativeState, lastExportedState) {
     const metricsMap = new Map()
@@ -288,11 +287,8 @@ class MetricAggregator {
       }
     }
 
-    const metrics = [...metricsMap.values()]
-
-    this.#applyDeltaTemporality(metrics, lastExportedState)
-
-    return metrics
+    this.#applyDeltaTemporality(metricsMap, lastExportedState)
+    return metricsMap
   }
 
   /**
@@ -333,7 +329,7 @@ class MetricAggregator {
   /**
    * Applies delta temporality to the metrics.
    * @private
-   * @param {AggregatedMetric[]} metrics - The metrics to apply delta temporality to
+   * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
    * @returns {void}
    */
