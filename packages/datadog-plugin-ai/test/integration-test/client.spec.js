@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
@@ -19,23 +20,15 @@ function getOpenaiVersion (realVersion) {
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('ai', 'ai', (version, _, realVersion) => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([
-        `ai@${version}`,
-        `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
-        'zod@3.25.75'
-      ], false, [
-        './packages/datadog-plugin-ai/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([
+      `ai@${version}`,
+      `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
+      'zod@3.25.75'
+    ], false, [
+      './packages/datadog-plugin-ai/test/integration-test/*'
+    ])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -63,7 +56,7 @@ describe('esm', () => {
         assert.fail('No ai spans found')
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, null, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs'
       })
 

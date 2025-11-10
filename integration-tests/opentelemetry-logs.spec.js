@@ -1,19 +1,11 @@
 'use strict'
 
 const { assert } = require('chai')
-const { createSandbox } = require('./helpers')
+const { useSandbox } = require('./helpers')
 const http = require('http')
 
 describe('OpenTelemetry Logs Integration', () => {
-  let sandbox
-
-  beforeEach(async () => {
-    sandbox = await createSandbox()
-  })
-
-  afterEach(async () => {
-    await sandbox.remove()
-  })
+  useSandbox()
 
   it('should send OTLP logs to test agent and receive 200', (done) => {
     const payload = JSON.stringify({

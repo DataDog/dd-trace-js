@@ -92,6 +92,8 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
+const VITEST_POOL = 'test.vitest.pool'
+
 const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
 const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
 
@@ -129,6 +131,8 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 // vitest worker variables
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
+
+const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
 // Library Capabilities Tagging
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
@@ -203,6 +207,7 @@ module.exports = {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
+  VITEST_POOL,
   CUCUMBER_IS_PARALLEL,
   MOCHA_IS_PARALLEL,
   TEST_TYPE,
@@ -223,6 +228,7 @@ module.exports = {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -621,20 +627,29 @@ function getCodeOwnersFileEntries (rootDir) {
   return entries.reverse()
 }
 
+const codeOwnersPerFileName = new Map()
+
 function getCodeOwnersForFilename (filename, entries) {
   if (!entries) {
     return null
+  }
+  if (codeOwnersPerFileName.has(filename)) {
+    return codeOwnersPerFileName.get(filename)
   }
   for (const entry of entries) {
     try {
       const isResponsible = ignore().add(entry.pattern).ignores(filename)
       if (isResponsible) {
-        return JSON.stringify(entry.owners)
+        const codeOwners = JSON.stringify(entry.owners)
+        codeOwnersPerFileName.set(filename, codeOwners)
+        return codeOwners
       }
     } catch {
+      codeOwnersPerFileName.set(filename, null)
       return null
     }
   }
+  codeOwnersPerFileName.set(filename, null)
   return null
 }
 

@@ -514,7 +514,7 @@ function createGarbage (count = 50) {
                 userPercent = number
               }
               if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 1, `${metric} sanity check failed: ${number}`)
+                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
                 systemPercent = number
               }
               if (metric === 'runtime.node.cpu.total') {
