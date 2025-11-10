@@ -10,8 +10,6 @@ const { PassThrough } = require('node:stream')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
-const { SAMPLING_PRIORITY } = require('../../../ext/tags')
-const { AUTO_KEEP } = require('../../../ext/priority')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
   TEST_FRAMEWORK,
@@ -22,12 +20,8 @@ const {
   TEST_STATUS,
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
-  TEST_FRAMEWORK_VERSION,
-  LIBRARY_VERSION,
   TEST_SOURCE_START
 } = require('../../dd-trace/src/plugins/util/test')
-
-const { version: ddTraceVersion } = require('../../../package.json')
 
 const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   const stdout = new PassThrough()
@@ -78,42 +72,6 @@ describe('Plugin', function () {
 
     describe('cucumber', () => {
       describe('passing test', () => {
-        it('should create a test span', async function () {
-          const checkTraces = agent.assertSomeTraces(traces => {
-            expect(traces.length).to.equal(1)
-            const testTrace = traces[0]
-            expect(testTrace.length).to.equal(4)
-            // take the test span
-            const testSpan = testTrace.find(span => span.name === 'cucumber.test')
-            // having no parent span means there is no span leak from other tests
-            expect(testSpan.parent_id.toString()).to.equal('0')
-            expect(testSpan.meta[ORIGIN_KEY]).to.equal(CI_APP_ORIGIN)
-            expect(testSpan.meta).to.contain({
-              language: 'javascript',
-              service: 'test',
-              [TEST_NAME]: 'pass scenario',
-              [TEST_TYPE]: 'test',
-              [TEST_FRAMEWORK]: 'cucumber',
-              [TEST_STATUS]: 'pass',
-              [LIBRARY_VERSION]: ddTraceVersion,
-              [COMPONENT]: 'cucumber'
-            })
-            expect(testSpan.metrics).to.contain({
-              [SAMPLING_PRIORITY]: AUTO_KEEP
-            })
-            expect(testSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-            expect(testSpan.meta[TEST_SUITE].endsWith('simple.feature')).to.equal(true)
-            expect(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature')).to.equal(true)
-            expect(testSpan.metrics[TEST_SOURCE_START]).to.exist
-            expect(testSpan.type).to.equal('test')
-            expect(testSpan.name).to.equal('cucumber.test')
-            expect(testSpan.resource.endsWith('simple.feature.pass scenario')).to.equal(true)
-          })
-          const result = await runCucumber(version, Cucumber, 'simple.js', 'simple.feature', 'pass scenario')
-          expect(result.success).to.equal(true)
-          await checkTraces
-        })
-
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },

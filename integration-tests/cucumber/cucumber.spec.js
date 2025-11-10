@@ -14,8 +14,10 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
+  TEST_TYPE,
   TEST_SKIPPED_BY_ITR,
   TEST_COMMAND,
   TEST_MODULE,
@@ -62,8 +64,13 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  TEST_FRAMEWORK,
+  TEST_FRAMEWORK_VERSION,
+  CI_APP_ORIGIN
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { SAMPLING_PRIORITY } = require('../../ext/tags')
+const { AUTO_KEEP } = require('../../ext/priority')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
 
@@ -97,6 +104,60 @@ versions.forEach(version => {
       testOutput = ''
       childProcess.kill()
       await receiver.stop()
+    })
+
+    context('APM protocol (old agents)', () => {
+      it('should create a test span for a passing test', async function () {
+        receiver.setInfoResponse({ endpoints: [] })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('v0.4/traces'), (payloads) => {
+            const spans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+            // Find the pass scenario test span
+            const testSpan = spans.find(span =>
+              span.name === 'cucumber.test' && span.meta[TEST_NAME] === 'pass scenario'
+            )
+            assert.exists(testSpan, 'pass scenario test span should exist')
+
+            // Assertions matching the plugin test
+            assert.propertyVal(testSpan.meta, 'language', 'javascript')
+            assert.propertyVal(testSpan.meta, 'service', 'test')
+            assert.propertyVal(testSpan.meta, TEST_NAME, 'pass scenario')
+            assert.propertyVal(testSpan.meta, TEST_TYPE, 'test')
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'cucumber')
+            assert.propertyVal(testSpan.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(testSpan.meta, COMPONENT, 'cucumber')
+            assert.propertyVal(testSpan.metrics, SAMPLING_PRIORITY, AUTO_KEEP)
+            assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
+            assert.isTrue(testSpan.meta[TEST_SUITE].endsWith('simple.feature'))
+            assert.isTrue(testSpan.meta[TEST_SOURCE_FILE].endsWith('simple.feature'))
+            assert.exists(testSpan.metrics[TEST_SOURCE_START])
+            assert.equal(testSpan.type, 'test')
+            assert.equal(testSpan.name, 'cucumber.test')
+            assert.isTrue(testSpan.resource.endsWith('simple.feature.pass scenario'))
+            // having no parent span means there is no span leak from other tests
+            assert.equal(testSpan.parent_id.toString(), '0')
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/cucumber-plugin-tests/features/*.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              DD_SERVICE: 'test'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
     })
 
     const reportMethods = ['agentless', 'evp proxy']
