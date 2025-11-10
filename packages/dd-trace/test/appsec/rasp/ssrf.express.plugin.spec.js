@@ -1,11 +1,13 @@
 'use strict'
 
 const path = require('node:path')
+const setTimeout = require('node:timers/promises').setTimeout
 
 const Axios = require('axios')
 const { assert } = require('chai')
-const { getConfigFresh } = require('../../helpers/config')
+const { describe, it, beforeEach, before, after } = require('mocha')
 
+const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
@@ -78,7 +80,7 @@ describe('RASP - ssrf', () => {
 
             axios.get('/?host=www.datadoghq.com')
 
-            return checkRaspExecutedAndNotThreat(agent)
+            return checkRaspExecutedAndNotThreat(agent, protocol === 'http')
           })
 
           it('Should detect threat doing a GET request', async () => {
