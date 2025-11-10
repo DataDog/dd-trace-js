@@ -1,7 +1,6 @@
 'use strict'
 
 // The rewriter works effectively the same as Orchestrion with some additions:
-// - Supports an `engines` field to filter a Node version range.
 // - Supports an `astQuery` field to filter AST nodes with an esquery query.
 
 const { readFileSync } = require('fs')
@@ -11,14 +10,14 @@ const transforms = require('./transforms')
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations.json')
 
-const NODE_VERSION = process.versions.node
-
 const supported = {}
 const disabled = new Set()
+const sourceMaps = {}
 
 let parse
 let generate
 let esquery
+let sourceMapSupport
 
 function rewrite (content, filename, format) {
   if (!content) return content
@@ -26,22 +25,36 @@ function rewrite (content, filename, format) {
   try {
     let ast
 
+    filename = filename.replace('file://', '')
+
     for (const inst of instrumentations) {
-      const { astQuery, moduleName, versionRange, filePath, channelName, engines } = inst
+      const { astQuery, moduleName, versionRange, filePath, channelName } = inst
       const transform = transforms[inst.operator]
 
       if (disabled.has(moduleName)) continue
       if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
       if (!transform) continue
-      if (engines && !semifies(NODE_VERSION, engines)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
       parse ??= require('meriyah').parse
-      generate ??= require('astring').generate
+      generate ??= require('escodegen').generate
       esquery ??= require('esquery')
 
+      if (!sourceMapSupport) {
+        // Use an alias to ensure we have our own instance, otherwise there
+        // could be an existing user instance and the library doesn't support
+        // multiple calls to `install`.
+        sourceMapSupport = require('@datadog/source-map-support')
+        sourceMapSupport.install({
+          retrieveSourceMap: function (url) {
+            const map = sourceMaps[url]
+            return map ? { url, map } : null
+          }
+        })
+      }
+
       try {
-        ast ??= parse(content.toString(), { loc: true, module: format === 'module' })
+        ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
       } catch (e) {
         log.error(e)
       }
@@ -53,11 +66,18 @@ function rewrite (content, filename, format) {
       esquery.traverse(ast, selector, (...args) => transform(state, ...args))
     }
 
-    return ast ? generate(ast) : content
+    if (ast) {
+      const { code, map } = generate(ast, { sourceMap: filename, sourceMapWithCode: true })
+
+      sourceMaps[filename] = map.toString()
+
+      return code
+    }
   } catch (e) {
     log.error(e)
-    return content
   }
+
+  return content
 }
 
 function disable (instrumentation) {
@@ -70,7 +90,7 @@ function satisfies (filename, filePath, versions) {
   if (supported[basename] === undefined) {
     try {
       const pkg = JSON.parse(readFileSync(
-        join(basename.replace('file://', ''), 'package.json'), 'utf8'
+        join(basename, 'package.json'), 'utf8'
       ))
 
       supported[basename] = semifies(pkg.version, versions)
