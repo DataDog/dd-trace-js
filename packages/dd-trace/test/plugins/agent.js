@@ -526,7 +526,7 @@ module.exports = {
    * @param {Function} handler
    */
   subscribe (handler) {
-    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
+    traceHandlers.add(handler)
   },
 
   /**
