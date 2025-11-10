@@ -1532,9 +1532,9 @@ function maybeFloat (number) {
 }
 
 function nonNegInt (value, envVarName, allowZero = true) {
-  const parsed = maybeInt(value)
-  if (parsed === undefined) return
-  if (parsed < 0 || (parsed === 0 && !allowZero)) {
+  if (value === undefined) return
+  const parsed = Number.parseInt(value)
+  if (Number.isNaN(parsed) || parsed < 0 || (parsed === 0 && !allowZero)) {
     log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
     return
   }
