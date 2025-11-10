@@ -1,8 +1,9 @@
 'use strict'
 
-const { METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS } = require('./constants')
+const {
+  METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
+} = require('./constants')
 const log = require('../../log')
-const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -48,7 +49,6 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @class PeriodicMetricReader
  */
 class PeriodicMetricReader {
-  MAX_MEASUREMENT_QUEUE_SIZE = 1_048_576 // arbitrary limit to prevent memory exhaustion
   #measurements = []
   #observableInstruments = new Set()
   #cumulativeState = new Map()
@@ -79,7 +79,7 @@ class PeriodicMetricReader {
    * @param {Measurement} measurement - The measurement data
    */
   record (measurement) {
-    if (this.#measurements.length >= this.MAX_MEASUREMENT_QUEUE_SIZE) {
+    if (this.#measurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {
       this.#droppedCount++
       return
     }
@@ -141,17 +141,18 @@ class PeriodicMetricReader {
    * @param {Function} [callback] - Called after export completes
    */
   #collectAndExport (callback = () => {}) {
-    const allMeasurements = this.#measurements.splice(0)
+    const allMeasurements = this.#measurements
+    this.#measurements = []
 
     for (const instrument of this.#observableInstruments) {
       const observableMeasurements = instrument.collect()
 
-      if (allMeasurements.length >= this.MAX_MEASUREMENT_QUEUE_SIZE) {
+      if (allMeasurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {
         this.#droppedCount += observableMeasurements.length
         continue
       }
 
-      const remainingCapacity = this.MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
+      const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
 
       if (observableMeasurements.length <= remainingCapacity) {
         allMeasurements.push(...observableMeasurements)
@@ -163,7 +164,7 @@ class PeriodicMetricReader {
 
     if (this.#droppedCount > 0) {
       log.warn(
-        `Metric queue exceeded limit (max: ${this.MAX_MEASUREMENT_QUEUE_SIZE}). ` +
+        `Metric queue exceeded limit (max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}). ` +
         `Dropping ${this.#droppedCount} measurements. `
       )
       this.#droppedCount = 0
@@ -253,7 +254,7 @@ class MetricAggregator {
 
       const scopeKey = this.#getScopeKey(instrumentationScope)
       const metricKey = `${scopeKey}:${name}:${type}`
-      const attrKey = stableStringify(attributes)
+      const attrKey = JSON.stringify(attributes)
       const stateKey = this.#getStateKey(scopeKey, name, type, attrKey)
 
       let metric = metricsMap.get(metricKey)

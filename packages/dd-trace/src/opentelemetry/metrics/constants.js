@@ -21,8 +21,13 @@ const TEMPORALITY = {
 // Default histogram bucket boundaries (in milliseconds for latency metrics)
 const DEFAULT_HISTOGRAM_BUCKETS = [0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10_000]
 
+// Maximum number of measurements to queue before dropping
+// This is an arbitrary limit to prevent memory exhaustion
+const DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE = 524_288
+
 module.exports = {
   METRIC_TYPES,
   TEMPORALITY,
-  DEFAULT_HISTOGRAM_BUCKETS
+  DEFAULT_HISTOGRAM_BUCKETS,
+  DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
 }

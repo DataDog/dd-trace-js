@@ -5,10 +5,10 @@ const Meter = require('./meter')
 const log = require('../../log')
 const { context } = require('@opentelemetry/api')
 const ContextManager = require('../context_manager')
-const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Meter} Meter
+ * @typedef {import('@opentelemetry/api').MeterOptions} MeterOptions
  * @typedef {import('./periodic_metric_reader')} PeriodicMetricReader
  */
 
@@ -27,7 +27,7 @@ class MeterProvider {
   /**
    * Creates a new MeterProvider instance with a single reader for Datadog Agent export.
    *
-   * @param {Object} [options] - MeterProvider options
+   * @param {MeterOptions} [options] - MeterProvider options
    * @param {PeriodicMetricReader} [options.reader] - Single MetricReader instance for
    *   exporting metrics to Datadog Agent
    */
@@ -41,21 +41,18 @@ class MeterProvider {
    *
    * @param {string} name - Meter name (case-insensitive)
    * @param {string} [version] - Meter version
-   * @param {Object} [options] - Additional options
-   * @param {string} [options.schemaUrl] - Schema URL for the meter
-   * @param {Object} [options.attributes] - Attributes for the instrumentation scope
+   * @param {MeterOptions} [options] - Additional options
    * @returns {Meter} Meter instance
    */
-  getMeter (name, version = '', { schemaUrl = '', attributes = {} } = {}) {
+  getMeter (name, version = '', { schemaUrl = '' } = {}) {
     if (this.isShutdown) {
       return this.#createNoOpMeter()
     }
     const normalizedName = name.toLowerCase()
-    const attrsKey = stableStringify(attributes)
-    const key = `${normalizedName}@${version}@${schemaUrl}@${attrsKey}`
+    const key = `${normalizedName}@${version}@${schemaUrl}`
     let meter = this.#meters.get(key)
     if (!meter) {
-      meter = new Meter(this, { name: normalizedName, version, schemaUrl, attributes })
+      meter = new Meter(this, { name: normalizedName, version, schemaUrl })
       this.#meters.set(key, meter)
     }
     return meter

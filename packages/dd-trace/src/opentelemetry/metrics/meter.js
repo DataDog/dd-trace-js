@@ -8,11 +8,7 @@ const log = require('../../log')
 const { METRIC_TYPES } = require('./constants')
 
 /**
- * @typedef {import('@opentelemetry/api').Counter} Counter
- * @typedef {import('@opentelemetry/api').UpDownCounter} UpDownCounter
- * @typedef {import('@opentelemetry/api').Histogram} Histogram
- * @typedef {import('@opentelemetry/api').ObservableGauge} ObservableGauge
- * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {import('@opentelemetry/api').MetricOptions} MetricOptions
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  */
 
@@ -58,8 +54,8 @@ class Meter {
    * @param {string} name - Instrument name (will be normalized to lowercase)
    * @param {string} type - Instrument type (e.g., 'counter', 'histogram', 'gauge')
    * @param {Function} InstrumentClass - Constructor for the instrument type
-   * @param {Object} [options] - Instrument options (description, unit, etc.)
-   * @returns {Object} The instrument instance (new or cached)
+   * @param {MetricOptions} [options] - Instrument options (description, unit, etc.)
+   * @returns {Instrument} The instrument instance (new or cached)
    */
   #getOrCreateInstrument (name, type, InstrumentClass, options) {
     const normalizedName = name.toLowerCase()
@@ -78,10 +74,7 @@ class Meter {
    * Creates a Counter instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
-   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {Counter} Counter instrument
    */
   createCounter (name, options = {}) {
@@ -92,10 +85,7 @@ class Meter {
    * Creates an UpDownCounter instrument.
    *
    * @param {string} name - Instrument name
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
-   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {UpDownCounter} UpDownCounter instrument
    */
   createUpDownCounter (name, options = {}) {
@@ -106,10 +96,7 @@ class Meter {
    * Creates a Histogram instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
-   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {Histogram} Histogram instrument
    */
   createHistogram (name, options = {}) {
@@ -120,10 +107,7 @@ class Meter {
    * Creates a Gauge instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
-   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {Gauge} Gauge instrument
    */
   createGauge (name, options = {}) {
@@ -134,10 +118,7 @@ class Meter {
    * Creates an ObservableGauge instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
-   * @param {Attributes} [options.valueType] - Value type (currently ignored, always numeric)
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {ObservableGauge} ObservableGauge instrument
    */
   createObservableGauge (name, options = {}) {
@@ -148,9 +129,7 @@ class Meter {
    * Creates an ObservableCounter instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {ObservableCounter} ObservableCounter instrument
    */
   createObservableCounter (name, options = {}) {
@@ -161,9 +140,7 @@ class Meter {
    * Creates an ObservableUpDownCounter instrument.
    *
    * @param {string} name - Instrument name (case-insensitive)
-   * @param {Object} [options] - Instrument options
-   * @param {string} [options.description] - Instrument description
-   * @param {string} [options.unit] - Unit of measurement
+   * @param {MetricOptions} [options] - Instrument options
    * @returns {ObservableUpDownCounter} ObservableUpDownCounter instrument
    */
   createObservableUpDownCounter (name, options = {}) {

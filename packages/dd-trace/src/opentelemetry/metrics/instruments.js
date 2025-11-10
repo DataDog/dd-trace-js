@@ -26,10 +26,22 @@ const { METRIC_TYPES } = require('./constants')
  * @private
  */
 class Instrument {
+  /**
+   * Creates a new instrument instance.
+   *
+   * @param {string} name - Instrument name (e.g., 'http.request.duration')
+   * @param {Object} options - Instrument configuration options
+   * @param {string} [options.description] - Human-readable description of the instrument
+   * @param {string} [options.unit] - Unit of measurement (e.g., 'ms', 'bytes', '1')
+   * @param {InstrumentationScope} instrumentationScope - Instrumentation scope for this instrument
+   * @param {Object} reader - Metric reader for recording measurements
+   */
   constructor (name, options, instrumentationScope, reader) {
     this.name = name
     this.description = options.description ?? ''
     this.unit = options.unit ?? ''
+    this.valueType = options.valueType // currently ignored, TODO: add support for ValueType
+    this.advice = options.advice // currently ignored, TODO: add support for MetricAdvice
     this.instrumentationScope = instrumentationScope
     this.reader = reader
   }
