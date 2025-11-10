@@ -111,7 +111,7 @@ describe('RASP - lfi', () => {
         }
 
         function runFsMethodTest (description, options, fn, ...args) {
-          const { vulnerableIndex = 0, ruleEvalCount } = options
+          const { vulnerableIndex = 0, ruleEvalCount, secureFile = '/test.file' } = options
 
           describe(description, () => {
             const getAppFn = options.getAppFn ?? getApp
@@ -129,7 +129,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get('/?file=/test.file')
+              await axios.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -433,21 +433,20 @@ describe('RASP - lfi', () => {
           function getAppFn (fn, args, options) {
             return (req, res) => {
               try {
-                const result = fn(args)
+                const result = fn(req, res, args)
                 options.onfinish?.(result)
               } catch (e) {
                 if (e.message === 'DatadogRaspAbortError') {
                   res.status(418)
+                  res.end('end')
                 }
               }
-              res.render('template')
             }
           }
 
-          runFsMethodTest('rule is eval only once and rendering file accesses are ignored',
-            { getAppFn, ruleEvalCount: 1 }, (args) => {
-              const fs = require('fs')
-              return fs.readFileSync(...args)
+          runFsMethodTest('res.render',
+            { getAppFn, ruleEvalCount: 1, secureFile: 'template' }, (req, res) => {
+              return res.render(req.query.file)
             }, __filename)
         })
       })
