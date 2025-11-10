@@ -134,6 +134,8 @@ function beforeEachIastTest (iastConfig) {
 }
 
 function endResponse (res, appResult) {
+  if (appResult === true) return
+
   if (appResult && typeof appResult.then === 'function') {
     appResult.then(() => {
       if (!res.headersSent) {

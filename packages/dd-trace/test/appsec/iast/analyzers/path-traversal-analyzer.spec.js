@@ -74,8 +74,10 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('Analyzer should be subscribed to proper channel', () => {
-    expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(1)
+    expect(pathTraversalAnalyzer._subscriptions).to.have.lengthOf(2)
     expect(pathTraversalAnalyzer._subscriptions[0]._channel.name).to.equals('apm:fs:operation:start')
+    expect(pathTraversalAnalyzer._subscriptions[1]._channel.name)
+      .to.equals('tracing:datadog:express:response:render:start')
   })
 
   it('If no context it should not report vulnerability', () => {

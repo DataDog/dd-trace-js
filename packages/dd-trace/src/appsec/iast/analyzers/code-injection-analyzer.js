@@ -31,6 +31,10 @@ class CodeInjectionAnalyzer extends StoredInjectionAnalyzer {
     this.addSub('datadog:vm:run-script:start', ({ code }) => this.analyze(code))
     this.addSub('datadog:vm:source-text-module:start', ({ code }) => this.analyze(code))
   }
+
+  analyze (...args) {
+    super.analyze(...args)
+  }
 }
 
 module.exports = new CodeInjectionAnalyzer()
