@@ -1,6 +1,6 @@
 'use strict'
 
-const { version: packageVersion } = require('../../../../../package.json')
+const { VERSION: packageVersion } = require('../../../../../version')
 const {
   Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
 } = require('./instruments')

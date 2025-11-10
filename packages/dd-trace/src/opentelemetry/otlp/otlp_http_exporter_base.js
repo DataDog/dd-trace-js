@@ -61,7 +61,11 @@ class OtlpHttpExporterBase {
    * @protected
    */
   recordTelemetry (metricName, count, additionalTags) {
-    tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags]).inc(count)
+    if (additionalTags?.length > 0) {
+      tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
+    } else {
+      tracerMetrics.count(metricName, this.telemetryTags).inc(count)
+    }
   }
 
   /**

@@ -70,8 +70,8 @@ function initializeOpenTelemetryLogs (config) {
   // Create batch processor for exporting logs to Datadog Agent
   const processor = new BatchLogRecordProcessor(
     exporter,
-    config.otelLogsBatchTimeout,
-    config.otelLogsMaxExportBatchSize
+    config.otelBatchTimeout,
+    config.otelMaxExportBatchSize
   )
 
   // Create logger provider with processor for Datadog Agent export

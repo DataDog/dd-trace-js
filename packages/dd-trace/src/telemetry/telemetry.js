@@ -340,6 +340,8 @@ const nameMapping = {
   otelLogsTimeout: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT',
   otelLogsUrl: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
   otelBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
+  otelMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+  otelMaxQueueSize: 'OTEL_BSP_MAX_QUEUE_SIZE',
   otelMetricsEnabled: 'DD_METRICS_OTEL_ENABLED',
   otelMetricsHeaders: 'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
   otelMetricsProtocol: 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
