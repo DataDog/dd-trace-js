@@ -1,7 +1,6 @@
 'use strict'
 
 const path = require('node:path')
-const setTimeout = require('node:timers/promises').setTimeout
 
 const Axios = require('axios')
 const { assert } = require('chai')
