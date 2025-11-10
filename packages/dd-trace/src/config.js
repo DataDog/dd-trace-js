@@ -1464,6 +1464,18 @@ class Config {
       }
     }
   }
+
+  isCIVisibilityEnabled () {
+    return this.isCiVisibility
+  }
+
+  isCiVisibilityAgentlessEnabled () {
+    return this.isCiVisibilityAgentless
+  }
+
+  getAPIKey () {
+    return this.apiKey
+  }
 }
 
 function handleOtel (tagString) {
