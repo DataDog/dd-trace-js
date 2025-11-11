@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, expect } = require('../../../versions/@jest/globals').get()
+const { describe, it, expect } = require('@jest/globals')
 
 describe('jest-inject-globals', () => {
   it('will be run', () => {
