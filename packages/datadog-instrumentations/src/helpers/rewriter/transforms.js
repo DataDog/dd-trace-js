@@ -91,119 +91,140 @@ const transforms = module.exports = {
     })
   },
 
-  traceSync (state, node, parent, ancestry) {
-    traceAny('traceSync', state, node, ancestry)
-  },
+  traceSync: traceAny,
 
-  tracePromise (state, node, parent, ancestry) {
-    traceAny('tracePromise', state, node, ancestry)
+  tracePromise: traceAny
+}
+
+function traceAny (state, node, _parent, ancestry) {
+  const program = ancestry[ancestry.length - 1]
+
+  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
+    traceInstanceMethod(state, node, program)
+  } else {
+    traceFunction(state, node, program)
   }
 }
 
-function traceAny (operator, state, node, ancestry) {
-  const { channelName, functionQuery } = state
+function traceFunction (state, node, program) {
+  const { operator } = state
+
+  transforms.tracingChannelDeclaration(state, program)
+
+  node.body = wrap(state, {
+    type: 'ArrowFunctionExpression',
+    params: [],
+    body: node.body,
+    async: operator === 'tracePromise',
+    expression: false,
+    generator: false
+  })
+}
+
+function traceInstanceMethod (state, node, program) {
+  const { functionQuery, operator } = state
   const { methodName } = functionQuery
-  const channelVariable = channelName.replaceAll(':', '_')
-  const program = ancestry[ancestry.length - 1]
-  const async = operator === 'tracePromise'
 
-  let field = 'body'
+  const classBody = node.body
 
-  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
-    const classBody = node.body
+  // If the method exists on the class, we return as it will be patched later
+  // while traversing child nodes later on.
+  if (classBody.body.some(({ key }) => key.name === methodName)) return
 
-    // If the method exists on the class, we return as it will be patched later
-    // while traversing child nodes later on.
-    if (classBody.body.some(({ key }) => key.name === methodName)) return
+  // Method doesn't exist on the class so we assume an instance method and
+  // wrap it in the constructor instead.
+  let ctor = classBody.body.find(({ kind }) => kind === 'constructor')
 
-    // Method doesn't exist on the class so we assume an instance method and
-    // wrap it in the constructor instead.
-    let ctor = classBody.body.find(({ kind }) => kind === 'constructor')
+  transforms.tracingChannelDeclaration(state, program)
 
-    if (!ctor) {
-      ctor = {
-        type: 'MethodDefinition',
-        kind: 'constructor',
-        static: false,
-        computed: false,
-        key: { type: 'Identifier', name: 'constructor' },
-        value: {
-          type: 'FunctionExpression',
-          params: [],
-          body: { type: 'BlockStatement', body: [] },
-          async: false,
-          generator: false,
-          id: null
-        }
+  if (!ctor) {
+    ctor = {
+      type: 'MethodDefinition',
+      kind: 'constructor',
+      static: false,
+      computed: false,
+      key: { type: 'Identifier', name: 'constructor' },
+      value: {
+        type: 'FunctionExpression',
+        params: [],
+        body: { type: 'BlockStatement', body: [] },
+        async: false,
+        generator: false,
+        id: null
       }
-
-      if (node.superClass) {
-        ctor.value.body.params.push({
-          type: 'RestElement',
-          argument: { type: 'Identifier', name: 'args' }
-        })
-
-        ctor.value.body.body.push({
-          type: 'ExpressionStatement',
-          expression: {
-            type: 'CallExpression',
-            callee: { type: 'Super' },
-            arguments: [
-              {
-                type: 'SpreadElement',
-                argument: { type: 'Identifier', name: 'args' }
-              }
-            ],
-            optional: false
-          }
-        })
-      }
-
-      classBody.body.unshift(ctor)
     }
 
-    ctor.value.body.body.push({
-      type: 'VariableDeclaration',
-      kind: 'const',
-      declarations: [
-        {
-          type: 'VariableDeclarator',
-          id: { type: 'Identifier', name: methodName },
-          init: {
-            type: 'MemberExpression',
-            object: { type: 'ThisExpression' },
-            computed: false,
-            property: { type: 'Identifier', name: methodName },
-            optional: false
-          }
+    if (node.superClass) {
+      ctor.value.body.params.push({
+        type: 'RestElement',
+        argument: { type: 'Identifier', name: 'args' }
+      })
+
+      ctor.value.body.body.push({
+        type: 'ExpressionStatement',
+        expression: {
+          type: 'CallExpression',
+          callee: { type: 'Super' },
+          arguments: [
+            {
+              type: 'SpreadElement',
+              argument: { type: 'Identifier', name: 'args' }
+            }
+          ],
+          optional: false
         }
-      ]
-    },
-    {
-      type: 'ExpressionStatement',
-      expression: {
-        type: 'AssignmentExpression',
-        left: {
+      })
+    }
+
+    classBody.body.unshift(ctor)
+  }
+
+  ctor.value.body.body.push({
+    type: 'VariableDeclaration',
+    kind: 'const',
+    declarations: [
+      {
+        type: 'VariableDeclarator',
+        id: { type: 'Identifier', name: `__apm$${methodName}` },
+        init: {
           type: 'MemberExpression',
           object: { type: 'ThisExpression' },
           computed: false,
           property: { type: 'Identifier', name: methodName },
           optional: false
-        },
-        operator: '=',
-        right: { type: 'Identifier', name: methodName }
+        }
       }
-    })
+    ]
+  },
+  {
+    type: 'ExpressionStatement',
+    expression: {
+      type: 'AssignmentExpression',
+      left: {
+        type: 'MemberExpression',
+        object: { type: 'ThisExpression' },
+        computed: false,
+        property: { type: 'Identifier', name: methodName },
+        optional: false
+      },
+      operator: '=',
+      right: {
+        type: 'FunctionExpression',
+        id: null,
+        params: [],
+        body: wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }),
+        async: operator === 'tracePromise',
+        generator: false
+      }
+    }
+  })
+}
 
-    node = ctor.value
-    field = 'right'
-  }
+function wrap (state, node) {
+  const { channelName, operator } = state
+  const channelVariable = channelName.replaceAll(':', '_')
 
-  transforms.tracingChannelDeclaration(state, program)
-
-  const body = node[field]
-
-  node[field] = {
+  return {
     type: 'BlockStatement',
     body: [
       {
@@ -240,14 +261,7 @@ function traceAny (operator, state, node, ancestry) {
                           type: 'Identifier',
                           name: '__apm$wrapped'
                         },
-                        init: {
-                          type: 'ArrowFunctionExpression',
-                          params: [],
-                          body,
-                          async,
-                          expression: false,
-                          generator: false
-                        }
+                        init: node
                       }
                     ]
                   },
@@ -277,7 +291,7 @@ function traceAny (operator, state, node, ancestry) {
                   }
                 ]
               },
-              async,
+              async: operator === 'tracePromise',
               expression: false,
               generator: false
             }
