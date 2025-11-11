@@ -4,6 +4,7 @@ const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
 } = require('./constants')
 const log = require('../../log')
+const { stableStringify } = require('../otlp/otlp_transformer_base')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -141,8 +142,9 @@ class PeriodicMetricReader {
    * @param {Function} [callback] - Called after export completes
    */
   #collectAndExport (callback = () => {}) {
-    const allMeasurements = this.#measurements
-    this.#measurements = []
+    // Atomically drain measurements for export. New measurements can be recorded
+    // during export without interfering with this batch.
+    const allMeasurements = this.#measurements.splice(0)
 
     for (const instrument of this.#observableInstruments) {
       const observableMeasurements = instrument.collect()
@@ -254,7 +256,7 @@ class MetricAggregator {
 
       const scopeKey = this.#getScopeKey(instrumentationScope)
       const metricKey = `${scopeKey}:${name}:${type}`
-      const attrKey = JSON.stringify(attributes)
+      const attrKey = stableStringify(attributes)
       const stateKey = this.#getStateKey(scopeKey, name, type, attrKey)
 
       let metric = metricsMap.get(metricKey)

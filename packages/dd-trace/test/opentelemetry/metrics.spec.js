@@ -342,6 +342,30 @@ describe('OpenTelemetry Meter Provider', () => {
       setTimeout(() => { validator(); done() }, 150)
     })
 
+    it('aggregates data points with the same attributes', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        assert.strictEqual(counter.name, 'api')
+        assert.strictEqual(counter.sum.dataPoints.length, 2)
+        const getDp = (method, status) => counter.sum.dataPoints.find(dp =>
+          dp.attributes.some(a => a.key === 'method' && a.value.stringValue === method) &&
+          dp.attributes.some(a => a.key === 'status' && a.value.intValue === status)
+        )
+        assert.strictEqual(getDp('GET', 200).asInt, 15)
+        assert.strictEqual(getDp('POST', 200).asInt, 150)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app')
+      const api = meter.createCounter('api')
+      api.add(10, { method: 'GET', status: 200 })
+      api.add(5, { status: 200, method: 'GET' })
+      api.add(100, { method: 'POST', status: 200 })
+      api.add(50, { status: 200, method: 'POST' })
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
     it('encodes different attribute types and drops objects', (done) => {
       let validated = false
       const validator = mockOtlpExport((decoded) => {
@@ -790,6 +814,27 @@ describe('OpenTelemetry Meter Provider', () => {
       assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
       assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/)))
     })
+
+    it('rejects values that are not numbers for all configs', () => {
+      setupTracer({
+        OTEL_EXPORTER_OTLP_TIMEOUT: 'not a number',
+        OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 'invalid',
+        OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 'hi sir',
+        OTEL_METRIC_EXPORT_TIMEOUT: '@weeeeee',
+        OTEL_METRIC_EXPORT_INTERVAL: 'python!',
+        OTEL_BSP_SCHEDULE_DELAY: 'NaN',
+        OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
+        OTEL_BSP_MAX_QUEUE_SIZE: 'xyz'
+      }, false)
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
+      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/)))
+    })
   })
 
   describe('Initialization', () => {
@@ -906,7 +951,9 @@ describe('OpenTelemetry Meter Provider', () => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
       let firstExport = true
-
+      // Validates that up to 524288 measurements can be queued in a metrics interval.
+      // Note: This test uses significant amount of memory and could be flaky on machines
+      // with limited memory.
       const validator = mockOtlpExport((metrics) => {
         if (!firstExport) return
         firstExport = false
