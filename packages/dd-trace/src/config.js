@@ -4,7 +4,6 @@ const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
-const util = require('util')
 
 const log = require('./log')
 const tagger = require('./tagger')
@@ -1510,15 +1509,9 @@ function getAgentUrl (url, options) {
 }
 
 let configInstance = null
-let configOptions = null
 function getConfig (options) {
   if (!configInstance) {
-    configOptions = options
     configInstance = new Config(options)
-  }
-  // TODO: Remove before landing
-  if (!util.isDeepStrictEqual(configOptions || {}, options || {})) {
-    throw new Error('Debug: different options since last call to getConfig')
   }
   return configInstance
 }
