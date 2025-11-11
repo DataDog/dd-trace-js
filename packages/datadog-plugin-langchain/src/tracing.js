@@ -12,6 +12,8 @@ const LangChainHandler = require('./handlers/default')
 const LangChainLanguageModelHandler = require('./handlers/language_models')
 const LangChainEmbeddingHandler = require('./handlers/embedding')
 
+const defaultNs = ['langchain', 'embeddings']
+
 class BaseLangChainTracingPlugin extends TracingPlugin {
   static id = 'langchain'
   static operation = 'invoke'
@@ -36,7 +38,9 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     const type = ctx.type = this.constructor.lcType
 
     // Runnable interfaces have an `lc_namespace` property
-    const ns = ctx.self.lc_namespace || ctx.namespace
+    const ns = ctx.self.lc_namespace || (
+      ctx.self.constructor.name === 'OpenAIEmbeddings' ? [...defaultNs, 'openai'] : defaultNs
+    )
 
     const resourceParts = [...ns, ctx.self.constructor.name]
     if (type === 'tool') {
