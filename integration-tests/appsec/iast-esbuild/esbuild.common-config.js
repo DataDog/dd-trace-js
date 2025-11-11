@@ -1,6 +1,6 @@
 'use strict'
 
-const ddPlugin = require('dd-trace/esbuild')
+const ddPlugin = require('dd-trace/esbuild') // eslint-disable-line n/no-extraneous-require
 
 module.exports = {
   entryPoints: ['app.js'],

@@ -1,6 +1,6 @@
 'use strict'
 
-require('dd-trace').init()
+require('dd-trace').init() // eslint-disable-line n/no-extraneous-require
 
 const express = require('express')
 
