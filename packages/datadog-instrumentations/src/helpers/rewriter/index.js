@@ -2,6 +2,7 @@
 
 // The rewriter works effectively the same as Orchestrion with some additions:
 // - Supports an `astQuery` field to filter AST nodes with an esquery query.
+// - Supports replacing methods of child class instance in the base constructor.
 
 const { readFileSync } = require('fs')
 const { join } = require('path')
@@ -28,8 +29,8 @@ function rewrite (content, filename, format) {
     filename = filename.replace('file://', '')
 
     for (const inst of instrumentations) {
-      const { astQuery, moduleName, versionRange, filePath, channelName } = inst
-      const transform = transforms[inst.operator]
+      const { astQuery, moduleName, versionRange, filePath, operator, functionQuery, channelName } = inst
+      const transform = transforms[operator]
 
       if (disabled.has(moduleName)) continue
       if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
@@ -53,15 +54,11 @@ function rewrite (content, filename, format) {
         })
       }
 
-      try {
-        ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
-      } catch (e) {
-        log.error(e)
-      }
+      ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
-      const query = astQuery || functionQuery(inst)
+      const query = astQuery || fromFunctionQuery(functionQuery)
       const selector = esquery.parse(query)
-      const state = { channelName, format, moduleName }
+      const state = { channelName, format, functionQuery, moduleName }
 
       esquery.traverse(ast, selector, (...args) => transform(state, ...args))
     }
@@ -103,8 +100,7 @@ function satisfies (filename, filePath, versions) {
 }
 
 // TODO: Support index
-function functionQuery (inst) {
-  const { functionQuery } = inst
+function fromFunctionQuery (functionQuery) {
   const { methodName, functionName, expressionName, className } = functionQuery
   const kind = functionQuery.kind?.toLowerCase()
 
@@ -112,6 +108,7 @@ function functionQuery (inst) {
 
   if (className) {
     queries.push(
+      `[id.name="${className}"]`,
       `[id.name="${className}"] > ClassBody > [key.name="${methodName}"] > [async]`
     )
   } else if (methodName) {
@@ -122,16 +119,16 @@ function functionQuery (inst) {
   }
 
   if (functionName) {
-    queries.push(`FunctionDeclaration[id.name="${functionName}"]`)
+    queries.push(`FunctionDeclaration[id.name="${functionName}"][async]`)
   } else if (expressionName) {
     queries.push(
-      `FunctionExpression[id.name="${expressionName}"]`,
-      `ArrowFunctionExpression[id.name="${expressionName}"]`
+      `FunctionExpression[id.name="${expressionName}"][async]`,
+      `ArrowFunctionExpression[id.name="${expressionName}"][async]`
     )
   }
 
   if (kind) {
-    queries = queries.map(q => `${q}[async="${kind === 'async' ? 'true' : 'false'}"]`)
+    queries = queries.map(q => q.replaceAll('[async]', `[async="${kind === 'async' ? 'true' : 'false'}"]`))
   }
 
   return queries.join(', ')

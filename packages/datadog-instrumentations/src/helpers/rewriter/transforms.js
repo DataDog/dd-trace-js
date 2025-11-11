@@ -8,11 +8,10 @@ const tracingChannelPredicate = (node) => (
 const transforms = module.exports = {
   tracingChannelImport ({ format }, node) {
     if (node.body.some(tracingChannelPredicate)) return
-    if (format === 'module') {
-      const index = node.body.findLastIndex(
-        child => child.type === 'ImportDeclaration' || child.directive === 'use strict'
-      )
 
+    const index = node.body.findIndex(child => child.directive === 'use strict')
+
+    if (format === 'module') {
       node.body.splice(index + 1, 0, {
         type: 'ImportDeclaration',
         specifiers: [
@@ -26,9 +25,7 @@ const transforms = module.exports = {
         attributes: []
       })
     } else {
-      const index = node.body.findIndex(child => child?.directive !== 'use strict')
-
-      node.body.splice(index, 0, {
+      node.body.splice(index + 1, 0, {
         type: 'VariableDeclaration',
         kind: 'const',
         declarations: [
@@ -104,16 +101,109 @@ const transforms = module.exports = {
 }
 
 function traceAny (operator, state, node, ancestry) {
-  const { channelName } = state
+  const { channelName, functionQuery } = state
+  const { methodName } = functionQuery
   const channelVariable = channelName.replaceAll(':', '_')
   const program = ancestry[ancestry.length - 1]
   const async = operator === 'tracePromise'
 
+  let field = 'body'
+
+  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
+    const classBody = node.body
+
+    // If the method exists on the class, we return as it will be patched later
+    // while traversing child nodes later on.
+    if (classBody.body.some(({ key }) => key.name === methodName)) return
+
+    // Method doesn't exist on the class so we assume an instance method and
+    // wrap it in the constructor instead.
+    let ctor = classBody.body.find(({ kind }) => kind === 'constructor')
+
+    if (!ctor) {
+      ctor = {
+        type: 'MethodDefinition',
+        kind: 'constructor',
+        static: false,
+        computed: false,
+        key: { type: 'Identifier', name: 'constructor' },
+        value: {
+          type: 'FunctionExpression',
+          params: [],
+          body: { type: 'BlockStatement', body: [] },
+          async: false,
+          generator: false,
+          id: null
+        }
+      }
+
+      if (node.superClass) {
+        ctor.value.body.params.push({
+          type: 'RestElement',
+          argument: { type: 'Identifier', name: 'args' }
+        })
+
+        ctor.value.body.body.push({
+          type: 'ExpressionStatement',
+          expression: {
+            type: 'CallExpression',
+            callee: { type: 'Super' },
+            arguments: [
+              {
+                type: 'SpreadElement',
+                argument: { type: 'Identifier', name: 'args' }
+              }
+            ],
+            optional: false
+          }
+        })
+      }
+
+      classBody.body.unshift(ctor)
+    }
+
+    ctor.value.body.body.push({
+      type: 'VariableDeclaration',
+      kind: 'const',
+      declarations: [
+        {
+          type: 'VariableDeclarator',
+          id: { type: 'Identifier', name: methodName },
+          init: {
+            type: 'MemberExpression',
+            object: { type: 'ThisExpression' },
+            computed: false,
+            property: { type: 'Identifier', name: methodName },
+            optional: false
+          }
+        }
+      ]
+    },
+    {
+      type: 'ExpressionStatement',
+      expression: {
+        type: 'AssignmentExpression',
+        left: {
+          type: 'MemberExpression',
+          object: { type: 'ThisExpression' },
+          computed: false,
+          property: { type: 'Identifier', name: methodName },
+          optional: false
+        },
+        operator: '=',
+        right: { type: 'Identifier', name: methodName }
+      }
+    })
+
+    node = ctor.value
+    field = 'right'
+  }
+
   transforms.tracingChannelDeclaration(state, program)
 
-  const body = node.body
+  const body = node[field]
 
-  node.body = {
+  node[field] = {
     type: 'BlockStatement',
     body: [
       {
