@@ -47,7 +47,7 @@ export async function load (url, context, nextLoad) {
         passes.push('iast')
       }
     } else {
-      passes = ['orchestrion']
+      passes = [] // TODO: Re-enable Orchestrion when viable.
     }
     const rewritten = rewriter.rewrite(result.source.toString(), url, passes)
 
