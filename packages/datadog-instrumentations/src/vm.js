@@ -2,12 +2,11 @@
 
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const names = ['vm', 'node:vm']
 
 const runScriptStartChannel = channel('datadog:vm:run-script:start')
 const sourceTextModuleStartChannel = channel('datadog:vm:source-text-module:start')
 
-addHook({ name: names }, function (vm) {
+addHook({ name: 'vm' }, function (vm) {
   vm.Script = class extends vm.Script {
     constructor (code) {
       super(...arguments)

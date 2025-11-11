@@ -38,23 +38,39 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
-const HOOK_SYMBOL = Symbol('hookExportsSet')
-
 if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   checkRequireCache.checkForRequiredModules()
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
+/** @type {Set<string>} */
 const seenCombo = new Set()
+/** @type {Record<string, boolean>} */
 const allInstrumentations = {}
+/** @type {Set<string>} */
+const instrumentedNodeModules = new Set()
 
-// TODO: make this more efficient
-for (const packageName of names) {
-  if (disabledInstrumentations.has(packageName)) continue
+for (const name of names) {
+  if (name.startsWith('node:')) {
+    // Add all unprefixed node modules to the instrumentations list.
+    names.push(name.slice(5))
+    // Always disable prefixed and unprefixed node modules if one is disabled.
+    // TODO: Activate & write a regression test for this.
+    // if (disabledInstrumentations.has(name) !== disabledInstrumentations.has(`node:${name}`)) {
+    //   disabledInstrumentations.add(name)
+    //   disabledInstrumentations.add(`node:${name}`)
+    // }
+  }
+}
+
+for (const name of names) {
+  if (disabledInstrumentations.has(name)) continue
+
+  const isNodeModule = name.startsWith('node:') || !hooks[name]
 
   const hookOptions = {}
 
-  let hook = hooks[packageName]
+  let hook = hooks[name] ?? hooks[`node:${name}`]
 
   if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
@@ -63,42 +79,41 @@ for (const packageName of names) {
     hook = hook.fn
   }
 
-  // get the instrumentation file name to save all hooked versions
-  const instrumentationFileName = parseHookInstrumentationFileName(packageName)
+  const nameWithoutPrefix = name.startsWith('node:') ? name.slice(5) : name
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  // get the instrumentation file name to save all hooked versions
+  const instrumentationFileName = parseHookInstrumentationFileName(hook)
+
+  Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
 
-    if (!instrumentations[packageName]) {
+    if (!instrumentations[nameWithoutPrefix] || instrumentedNodeModules.has(nameWithoutPrefix)) {
       return moduleExports
     }
 
+    // Used for node: prefixed modules to prevent double instrumentation.
+    if (isNodeModule) {
+      instrumentedNodeModules.add(nameWithoutPrefix)
+    }
+
     const namesAndSuccesses = {}
-    for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
-      if (patchDefault === false && !moduleExports.default && isIitm) {
-        return moduleExports
-      } else if (patchDefault === true && moduleExports.default && isIitm) {
-        moduleExports = moduleExports.default
+    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[nameWithoutPrefix]) {
+      if (isIitm && patchDefault === !!moduleExports.default) {
+        if (patchDefault) {
+          moduleExports = moduleExports.default
+        } else {
+          return moduleExports
+        }
       }
 
-      let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
-      if (fullFilePattern) {
-        fullFilePattern = filename(name, fullFilePattern)
-      }
 
-      // Create a WeakSet associated with the hook function so that patches on the same moduleExport only happens once
-      // for example by instrumenting both dns and node:dns double the spans would be created
-      // since they both patch the same moduleExport, this WeakSet is used to mitigate that
-      // TODO(BridgeAR): Instead of using a WeakSet here, why not just use aliases for the hook in register?
-      // That way it would also not be duplicated. The actual name being used has to be identified else wise.
-      // Maybe it is also not important to know what name was actually used?
-      hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
 
+      const fullFilePattern = filePattern && filename(name, filePattern)
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
         // so our instrumentation has to include a '.*' to match them for more than a single version.
@@ -109,12 +124,11 @@ for (const packageName of names) {
         let version = moduleVersion
         try {
           version = version || getVersion(moduleBaseDir)
-          allInstrumentations[instrumentationFileName] = allInstrumentations[instrumentationFileName] || false
         } catch (e) {
           log.error('Error getting version for "%s": %s', name, e.message, e)
           continue
         }
-        if (namesAndSuccesses[`${name}@${version}`] === undefined && !file) {
+        if (namesAndSuccesses[`${nameWithoutPrefix}@${version}`] === undefined && !file) {
           // TODO If `file` is present, we might elsewhere instrument the result of the module
           // for a version range that actually matches, so we can't assume that we're _not_
           // going to instrument that. However, the way the data model around instrumentation
@@ -122,36 +136,21 @@ for (const packageName of names) {
           // ignore this if there is a `file` in the hook. The thing to do here is rework
           // everything so that we can be sure that there are _no_ instrumentations that it
           // could match.
-          namesAndSuccesses[`${name}@${version}`] = false
+          namesAndSuccesses[`${nameWithoutPrefix}@${version}`] = false
         }
 
         if (matchVersion(version, versions)) {
-          allInstrumentations[instrumentationFileName] = true
-
-          // Check if the hook already has a set moduleExport
-          if (hook[HOOK_SYMBOL].has(moduleExports)) {
-            namesAndSuccesses[`${name}@${version}`] = true
-            return moduleExports
-          }
+          allInstrumentations[instrumentationFileName] ||= false
 
           try {
-            loadChannel.publish({ name, version, file })
-            // Send the name and version of the module back to the callback because now addHook
-            // takes in an array of names so by passing the name the callback will know which module name is being used
-            // TODO(BridgeAR): This is only true in case the name is identical
-            // in all loads. If they deviate, the deviating name would not be
-            // picked up due to the unification. Check what modules actually use the name.
-            // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
-            // This allows to reduce the instrumentation code (no return needed).
+            loadChannel.publish({ name })
 
-            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
-            // Set the moduleExports in the hooks WeakSet
-            hook[HOOK_SYMBOL].add(moduleExports)
+            moduleExports = hook(moduleExports, version) ?? moduleExports
           } catch (e) {
             log.info('Error during ddtrace instrumentation of application, aborting.', e)
             telemetry('error', [
               `error_type:${e.constructor.name}`,
-              `integration:${name}`,
+              `integration:${nameWithoutPrefix}`,
               `integration_version:${version}`
             ], {
               result: 'error',
@@ -159,15 +158,21 @@ for (const packageName of names) {
               result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
             })
           }
-          namesAndSuccesses[`${name}@${version}`] = true
+          namesAndSuccesses[`${nameWithoutPrefix}@${version}`] = true
         }
       }
     }
     for (const nameVersion of Object.keys(namesAndSuccesses)) {
-      const [name, version] = nameVersion.split('@')
       const success = namesAndSuccesses[nameVersion]
       // we check allVersions to see if any version of the integration was successfully instrumented
+      // TODO: The allInstrumentations check is meant to fix https://github.com/DataDog/dd-trace-js/issues/5092
+      // This is a workaround to actually detect if any hook inside of the instrumentation file was successful or not.
+      // This could be simplified by checking it in a different way. Another alternative is to mention which hooks were
+      // successful or not. That would also be better for debugging. If no filename is detected, the allInstrumentations
+      // check will always be false - which is a mistake.
+      // The current seenCombo also seems to be redundant to namesAndSuccesses. Refactor this if possible.
       if (!success && !seenCombo.has(nameVersion) && !allInstrumentations[instrumentationFileName]) {
+        const [name, version] = nameVersion.split('@')
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
@@ -185,18 +190,31 @@ for (const packageName of names) {
   })
 }
 
+/**
+ * @param {string|undefined} version
+ * @param {string[]|undefined} ranges
+ */
 function matchVersion (version, ranges) {
   return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
+/**
+ * @param {string} moduleBaseDir
+ * @returns {string|undefined}
+ */
 function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
-    return requirePackageJson(moduleBaseDir, module).version
+    return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
   }
 }
 
+/**
+ * @param {string} name
+ * @param {string} [file]
+ * @returns {string}
+ */
 function filename (name, file) {
-  return [name, file].filter(Boolean).join('/')
+  return file ? `${name}/${file}` : name
 }
 
 // This function captures the instrumentation file name for a given package by parsing the hook require
@@ -208,11 +226,11 @@ function filename (name, file) {
 //                  redis -> "() => require('../redis')" -> redis
 //          @redis/client -> "() => require('../redis')" -> redis
 //
-function parseHookInstrumentationFileName (packageName) {
-  let hook = hooks[packageName]
-  if (hook.fn) {
-    hook = hook.fn
-  }
+/**
+ * @param {Function} hook
+ * @returns {string|undefined}
+ */
+function parseHookInstrumentationFileName (hook) {
   const hookString = hook.toString()
 
   const regex = /require\('([^']*)'\)/
@@ -227,8 +245,6 @@ function parseHookInstrumentationFileName (packageName) {
     }
     return moduleName
   }
-
-  return null
 }
 
 module.exports = {
