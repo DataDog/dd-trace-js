@@ -29,7 +29,7 @@ function rewrite (content, filename, format) {
     filename = filename.replace('file://', '')
 
     for (const inst of instrumentations) {
-      const { astQuery, moduleName, versionRange, filePath, operator, functionQuery, channelName } = inst
+      const { astQuery, moduleName, versionRange, filePath, operator, functionQuery } = inst
       const transform = transforms[operator]
 
       if (disabled.has(moduleName)) continue
@@ -58,7 +58,7 @@ function rewrite (content, filename, format) {
 
       const query = astQuery || fromFunctionQuery(functionQuery)
       const selector = esquery.parse(query)
-      const state = { channelName, format, functionQuery, moduleName }
+      const state = { ...inst, format }
 
       esquery.traverse(ast, selector, (...args) => transform(state, ...args))
     }
