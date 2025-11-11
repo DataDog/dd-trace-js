@@ -19,6 +19,14 @@ let generate
 let esquery
 let sourceMapSupport
 
+const swc = require('@swc/core')
+
+console.time('test')
+
+swc.parseSync('console.log("hello")', { syntax: 'ecmascript' })
+
+console.timeEnd('test')
+
 function rewrite (content, filename, format) {
   if (!content) return content
 
