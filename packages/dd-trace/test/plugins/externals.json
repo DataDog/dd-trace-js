@@ -289,28 +289,6 @@
       "versions": ["1.15.0"]
     }
   ],
-  "jest": [
-    {
-      "name": "jest",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-environment-jsdom",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-environment-node",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "jest-circus",
-      "versions": [">=24.8.0"]
-    },
-    {
-      "name": "@jest/globals",
-      "versions": [">=26.5.0"]
-    }
-  ],
   "knex": [
     {
       "name": "pg",

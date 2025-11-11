@@ -4,6 +4,9 @@ const http = require('http')
 
 const tracer = require('dd-trace')
 
+const ENDPOINT_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL ||
+  `http://127.0.0.1:${process.env.DD_TRACE_AGENT_PORT}`
+
 describe('jest-test-suite', () => {
   jest.setTimeout(400)
 
@@ -40,7 +43,7 @@ describe('jest-test-suite', () => {
   })
 
   it('can do integration http', (done) => {
-    const req = http.request('http://test:123', (res) => {
+    const req = http.request(`${ENDPOINT_URL}/info`, { agent: false }, (res) => {
       expect(res.statusCode).toEqual(200)
       done()
     })
