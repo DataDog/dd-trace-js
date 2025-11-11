@@ -71,6 +71,9 @@ describe('RASP - ssrf', () => {
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
+            // Hack to enforce the module to be loaded once before the actual request
+            require(protocol)
+
             app = (req, res) => {
               const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
               clientRequest.on('error', noop)
@@ -79,7 +82,7 @@ describe('RASP - ssrf', () => {
 
             axios.get('/?host=www.datadoghq.com')
 
-            return checkRaspExecutedAndNotThreat(agent, protocol === 'http')
+            return checkRaspExecutedAndNotThreat(agent)
           })
 
           it('Should detect threat doing a GET request', async () => {
