@@ -169,21 +169,22 @@ moduleTypes.forEach(({
     // because there are pending connections.
     afterEach(async () => {
       if (childProcess) {
-        childProcess.kill()
-        // Wait for process to actually exit before continuing
+        // Use SIGKILL directly for reliable cleanup
+        childProcess.kill('SIGKILL')
+        // Wait for process to exit with a safety timeout
         try {
           await Promise.race([
             once(childProcess, 'exit'),
-            new Promise((resolve, reject) =>
-              setTimeout(() => {
-                childProcess.kill('SIGKILL') // Force kill if still alive
-                reject(new Error('Child process termination timeout'))
-              }, 5000)
+            new Promise((_resolve, reject) =>
+              setTimeout(() =>
+                reject(new Error('SIGKILL timeout after 5s - process may be stuck in uninterruptible state')), 5000
+              )
             )
           ])
         } catch (error) {
           // eslint-disable-next-line no-console
-          console.warn('Child process cleanup warning:', error.message)
+          console.error(error)
+          // Continue cleanup anyway - nothing more we can do
         }
       }
 
@@ -193,7 +194,7 @@ moduleTypes.forEach(({
           webAppServer.close((err) => {
             if (err) {
               // eslint-disable-next-line no-console
-              console.warn('Web server close error:', err)
+              console.error('Web server close error:', err)
             }
             resolve()
           })
