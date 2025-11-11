@@ -280,7 +280,7 @@ function wrap (state, node) {
                         optional: false
                       },
                       arguments: [
-                        { type: 'Literal', value: null },
+                        { type: 'Identifier', name: 'this' },
                         {
                           type: 'Identifier',
                           name: '__apm$original_args'

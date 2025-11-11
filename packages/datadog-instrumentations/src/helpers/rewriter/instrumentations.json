@@ -1,7 +1,7 @@
 [
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/runnables/base.cjs",
     "functionQuery": {
       "methodName": "invoke",
@@ -13,7 +13,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/runnables/base.cjs",
     "functionQuery": {
       "methodName": "batch",
@@ -25,7 +25,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/language_models/chat_models.cjs",
     "functionQuery": {
       "methodName": "generate",
@@ -37,7 +37,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/language_models/llms.cjs",
     "functionQuery": {
       "methodName": "generate",
@@ -48,7 +48,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/embeddings.cjs",
     "functionQuery": {
       "methodName": "embedQuery",
@@ -59,7 +59,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/embeddings.cjs",
     "functionQuery": {
       "methodName": "embedDocuments",
@@ -70,7 +70,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/tools/index.cjs",
     "functionQuery": {
       "methodName": "invoke",
@@ -82,7 +82,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/vectorstores.cjs",
     "functionQuery": {
       "methodName": "similaritySearch",
@@ -94,7 +94,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/vectorstores.cjs",
     "functionQuery": {
       "methodName": "similaritySearchWithScore",
@@ -106,7 +106,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/runnables/base.js",
     "functionQuery": {
       "methodName": "invoke",
@@ -118,7 +118,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/runnables/base.js",
     "functionQuery": {
       "methodName": "batch",
@@ -130,7 +130,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/language_models/chat_models.js",
     "functionQuery": {
       "methodName": "generate",
@@ -142,7 +142,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/language_models/llms.js",
     "functionQuery": {
       "methodName": "generate",
@@ -153,7 +153,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/embeddings.js",
     "functionQuery": {
       "methodName": "embedQuery",
@@ -164,7 +164,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/embeddings.js",
     "functionQuery": {
       "methodName": "embedDocuments",
@@ -175,7 +175,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/tools/index.js",
     "functionQuery": {
       "methodName": "invoke",
@@ -187,7 +187,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/vectorstores.js",
     "functionQuery": {
       "methodName": "similaritySearch",
@@ -199,7 +199,7 @@
   },
   {
     "moduleName": "@langchain/core",
-    "versionRange": ">=0.1.0",
+    "versionRange": ">=0.1",
     "filePath": "dist/vectorstores.js",
     "functionQuery": {
       "methodName": "similaritySearchWithScore",

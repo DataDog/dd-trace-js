@@ -174,13 +174,13 @@ class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_embeddings_embed_query'
   static lcType = 'embedding'
-  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedQuery'
+  static prefix = 'tracing:orchestrion:@langchain/core:Embeddings_embedQuery'
 }
 
 class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_embeddings_embed_documents'
   static lcType = 'embedding'
-  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+  static prefix = 'tracing:orchestrion:@langchain/core:Embeddings_embedDocuments'
 }
 
 class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
