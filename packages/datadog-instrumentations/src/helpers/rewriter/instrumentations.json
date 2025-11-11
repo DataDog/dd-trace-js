@@ -51,12 +51,22 @@
     "versionRange": ">=0.1.0",
     "filePath": "dist/embeddings.cjs",
     "functionQuery": {
-      "methodName": "constructor",
-      "kind": "sync",
+      "methodName": "embedQuery",
       "className": "Embeddings"
     },
-    "operator": "traceSync",
-    "channelName": "Embeddings_constructor"
+    "operator": "tracePromise",
+    "channelName": "Embeddings_embedQuery"
+  },
+  {
+    "moduleName": "@langchain/core",
+    "versionRange": ">=0.1.0",
+    "filePath": "dist/embeddings.cjs",
+    "functionQuery": {
+      "methodName": "embedDocuments",
+      "className": "Embeddings"
+    },
+    "operator": "tracePromise",
+    "channelName": "Embeddings_embedDocuments"
   },
   {
     "moduleName": "@langchain/core",
@@ -146,12 +156,22 @@
     "versionRange": ">=0.1.0",
     "filePath": "dist/embeddings.js",
     "functionQuery": {
-      "methodName": "constructor",
-      "kind": "sync",
+      "methodName": "embedQuery",
       "className": "Embeddings"
     },
-    "operator": "traceSync",
-    "channelName": "Embeddings_constructor"
+    "operator": "tracePromise",
+    "channelName": "Embeddings_embedQuery"
+  },
+  {
+    "moduleName": "@langchain/core",
+    "versionRange": ">=0.1.0",
+    "filePath": "dist/embeddings.js",
+    "functionQuery": {
+      "methodName": "embedDocuments",
+      "className": "Embeddings"
+    },
+    "operator": "tracePromise",
+    "channelName": "Embeddings_embedDocuments"
   },
   {
     "moduleName": "@langchain/core",
