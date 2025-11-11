@@ -72,10 +72,10 @@ describe('RASP - ssrf', () => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
             // Hack to enforce the module to be loaded once before the actual request
-            require(protocol)
+            const module = require(protocol)
 
             app = (req, res) => {
-              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = module.get(`${protocol}://${req.query.host}`)
               clientRequest.on('error', noop)
               res.end('end')
             }
