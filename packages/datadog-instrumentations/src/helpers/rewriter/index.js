@@ -19,6 +19,14 @@ let generate
 let esquery
 let sourceMapSupport
 
+const oxc = require('oxc-parser')
+
+console.time('test')
+
+oxc.parseSync('index.js', 'console.log("hello")')
+
+console.timeEnd('test')
+
 function rewrite (content, filename, format) {
   if (!content) return content
 

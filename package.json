@@ -152,6 +152,7 @@
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
     "opentracing": ">=0.14.7",
+    "oxc-parser": "^0.96.0",
     "path-to-regexp": "^0.1.12",
     "pprof-format": "^2.1.1",
     "protobufjs": "^7.5.3",
