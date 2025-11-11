@@ -135,7 +135,7 @@ function wrapAppUse (use) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.application, 'all', wrapAppAll)
   shimmer.wrap(express.application, 'route', wrapAppRoute)
@@ -213,19 +213,19 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.0.0 <4.3.0'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(1))
   return express
 })
 
-addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: ['lib/express.js'] }, express => {
+addHook({ name: 'express', versions: ['>=4.3.0 <5.0.0'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.Router, 'process_params', wrapProcessParamsMethod(2))
   return express
 })
 
 const queryReadCh = channel('datadog:express:query:finish')
 
-addHook({ name: 'express', file: ['lib/request.js'], versions: ['>=5.0.0'] }, request => {
+addHook({ name: 'express', file: 'lib/request.js', versions: ['>=5.0.0'] }, request => {
   shimmer.wrap(request, 'query', function (originalGet) {
     return function wrappedGet () {
       const query = originalGet.call(this)

@@ -14,11 +14,6 @@ const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 // ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn']
 
-const names = ['child_process', 'node:child_process']
-
-// child_process and node:child_process returns the same object instance, we only want to add hooks once
-let patched = false
-
 function throwSyncError (error) {
   throw error
 }
@@ -37,18 +32,13 @@ function returnSpawnSyncError (error, context) {
   return context.result
 }
 
-names.forEach(name => {
-  addHook({ name }, childProcess => {
-    if (!patched) {
-      patched = true
-      shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
-      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(throwSyncError, true))
-      shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod(throwSyncError))
-      shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod(returnSpawnSyncError))
-    }
+addHook({ name: 'child_process' }, childProcess => {
+  shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod(childProcess.ChildProcess))
+  shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(throwSyncError, true))
+  shimmer.wrap(childProcess, 'execFileSync', wrapChildProcessSyncMethod(throwSyncError))
+  shimmer.wrap(childProcess, 'spawnSync', wrapChildProcessSyncMethod(returnSpawnSyncError))
 
-    return childProcess
-  })
+  return childProcess
 })
 
 function normalizeArgs (args, shell) {

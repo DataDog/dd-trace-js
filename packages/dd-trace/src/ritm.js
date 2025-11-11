@@ -19,19 +19,32 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
+/**
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {object} options hook options
+ * @param {Function} onrequire callback to be executed upon encountering module
+ *
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {Function} onrequire callback to be executed upon encountering module
+ *
+ * @overload
+ * @param {Function} onrequire callback to be executed upon encountering module
+ */
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof modules === 'function') {
     onrequire = modules
-    modules = null
+    modules = undefined
     options = {}
   } else if (typeof options === 'function') {
     onrequire = options
     options = {}
   }
 
-  modules = modules || []
-  options = options || {}
+  modules ??= []
+  options ??= {}
 
   this.modules = modules
   this.options = options
@@ -60,6 +73,7 @@ function Hook (modules, options, onrequire) {
     */
     let filename
     try {
+      // @ts-expect-error - Module._resolveFilename is not typed
       filename = Module._resolveFilename(request, this)
     } catch {
       return _origRequire.apply(this, arguments)
@@ -70,8 +84,9 @@ function Hook (modules, options, onrequire) {
     // return known patched modules immediately
     if (cache[filename]) {
       // require.cache was potentially altered externally
-      if (require.cache[filename] && require.cache[filename].exports !== cache[filename].original) {
-        return require.cache[filename].exports
+      const cacheEntry = require.cache[filename]
+      if (cacheEntry && cacheEntry.exports !== cache[filename].original) {
+        return cacheEntry.exports
       }
 
       return cache[filename].exports
@@ -125,6 +140,7 @@ function Hook (modules, options, onrequire) {
       if (!hooks) return exports // abort if module name isn't on whitelist
 
       // figure out if this is the main module file, or a file inside the module
+      // @ts-expect-error - Module._resolveLookupPaths is meant to be internal and is not typed
       const paths = Module._resolveLookupPaths(name, this, true)
       if (!paths) {
         // abort if _resolveLookupPaths return null
@@ -133,6 +149,7 @@ function Hook (modules, options, onrequire) {
 
       let res
       try {
+        // @ts-expect-error - Module._findPath is meant to be internal and is not typed
         res = Module._findPath(name, [basedir, ...paths])
       } catch {
         // case where the file specified in package.json "main" doesn't exist
@@ -159,26 +176,14 @@ function Hook (modules, options, onrequire) {
   }
 }
 
+/**
+ * Reset the Ritm hook. This is used to reset the hook after a test.
+ * TODO: Remove this and instead use proxyquire to reset the hook.
+ */
 Hook.reset = function () {
   Module.prototype.require = origRequire
   patchedRequire = null
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
-}
-
-Hook.prototype.unhook = function () {
-  for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
-
-    if (hooks.length > 0) {
-      moduleHooks[mod] = hooks
-    } else {
-      delete moduleHooks[mod]
-    }
-  }
-
-  if (Object.keys(moduleHooks).length === 0) {
-    Hook.reset()
-  }
 }
