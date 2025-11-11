@@ -7,8 +7,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-require('../src/knex')
-
 describe('Instrumentation', () => {
   let knex
   let client
@@ -17,6 +15,11 @@ describe('Instrumentation', () => {
   describe('knex', () => {
     withVersions('knex', 'knex', version => {
       describe('without configuration', () => {
+        /**
+         * TODO (Pablo Erhard): Implement a single mechanism to automatically trigger hook loading
+         * across all tests. This should allow test hooks to initialize programmatically
+         * without requiring explicit `agent.load()` calls in every individual test file.
+         */
         before(async () => {
           await agent.load()
         })
