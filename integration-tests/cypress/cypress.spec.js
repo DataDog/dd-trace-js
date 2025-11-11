@@ -168,24 +168,15 @@ moduleTypes.forEach(({
     // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
     // because there are pending connections.
     afterEach(async () => {
-      if (childProcess) {
-        // Use SIGKILL directly for reliable cleanup
-        childProcess.kill('SIGKILL')
-        // Wait for process to exit with a safety timeout
+      if (childProcess && childProcess.pid) {
         try {
-          await Promise.race([
-            once(childProcess, 'exit'),
-            new Promise((_resolve, reject) =>
-              setTimeout(() =>
-                reject(new Error('SIGKILL timeout after 5s - process may be stuck in uninterruptible state')), 5000
-              )
-            )
-          ])
+          childProcess.kill('SIGKILL')
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error(error)
-          // Continue cleanup anyway - nothing more we can do
+          // Process might already be dead - this is fine, ignore error
         }
+
+        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
+        // The OS will clean up zombies, and fresh server per test prevents port conflicts
       }
 
       // Close web server before stopping receiver
