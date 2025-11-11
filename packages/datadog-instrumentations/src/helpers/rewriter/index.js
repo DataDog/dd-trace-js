@@ -19,6 +19,15 @@ let generate
 let esquery
 let sourceMapSupport
 
+const { Rewriter } = require('@datadog/wasm-js-rewriter')
+const rewriter = new Rewriter({
+  orchestrion: `
+version: 1
+dc_module: dc-polyfill
+instrumentations: []
+`
+})
+
 function rewrite (content, filename, format) {
   if (!content) return content
 
