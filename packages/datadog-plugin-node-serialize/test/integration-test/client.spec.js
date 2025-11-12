@@ -1,21 +1,21 @@
 'use strict'
 
 const {
-  sandboxCwd, useSandbox, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc
+  useSandbox, sandboxCwd, varySandbox,
+  FakeAgent, spawnPluginIntegrationTestProc, curl
 } = require('../../../../integration-tests/helpers')
 const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-withVersions('express-session', 'express-session', version => {
+withVersions('node-serialize', 'node-serialize', version => {
   describe('ESM', () => {
     let variants, proc, agent
 
-    useSandbox([`'express-session@${version}'`, 'express'], false,
-      ['./packages/datadog-plugin-express-session/test/integration-test/*'])
+    useSandbox([`'node-serialize@${version}'`, 'express'], false,
+      ['./packages/datadog-plugin-node-serialize/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'expressSession', undefined, 'express-session')
+      variants = varySandbox('server.mjs', 'node-serialize', undefined, 'lib')
     })
 
     beforeEach(async () => {
