@@ -6,17 +6,17 @@ require,@datadog/native-iast-taint-tracking,Apache license 2.0,Copyright 2018 Da
 require,@datadog/openfeature-node-server,Apache license 2.0,Copyright 2024 Datadog Inc.
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
-require,@datadog/source-map-support,MIT,Copyright 2014 Evan Wallace
+require,@datadog/source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and contributors
 require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@isaacs/ttlcache,Blue Oak,Copyright Isaac Z. Schlueter and Contributors
+require,astring,MIT,Copyright 2015 David Bonnet
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
 require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
 require,escape-string-regexp,MIT,Copyright Sindre Sorhus
-require,escodegen,BSD-2-Clause,Copyright 2012 Yusuke Suzuki and other contributors
 require,esquery,MIT,Copyright 2013 Joel Feenstra
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
