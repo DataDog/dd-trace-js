@@ -7,66 +7,39 @@
 const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('semifies')
-const transforms = require('./transforms')
+const codeTransformer = require('@apm-js-collab/code-transformer')
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations.json')
-const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
-
-const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
 const supported = {}
+const versions = {}
 const disabled = new Set()
 
-// TODO: Source maps without `--enable-source-maps`.
-const enableSourceMaps = NODE_OPTIONS?.includes('--enable-source-maps') ||
-  process.execArgv?.some(arg => arg.includes('--enable-source-maps'))
-
-let parse
-let generate
-let esquery
-let SourceMapGenerator
+const matcher = codeTransformer.create(instrumentations)
 
 function rewrite (content, filename, format) {
   if (!content) return content
 
   try {
-    let ast
-
     filename = filename.replace('file://', '')
 
     for (const inst of instrumentations) {
-      const { astQuery, moduleName, versionRange, filePath, operator, functionQuery } = inst
-      const transform = transforms[operator]
+      const { module: { name, versionRange, filePath } } = inst
 
-      if (disabled.has(moduleName)) continue
-      if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
-      if (!transform) continue
+      if (disabled.has(name)) continue
+      if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
-      parse ??= require('meriyah').parse
-      generate ??= require('astring').generate
-      esquery ??= require('esquery')
+      const version = getVersion(filename, filePath)
+      const transformer = matcher.getTransformer(name, version, filePath)
 
-      ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
+      if (!transformer) continue
 
-      const query = astQuery || fromFunctionQuery(functionQuery)
-      const selector = esquery.parse(query)
-      const state = { ...inst, format }
+      const { code } = transformer.transform(content, 'unknown')
 
-      esquery.traverse(ast, selector, (...args) => transform(state, ...args))
-    }
+      content = code
 
-    if (ast) {
-      if (!enableSourceMaps || SourceMapGenerator) return generate(ast)
-
-      // TODO: Can we use the same version of `source-maps` that DI uses?
-      SourceMapGenerator ??= require('@datadog/source-map').SourceMapGenerator
-
-      const sourceMap = new SourceMapGenerator({ file: filename })
-      const code = generate(ast, { sourceMap })
-      const map = Buffer.from(sourceMap.toString()).toString('base64')
-
-      return code + '\n' + `//# sourceMappingURL=data:application/json;base64,${map}`
+      transformer.free()
     }
   } catch (e) {
     log.error(e)
@@ -84,11 +57,7 @@ function satisfies (filename, filePath, versions) {
 
   if (supported[basename] === undefined) {
     try {
-      const pkg = JSON.parse(readFileSync(
-        join(basename, 'package.json'), 'utf8'
-      ))
-
-      supported[basename] = semifies(pkg.version, versions)
+      supported[basename] = semifies(getVersion(basename), versions)
     } catch {
       supported[basename] = false
     }
@@ -97,40 +66,18 @@ function satisfies (filename, filePath, versions) {
   return supported[basename]
 }
 
-// TODO: Support index
-function fromFunctionQuery (functionQuery) {
-  const { methodName, functionName, expressionName, className } = functionQuery
-  const kind = functionQuery.kind?.toLowerCase()
+function getVersion (filename, filePath) {
+  const [basename] = filename.split(filePath)
 
-  let queries = []
+  if (!versions[basename]) {
+    const pkg = JSON.parse(readFileSync(
+      join(basename, 'package.json'), 'utf8'
+    ))
 
-  if (className) {
-    queries.push(
-      `[id.name="${className}"]`,
-      `[id.name="${className}"] > ClassBody > [key.name="${methodName}"] > [async]`,
-      `[id.name="${className}"] > ClassExpression > ClassBody > [key.name="${methodName}"] > [async]`
-    )
-  } else if (methodName) {
-    queries.push(
-      `ClassBody > [key.name="${methodName}"] > [async]`,
-      `Property[key.name="${methodName}"] > [async]`
-    )
+    versions[basename] = pkg.version
   }
 
-  if (functionName) {
-    queries.push(`FunctionDeclaration[id.name="${functionName}"][async]`)
-  } else if (expressionName) {
-    queries.push(
-      `FunctionExpression[id.name="${expressionName}"][async]`,
-      `ArrowFunctionExpression[id.name="${expressionName}"][async]`
-    )
-  }
-
-  if (kind) {
-    queries = queries.map(q => q.replaceAll('[async]', `[async="${kind === 'async' ? 'true' : 'false'}"]`))
-  }
-
-  return queries.join(', ')
+  return versions[basename]
 }
 
 module.exports = { rewrite, disable }
