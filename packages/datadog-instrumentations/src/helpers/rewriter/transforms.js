@@ -62,7 +62,9 @@ const transforms = module.exports = {
 
   tracingChannelDeclaration (state, node) {
     const { channelName, moduleName } = state
-    const channelVariable = channelName.replaceAll(':', '_')
+    const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+
+    if (node.body.some(child => child.declarations?.[0]?.id?.name === channelVariable)) return
 
     transforms.tracingChannelImport(state, node)
 
@@ -74,7 +76,7 @@ const transforms = module.exports = {
       declarations: [
         {
           type: 'VariableDeclarator',
-          id: { type: 'Identifier', name: `tr_ch_apm$${channelVariable}` },
+          id: { type: 'Identifier', name: channelVariable },
           init: {
             type: 'CallExpression',
             callee: { type: 'Identifier', name: 'tr_ch_apm_tracingChannel' },
@@ -222,7 +224,7 @@ function traceInstanceMethod (state, node, program) {
 
 function wrap (state, node) {
   const { channelName, operator } = state
-  const channelVariable = channelName.replaceAll(':', '_')
+  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
 
   return {
     type: 'BlockStatement',
@@ -305,7 +307,7 @@ function wrap (state, node) {
           operator: '!',
           argument: {
             type: 'MemberExpression',
-            object: { type: 'Identifier', name: `tr_ch_apm$${channelVariable}` },
+            object: { type: 'Identifier', name: channelVariable },
             computed: false,
             property: { type: 'Identifier', name: 'hasSubscribers' },
             optional: false
@@ -329,7 +331,7 @@ function wrap (state, node) {
           type: 'CallExpression',
           callee: {
             type: 'MemberExpression',
-            object: { type: 'Identifier', name: `tr_ch_apm$${channelVariable}` },
+            object: { type: 'Identifier', name: channelVariable },
             computed: false,
             property: { type: 'Identifier', name: operator },
             optional: false
