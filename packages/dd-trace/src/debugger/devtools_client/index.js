@@ -58,6 +58,11 @@ if (SUPPORT_ARRAY_BUFFER_RESIZE) {
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
+  if (params.reason !== 'other') {
+    // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
+    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
+  }
+
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
   let sampled = false
   let numberOfProbesWithSnapshots = 0
