@@ -8,7 +8,8 @@ const fs = require('fs')
 const path = require('path')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -80,21 +81,12 @@ versions.forEach(version => {
 
   // TODO: add esm tests
   describe(`cucumber@${version} commonJS`, () => {
-    let sandbox, cwd, receiver, childProcess, testOutput
+    let cwd, receiver, childProcess, testOutput
 
-    before(async function () {
-      // add an explicit timeout to make tests less flaky
-      this.timeout(50000)
+    useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
 
-      sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
-      cwd = sandbox.folder
-    })
-
-    after(async function () {
-      // add an explicit timeout to make tests less flaky
-      this.timeout(50000)
-
-      await sandbox.remove()
+    before(function () {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {
@@ -1849,10 +1841,18 @@ versions.forEach(version => {
                 './node_modules/.bin/cucumber-js ci-visibility/features-di/test-hit-breakpoint.feature --retry 1',
                 {
                   cwd,
-                  env: envVars,
+                  env: {
+                    ...envVars,
+                    DD_TRACE_DEBUG: '1',
+                    DD_TRACE_LOG_LEVEL: 'warn',
+                  },
                   stdio: 'pipe'
                 }
               )
+
+              // TODO: remove once we figure out flakiness
+              childProcess.stdout.pipe(process.stdout)
+              childProcess.stderr.pipe(process.stderr)
 
               childProcess.on('exit', () => {
                 Promise.all([eventsPromise, logsPromise]).then(() => {

@@ -6,13 +6,13 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const axios = require('axios')
 const path = require('path')
 const blocking = require('../../../src/appsec/blocking')
 
 describe('user_blocking - Integration with the tracer', () => {
-  const config = new Config({
+  const config = getConfigFresh({
     appsec: {
       enabled: true,
       rules: path.join(__dirname, './user_blocking_rules.json')

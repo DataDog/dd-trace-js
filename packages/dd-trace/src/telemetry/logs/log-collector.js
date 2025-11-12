@@ -41,12 +41,14 @@ function sanitize (logEntry) {
 
   const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  const isDDCode = firstIndex !== -1 && stackLines[firstIndex].includes(ddBasePath)
+  // Filter to keep only DD frames
   stackLines = stackLines
-    .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
+    .filter((line, index) => index >= firstIndex && line.includes(ddBasePath))
     .map(line => line.replace(ddBasePath, ''))
 
-  if (!isDDCode && logEntry.errorType && stackLines.length) {
+  // ALWAYS redact error messages (RFC requirement: exception type only, no message)
+  // This handles single-line and multi-line error messages
+  if (logEntry.errorType && stackLines.length) {
     stackLines = [`${logEntry.errorType}: redacted`, ...stackLines]
   }
 

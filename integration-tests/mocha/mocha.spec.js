@@ -8,7 +8,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -89,28 +90,24 @@ const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
   let childProcess
-  let sandbox
   let cwd
   let startupTestFile
   let testOutput = ''
 
-  before(async function () {
-    sandbox = await createSandbox(
-      [
-        `mocha@${MOCHA_VERSION}`,
-        'chai@v4',
-        'nyc',
-        'mocha-each',
-        'workerpool'
-      ],
-      true
-    )
-    cwd = sandbox.folder
-    startupTestFile = path.join(cwd, testFile)
-  })
+  useSandbox(
+    [
+      `mocha@${MOCHA_VERSION}`,
+      'chai@v4',
+      'nyc',
+      'mocha-each',
+      'workerpool'
+    ],
+    true
+  )
 
-  after(async function () {
-    await sandbox.remove()
+  before(function () {
+    cwd = sandboxCwd()
+    startupTestFile = path.join(cwd, testFile)
   })
 
   beforeEach(async function () {
@@ -3084,7 +3081,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   it('takes into account untested files if "all" is passed to nyc', (done) => {
-    const linePctMatchRegex = /Lines\s*:\s*(\d+)%/
+    const linePctMatchRegex = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
     let linePctMatch
     let linesPctFromNyc = 0
     let codeCoverageWithUntestedFiles = 0

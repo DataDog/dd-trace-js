@@ -213,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.8.0-rc2
+        image: apache/kafka-native:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: '1'
@@ -384,6 +384,26 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
 
+  express-mongo-sanitize:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express-mongo-sanitize
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  express-session:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: express-session
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   fastify:
     runs-on: ubuntu-latest
     env:
@@ -514,7 +534,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.8.0-rc2
+        image: apache/kafka-native:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: '1'

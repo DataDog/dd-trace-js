@@ -577,13 +577,17 @@ function getHeadersToRecord (config) {
   return []
 }
 
+function isNot500ErrorCode (code) {
+  return code < 500
+}
+
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 500
+  return isNot500ErrorCode
 }
 
 const noop = () => {}

@@ -181,6 +181,7 @@ interface Tracer extends opentracing.Tracer {
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
+  "ai": tracer.plugins.ai;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
@@ -1644,6 +1645,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
+     */
+    interface ai extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
      */
     interface amqp10 extends Instrumentation {}
@@ -1698,12 +1705,6 @@ declare namespace tracer {
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
-      /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
@@ -2821,7 +2822,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 

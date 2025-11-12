@@ -11,7 +11,8 @@ const execPromise = promisify(exec)
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig
 } = require('../helpers')
@@ -22,7 +23,9 @@ const {
   TEST_STATUS,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
+  TEST_TYPE,
   TEST_TOOLCHAIN,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
@@ -62,7 +65,7 @@ const {
   TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
@@ -122,16 +125,17 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(80000)
-    let sandbox, cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let cwd, receiver, childProcess, webAppPort, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
     }
 
+    // cypress-fail-fast is required as an incompatible plugin
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+
     before(async () => {
-      // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
-      cwd = sandbox.folder
+      cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
@@ -144,7 +148,6 @@ moduleTypes.forEach(({
     })
 
     after(async () => {
-      await sandbox.remove()
       await new Promise(resolve => webAppServer.close(resolve))
       if (secondWebAppServer) {
         await new Promise(resolve => secondWebAppServer.close(resolve))
@@ -173,6 +176,95 @@ moduleTypes.forEach(({
         // eslint-disable-next-line no-console
         console.warn('Receiver stop timed out:', error.message)
       }
+    })
+
+    it('instruments tests with the APM protocol (old agents)', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const passedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          const failedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
+          )
+
+          assert.exists(passedTestSpan, 'passed test span should exist')
+          assert.equal(passedTestSpan.name, 'cypress.test')
+          assert.equal(passedTestSpan.resource, 'cypress/e2e/basic-pass.js.basic pass suite can pass')
+          assert.equal(passedTestSpan.type, 'test')
+          assert.equal(passedTestSpan.meta[TEST_STATUS], 'pass')
+          assert.equal(passedTestSpan.meta[TEST_NAME], 'basic pass suite can pass')
+          assert.equal(passedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-pass.js')
+          assert.equal(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(passedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(passedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(passedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-pass.js')
+          assert.exists(passedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(passedTestSpan.meta[COMPONENT])
+          assert.exists(passedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(passedTestSpan.meta.customTag, 'customValue')
+          assert.equal(passedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(passedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+
+          assert.exists(failedTestSpan, 'failed test span should exist')
+          assert.equal(failedTestSpan.name, 'cypress.test')
+          assert.equal(failedTestSpan.resource, 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+          assert.equal(failedTestSpan.type, 'test')
+          assert.equal(failedTestSpan.meta[TEST_STATUS], 'fail')
+          assert.equal(failedTestSpan.meta[TEST_NAME], 'basic fail suite can fail')
+          assert.equal(failedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-fail.js')
+          assert.equal(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(failedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(failedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(failedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-fail.js')
+          assert.exists(failedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(failedTestSpan.meta[COMPONENT])
+          assert.exists(failedTestSpan.meta[ERROR_MESSAGE])
+          assert.include(failedTestSpan.meta[ERROR_MESSAGE], 'expected')
+          assert.exists(failedTestSpan.meta[ERROR_TYPE])
+          assert.exists(failedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(failedTestSpan.meta.customTag, 'customValue')
+          assert.equal(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(failedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+          // Tags added after failure should not be present because test failed
+          assert.notProperty(failedTestSpan.meta, 'addTagsAfterFailure')
+        }, 60000)
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const specToRun = 'cypress/e2e/basic-*.js'
+
+      // For Cypress 6.7.0, we need to override the --spec flag that's hardcoded in testCommand
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: specToRun
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     if (version === '6.7.0') {
@@ -493,7 +585,7 @@ moduleTypes.forEach(({
           .map(file => file.filename)
 
         assert.includeMembers(fileNames, Object.keys(coverageFixture))
-      }, 20000)
+      }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -517,10 +609,11 @@ moduleTypes.forEach(({
     context('intelligent test runner', () => {
       it('can report git metadata', async () => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
-          ({ url }) => url.endsWith('/api/v2/git/repository/search_commits')
+          ({ url }) => url.endsWith('/api/v2/git/repository/search_commits'),
+          25000
         )
         const packfileRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'), 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -539,6 +632,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
@@ -628,13 +725,13 @@ moduleTypes.forEach(({
           }, 25000)
 
         const coverageRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'), 25000)
           .then(coverageRequest => {
             assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
           })
 
         const skippableRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000)
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
           })
@@ -656,6 +753,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -682,7 +783,7 @@ moduleTypes.forEach(({
 
         receiver.assertPayloadReceived(() => {
           hasRequestedSkippable = true
-        }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable')).catch(() => {})
+        }, ({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 25000).catch(() => {})
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -711,6 +812,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -787,6 +892,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -856,6 +965,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -883,10 +996,10 @@ moduleTypes.forEach(({
             assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'true')
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
             assert.propertyVal(testModule.metrics, TEST_ITR_SKIPPING_COUNT, 0)
-          }, 25000)
+          }, 30000)
 
         const skippableRequestPromise = receiver
-          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+          .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'), 30000)
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
           })
@@ -908,6 +1021,10 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -988,7 +1105,7 @@ moduleTypes.forEach(({
               'ci-visibility/subproject/src/index.tsx',
               'ci-visibility/subproject/cypress/e2e/spec.cy.js'
             ])
-          }, 10000)
+          }, 25000)
 
         childProcess = exec(
           command,
@@ -1001,6 +1118,10 @@ moduleTypes.forEach(({
             stdio: 'inherit'
           }
         )
+
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1028,7 +1149,7 @@ moduleTypes.forEach(({
             assert.exists(testEvent.content.test_session_id)
             assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
           })
-        })
+        }, 25000)
 
       childProcess = exec(
         testCommand,
@@ -1173,7 +1294,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1241,7 +1362,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1298,7 +1419,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/skipped-test.js'
 
@@ -1353,7 +1474,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.equal(newTests.length, 0)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1433,10 +1554,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -1498,10 +1615,6 @@ moduleTypes.forEach(({
             stdio: 'pipe'
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout.pipe(process.stdout)
-        childProcess.stderr.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -1591,6 +1704,10 @@ moduleTypes.forEach(({
           }
         )
 
+        // TODO: remove this once we have figured out flakiness
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise
@@ -1624,7 +1741,7 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1683,7 +1800,7 @@ moduleTypes.forEach(({
             ])
 
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
@@ -1795,7 +1912,7 @@ moduleTypes.forEach(({
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
-          })
+          }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
@@ -1835,7 +1952,7 @@ moduleTypes.forEach(({
             const test = events.find(event => event.type === 'test').content
             assert.equal(test.resource, 'cypress/e2e/multi-origin.js.tests multiple origins')
             assert.equal(test.meta[TEST_STATUS], 'pass')
-          })
+          }, 25000)
 
         secondWebAppServer = http.createServer((req, res) => {
           res.setHeader('Content-Type', 'text/html')
@@ -2011,7 +2128,7 @@ moduleTypes.forEach(({
                   }
                 }
               }
-            })
+            }, 25000)
 
         const runAttemptToFixTest = async ({
           isAttemptToFix,
@@ -2051,6 +2168,10 @@ moduleTypes.forEach(({
               stdio: 'pipe'
             }
           )
+
+          // TODO: remove this once we have figured out flakiness
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
 
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
@@ -2195,7 +2316,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
               }
-            })
+            }, 25000)
 
         const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
@@ -2294,7 +2415,7 @@ moduleTypes.forEach(({
                 assert.propertyVal(failedTest.meta, TEST_STATUS, 'fail')
                 assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
               }
-            })
+            }, 25000)
 
         const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
@@ -2366,7 +2487,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.equal(tests.length, 1)
-          })
+          }, 25000)
 
         const {
           NODE_OPTIONS,

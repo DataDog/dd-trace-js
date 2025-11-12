@@ -19,6 +19,8 @@ const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
   'node'
 
 module.exports = {
+  apiKey: undefined,
+  appKey: undefined,
   apmTracingEnabled: true,
   'appsec.apiSecurity.enabled': true,
   'appsec.apiSecurity.sampleDelay': 30,
@@ -50,6 +52,10 @@ module.exports = {
   baggageTagKeys: 'user.id,session.id,account.id',
   clientIpEnabled: false,
   clientIpHeader: null,
+  'cloudPayloadTagging.requestsEnabled': false,
+  'cloudPayloadTagging.responsesEnabled': false,
+  'cloudPayloadTagging.maxDepth': 10,
+  'cloudPayloadTagging.rules': [],
   'crashtracking.enabled': true,
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
@@ -95,6 +101,9 @@ module.exports = {
   'iast.telemetryVerbosity': 'INFORMATION',
   'iast.stackTrace.enabled': true,
   injectionEnabled: [],
+  'installSignature.id': null,
+  'installSignature.time': null,
+  'installSignature.type': null,
   instrumentationSource: 'manual',
   injectForce: null,
   isAzureFunction: false,

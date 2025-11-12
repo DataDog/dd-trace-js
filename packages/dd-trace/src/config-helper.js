@@ -80,6 +80,7 @@ module.exports = {
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
+  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
   getEnvironmentVariable (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
         !supportedConfigurations[name]) {

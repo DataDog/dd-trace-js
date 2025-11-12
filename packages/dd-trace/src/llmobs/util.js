@@ -6,7 +6,7 @@ function encodeUnicode (str = '') {
   let result = ''
   for (let i = 0; i < str.length; i++) {
     const code = str.charCodeAt(i)
-    result += code > 127 ? `\\u${code.toString(16).padStart(4, '0')}` : str[i]
+    result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[i]
   }
   return result
 }

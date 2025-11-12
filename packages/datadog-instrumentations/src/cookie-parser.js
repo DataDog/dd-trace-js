@@ -25,8 +25,6 @@ addHook({
   name: 'cookie-parser',
   versions: ['>=1.0.0']
 }, cookieParser => {
-  // This prevents the non default export from entering the wrapping process
-  if (cookieParser.default) return cookieParser
   return shimmer.wrapFunction(cookieParser, cookieParser => function () {
     const cookieMiddleware = cookieParser.apply(this, arguments)
 
