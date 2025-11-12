@@ -1,7 +1,7 @@
 'use strict'
 
 /** @typedef {'error'|'warn'|'info'|'debug'} Level */
-/** @typedef {(...args: any[]) => void} LogFn */
+/** @typedef {(...args: unknown[]) => void} LogFn */
 /** @typedef {Record<Level, LogFn>} Logger */
 
 const { workerData } = require('node:worker_threads')
