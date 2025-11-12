@@ -1,4 +1,5 @@
 /** Some comment */
+/* eslint-disable jsdoc/valid-types */
 /**
  * @datadog {"unskippable": true}
  */
