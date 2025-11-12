@@ -362,6 +362,6 @@ exports.mochaHooks = {
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
-    storage('legacy').enterWith({})
+    storage('legacy').enterWith(undefined)
   }
 }

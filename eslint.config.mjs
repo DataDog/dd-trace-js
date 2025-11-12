@@ -219,6 +219,7 @@ export default [
       'import/no-duplicates': 'error',
       'import/no-named-default': 'error',
       'import/no-webpack-loader-syntax': 'error',
+      'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
       'jsdoc/check-types': 'off', // Should be activated, but it needs a couple of fixes.
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.

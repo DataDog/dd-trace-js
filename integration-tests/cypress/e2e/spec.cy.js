@@ -1,8 +1,7 @@
-/* eslint-disable jsdoc/valid-types, jsdoc/check-tag-names */
+/* eslint-disable */
 /**
  * @datadog {"unskippable": true}
  */
-/* eslint-disable */
 describe('context', () => {
   it('passes', () => {
     cy.visit('/')

@@ -1,4 +1,4 @@
-/* eslint-disable jsdoc/valid-types, jsdoc/check-tag-names */
+/* eslint-disable jsdoc/valid-types */
 /**
  * @datadog {"unskippable": true}
  */

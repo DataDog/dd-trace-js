@@ -13,7 +13,7 @@
     "type:check": "tsc --noEmit -p tsconfig.json",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && TIMING=1 eslint . --concurrency=auto --max-warnings 0",
+    "lint": "node scripts/check_licenses.js && eslint . --concurrency=auto --max-warnings 0",
     "lint:fix": "node scripts/check_licenses.js && eslint . --concurrency=auto --max-warnings 0 --fix",
     "lint:inspect": "npx @eslint/config-inspector@latest",
     "release:proposal": "node scripts/release/proposal",

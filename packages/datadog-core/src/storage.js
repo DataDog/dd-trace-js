@@ -15,7 +15,7 @@ const { AsyncLocalStorage } = require('async_hooks')
 class DatadogStorage extends AsyncLocalStorage {
   /**
    *
-   * @param {Store} store
+   * @param {Store} [store]
    * @override
    */
   enterWith (store) {
@@ -87,7 +87,7 @@ class DatadogStorage extends AsyncLocalStorage {
 
 /**
  * This is the map from handles to real stores, used in the class above.
- * @type {WeakMap<WeakKey, Store>}
+ * @type {WeakMap<WeakKey, Store|undefined>}
  */
 const stores = new WeakMap()
 
