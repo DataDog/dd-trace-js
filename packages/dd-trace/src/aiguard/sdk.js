@@ -187,7 +187,7 @@ class AIGuard extends NoopAIGuard {
         span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
       }
       if (tags) {
-        tags.forEach(tag => span.setTag(`ai_guard.tag.${tag}`, 'true'))
+        tags.forEach(tag => span.setTag(`ai_guard.tags.${tag}`, 'true'))
       }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
