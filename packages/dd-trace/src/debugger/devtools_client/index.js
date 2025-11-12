@@ -168,7 +168,9 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ${
+  // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
+  // On my machine I'm seeing around 1.7ms of overhead.
+  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ~${
     Number(diff) / 1_000_000
   } ms`)
 
