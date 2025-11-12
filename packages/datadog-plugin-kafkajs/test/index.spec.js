@@ -567,9 +567,9 @@ describe('Plugin', () => {
                 }
 
                 /**
-                   * No choice but to reinitialize everything, because the only way to flush eachMessage
-                   * calls is to disconnect.
-                   */
+                 * No choice but to reinitialize everything, because the only way to flush eachMessage
+                 * calls is to disconnect.
+                 */
                 consumer.connect()
                 await sendMessages(kafka, testTopic, messages)
                 await consumer.run({ eachMessage: async () => {}, autoCommit: false })

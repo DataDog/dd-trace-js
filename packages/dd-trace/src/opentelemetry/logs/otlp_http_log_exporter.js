@@ -15,7 +15,7 @@ const OtlpTransformer = require('./otlp_transformer')
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpLogExporter
- * @extends OtlpHttpExporterBase
+ * @augments OtlpHttpExporterBase
  */
 class OtlpHttpLogExporter extends OtlpHttpExporterBase {
   /**

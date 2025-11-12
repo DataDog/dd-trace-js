@@ -25,6 +25,8 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    * @property {string} topic
    * @property {number} partition
    * @property {number} offset
+   */
+  /**
    *
    * @typedef {object} ProducerResponseItem
    * @property {string} topic
@@ -49,7 +51,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
   /**
    *
-   * @param {ProducerResponseItem[]} commitList
+   * @param {{ result: ProducerResponseItem[] }} ctx
    * @returns {void}
    */
   commit (ctx) {

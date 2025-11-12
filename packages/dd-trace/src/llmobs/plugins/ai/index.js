@@ -79,6 +79,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    *
    * We use the tool description as the next best identifier for a tool.
    *
+   * @param {string} toolName
    * @param {string} toolDescription
    * @returns {string | undefined}
    */

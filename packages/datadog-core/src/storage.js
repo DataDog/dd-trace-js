@@ -15,7 +15,7 @@ const { AsyncLocalStorage } = require('async_hooks')
 class DatadogStorage extends AsyncLocalStorage {
   /**
    *
-   * @param store {Store}
+   * @param {Store} store
    * @override
    */
   enterWith (store) {
@@ -47,7 +47,7 @@ class DatadogStorage extends AsyncLocalStorage {
    * retrieved through `getHandle()` can also be passed in to be used as the
    * key. This is useful if you've stashed a handle somewhere and want to
    * retrieve the store with it.
-   * @param {{}} [handle]
+   * @param {object} [handle]
    * @returns {Store | undefined}
    * @override
    */
@@ -101,7 +101,7 @@ const storages = Object.create(null)
 
 /**
  *
- * @param namespace {string} the namespace to use
+ * @param {string} namespace The namespace to use
  * @returns {DatadogStorage}
  */
 function storage (namespace) {
