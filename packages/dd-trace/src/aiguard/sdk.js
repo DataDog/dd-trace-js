@@ -138,10 +138,11 @@ class AIGuard extends NoopAIGuard {
           span.setTag(AI_GUARD_TOOL_NAME_TAG_KEY, name)
         }
       }
+      const metaStruct = {
+        messages: this.#truncate(messages)
+      }
       span.meta_struct = {
-        [AI_GUARD_META_STRUCT_KEY]: {
-          messages: this.#truncate(messages)
-        }
+        [AI_GUARD_META_STRUCT_KEY]: metaStruct
       }
       let response
       try {
@@ -186,8 +187,8 @@ class AIGuard extends NoopAIGuard {
       if (reason) {
         span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
       }
-      if (tags && tags.length > 0) {
-        span.meta_struct[AI_GUARD_META_STRUCT_KEY].matching_rules = tags
+      if (tags?.length > 0) {
+        metaStruct.attack_categories = tags
       }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')

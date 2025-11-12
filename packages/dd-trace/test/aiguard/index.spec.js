@@ -177,7 +177,7 @@ describe('AIGuard SDK', () => {
       },
       {
         messages,
-        ...(tags.length > 0 ? { matching_rules: tags } : {})
+        ...(tags.length > 0 ? { attack_categories: tags } : {})
       })
     })
   }
