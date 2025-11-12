@@ -10,15 +10,21 @@ const semifies = require('semifies')
 const transforms = require('./transforms')
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations.json')
+const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
+
+const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
 const supported = {}
 const disabled = new Set()
-const sourceMaps = {}
+
+// TODO: Source maps without `--enable-source-maps`.
+const enableSourceMaps = NODE_OPTIONS?.includes('--enable-source-maps') ||
+  process.execArgv?.some(arg => arg.includes('--enable-source-maps'))
 
 let parse
 let generate
 let esquery
-let sourceMapSupport
+let SourceMapGenerator
 
 function rewrite (content, filename, format) {
   if (!content) return content
@@ -38,21 +44,8 @@ function rewrite (content, filename, format) {
       if (!satisfies(filename, filePath, versionRange)) continue
 
       parse ??= require('meriyah').parse
-      generate ??= require('escodegen').generate
+      generate ??= require('astring').generate
       esquery ??= require('esquery')
-
-      if (!sourceMapSupport) {
-        // Use an alias to ensure we have our own instance, otherwise there
-        // could be an existing user instance and the library doesn't support
-        // multiple calls to `install`.
-        sourceMapSupport = require('@datadog/source-map-support')
-        sourceMapSupport.install({
-          retrieveSourceMap: function (url) {
-            const map = sourceMaps[url]
-            return map ? { url, map } : null
-          }
-        })
-      }
 
       ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
@@ -64,11 +57,16 @@ function rewrite (content, filename, format) {
     }
 
     if (ast) {
-      const { code, map } = generate(ast, { sourceMap: filename, sourceMapWithCode: true })
+      if (!enableSourceMaps || SourceMapGenerator) return generate(ast)
 
-      sourceMaps[filename] = map.toString()
+      // TODO: Can we use the same version of `source-maps` that DI uses?
+      SourceMapGenerator ??= require('@datadog/source-map').SourceMapGenerator
 
-      return code
+      const sourceMap = new SourceMapGenerator({ file: filename })
+      const code = generate(ast, { sourceMap })
+      const map = Buffer.from(sourceMap.toString()).toString('base64')
+
+      return code + '\n' + `//# sourceMappingURL=data:application/json;base64,${map}`
     }
   } catch (e) {
     log.error(e)
