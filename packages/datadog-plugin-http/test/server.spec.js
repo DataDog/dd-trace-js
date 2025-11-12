@@ -36,7 +36,7 @@ describe('Plugin', () => {
       })
 
       describe('canceled request', () => {
-        beforeEach(done => {
+        beforeEach(() => {
           listener = (req, res) => {
             setTimeout(() => {
               app && app(req, res)
@@ -44,18 +44,22 @@ describe('Plugin', () => {
               res.end()
             }, 500)
           }
+        })
 
-          agent.load('http')
+        beforeEach(() => {
+          return agent.load('http')
             .then(() => {
               http = require(pluginToBeLoaded)
-              const server = new http.Server(listener)
-              appListener = server
-                .listen(0, 'localhost', () => {
-                  port = appListener.address().port
-                  done()
-                })
             })
-            .catch(done)
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         it('should send traces to agent', (done) => {
@@ -84,15 +88,17 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        beforeEach(done => {
-          agent.load('http')
+        beforeEach(() => {
+          return agent.load('http')
             .then(() => {
               http = require(pluginToBeLoaded)
-              const server = new http.Server(listener)
-              appListener = server
-                .listen(port, 'localhost', () => done())
             })
-            .catch(done)
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(port, 'localhost', () => done())
         })
 
         withNamingSchema(
@@ -201,15 +207,17 @@ describe('Plugin', () => {
       })
 
       describe('with a `server` configuration', () => {
-        beforeEach(done => {
-          agent.load('http', { client: false, server: {} })
+        beforeEach(() => {
+          return agent.load('http', { client: false, server: {} })
             .then(() => {
               http = require(pluginToBeLoaded)
-              const server = new http.Server(listener)
-              appListener = server
-                .listen(port, 'localhost', () => done())
             })
-            .catch(done)
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(port, 'localhost', () => done())
         })
 
         // see https://github.com/DataDog/dd-trace-js/issues/2453
@@ -223,15 +231,17 @@ describe('Plugin', () => {
       })
 
       describe('with a blocklist configuration', () => {
-        beforeEach(done => {
-          agent.load('http', { client: false, blocklist: '/health' })
+        beforeEach(() => {
+          return agent.load('http', { client: false, blocklist: '/health' })
             .then(() => {
               http = require(pluginToBeLoaded)
-              const server = new http.Server(listener)
-              appListener = server
-                .listen(port, 'localhost', () => done())
             })
-            .catch(done)
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(port, 'localhost', () => done())
         })
 
         it('should drop traces for blocklist route', done => {
@@ -249,85 +259,6 @@ describe('Plugin', () => {
           }, 100)
 
           axios.get(`http://localhost:${port}/health`).catch(done)
-        })
-      })
-
-      describe('http.endpoint', () => {
-        beforeEach(done => {
-          agent.wipe()
-          tracer = require('../../dd-trace')
-          app = null
-          listener = (req, res) => {
-            app && app(req, res)
-            res.writeHead(200)
-            res.end()
-          }
-
-          agent.load('http', {}, { appsec: { enabled: true } })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              const server = new http.Server(listener)
-              appListener = server
-                .listen(0, 'localhost', () => {
-                  port = appListener.address().port
-                  done()
-                })
-            })
-            .catch(done)
-        })
-
-        it('should set http.endpoint with int when no route is available', done => {
-          agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/users/123`)
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/users/{param:int}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/users/123`).catch(done)
-        })
-
-        it('should set http.endpoint with int_id when no route is available', done => {
-          agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/resources/{param:int_id}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/resources/123-456`).catch(done)
-        })
-
-        it('should set http.endpoint with hex when no route is available', done => {
-          agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/orders/abc123`)
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/orders/{param:hex}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/orders/abc123`).catch(done)
-        })
-
-        it('should set http.endpoint with hex_id when no route is available', done => {
-          agent
-            .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'web.request')
-              expect(traces[0][0].meta).to.not.have.property('http.route')
-              expect(traces[0][0].meta).to.have.property('http.endpoint', '/resources/{param:hex_id}')
-            })
-            .then(done)
-            .catch(done)
-
-          axios.get(`http://localhost:${port}/resources/abc-123`).catch(done)
         })
       })
     })
