@@ -7,15 +7,15 @@ const {
 const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-withVersions('express-session', 'express-session', version => {
+withVersions('sequelize', 'sequelize', version => {
   describe('ESM', () => {
     let variants, proc, agent
 
-    useSandbox([`'express-session@${version}'`, 'express'], false,
-      ['./packages/datadog-plugin-express-session/test/integration-test/*'])
+    useSandbox([`'sequelize@${version}'`, 'sqlite3', 'express'], false,
+      ['./packages/datadog-plugin-sequelize/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'expressSession', undefined, 'express-session')
+      variants = varySandbox('server.mjs', 'sequelize', 'Sequelize')
     })
 
     beforeEach(async () => {

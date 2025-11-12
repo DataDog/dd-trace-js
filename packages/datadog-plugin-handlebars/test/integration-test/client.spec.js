@@ -7,15 +7,15 @@ const {
 const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-withVersions('express-session', 'express-session', version => {
+withVersions('handlebars', 'handlebars', '>=4.0.0', version => {
   describe('ESM', () => {
     let variants, proc, agent
 
-    useSandbox([`'express-session@${version}'`, 'express'], false,
-      ['./packages/datadog-plugin-express-session/test/integration-test/*'])
+    useSandbox([`'handlebars@${version}'`, 'express'], false,
+      ['./packages/datadog-plugin-handlebars/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'expressSession', undefined, 'express-session')
+      variants = varySandbox('server.mjs', 'Handlebars', undefined, 'handlebars')
     })
 
     beforeEach(async () => {
