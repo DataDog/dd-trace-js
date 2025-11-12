@@ -1,6 +1,6 @@
 'use strict'
 
-const Config = require('../../../packages/dd-trace/src/config')
+const getConfig = require('../../../packages/dd-trace/src/config')
 const { start } = require('../../../packages/dd-trace/src/debugger')
 const { generateProbeConfig } = require('../../../packages/dd-trace/test/debugger/devtools_client/utils')
 
@@ -8,7 +8,7 @@ const breakpoint = {
   file: process.env.BREAKPOINT_FILE,
   line: process.env.BREAKPOINT_LINE
 }
-const config = new Config()
+const config = getConfig()
 const rc = {
   setProductHandler (product, cb) {
     const action = 'apply'
