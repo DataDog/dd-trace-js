@@ -99,7 +99,7 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   session.once('Debugger.paused', ({ params }) => {
     assert.strictEqual(params.hitBreakpoints.length, 1)
 
-    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
+    getLocalStateForCallFrame(params.callFrames[0], Infinity, snapshotConfig).then((process) => {
       callback(process())
       done()
     }).catch(done)

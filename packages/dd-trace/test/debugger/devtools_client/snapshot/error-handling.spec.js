@@ -10,7 +10,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
   describe('error handling', function () {
     it('should generate a notCapturedReason if an error is thrown during inital collection', async function () {
       const invalidCallFrameThatTriggersAnException = {}
-      const processLocalState = await getLocalStateForCallFrame(invalidCallFrameThatTriggersAnException)
+      const processLocalState = await getLocalStateForCallFrame(invalidCallFrameThatTriggersAnException, Infinity)
       const result = processLocalState()
       assert.ok(result instanceof Error)
       assert.strictEqual(result.message, 'Error getting local state')

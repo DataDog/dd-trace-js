@@ -19,6 +19,7 @@ function returnError () {
 
 async function getLocalStateForCallFrame (
   callFrame,
+  deadlineNs,
   {
     maxReferenceDepth = DEFAULT_MAX_REFERENCE_DEPTH,
     maxCollectionSize = DEFAULT_MAX_COLLECTION_SIZE,
@@ -34,7 +35,7 @@ async function getLocalStateForCallFrame (
       if (scope.type === 'global') return // The global scope is too noisy
       rawState.push(...await getRuntimeObject(
         scope.object.objectId,
-        { maxReferenceDepth, maxCollectionSize, maxFieldCount }
+        { maxReferenceDepth, maxCollectionSize, maxFieldCount, deadlineNs }
       ))
     }))
   } catch (err) {
