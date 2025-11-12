@@ -1,13 +1,13 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym } = require('./symbols')
+const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
 const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
 
 module.exports = {
-  getRuntimeObject: getObject
+  getRuntimeObject: getObject // TODO: Called once per stack frame, but doesn't retain the `deadlineReached` flag.
 }
 
 async function getObject (objectId, opts, depth = 0, collection = false) {
@@ -47,6 +47,10 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   for (const prop of props) {
     if (prop.value === undefined) continue
+    if (overBudget(opts)) {
+      prop.value[timeBudgetSym] = true
+      continue
+    }
     const { value: { type, objectId, subtype } } = prop
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
@@ -188,4 +192,10 @@ function removeNonEnumerableProperties (props) {
       props.splice(i--, 1)
     }
   }
+}
+
+function overBudget (opts) {
+  if (opts.deadlineReached) return true
+  opts.deadlineReached = process.hrtime.bigint() >= opts.deadlineNs
+  return opts.deadlineReached
 }

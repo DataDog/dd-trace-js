@@ -32,7 +32,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       session.once('Debugger.paused', async ({ params }) => {
         expect(params.hitBreakpoints.length).to.eq(1)
 
-        resolve((await getLocalStateForCallFrame(params.callFrames[0], { maxFieldCount: Number.MAX_SAFE_INTEGER }))())
+        resolve((await getLocalStateForCallFrame(
+          params.callFrames[0],
+          Infinity,
+          { maxFieldCount: Number.MAX_SAFE_INTEGER })
+        )())
       })
 
       await setAndTriggerBreakpoint(target, 10)

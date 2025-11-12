@@ -49,6 +49,7 @@ describe('onPause', function () {
       runtimeId: 'my-runtime-id',
       parentThreadId,
       dynamicInstrumentation: {
+        captureTimeoutMs: 10,
         redactedIdentifiers: [],
         redactionExcludedIdentifiers: []
       },
