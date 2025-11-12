@@ -173,10 +173,12 @@ describe('AIGuard SDK', () => {
         'ai_guard.action': action,
         'ai_guard.reason': reason,
         ...(target === 'tool' ? { 'ai_guard.tool_name': 'calc' } : {}),
-        ...(shouldBlock ? { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' } : {}),
-        ...(Object.fromEntries(tags.map(tag => [`ai_guard.tags.${tag}`, 'true'])))
+        ...(shouldBlock ? { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' } : {})
       },
-      { messages })
+      {
+        messages,
+        ...(tags.length > 0 ? { matching_rules: tags } : {})
+      })
     })
   }
 
