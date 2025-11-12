@@ -91,12 +91,7 @@ describe('onPause', function () {
     expect(send).to.not.have.been.called
   })
 
-  it('should abort if paused for an unknown reason', async function () {
-    const error = new Error('process.exit called')
-    const exitStub = sinon.stub(process, 'exit').callsFake(() => {
-      throw error
-    })
-
+  it('should throw if paused for an unknown reason', async function () {
     const unknownReasonEvent = {
       ...event,
       params: {
@@ -105,18 +100,15 @@ describe('onPause', function () {
       }
     }
 
+    let thrown
     try {
       await onPaused(unknownReasonEvent)
     } catch (err) {
-      expect(err).to.equal(error)
-    } finally {
-      exitStub.restore()
+      thrown = err
     }
 
-    expect(log.error).to.have.been.calledOnceWith(
-      '[debugger:devtools_client] Unexpected Debugger.paused reason: OOM'
-    )
-    expect(exitStub).to.have.been.calledOnceWith(1)
+    expect(thrown).to.be.an('error')
+    expect(thrown.message).to.equal('Unexpected Debugger.paused reason: OOM')
     expect(session.post).to.not.have.been.called
     expect(ackReceived).to.not.have.been.called
     expect(send).to.not.have.been.called

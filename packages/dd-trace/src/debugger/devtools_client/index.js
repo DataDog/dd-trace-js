@@ -59,9 +59,8 @@ session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
   if (params.reason !== 'other') {
-    log.error(`[debugger:devtools_client] Unexpected Debugger.paused reason: ${params.reason}`)
-    // It's ok to use process.exit here: This will just exit the worker thread, not the main process.
-    process.exit(1) // eslint-disable-line unicorn/no-process-exit
+    // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
+    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
   }
 
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
