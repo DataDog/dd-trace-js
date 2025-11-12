@@ -16,16 +16,22 @@ const functionName = 'myFn'
 const parentThreadId = 'my-parent-thread-id'
 const event = {
   params: {
+    reason: 'other',
     hitBreakpoints: [breakpointId],
     callFrames: [{ functionName, location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 } }]
   }
 }
 
 describe('onPause', function () {
-  let session, send, onPaused, ackReceived
+  let session, send, onPaused, ackReceived, log
 
   beforeEach(async function () {
     ackReceived = sinon.spy()
+    log = {
+      error: sinon.spy(),
+      debug: sinon.spy(),
+      '@noCallThru': true
+    }
 
     session = {
       on: sinon.spy((event, listener) => {
@@ -68,6 +74,7 @@ describe('onPause', function () {
       './session': session,
       './state': state,
       './snapshot': snapshot,
+      './log': log,
       './send': send,
       './status': { ackReceived },
       './remote_config': { '@noCallThru': true }
@@ -80,6 +87,37 @@ describe('onPause', function () {
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
     expect(session.post).to.have.been.calledOnceWith('Debugger.resume')
+    expect(ackReceived).to.not.have.been.called
+    expect(send).to.not.have.been.called
+  })
+
+  it('should abort if paused for an unknown reason', async function () {
+    const error = new Error('process.exit called')
+    const exitStub = sinon.stub(process, 'exit').callsFake(() => {
+      throw error
+    })
+
+    const unknownReasonEvent = {
+      ...event,
+      params: {
+        ...event.params,
+        reason: 'OOM'
+      }
+    }
+
+    try {
+      await onPaused(unknownReasonEvent)
+    } catch (err) {
+      expect(err).to.equal(error)
+    } finally {
+      exitStub.restore()
+    }
+
+    expect(log.error).to.have.been.calledOnceWith(
+      '[debugger:devtools_client] Unexpected Debugger.paused reason: OOM'
+    )
+    expect(exitStub).to.have.been.calledOnceWith(1)
+    expect(session.post).to.not.have.been.called
     expect(ackReceived).to.not.have.been.called
     expect(send).to.not.have.been.called
   })

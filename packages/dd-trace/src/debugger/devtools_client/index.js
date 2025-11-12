@@ -58,6 +58,12 @@ if (SUPPORT_ARRAY_BUFFER_RESIZE) {
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
+  if (params.reason !== 'other') {
+    log.error(`[debugger:devtools_client] Unexpected Debugger.paused reason: ${params.reason}`)
+    // It's ok to use process.exit here: This will just exit the worker thread, not the main process.
+    process.exit(1) // eslint-disable-line unicorn/no-process-exit
+  }
+
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
   let sampled = false
   let numberOfProbesWithSnapshots = 0
