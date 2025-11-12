@@ -15,7 +15,7 @@ describe('esm', () => {
   let proc
 
   // TODO(sabrenner, MLOB-4410): follow-up on re-enabling this test in a different PR once a fix lands
-  withVersions('langchain', ['@langchain/core'], '>=0.1 <1.0.0', version => {
+  withVersions('langchain', ['@langchain/core'], '>=0.1', version => {
     useSandbox([
       `@langchain/core@${version}`,
       `@langchain/openai@${version}`,

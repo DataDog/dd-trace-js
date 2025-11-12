@@ -101,7 +101,11 @@ const transforms = module.exports = {
 function traceAny (state, node, _parent, ancestry) {
   const program = ancestry[ancestry.length - 1]
 
-  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
+  if (
+    node.type === 'ClassDeclaration' ||
+    node.type === 'ClassExpression' ||
+    (node.type === 'VariableDeclarator' && ['ClassDeclaration', 'ClassExpression'].includes(node.init?.type))
+  ) {
     traceInstanceMethod(state, node, program)
   } else {
     traceFunction(state, node, program)
@@ -127,11 +131,17 @@ function traceInstanceMethod (state, node, program) {
   const { functionQuery, operator } = state
   const { methodName } = functionQuery
 
-  const classBody = node.body
+  const classBody = node.body ?? node.init.body
 
   // If the method exists on the class, we return as it will be patched later
   // while traversing child nodes later on.
-  if (classBody.body.some(({ key }) => key.name === methodName)) return
+
+  if (
+    (node.type !== 'VariableDeclarator' && classBody.body.some(({ key }) => key.name === methodName)) ||
+    (node.init?.id != null)
+  ) {
+    return
+  }
 
   // Method doesn't exist on the class so we assume an instance method and
   // wrap it in the constructor instead.
