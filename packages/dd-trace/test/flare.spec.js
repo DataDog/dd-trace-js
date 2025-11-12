@@ -1,17 +1,17 @@
 'use strict'
 
+const http = require('node:http')
+
 const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const express = require('express')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
-
-const http = require('node:http')
-
-require('./setup/core')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
-const Config = require('../src/config')
+require('./setup/core')
+
+const { getConfigFresh } = require('./helpers/config')
 
 const debugChannel = channel('datadog:log:debug')
 
@@ -60,7 +60,7 @@ describe('Flare', () => {
   beforeEach(createServer)
 
   beforeEach(() => {
-    tracerConfig = new Config({
+    tracerConfig = getConfigFresh({
       url: `http://127.0.0.1:${port}`
     })
 

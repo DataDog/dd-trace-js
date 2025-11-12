@@ -1,17 +1,19 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../../version')
-const semver = require('semver')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const Axios = require('axios')
-const os = require('os')
-const fs = require('fs')
+const { assert } = require('chai')
+const semver = require('semver')
+
+const { NODE_MAJOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
+const { getConfigFresh } = require('../../helpers/config')
 
 describe('RASP - lfi', () => {
   let axios
@@ -58,7 +60,7 @@ describe('RASP - lfi', () => {
           app(req, res)
         })
 
-        appsec.enable(new Config({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
@@ -471,7 +473,7 @@ describe('RASP - lfi', () => {
         }
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),

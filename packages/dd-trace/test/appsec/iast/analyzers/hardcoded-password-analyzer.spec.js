@@ -10,7 +10,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 
 const agent = require('../../../plugins/agent')
-const Config = require('../../../../src/config')
+const { getConfigFresh } = require('../../../helpers/config')
 
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
@@ -125,7 +125,7 @@ describe('Hardcoded Password Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        const config = new Config({
+        const config = getConfigFresh({
           experimental: {
             iast: {
               enabled: true,
