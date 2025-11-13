@@ -48,7 +48,6 @@ export default [
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/minify.min.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/typescript.js', // Generated
-      'integration-tests/appsec/iast-stack-traces/errors.js', // Generated
       'integration-tests/esbuild/out.js', // Generated
       'integration-tests/esbuild/aws-sdk-out.js', // Generated
       'packages/datadog-plugin-graphql/src/tools/index.js', // Inlined from apollo-graphql
