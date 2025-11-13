@@ -9,7 +9,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 
 const agent = require('../../../plugins/agent')
-const Config = require('../../../../src/config')
+const { getConfigFresh } = require('../../../helpers/config')
 
 const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyzers/hardcoded-rule-type')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
@@ -95,7 +95,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
       beforeEach(() => {
         const tracer = require('../../../../')
-        const config = new Config({
+        const config = getConfigFresh({
           experimental: {
             iast: {
               enabled: true,

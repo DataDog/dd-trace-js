@@ -10,13 +10,15 @@ const {
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProc,
-  assertObjectContains
+  assertObjectContains,
+  varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   withVersions('prisma', '@prisma/client', version => {
     useSandbox([`'prisma@${version}'`, `'@prisma/client@${version}'`], false, [
@@ -38,43 +40,49 @@ describe('esm', () => {
       )
     })
 
+    before(function () {
+      variants = varySandbox('server.mjs', '@prisma/client', 'PrismaClient')
+    })
+
     afterEach(async () => {
       proc?.kill()
       await agent.stop()
     })
 
-    it('is instrumented', async function () {
-      this.timeout(60000)
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assertObjectContains(payload, [[{
-          name: 'prisma.client',
-          resource: 'User.create',
-          service: 'node-prisma',
-        }], [{
-          name: 'prisma.engine',
-          service: 'node-prisma',
-          meta: {
-            'db.user': 'postgres',
-            'db.name': 'postgres',
-            'db.type': 'postgres',
-          }
-        }]])
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it('is instrumented', async function () {
+        this.timeout(60000)
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assertObjectContains(payload, [[{
+            name: 'prisma.client',
+            resource: 'User.create',
+            service: 'node-prisma',
+          }], [{
+            name: 'prisma.engine',
+            service: 'node-prisma',
+            meta: {
+              'db.user': 'postgres',
+              'db.name': 'postgres',
+              'db.type': 'postgres',
+            }
+          }]])
+        })
 
-      // TODO: Integrate the assertions into the spawn command by adding a
-      // callback. It should end the process when the assertions are met. That
-      // way we can remove the Promise.all and the procPromise.then().
-      const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, {
-        DD_TRACE_FLUSH_INTERVAL: '2000'
-      })
+        // TODO: Integrate the assertions into the spawn command by adding a
+        // callback. It should end the process when the assertions are met. That
+        // way we can remove the Promise.all and the procPromise.then().
+        const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
+          DD_TRACE_FLUSH_INTERVAL: '2000'
+        })
 
-      await Promise.all([
-        procPromise.then((res) => {
-          proc = res
-        }),
-        res
-      ])
-    })
+        await Promise.all([
+          procPromise.then((res) => {
+            proc = res
+          }),
+          res
+        ])
+      })
+    }
   })
 })

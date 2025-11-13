@@ -1,7 +1,7 @@
 'use strict'
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
-const Config = require('./config')
+const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
@@ -98,7 +98,7 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
-      const config = new Config(options) // TODO: support dynamic code config
+      const config = getConfig(options) // TODO: support dynamic code config
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)

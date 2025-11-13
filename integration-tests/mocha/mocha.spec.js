@@ -3081,7 +3081,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   it('takes into account untested files if "all" is passed to nyc', (done) => {
-    const linePctMatchRegex = /Lines\s*:\s*(\d+)%/
+    const linePctMatchRegex = /Lines\s*:\s*(\d+(?:\.\d+)?)%/
     let linePctMatch
     let linesPctFromNyc = 0
     let codeCoverageWithUntestedFiles = 0
