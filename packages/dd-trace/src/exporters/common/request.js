@@ -18,6 +18,10 @@ const maxActiveRequests = 8
 
 let activeRequests = 0
 
+/**
+ * @param {string|URL|object} urlObjOrString
+ * @returns {object}
+ */
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
 
@@ -33,6 +37,11 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
+/**
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {object} options
+ * @param {(error: Error|null, result: string, statusCode: number) => void} callback
+ */
 function request (data, options, callback) {
   if (!options.headers) {
     options.headers = {}

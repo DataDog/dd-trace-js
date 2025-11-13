@@ -2,6 +2,19 @@
 const iitm = require('../../../dd-trace/src/iitm')
 const path = require('path')
 const ritm = require('../../../dd-trace/src/ritm')
+const log = require('../../../dd-trace/src/log')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+
+/**
+ * @param {string} moduleBaseDir
+ * @returns {string|undefined}
+ */
+function getVersion (moduleBaseDir) {
+  if (moduleBaseDir) {
+    return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
+  }
+  return process.version
+}
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
@@ -38,6 +51,13 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     let defaultWrapResult
+
+    try {
+      moduleVersion ||= getVersion(moduleBaseDir)
+    } catch (error) {
+      log.error('Error getting version for "%s": %s', moduleName, error.message, error)
+      return
+    }
 
     if (
       isIitm &&
