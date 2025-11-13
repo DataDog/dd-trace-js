@@ -256,7 +256,7 @@ describe('AppSec Index', function () {
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
     })
 
     it('should call rasp enable', () => {

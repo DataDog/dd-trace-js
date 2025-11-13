@@ -52,7 +52,7 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
-    appsecTelemetry.enable(_config.telemetry)
+    appsecTelemetry.enable(_config)
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {

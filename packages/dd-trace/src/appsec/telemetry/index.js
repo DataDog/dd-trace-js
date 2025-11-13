@@ -21,8 +21,8 @@ const metricsStoreMap = new WeakMap()
 
 let enabled = false
 
-function enable (telemetryConfig) {
-  enabled = telemetryConfig?.enabled && telemetryConfig.metrics
+function enable (config) {
+  enabled = config.telemetry?.enabled && config.telemetry?.metrics
 }
 
 function disable () {
