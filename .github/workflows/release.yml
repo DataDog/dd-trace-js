@@ -6,7 +6,7 @@ on:
       - v3.x
       - v4.x
       - v5.x
-      - workflow_dispatch
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
