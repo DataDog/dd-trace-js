@@ -17,7 +17,7 @@ jobs:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/v3.x'
     runs-on: ubuntu-latest
     environment:
-      name: npm-latest-node14
+      name: npm
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
@@ -42,7 +42,7 @@ jobs:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/v4.x'
     runs-on: ubuntu-latest
     environment:
-      name: npm-latest-node16
+      name: npm
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
@@ -67,7 +67,7 @@ jobs:
     if: github.event_name == 'push' && github.event.ref == 'refs/heads/v5.x'
     runs-on: ubuntu-latest
     environment:
-      name: npm-latest
+      name: npm
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
@@ -126,7 +126,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
-      name: npm-dev
+      name: npm
       url: https://npmjs.com/package/dd-trace
     permissions:
       id-token: write
