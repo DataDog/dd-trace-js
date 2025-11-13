@@ -63,7 +63,8 @@ function enable (config, appsec) {
 
 function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
-    const shouldEnable = action === 'apply' || action === 'modify'
+    const isRemoteConfigControlling = action === 'apply' || action === 'modify'
+    const shouldEnable = isRemoteConfigControlling
       ? rcConfig.asm.enabled // take control
       : config.appsec.enabled // give back control to local config
 
@@ -76,7 +77,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
     updateConfig([
       {
         name: 'appsec.enabled',
-        origin: action === 'apply' || action === 'modify' ? 'remote_config' : config.getOrigin('appsec.enabled'),
+        origin: isRemoteConfigControlling ? 'remote_config' : config.getOrigin('appsec.enabled'),
         value: shouldEnable
       }
     ], config)
