@@ -3,36 +3,85 @@
 const assert = require('node:assert')
 const { setup } = require('./utils')
 
-describe('Dynamic Instrumentation', function () {
-  // Force a very small time budget in ms to trigger partial snapshots
-  const t = setup({
-    dependencies: ['fastify'],
-    env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: '1' }
-  })
+const tolerance = 5
 
+describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
     describe('with snapshot under tight time budget', function () {
-      beforeEach(t.triggerBreakpoint)
-
-      it('should include partial snapshot marked with notCapturedReason: timeout', function (done) {
-        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
-          const { locals } = captures.lines[t.breakpoint.line]
-          assert.strictEqual(
-            containsTimeBudget(locals),
-            true,
-            'expected at least one field/element to be marked with notCapturedReason: "timeout"'
-          )
-          done()
+      context('1ms time budget', function () {
+        // Force a very small time budget in ms to trigger partial snapshots
+        const target = 1
+        const t = setup({
+          dependencies: ['fastify'],
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(target) }
         })
 
-        t.agent.addRemoteConfig(t.generateRemoteConfig({
-          captureSnapshot: true,
-          capture: { maxReferenceDepth: 5 }
-        }))
+        it(
+          'should include partial snapshot marked with notCapturedReason: timeout',
+          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 0, maxReferenceDepth: 5 })
+        )
+      })
+
+      context('default time budget', function () {
+        const target = 10 // default time budget in ms
+        const t = setup({ dependencies: ['fastify'] })
+
+        // TODO: Make this pass
+        // eslint-disable-next-line mocha/no-pending-tests
+        it.skip(
+          'should keep budget when state includes an object with 1 million properties',
+          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 1, maxReferenceDepth: 1 })
+        )
+
+        // TODO: Make this pass
+        // eslint-disable-next-line mocha/no-pending-tests
+        it.skip(
+          'should keep budget when state includes an array of 1 million primitives',
+          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 2, maxReferenceDepth: 1 })
+        )
+
+        // TODO: Make this pass
+        // eslint-disable-next-line mocha/no-pending-tests
+        it.skip(
+          'should keep budget when state includes an array of 1 million objects',
+          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 3, maxReferenceDepth: 1 })
+        )
       })
     })
   })
 })
+
+function test ({ t, maxPausedTime, breakpointIndex, maxReferenceDepth }) {
+  const breakpoint = t.breakpoints[breakpointIndex]
+
+  return async function () {
+    const payloadReceived = new Promise((/** @type {(value?: unknown) => void} */ resolve) => {
+      t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
+        const { locals } = captures.lines[breakpoint.line]
+        assert.strictEqual(
+          containsTimeBudget(locals),
+          true,
+          'expected at least one field/element to be marked with notCapturedReason: "timeout"'
+        )
+        resolve()
+      })
+    })
+
+    t.agent.addRemoteConfig(breakpoint.generateRemoteConfig({
+      captureSnapshot: true,
+      capture: { maxReferenceDepth }
+    }))
+
+    const { data } = await breakpoint.triggerBreakpoint()
+
+    assert.ok(
+      data.paused <= maxPausedTime,
+      `expected thread to be paused <=${maxPausedTime}ms, but was paused for ~${data.paused}ms`
+    )
+
+    await payloadReceived
+  }
+}
 
 function containsTimeBudget (node) {
   if (node == null || typeof node !== 'object') return false

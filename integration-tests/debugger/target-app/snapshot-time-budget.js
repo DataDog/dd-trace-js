@@ -6,13 +6,35 @@ const Fastify = require('fastify')
 
 const fastify = Fastify({ logger: { level: 'error' } })
 
-fastify.get('/:name', function handler (request) {
+fastify.get('/deeply-nested-large-object', function handler () {
   // The size of `obj` generated is carefully tuned to never result in a snapshot larger than the 1MB size limit, while
   // still being large enough to trigger the time budget limit. However, the size of `fastify` and `request` is not
   // stable across Node.js and Fastify versions, so the generated object might need to be adjusted.
-  const obj = generateObject(5, 6) // eslint-disable-line no-unused-vars
+  const obj = generateObject(5, 12) // eslint-disable-line no-unused-vars
+  const start = process.hrtime.bigint()
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /deeply-nested-large-object
+  return { paused: Number(diff) / 1_000_000 }
+})
 
-  return { hello: request.params.name } // BREAKPOINT: /foo
+fastify.get('/large-object-of-primitives', function handler () {
+  const obj = generateObject(0, 1_000_000) // eslint-disable-line no-unused-vars
+  const start = process.hrtime.bigint()
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-object-of-primitives
+  return { paused: Number(diff) / 1_000_000 }
+})
+
+fastify.get('/large-array-of-primitives', function handler () {
+  const arr = Array.from({ length: 1_000_000 }, (_, i) => i) // eslint-disable-line no-unused-vars
+  const start = process.hrtime.bigint()
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-array-of-primitives
+  return { paused: Number(diff) / 1_000_000 }
+})
+
+fastify.get('/large-array-of-objects', function handler () {
+  const arr = Array.from({ length: 1_000_000 }, (_, i) => ({ i })) // eslint-disable-line no-unused-vars
+  const start = process.hrtime.bigint()
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-array-of-objects
+  return { paused: Number(diff) / 1_000_000 }
 })
 
 fastify.listen({ port: process.env.APP_PORT || 0 }, (err) => {
