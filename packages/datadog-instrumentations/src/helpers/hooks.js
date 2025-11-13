@@ -1,6 +1,18 @@
 'use strict'
 
 module.exports = {
+  // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
+  child_process: () => require('../child_process'),
+  crypto: () => require('../crypto'),
+  dns: () => require('../dns'),
+  fs: { serverless: false, fn: () => require('../fs') },
+  http: () => require('../http'),
+  http2: () => require('../http2'),
+  https: () => require('../http'),
+  net: () => require('../net'),
+  url: () => require('../url'),
+  vm: () => require('../vm'),
+  // Non Node.js modules
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
@@ -92,17 +104,6 @@ module.exports = {
   mysql2: () => require('../mysql2'),
   next: () => require('../next'),
   'node-serialize': () => require('../node-serialize'),
-  // Only list prefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
-  'node:child_process': () => require('../child_process'),
-  'node:crypto': () => require('../crypto'),
-  'node:dns': () => require('../dns'),
-  'node:fs': { serverless: false, fn: () => require('../fs') },
-  'node:http': () => require('../http'),
-  'node:http2': () => require('../http2'),
-  'node:https': () => require('../http'),
-  'node:net': () => require('../net'),
-  'node:url': () => require('../url'),
-  'node:vm': () => require('../vm'),
   nyc: () => require('../nyc'),
   oracledb: () => require('../oracledb'),
   openai: { esmFirst: true, fn: () => require('../openai') },

@@ -1,8 +1,11 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { builtinModules } = require('module')
 const path = require('path')
+
+const { channel } = require('dc-polyfill')
 const satisfies = require('semifies')
+
 const Hook = require('./hook')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
@@ -42,24 +45,30 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
-/** @type {Set<string>} */
-const instrumentedNodeModules = new Set()
+/** @type {Map<string, object>} */
+const instrumentedNodeModules = new Map()
 /** @type {Map<string, boolean>} */
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
 
-for (const name of names) {
-  if (name.startsWith('node:')) {
-    // Add all unprefixed node modules to the instrumentations list.
-    const unprefixedName = name.slice(5)
-    names.push(unprefixedName)
-    // Always disable prefixed and unprefixed node modules if one is disabled.
-    if (disabledInstrumentations.has(name) !== disabledInstrumentations.has(unprefixedName)) {
-      disabledInstrumentations.add(name)
-      disabledInstrumentations.add(unprefixedName)
+// Always disable prefixed and unprefixed node modules if one is disabled.
+if (disabledInstrumentations.size) {
+  const builtinsSet = new Set(builtinModules)
+  for (const name of disabledInstrumentations) {
+    const hasPrefix = name.startsWith('node:')
+    if (hasPrefix || builtinsSet.has(name)) {
+      if (hasPrefix) {
+        const unprefixedName = name.slice(5)
+        if (!disabledInstrumentations.has(unprefixedName)) {
+          disabledInstrumentations.add(unprefixedName)
+        }
+      } else if (!disabledInstrumentations.has(`node:${name}`)) {
+        disabledInstrumentations.add(`node:${name}`)
+      }
     }
   }
+  builtinsSet.clear()
 }
 
 let timeout
@@ -67,11 +76,9 @@ let timeout
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
 
-  const isNodeModule = name.startsWith('node:') || !hooks[name]
-
   const hookOptions = {}
 
-  let hook = hooks[name] ?? hooks[`node:${name}`]
+  let hook = hooks[name]
 
   if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
@@ -79,8 +86,6 @@ for (const name of names) {
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
-
-  const nameWithoutPrefix = name.startsWith('node:') ? name.slice(5) : name
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     if (timeout === undefined) {
@@ -92,24 +97,25 @@ for (const name of names) {
       timeout.refresh()
     }
     // All loaded versions are first expected to fail instrumentation.
-    if (!instrumentedIntegrationsSuccess.has(`${nameWithoutPrefix}@${moduleVersion}`)) {
-      instrumentedIntegrationsSuccess.set(`${nameWithoutPrefix}@${moduleVersion}`, false)
+    if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
+      instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
     }
-    moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
 
-    if (!instrumentations[nameWithoutPrefix] || instrumentedNodeModules.has(nameWithoutPrefix)) {
+    if (!instrumentations[name] || moduleExports === instrumentedNodeModules.get(name)) {
       return moduleExports
     }
 
     // Used for node: prefixed modules to prevent double instrumentation.
-    if (isNodeModule) {
-      instrumentedNodeModules.add(nameWithoutPrefix)
+    if (moduleBaseDir) {
+      moduleName = moduleName.replace(pathSepExpr, '/')
+    } else {
+      instrumentedNodeModules.set(name, moduleExports)
     }
 
-    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[nameWithoutPrefix]) {
+    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
       if (isIitm && patchDefault === !!moduleExports.default) {
         if (patchDefault) {
           moduleExports = moduleExports.default
@@ -131,7 +137,7 @@ for (const name of names) {
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
-        instrumentedIntegrationsSuccess.set(`${nameWithoutPrefix}@${moduleVersion}`, true)
+        instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
           loadChannel.publish({ name })
 
@@ -140,7 +146,7 @@ for (const name of names) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [
             `error_type:${error.constructor.name}`,
-            `integration:${nameWithoutPrefix}`,
+            `integration:${name}`,
             `integration_version:${moduleVersion}`
           ], {
             result: 'error',
