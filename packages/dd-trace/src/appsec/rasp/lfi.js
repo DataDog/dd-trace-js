@@ -1,12 +1,13 @@
 'use strict'
 
-const { fsOperationStart, incomingHttpRequestStart } = require('../channels')
+const { isAbsolute } = require('path')
+
+const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
-const { isAbsolute } = require('path')
 
 let config
 let enabled
@@ -25,6 +26,7 @@ function enable (_config) {
 function disable () {
   if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(onFirstReceivedRequest)
+  if (expressResponseRenderStart.hasSubscribers) expressResponseRenderStart.unsubscribe(analyzeLfiInResponseRender)
 
   disableFsPlugin(RASP_MODULE)
 
@@ -42,8 +44,16 @@ function onFirstReceivedRequest () {
 
   if (!analyzeSubscribed) {
     fsOperationStart.subscribe(analyzeLfi)
+    expressResponseRenderStart.subscribe(analyzeLfiInResponseRender)
     analyzeSubscribed = true
   }
+}
+
+function analyzeLfiInResponseRender (ctx) {
+  const store = storage('legacy').getStore()
+  if (!store) return
+
+  analyzeLfiPath(ctx.view, ctx.req, store.res, ctx.abortController)
 }
 
 function analyzeLfi (ctx) {
@@ -54,15 +64,19 @@ function analyzeLfi (ctx) {
   if (!req || !fs) return
 
   getPaths(ctx, fs).forEach(path => {
-    const ephemeral = {
-      [FS_OPERATION_PATH]: path
-    }
-
-    const raspRule = { type: RULE_TYPES.LFI }
-
-    const result = waf.run({ ephemeral }, req, raspRule)
-    handleResult(result, req, res, ctx.abortController, config, raspRule)
+    analyzeLfiPath(path, req, res, ctx.abortController)
   })
+}
+
+function analyzeLfiPath (path, req, res, abortController) {
+  const ephemeral = {
+    [FS_OPERATION_PATH]: path
+  }
+
+  const raspRule = { type: RULE_TYPES.LFI }
+
+  const result = waf.run({ ephemeral }, req, raspRule)
+  handleResult(result, req, res, abortController, config, raspRule)
 }
 
 function getPaths (ctx, fs) {
