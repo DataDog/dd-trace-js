@@ -16,6 +16,7 @@ describe('check-require-cache', () => {
   it('should be no warnings when tracer is loaded first', (done) => {
     exec(`${process.execPath} ./check-require-cache/good-order.js`, opts, (error, stdout, stderr) => {
       expect(error).to.be.null
+      expect(stdout).to.not.include("Found incompatible integration version")
       expect(stderr).to.not.include("Package 'express' was loaded")
       done()
     })
