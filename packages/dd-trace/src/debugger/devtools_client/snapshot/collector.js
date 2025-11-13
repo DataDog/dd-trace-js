@@ -5,6 +5,8 @@ const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
+const SIZE_IN_DESCRIPTION_SUBTYPES = new Set(['array', 'typedarray', 'arraybuffer', 'dataview', 'map', 'set'])
+const COLLECTION_SIZE_THRESHOLD = 500
 
 module.exports = {
   getRuntimeObject: getObject
@@ -50,6 +52,12 @@ async function getObject (objectId, opts, depth = 0, collection = false) {
   } else if (result.length > opts.maxFieldCount) {
     // Trim the number of properties on the object if there's too many.
     const size = result.length
+    if (size > COLLECTION_SIZE_THRESHOLD) {
+      opts.fatalSnapshotError = new Error(
+        `An object with more than ${COLLECTION_SIZE_THRESHOLD} properties was detected while collecting a snapshot. ` +
+        'Future snapshots for exising probes in this location will be skipped until the Node.js process is restarted'
+      )
+    }
     result.length = opts.maxFieldCount
     result[fieldCountSym] = size
   } else if (privateProperties) {
@@ -69,10 +77,17 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   for (const prop of props) {
     if (prop.value === undefined) continue
-    const { value: { type, objectId, subtype } } = prop
+    const { value: { type, objectId, subtype, description } } = prop
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
+      const size = parseLengthFromDescription(description, subtype)
+      if (size !== null && size >= COLLECTION_SIZE_THRESHOLD) {
+        const empty = []
+        empty[collectionSizeSym] = size
+        prop.value.properties = empty
+        continue
+      }
       work.push([
         prop.value,
         () => getObjectProperties(subtype, objectId, opts, depth).then((properties) => {
@@ -232,6 +247,26 @@ function removeNonEnumerableProperties (props) {
       props.splice(i--, 1)
     }
   }
+}
+
+function parseLengthFromDescription (description, subtype) {
+  if (typeof description !== 'string') return null
+  if (!SIZE_IN_DESCRIPTION_SUBTYPES.has(subtype)) return null
+
+  const open = description.lastIndexOf('(')
+  if (open === -1) return null
+
+  const close = description.indexOf(')', open + 1)
+  if (close === -1) return null
+
+  const s = description.slice(open + 1, close)
+  if (s === '') return null
+
+  const n = Number(s)
+  if (!Number.isSafeInteger(n) || n < 0) return null
+  if (String(n) !== s) return null
+
+  return n
 }
 
 function overBudget (opts) {

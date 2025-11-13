@@ -6,10 +6,11 @@ function run () {
   const set = new Set()
   const wmap = new WeakMap()
   const wset = new WeakSet()
-  const typedArray = new Uint16Array(new ArrayBuffer(2000))
+  const typedArray = new Uint16Array(new ArrayBuffer(998))
 
-  // 1000 is larger the default maxCollectionSize of 100
-  for (let i = 1; i <= 1000; i++) {
+  // 499 is larger the default maxCollectionSize of 100, but lower than the collection size threshold of 500, after
+  // which nothing is captured.
+  for (let i = 1; i <= 499; i++) {
     // A reference that can be used in WeakMap/WeakSet to avoid GC
     const obj = { i }
 
