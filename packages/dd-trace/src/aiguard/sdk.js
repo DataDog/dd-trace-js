@@ -138,10 +138,11 @@ class AIGuard extends NoopAIGuard {
           span.setTag(AI_GUARD_TOOL_NAME_TAG_KEY, name)
         }
       }
+      const metaStruct = {
+        messages: this.#truncate(messages)
+      }
       span.meta_struct = {
-        [AI_GUARD_META_STRUCT_KEY]: {
-          messages: this.#truncate(messages)
-        }
+        [AI_GUARD_META_STRUCT_KEY]: metaStruct
       }
       let response
       try {
@@ -166,7 +167,7 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, blockingEnabled
+      let action, reason, tags, blockingEnabled
       try {
         const attr = response.body.data.attributes
         if (!attr.action) {
@@ -174,6 +175,7 @@ class AIGuard extends NoopAIGuard {
         }
         action = attr.action
         reason = attr.reason
+        tags = attr.tags
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
@@ -182,7 +184,12 @@ class AIGuard extends NoopAIGuard {
       const shouldBlock = block && blockingEnabled && action !== ALLOW
       appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { action, error: false, block: shouldBlock }).inc(1)
       span.setTag(AI_GUARD_ACTION_TAG_KEY, action)
-      span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
+      if (reason) {
+        span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
+      }
+      if (tags?.length > 0) {
+        metaStruct.attack_categories = tags
+      }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
         throw new AIGuardAbortError(reason)

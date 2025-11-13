@@ -138,9 +138,9 @@ describe('AIGuard SDK', () => {
   }
 
   const testSuite = [
-    { action: 'ALLOW', reason: 'Go ahead' },
-    { action: 'DENY', reason: 'Nope' },
-    { action: 'ABORT', reason: 'Kill it with fire' }
+    { action: 'ALLOW', reason: 'Go ahead', tags: [] },
+    { action: 'DENY', reason: 'Nope', tags: ['deny_everything', 'test_deny'] },
+    { action: 'ABORT', reason: 'Kill it with fire', tags: ['alarm_tag', 'abort_everything'] }
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
@@ -150,9 +150,9 @@ describe('AIGuard SDK', () => {
     { ...r, suite: 'prompt', target: 'prompt', messages: prompt }
   ])
 
-  for (const { action, reason, blocking, suite, target, messages } of testSuite) {
+  for (const { action, reason, tags, blocking, suite, target, messages } of testSuite) {
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({ body: { data: { attributes: { action, reason, is_blocking_enabled: blocking } } } })
+      mockFetch({ body: { data: { attributes: { action, reason, tags, is_blocking_enabled: blocking } } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
@@ -175,7 +175,10 @@ describe('AIGuard SDK', () => {
         ...(target === 'tool' ? { 'ai_guard.tool_name': 'calc' } : {}),
         ...(shouldBlock ? { 'ai_guard.blocked': 'true', 'error.type': 'AIGuardAbortError' } : {})
       },
-      { messages })
+      {
+        messages,
+        ...(tags.length > 0 ? { attack_categories: tags } : {})
+      })
     })
   }
 
