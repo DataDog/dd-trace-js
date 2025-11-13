@@ -147,7 +147,12 @@ jobs:
           git push origin --tags
 
   status:
-  needs: ['publish-latest']
+    needs: [
+      'publish-v3',
+      'publish-v4',
+      'publish-latest',
+    ]
+    if: always() && contains(needs.*.result, 'success')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
