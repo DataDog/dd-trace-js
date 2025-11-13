@@ -238,7 +238,7 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@0.2.0":
+"@datadog/openfeature-node-server@^0.2.0":
   version "0.2.0"
   resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.2.0.tgz#905032cc6d7d1eb1d6620aabe323ed552366d65a"
   integrity sha512-Jn8lShFyqNji0tiKntLcCRwu3xrhg93fTTJS3gHSPKMfBDBKxjB9uF8Hu5Ayn2k0QuwJexx5atN9GSiWX0h5qg==
