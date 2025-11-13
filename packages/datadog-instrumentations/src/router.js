@@ -146,12 +146,12 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (...args) {
       let offset = 0
       if (this.stack) {
         offset = Array.isArray(this.stack) ? this.stack.length : 1
       }
-      const router = original.apply(this, arguments)
+      const router = original.apply(this, args)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
@@ -161,17 +161,19 @@ function createWrapRouterMethod (name) {
         routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
       }
 
+      const fn = args[0]
+
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
       if (routeAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
-        if (original.name === 'use' && arguments.length >= 2) {
+        if (original.name === 'use' && args.length >= 2) {
           const { mountPaths, startIdx } = extractMountPaths(fn)
 
           if (mountPaths.length) {
             const parentPaths = getRouterMountPaths(this)
 
-            for (let i = startIdx; i < arguments.length; i++) {
-              const nestedRouter = arguments[i]
+            for (let i = startIdx; i < args.length; i++) {
+              const nestedRouter = args[i]
 
               if (!nestedRouter || typeof nestedRouter !== 'function') continue
 
