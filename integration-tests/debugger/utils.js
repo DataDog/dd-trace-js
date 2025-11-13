@@ -129,7 +129,15 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     rcConfig: null,
     triggerBreakpoint: triggerBreakpoint.bind(null, breakpoints[0].url),
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[0]),
-    generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0])
+    generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0]),
+
+    snapshotReceived () {
+      return new Promise((/** @type {(value?: object) => void} */ resolve) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+          resolve(snapshot)
+        })
+      })
+    }
   }
 
   /**
