@@ -1,6 +1,7 @@
 'use strict'
 
 const services = require('../src/services')
+const { getConfigFresh } = require('../../dd-trace/test/helpers/config')
 
 describe('Plugin', () => {
   describe('openai services', () => {
@@ -10,23 +11,23 @@ describe('Plugin', () => {
       })
 
       it('dogstatsd does not throw when missing .dogstatsd', () => {
-        const service = services.init({
+        const service = services.init(getConfigFresh({
           hostname: 'foo',
           service: 'bar',
           apiKey: 'my api key',
           interval: 1000
-        })
+        }))
 
         service.metrics.increment('mykey')
         service.logger.log('hello')
       })
 
       it('logger does not throw', () => {
-        const service = services.init({
+        const service = services.init(getConfigFresh({
           hostname: 'foo',
           service: 'bar',
           interval: 1000
-        })
+        }))
 
         service.logger.log('hello')
       })

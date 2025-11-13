@@ -2,10 +2,11 @@
 
 const axios = require('axios')
 const { assert } = require('chai')
+
 const agent = require('../plugins/agent')
 const tracer = require('../../../../index')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 
 describe('Attacker fingerprinting', () => {
   describe('SDK', () => {
@@ -21,7 +22,7 @@ describe('Attacker fingerprinting', () => {
     }
 
     before(() => {
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         enabled: true
       }))
     })

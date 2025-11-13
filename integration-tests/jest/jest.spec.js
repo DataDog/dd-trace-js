@@ -59,11 +59,24 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_IS_MODIFIED,
   TEST_RETRY_REASON_TYPES,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  TEST_FRAMEWORK,
+  TEST_TYPE,
+  TEST_FRAMEWORK_VERSION,
+  CI_APP_ORIGIN,
+  JEST_TEST_RUNNER,
+  TEST_PARAMETERS,
+  LIBRARY_VERSION,
+  TEST_SUITE_ID,
+  TEST_MODULE_ID,
+  TEST_SESSION_ID,
+  TEST_MODULE,
+  TEST_COMMAND,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE, ERROR_TYPE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
+const { version: ddTraceVersion } = require('../../package.json')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -74,8 +87,11 @@ const expectedCoverageFiles = [
 ]
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
+const JEST_VERSION = process.env.JEST_VERSION || 'latest'
+const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
+
 // TODO: add ESM tests
-describe('jest CommonJS', () => {
+describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
   let childProcess
   let cwd
@@ -83,16 +99,19 @@ describe('jest CommonJS', () => {
   let testOutput = ''
 
   useSandbox([
-    'jest',
+    `jest@${JEST_VERSION}`,
     'chai@v4',
-    'jest-jasmine2',
-    'jest-environment-jsdom',
+    `jest-jasmine2@${JEST_VERSION}`,
+    // jest-environment-jsdom is included in older versions of jest
+    JEST_VERSION === 'latest' && `jest-environment-jsdom@${JEST_VERSION}`,
+    // jest-circus is not included in older versions of jest
+    JEST_VERSION !== 'latest' && `jest-circus@${JEST_VERSION}`,
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
     'jest-image-snapshot',
     '@fast-check/jest'
-  ], true)
+  ].filter(Boolean), true)
 
   before(function () {
     cwd = sandboxCwd()
@@ -109,81 +128,23 @@ describe('jest CommonJS', () => {
     await receiver.stop()
   })
 
-  it('can run tests and report tests with the APM protocol (old agents)', (done) => {
-    receiver.setInfoResponse({ endpoints: [] })
-    receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
-      const testSpans = payload.flatMap(trace => trace)
-      const resourceNames = testSpans.map(span => span.resource)
-
-      assert.includeMembers(resourceNames,
-        [
-          'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-          'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-        ]
-      )
-
-      const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
-      assert.isTrue(areAllTestSpans)
-
-      assert.include(testOutput, expectedStdout)
-
-      // Can read DD_TAGS
-      testSpans.forEach(testSpan => {
-        assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
-        assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
-      })
-
-      testSpans.forEach(testSpan => {
-        assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-        assert.exists(testSpan.metrics[TEST_SOURCE_START])
-      })
-
-      done()
-    })
-
-    childProcess = fork(startupTestFile, {
-      cwd,
-      env: {
+  context('older versions of the agent (APM protocol)', () => {
+    let oldApmProtocolEnvVars = {}
+    beforeEach(() => {
+      receiver.setInfoResponse({ endpoints: [] })
+      oldApmProtocolEnvVars = {
+        ...process.env,
+        GITHUB_WORKSPACE: '', // so the repository root is not assigned to dd-trace-js
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         DD_TRACE_AGENT_PORT: receiver.port,
         NODE_OPTIONS: '-r dd-trace/ci/init',
-        DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
-      },
-      stdio: 'pipe'
-    })
-    childProcess.stdout.on('data', (chunk) => {
-      testOutput += chunk.toString()
-    })
-    childProcess.stderr.on('data', (chunk) => {
-      testOutput += chunk.toString()
-    })
-  })
-
-  const nonLegacyReportingOptions = ['agentless', 'evp proxy']
-
-  nonLegacyReportingOptions.forEach((reportingOption) => {
-    it(`can run and report tests with ${reportingOption}`, (done) => {
-      const envVars = reportingOption === 'agentless'
-        ? getCiVisAgentlessConfig(receiver.port)
-        : getCiVisEvpProxyConfig(receiver.port)
-      if (reportingOption === 'evp proxy') {
-        receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
       }
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
-        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
-
-        metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
-        })
-
-        const events = payloads.flatMap(({ payload }) => payload.events)
-        const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-        const moduleEventContent = events.find(event => event.type === 'test_module_end').content
-        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-        const resourceNames = tests.map(span => span.resource)
+    })
+    it('can run tests and report tests', (done) => {
+      receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
+        const testSpans = payload.flatMap(trace => trace)
+        const resourceNames = testSpans.map(span => span.resource)
 
         assert.includeMembers(resourceNames,
           [
@@ -191,26 +152,21 @@ describe('jest CommonJS', () => {
             'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
           ]
         )
-        assert.equal(suites.length, 2)
-        assert.exists(sessionEventContent)
-        assert.exists(moduleEventContent)
+
+        const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
+        assert.isTrue(areAllTestSpans)
 
         assert.include(testOutput, expectedStdout)
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
-          assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-          // Can read DD_TAGS
-          assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
-          assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
-          assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
+        // Can read DD_TAGS
+        testSpans.forEach(testSpan => {
+          assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
+          assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
         })
 
-        suites.forEach(testSuite => {
-          assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
-          assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
-          assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
+        testSpans.forEach(testSpan => {
+          assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testSpan.metrics[TEST_SOURCE_START])
         })
 
         done()
@@ -219,10 +175,10 @@ describe('jest CommonJS', () => {
       childProcess = fork(startupTestFile, {
         cwd,
         env: {
-          ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
-          DD_TEST_SESSION_NAME: 'my-test-session',
-          DD_SERVICE: undefined
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_TRACE_AGENT_PORT: receiver.port,
+          NODE_OPTIONS: '-r dd-trace/ci/init',
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
         },
         stdio: 'pipe'
       })
@@ -231,6 +187,396 @@ describe('jest CommonJS', () => {
       })
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
+      })
+    })
+
+    it('should create test spans for sync, async, integration, parameterized and retried tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const spans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const expectedTests = [
+            {
+              name: 'jest-test-suite tracer and active span are available',
+              status: 'pass',
+              extraTags: { 'test.add.stuff': 'stuff' }
+            },
+            { name: 'jest-test-suite done', status: 'pass' },
+            { name: 'jest-test-suite done fail', status: 'fail' },
+            { name: 'jest-test-suite done fail uncaught', status: 'fail' },
+            { name: 'jest-test-suite can do integration http', status: 'pass' },
+            {
+              name: 'jest-test-suite can do parameterized test',
+              status: 'pass',
+              parameters: { arguments: [1, 2, 3], metadata: {} }
+            },
+            {
+              name: 'jest-test-suite can do parameterized test',
+              status: 'pass',
+              parameters: { arguments: [2, 3, 5], metadata: {} }
+            },
+            { name: 'jest-test-suite promise passes', status: 'pass' },
+            { name: 'jest-test-suite promise fails', status: 'fail' },
+            { name: 'jest-test-suite timeout', status: 'fail', error: 'Exceeded timeout' },
+            { name: 'jest-test-suite passes', status: 'pass' },
+            { name: 'jest-test-suite fails', status: 'fail' },
+            { name: 'jest-test-suite does not crash with missing stack', status: 'fail' },
+            { name: 'jest-test-suite skips', status: 'skip' },
+            { name: 'jest-test-suite skips todo', status: 'skip' },
+            { name: 'jest-circus-test-retry can retry', status: 'fail' },
+            { name: 'jest-circus-test-retry can retry', status: 'fail' },
+            { name: 'jest-circus-test-retry can retry', status: 'pass' }
+          ]
+
+          expectedTests.forEach(({ name, status, error, parameters, extraTags }) => {
+            const test = spans.find(test =>
+              test.meta[TEST_NAME] === name &&
+              test.meta[TEST_STATUS] === status &&
+              test.meta[TEST_SUITE] === 'ci-visibility/jest-plugin-tests/jest-test.js' &&
+              (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
+            )
+
+            assert.exists(test, `Expected to find test "${name}" with status "${status}"`)
+
+            assert.propertyVal(test.meta, 'language', 'javascript')
+            assert.propertyVal(test.meta, 'service', 'plugin-tests')
+            assert.propertyVal(test.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(test.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(test.meta, TEST_NAME, name)
+            assert.propertyVal(test.meta, TEST_STATUS, status)
+            assert.propertyVal(test.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+            assert.propertyVal(test.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-test.js')
+            assert.propertyVal(test.meta, TEST_TYPE, 'test')
+            assert.propertyVal(test.meta, JEST_TEST_RUNNER, 'jest-circus')
+            assert.propertyVal(test.meta, LIBRARY_VERSION, ddTraceVersion)
+            assert.propertyVal(test.meta, COMPONENT, 'jest')
+            assert.include(test.meta[TEST_CODE_OWNERS], '@datadog-dd-trace-js')
+
+            assert.equal(test.type, 'test')
+            assert.equal(test.name, 'jest.test')
+            assert.equal(test.service, 'plugin-tests')
+            assert.equal(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+
+            assert.exists(test.metrics[TEST_SOURCE_START])
+            assert.exists(test.meta[TEST_FRAMEWORK_VERSION])
+
+            if (extraTags) {
+              Object.entries(extraTags).forEach(([key, value]) => {
+                assert.propertyVal(test.meta, key, value)
+              })
+            }
+
+            if (error) {
+              assert.include(test.meta[ERROR_MESSAGE], error)
+            }
+
+            // TODO: why did this work in jsdom before?
+            if (name === 'jest-test-suite can do integration http') {
+              const httpSpan = spans.find(span => span.name === 'http.request')
+              assert.propertyVal(httpSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+              assert.include(httpSpan.meta['http.url'], '/info')
+              assert.equal(httpSpan.parent_id.toString(), test.span_id.toString())
+            }
+          })
+        }, 25000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...oldApmProtocolEnvVars,
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-test.js',
+            DD_SERVICE: 'plugin-tests',
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
+
+    it('should detect an error in hooks', async () => {
+      const tests = [
+        { name: 'jest-hook-failure will not run', error: 'hey, hook error before' },
+        { name: 'jest-hook-failure-after will not run', error: 'hey, hook error after' }
+      ]
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          tests.forEach(({ name, error }) => {
+            const testSpan = testSpans.find(span =>
+              span.resource === `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`
+            )
+
+            assert.exists(testSpan, `Expected to find test "${name}"`)
+            assert.propertyVal(testSpan.meta, 'language', 'javascript')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(testSpan.meta, TEST_NAME, name)
+            assert.propertyVal(testSpan.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-hook-failure.js')
+            assert.propertyVal(testSpan.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-hook-failure.js')
+            assert.propertyVal(testSpan.meta, TEST_TYPE, 'test')
+            assert.propertyVal(testSpan.meta, JEST_TEST_RUNNER, 'jest-circus')
+            assert.propertyVal(testSpan.meta, COMPONENT, 'jest')
+            assert.equal(testSpan.meta[ERROR_MESSAGE], error)
+            assert.equal(testSpan.type, 'test')
+            assert.equal(testSpan.name, 'jest.test')
+            assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-hook-failure.js.${name}`)
+            assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
+          })
+        }, 25000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...oldApmProtocolEnvVars,
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-hook-failure',
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
+
+    it('should work with focused tests', async () => {
+      const tests = [
+        { name: 'jest-test-focused will be skipped', status: 'skip' },
+        { name: 'jest-test-focused-2 will be skipped too', status: 'skip' },
+        { name: 'jest-test-focused can do focused test', status: 'pass' }
+      ]
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          tests.forEach(({ name, status }) => {
+            const testSpan = testSpans.find(span =>
+              span.resource === `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`
+            )
+
+            assert.exists(testSpan, `Expected to find test "${name}"`)
+            assert.propertyVal(testSpan.meta, 'language', 'javascript')
+            assert.propertyVal(testSpan.meta, ORIGIN_KEY, CI_APP_ORIGIN)
+            assert.propertyVal(testSpan.meta, TEST_FRAMEWORK, 'jest')
+            assert.propertyVal(testSpan.meta, TEST_NAME, name)
+            assert.propertyVal(testSpan.meta, TEST_STATUS, status)
+            assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-focus.js')
+            assert.propertyVal(testSpan.meta, TEST_SOURCE_FILE, 'ci-visibility/jest-plugin-tests/jest-focus.js')
+            assert.propertyVal(testSpan.meta, COMPONENT, 'jest')
+            assert.equal(testSpan.type, 'test')
+            assert.equal(testSpan.name, 'jest.test')
+            assert.equal(testSpan.resource, `ci-visibility/jest-plugin-tests/jest-focus.js.${name}`)
+            assert.exists(testSpan.meta[TEST_FRAMEWORK_VERSION])
+          })
+        }, 25000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...oldApmProtocolEnvVars,
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-focus'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
+
+    // injectGlobals was added in jest@26
+    onlyLatestIt('does not crash when injectGlobals is false', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpan = payloads
+            .flatMap(({ payload }) => payload.flatMap(trace => trace))
+            .find(span => span.type === 'test')
+          assert.exists(testSpan, 'Expected to find test span')
+          assert.propertyVal(testSpan.meta, TEST_NAME, 'jest-inject-globals will be run')
+          assert.propertyVal(testSpan.meta, TEST_STATUS, 'pass')
+          assert.propertyVal(testSpan.meta, TEST_SUITE, 'ci-visibility/jest-plugin-tests/jest-inject-globals.js')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...oldApmProtocolEnvVars,
+            TESTS_TO_RUN: 'jest-plugin-tests/jest-inject-globals',
+            DO_NOT_INJECT_GLOBALS: true
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise
+      ])
+    })
+  })
+
+  const nonLegacyReportingOptions = ['agentless', 'evp proxy']
+
+  nonLegacyReportingOptions.forEach((reportingOption) => {
+    context(`reporting via (${reportingOption})`, () => {
+      it('can run and report tests', (done) => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
+
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+          const moduleEventContent = events.find(event => event.type === 'test_module_end').content
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const resourceNames = tests.map(span => span.resource)
+
+          assert.includeMembers(resourceNames,
+            [
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
+            ]
+          )
+          assert.equal(suites.length, 2)
+          assert.exists(sessionEventContent)
+          assert.exists(moduleEventContent)
+
+          assert.include(testOutput, expectedStdout)
+
+          tests.forEach(testEvent => {
+            assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+            assert.exists(testEvent.metrics[TEST_SOURCE_START])
+            assert.equal(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+            // Can read DD_TAGS
+            assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
+            assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
+            assert.exists(testEvent.metrics[DD_HOST_CPU_COUNT])
+          })
+
+          suites.forEach(testSuite => {
+            assert.isTrue(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'))
+            assert.equal(testSuite.metrics[TEST_SOURCE_START], 1)
+            assert.exists(testSuite.metrics[DD_HOST_CPU_COUNT])
+          })
+
+          done()
+        })
+
+        childProcess = fork(startupTestFile, {
+          cwd,
+          env: {
+            ...envVars,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            DD_SERVICE: undefined
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      })
+
+      it('should create events for session, suite and test', async () => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            const testModuleEvent = events.find(event => event.type === 'test_module_end').content
+            const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+            const testEvent = events.find(event => event.type === 'test').content
+
+            assert.exists(testSessionEvent)
+            assert.equal(testSessionEvent.meta[TEST_STATUS], 'pass')
+            assert.exists(testSessionEvent[TEST_SESSION_ID])
+            assert.exists(testSessionEvent.meta[TEST_COMMAND])
+            assert.notExists(testSessionEvent[TEST_SUITE_ID])
+            assert.notExists(testSessionEvent[TEST_MODULE_ID])
+
+            assert.exists(testModuleEvent)
+            assert.equal(testModuleEvent.meta[TEST_STATUS], 'pass')
+            assert.exists(testModuleEvent[TEST_SESSION_ID])
+            assert.exists(testModuleEvent[TEST_MODULE_ID])
+            assert.exists(testModuleEvent.meta[TEST_COMMAND])
+            assert.notExists(testModuleEvent[TEST_SUITE_ID])
+
+            assert.exists(testSuiteEvent)
+            assert.equal(testSuiteEvent.meta[TEST_STATUS], 'pass')
+            assert.equal(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
+            assert.exists(testSuiteEvent.meta[TEST_COMMAND])
+            assert.exists(testSuiteEvent.meta[TEST_MODULE])
+            assert.exists(testSuiteEvent[TEST_SUITE_ID])
+            assert.exists(testSuiteEvent[TEST_SESSION_ID])
+            assert.exists(testSuiteEvent[TEST_MODULE_ID])
+
+            assert.exists(testEvent)
+            assert.equal(testEvent.meta[TEST_STATUS], 'pass')
+            assert.equal(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
+            assert.equal(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
+            assert.exists(testEvent.meta[TEST_COMMAND])
+            assert.exists(testEvent.meta[TEST_MODULE])
+            assert.exists(testEvent[TEST_SUITE_ID])
+            assert.exists(testEvent[TEST_SESSION_ID])
+            assert.exists(testEvent[TEST_MODULE_ID])
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              TESTS_TO_RUN: 'jest-plugin-tests/jest-test-suite'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise
+        ])
       })
     })
   })
@@ -312,10 +658,11 @@ describe('jest CommonJS', () => {
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
           PROJECTS: JSON.stringify([{
-            testMatch: ['**/subproject-test*']
+            testMatch: ['**/subproject-test*'],
+            testRunner: 'jest-circus/runner',
           }])
         },
-        stdio: 'inherit'
+        stdio: 'pipe'
       }
     )
 
@@ -326,7 +673,8 @@ describe('jest CommonJS', () => {
     })
   })
 
-  it('works when sharding', (done) => {
+  // --shard was added in jest@28
+  onlyLatestIt('works when sharding', (done) => {
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.equal(testSuiteEvents.length, 3)
@@ -527,7 +875,8 @@ describe('jest CommonJS', () => {
         }).catch(done)
     })
 
-    it('can work with Failed Test Replay', (done) => {
+    // older versions handle retries differently
+    onlyLatestIt('can work with Failed Test Replay', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -619,7 +968,8 @@ describe('jest CommonJS', () => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
+      // it's "100ms" or "100 ms" depending on the jest version
+      assert.match(testOutput, /Exceeded timeout of 100\s?ms for a test/)
       done()
     })
   })
@@ -658,7 +1008,7 @@ describe('jest CommonJS', () => {
   })
 
   context('when using off timing imports', () => {
-    it('reports test suite errors when using off timing import', async () => {
+    onlyLatestIt('reports test suite errors when using off timing import', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -698,7 +1048,7 @@ describe('jest CommonJS', () => {
       ])
     })
 
-    it('reports test suite errors when importing after environment is torn down', async () => {
+    onlyLatestIt('reports test suite errors when importing after environment is torn down', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1646,7 +1996,9 @@ describe('jest CommonJS', () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             PROJECTS: JSON.stringify([{
-              testMatch: ['**/subproject-test*']
+              testMatch: ['**/subproject-test*'],
+              testEnvironment: 'node',
+              testRunner: 'jest-circus/runner',
             }])
           },
           stdio: 'inherit'
@@ -2203,7 +2555,8 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('works with snapshot tests', async () => {
+    // resetting snapshot state logic only works in latest versions
+    onlyLatestIt('works with snapshot tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
       receiver.setKnownTests({
@@ -2271,7 +2624,8 @@ describe('jest CommonJS', () => {
       assert.equal(exitCode, 0)
     })
 
-    it('works with jest-image-snapshot', async () => {
+    // resetting snapshot state logic only works in latest versions
+    onlyLatestIt('works with jest-image-snapshot', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
       receiver.setKnownTests({
@@ -2452,7 +2806,7 @@ describe('jest CommonJS', () => {
       })
     })
     // happy-dom>=19 can only be used with CJS from node 20 and above
-    const happyDomTest = NODE_MAJOR < 20 ? it.skip : it
+    const happyDomTest = NODE_MAJOR < 20 ? it.skip : onlyLatestIt
     happyDomTest('works with happy-dom', async () => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
       receiver.setKnownTests({
@@ -2585,7 +2939,8 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('does not retry when it.failing is used', (done) => {
+    // it.failing was added in jest@29
+    onlyLatestIt('does not retry when it.failing is used', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       const NUM_RETRIES_EFD = 3
       receiver.setSettings({
@@ -2781,7 +3136,7 @@ describe('jest CommonJS', () => {
         ])
       })
 
-      it('works with snapshot tests', async () => {
+      onlyLatestIt('works with snapshot tests', async () => {
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
         receiver.setKnownTests({
@@ -3047,7 +3402,7 @@ describe('jest CommonJS', () => {
   })
 
   context('dynamic instrumentation', () => {
-    it('does not activate dynamic instrumentation if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
+    onlyLatestIt('does not activate DI if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3096,7 +3451,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
+    onlyLatestIt('does not activate DI if remote settings are disabled', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: false
@@ -3143,7 +3498,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('runs retries with dynamic instrumentation', (done) => {
+    onlyLatestIt('runs retries with DI', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3229,7 +3584,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('runs retries with dynamic instrumentation in parallel mode', (done) => {
+    onlyLatestIt('runs retries with DI in parallel mode', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3318,7 +3673,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('does not crash if the retry does not hit the breakpoint', (done) => {
+    onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3365,7 +3720,7 @@ describe('jest CommonJS', () => {
       })
     })
 
-    it('does not wait for breakpoint for a passed test', (done) => {
+    onlyLatestIt('does not wait for breakpoint for a passed test', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true
@@ -3772,7 +4127,7 @@ describe('jest CommonJS', () => {
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
 
-      it('works with snapshot tests', async () => {
+      onlyLatestIt('works with snapshot tests', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -3833,7 +4188,7 @@ describe('jest CommonJS', () => {
         ])
       })
 
-      it('works with snapshot tests when every attempt passes', async () => {
+      onlyLatestIt('works with snapshot tests when every attempt passes', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -3887,7 +4242,7 @@ describe('jest CommonJS', () => {
         assert.equal(exitCode, 0)
       })
 
-      it('works with image snapshot tests', async () => {
+      onlyLatestIt('works with image snapshot tests', async () => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         receiver.setTestManagementTests({
@@ -3966,7 +4321,7 @@ describe('jest CommonJS', () => {
           )
         })
 
-        it('works with snapshot tests', async () => {
+        onlyLatestIt('works with snapshot tests', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           receiver.setTestManagementTests({
@@ -4643,7 +4998,7 @@ describe('jest CommonJS', () => {
   })
 
   context('fast-check', () => {
-    it('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
+    onlyLatestIt('should remove seed from the test name if @fast-check/jest is used in the test', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4669,7 +5024,7 @@ describe('jest CommonJS', () => {
       ])
     })
 
-    it('should not remove seed if @fast-check/jest is not used', async () => {
+    onlyLatestIt('should not remove seed if @fast-check/jest is not used', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
