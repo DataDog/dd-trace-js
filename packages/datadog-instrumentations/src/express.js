@@ -67,26 +67,28 @@ function wrapResponseRender (render) {
 }
 
 function wrapAppAll (all) {
-  return function wrappedAll (path, ...otherArgs) {
-    if (!routeAddedChannel.hasSubscribers) return all.call(this, path, ...otherArgs)
+  return function wrappedAll (...args) {
+    if (!routeAddedChannel.hasSubscribers) return all.apply(this, args)
 
+    const path = args[0]
     const paths = normalizeRoutePaths(path)
 
     for (const p of paths) {
       routeAddedChannel.publish({ method: '*', path: p })
     }
 
-    return all.call(this, path, ...otherArgs)
+    return all.apply(this, args)
   }
 }
 
 // Wrap app.route() to instrument Route object
 function wrapAppRoute (route) {
-  return function wrappedRoute (path, ...otherArgs) {
-    const routeObj = route.call(this, path, ...otherArgs)
+  return function wrappedRoute (...args) {
+    const routeObj = route.apply(this, args)
 
     if (!routeAddedChannel.hasSubscribers) return routeObj
 
+    const path = args[0]
     const paths = normalizeRoutePaths(path)
 
     if (!paths.length) return routeObj
