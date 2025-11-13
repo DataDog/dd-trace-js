@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Print GitHub event action
         run: |
-          echo "${{ github.event.action }}"
+          cat "${{ github.event_path }}"
           echo "${{ github.event_name }}"
 
   # publish_v3:
