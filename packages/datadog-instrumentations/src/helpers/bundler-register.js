@@ -60,14 +60,17 @@ dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
 
-  const isNodeModule = name.startsWith('node:') || !hooks[name]
+  const isPrefixedWithNode = name.startsWith('node:')
+
+  const isNodeModule = isPrefixedWithNode || !hooks[name]
 
   if (isNodeModule) {
+    const nodeName = isPrefixedWithNode ? name.slice(5) : name
     // Used for node: prefixed modules to prevent double instrumentation.
-    if (instrumentedNodeModules.has(name)) {
+    if (instrumentedNodeModules.has(nodeName)) {
       return
     }
-    instrumentedNodeModules.add(name)
+    instrumentedNodeModules.add(nodeName)
   }
 
   doHook(name)
