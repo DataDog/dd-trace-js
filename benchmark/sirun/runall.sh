@@ -35,6 +35,7 @@ cargo install wasm-pack
     && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
     && PLUGINS="bluebird|q|graphql|express" yarn services
   cd ./node_modules/@apm-js-collab/code-transformer
+  yarn install
   yarn build
 )
 
