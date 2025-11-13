@@ -167,8 +167,13 @@ session.on('Debugger.paused', async ({ params }) => {
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
   const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
     params.callFrames[0],
-    start + BigInt(config.dynamicInstrumentation.captureTimeoutMs ?? 10) * 1_000_000n,
-    { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
+    {
+      maxReferenceDepth,
+      maxCollectionSize,
+      maxFieldCount,
+      maxLength,
+      deadlineNs: start + BigInt(config.dynamicInstrumentation.captureTimeoutMs ?? 10) * 1_000_000n
+    }
   )
 
   await session.post('Debugger.resume')

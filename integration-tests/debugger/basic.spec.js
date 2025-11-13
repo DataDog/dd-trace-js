@@ -641,7 +641,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('condition', function () {
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should trigger when condition is met', function (done) {
         t.agent.on('debugger-input', () => {
