@@ -52,7 +52,7 @@ describe('Ritm', () => {
   })
 
   it('should shim util', () => {
-    require('util')
+    require('node:util')
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
   })
@@ -84,7 +84,7 @@ describe('Ritm', () => {
 
   it('should fall back to monkey patched module', () => {
     // @ts-expect-error - Patching module works as expected
-    assert.equal(require('http').foo, 1, 'normal hooking still works')
+    assert.equal(require('node:http').foo, 1, 'normal hooking still works')
 
     const fnCore = require(mockedModuleName)
     assert.ok(fnCore, 'requiring monkey patched in module works')
