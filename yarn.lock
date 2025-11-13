@@ -204,10 +204,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/flagging-core@0.1.0-preview.15":
-  version "0.1.0-preview.15"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.15.tgz#bd8c21a7a7e96428c584d5b6f103b8011fa4f847"
-  integrity sha512-p6YhX7lHOlD3IhyBerL2OM7EEmOLA0MmjgIvEUX61cbRiK983m51rF8b8zXyiCCp/tdfBSmmsujtPwjMwXGiug==
+"@datadog/flagging-core@0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0.tgz#bf4b8b4f4ebf0cc2fc18d493467ea47fd26d1151"
+  integrity sha512-9eZG6AdPDz81FoFH1b9R8lnan0HSCuK8pV9qdu+Ixirq9YA06I8efiHEn5fSOblVbGoXcxHmHmTjYtgkEmTlBA==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -238,12 +238,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@0.1.0-preview.15":
-  version "0.1.0-preview.15"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.15.tgz#f9ec9f9614aefd9c03e83c62ea57c6163843a053"
-  integrity sha512-SXWseSmtEg+mKB2WzCzT5f/m61GEmFNBLchBaPO5w6dECk4jz4g6BXmfLTVdFZXi26/M644niZWHpv9cJVhoqg==
+"@datadog/openfeature-node-server@0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0.tgz#0a610263a01fa895bdc34414aef3662abe878d44"
+  integrity sha512-pHWyVA0riiXYlv3vNXO5oUfpXqvSfx5tzIp8tFWamsWM3fPAUM+CKvv8LNVoxQvcmPqmCE+0dI5RvfOatdeuEw==
   dependencies:
-    "@datadog/flagging-core" "0.1.0-preview.15"
+    "@datadog/flagging-core" "0.1.0"
     "@openfeature/server-sdk" "~1.18.0"
 
 "@datadog/pprof@5.12.0":
@@ -680,11 +680,6 @@
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
-
-"@openfeature/server-sdk@^1.20.0":
-  version "1.20.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.20.0.tgz#43a5d3cffd915742ff64eeef53b7132279df4823"
-  integrity sha512-95L9CCaGVKC6+7rNCmDxjthFvUyPLOUkoYyjg9Y/Cmy0G9D63xrJBsmH6fqHtLifzAu4+E7fWAZ3TIBnnCtr7A==
 
 "@openfeature/server-sdk@~1.18.0":
   version "1.18.0"
