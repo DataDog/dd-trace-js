@@ -140,7 +140,7 @@ for (const name of names) {
         }
 
         if (matchVersion(version, versions)) {
-          allInstrumentations[instrumentationFileName] ||= false
+          allInstrumentations[instrumentationFileName] = true
 
           try {
             loadChannel.publish({ name })
