@@ -22,7 +22,7 @@ let nativeMetrics = null
 let gcObserver = null
 let interval = null
 let client = null
-let lastTime = 0n
+let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
 
@@ -103,7 +103,6 @@ module.exports = {
     interval = null
 
     client = null
-    lastTime = 0n
     lastCpuUsage = null
 
     gcObserver?.disconnect()
@@ -339,6 +338,7 @@ function startGCObserver () {
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
+      // @ts-expect-error - entry.detail?.kind and entry.kind are not typed
       const type = gcType(entry.detail?.kind || entry.kind)
       const duration = entry.duration * 1_000_000
 

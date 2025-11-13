@@ -6,5 +6,7 @@ module.exports = {
   cache: false,
   testMatch: [
     process.env.TESTS_TO_RUN || '**/ci-visibility/test/ci-visibility-test*'
-  ]
+  ],
+  testRunner: 'jest-circus/runner',
+  testEnvironment: 'node'
 }

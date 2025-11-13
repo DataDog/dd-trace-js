@@ -200,6 +200,16 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  crypto:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: crypto
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   confluentinc-kafka-javascript:
     strategy:
       matrix:
@@ -261,6 +271,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: cookie-parser
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  cookie:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: cookie
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       - uses: ./.github/actions/plugins/test
@@ -434,6 +454,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  generic-pool:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: generic-pool
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   graphql:
     runs-on: ubuntu-latest
     env:
@@ -450,6 +480,16 @@ jobs:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  handlebars:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: handlebars
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -577,6 +617,16 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  knex:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: knex
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   koa:
     runs-on: ubuntu-latest
     env:
@@ -584,6 +634,16 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  ldapjs:
+    runs-on: 'ubuntu-latest'
+    env:
+      PLUGINS: ldapjs
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
@@ -606,6 +666,16 @@ jobs:
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  lodash:
+    runs-on: 'ubuntu-latest'
+    env:
+      PLUGINS: lodash
+    steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - uses: ./.github/actions/plugins/test
+      with:
+        dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mariadb:
     runs-on: ubuntu-latest
@@ -708,6 +778,16 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  multer:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: multer
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -832,6 +912,16 @@ jobs:
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
+
+  node-serialize:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: node-serialize
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   opensearch:
     runs-on: ubuntu-latest
@@ -963,6 +1053,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  process:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: process
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   protobufjs:
     runs-on: ubuntu-latest
     env:
@@ -971,6 +1071,16 @@ jobs:
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  pug:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: pug
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
@@ -1067,6 +1177,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  sequelize:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: sequelize
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   sharedb:
     runs-on: ubuntu-latest
     env:
@@ -1126,6 +1246,26 @@ jobs:
       PLUGINS: undici
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  url:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: url
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  vm:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: vm
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

@@ -8,7 +8,9 @@ module.exports = {
       cache: false,
       testMatch: [
         '**/ci-visibility/test/ci-visibility-test*'
-      ]
+      ],
+      testRunner: 'jest-circus/runner',
+      testEnvironment: 'node'
     },
     {
       displayName: 'node',
@@ -16,7 +18,9 @@ module.exports = {
       cache: false,
       testMatch: [
         '**/ci-visibility/test/ci-visibility-test*'
-      ]
+      ],
+      testRunner: 'jest-circus/runner',
+      testEnvironment: 'node'
     }
   ]
 }

@@ -17,13 +17,15 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('../ci-visibility/web-app-server')
+const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
+  TEST_TYPE,
   TEST_TOOLCHAIN,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
@@ -63,7 +65,7 @@ const {
   TEST_IS_MODIFIED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
-const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const RECEIVER_STOP_TIMEOUT = 20000
@@ -123,30 +125,25 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(80000)
-    let cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
     }
 
+    // cypress-fail-fast is required as an incompatible plugin
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
 
     before(async () => {
-      // cypress-fail-fast is required as an incompatible plugin
       cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
       await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
-
-      await /** @type {Promise<void>} */ (new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
-        webAppPort = webAppServer.address().port
-        resolve()
-      })))
     })
 
     after(async () => {
-      await new Promise(resolve => webAppServer.close(resolve))
+      // Cleanup second web app server if it exists
       if (secondWebAppServer) {
         await new Promise(resolve => secondWebAppServer.close(resolve))
       }
@@ -154,13 +151,46 @@ moduleTypes.forEach(({
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
+
+      // Create a fresh web server for each test to avoid state issues
+      webAppServer = createWebAppServer()
+      await new Promise((resolve, reject) => {
+        webAppServer.once('error', reject)
+        webAppServer.listen(0, 'localhost', () => {
+          webAppPort = webAppServer.address().port
+          webAppServer.removeListener('error', reject)
+          resolve()
+        })
+      })
     })
 
     // Cypress child processes can sometimes hang or take longer to
     // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
     // because there are pending connections.
     afterEach(async () => {
-      childProcess.kill()
+      if (childProcess && childProcess.pid) {
+        try {
+          childProcess.kill('SIGKILL')
+        } catch (error) {
+          // Process might already be dead - this is fine, ignore error
+        }
+
+        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
+        // The OS will clean up zombies, and fresh server per test prevents port conflicts
+      }
+
+      // Close web server before stopping receiver
+      if (webAppServer) {
+        await new Promise((resolve) => {
+          webAppServer.close((err) => {
+            if (err) {
+              // eslint-disable-next-line no-console
+              console.error('Web server close error:', err)
+            }
+            resolve()
+          })
+        })
+      }
 
       // Add timeout to prevent hanging
       const stopPromise = receiver.stop()
@@ -174,6 +204,98 @@ moduleTypes.forEach(({
         // eslint-disable-next-line no-console
         console.warn('Receiver stop timed out:', error.message)
       }
+
+      // Small delay to allow OS to release ports
+      await new Promise(resolve => setTimeout(resolve, 100))
+    })
+
+    it('instruments tests with the APM protocol (old agents)', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const passedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          const failedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
+          )
+
+          assert.exists(passedTestSpan, 'passed test span should exist')
+          assert.equal(passedTestSpan.name, 'cypress.test')
+          assert.equal(passedTestSpan.resource, 'cypress/e2e/basic-pass.js.basic pass suite can pass')
+          assert.equal(passedTestSpan.type, 'test')
+          assert.equal(passedTestSpan.meta[TEST_STATUS], 'pass')
+          assert.equal(passedTestSpan.meta[TEST_NAME], 'basic pass suite can pass')
+          assert.equal(passedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-pass.js')
+          assert.equal(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(passedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(passedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(passedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-pass.js')
+          assert.exists(passedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(passedTestSpan.meta[COMPONENT])
+          assert.exists(passedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(passedTestSpan.meta.customTag, 'customValue')
+          assert.equal(passedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(passedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+
+          assert.exists(failedTestSpan, 'failed test span should exist')
+          assert.equal(failedTestSpan.name, 'cypress.test')
+          assert.equal(failedTestSpan.resource, 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+          assert.equal(failedTestSpan.type, 'test')
+          assert.equal(failedTestSpan.meta[TEST_STATUS], 'fail')
+          assert.equal(failedTestSpan.meta[TEST_NAME], 'basic fail suite can fail')
+          assert.equal(failedTestSpan.meta[TEST_SUITE], 'cypress/e2e/basic-fail.js')
+          assert.equal(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
+          assert.equal(failedTestSpan.meta[TEST_TYPE], 'browser')
+          assert.exists(failedTestSpan.meta[TEST_SOURCE_FILE])
+          assert.include(failedTestSpan.meta[TEST_SOURCE_FILE], 'cypress/e2e/basic-fail.js')
+          assert.exists(failedTestSpan.meta[TEST_FRAMEWORK_VERSION])
+          assert.exists(failedTestSpan.meta[COMPONENT])
+          assert.exists(failedTestSpan.meta[ERROR_MESSAGE])
+          assert.include(failedTestSpan.meta[ERROR_MESSAGE], 'expected')
+          assert.exists(failedTestSpan.meta[ERROR_TYPE])
+          assert.exists(failedTestSpan.metrics[TEST_SOURCE_START])
+          assert.equal(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          assert.equal(failedTestSpan.meta.customTag, 'customValue')
+          assert.equal(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
+          assert.equal(failedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
+          // Tags added after failure should not be present because test failed
+          assert.notProperty(failedTestSpan.meta, 'addTagsAfterFailure')
+        }, 60000)
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const specToRun = 'cypress/e2e/basic-*.js'
+
+      // For Cypress 6.7.0, we need to override the --spec flag that's hardcoded in testCommand
+      const command = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+        : testCommand
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: specToRun
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise
+      ])
     })
 
     if (version === '6.7.0') {

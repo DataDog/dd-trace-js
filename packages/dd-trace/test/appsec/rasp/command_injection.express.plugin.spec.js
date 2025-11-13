@@ -8,7 +8,7 @@ const { describe, it, beforeEach, before, after } = require('mocha')
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 
@@ -71,7 +71,7 @@ describe('RASP - command_injection', () => {
         app(req, res)
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),

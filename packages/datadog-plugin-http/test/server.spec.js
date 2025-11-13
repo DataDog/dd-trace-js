@@ -17,6 +17,7 @@ describe('Plugin', () => {
   let tracer
   let port
   let app
+  let timeout
 
   ['http', 'node:http'].forEach(pluginToBeLoaded => {
     describe(`${pluginToBeLoaded}/server`, () => {
@@ -32,13 +33,15 @@ describe('Plugin', () => {
       afterEach(() => {
         appListener && appListener.close()
         app = null
+        clearTimeout(timeout)
+        timeout = null
         return agent.close({ ritmReset: false })
       })
 
       describe('canceled request', () => {
         beforeEach(() => {
           listener = (req, res) => {
-            setTimeout(() => {
+            timeout = setTimeout(() => {
               app && app(req, res)
               res.writeHead(200)
               res.end()
