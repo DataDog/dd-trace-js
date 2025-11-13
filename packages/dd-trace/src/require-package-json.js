@@ -21,10 +21,14 @@ function requirePackageJson (name, module) {
   }
   for (const modulePath of module.paths) {
     const candidate = path.join(modulePath, name, 'package.json')
-    try {
-      return JSON.parse(fs.readFileSync(candidate, 'utf8'))
-    } catch {
-      continue
+    // fs.existsSync is faster than fs.readFileSync due to not throwing an error if the file does not exist.
+    // The race condition should also not matter here as the time window is very small.
+    if (fs.existsSync(candidate)) {
+      try {
+        return JSON.parse(fs.readFileSync(candidate, 'utf8'))
+      } catch {
+        continue
+      }
     }
   }
   throw new Error(`could not find ${name}/package.json`)

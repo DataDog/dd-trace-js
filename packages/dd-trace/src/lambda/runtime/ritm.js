@@ -90,12 +90,12 @@ const registerLambdaHook = () => {
     const lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
 
     // TODO: Redo this like any other instrumentation.
-    Hook(lambdaFilePaths, (moduleExports, name) => {
+    Hook(lambdaFilePaths, (moduleExports, name, _, moduleVersion) => {
       require('./patch')
 
       for (const { hook } of instrumentations[name]) {
         try {
-          moduleExports = hook(moduleExports)
+          moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
         } catch (e) {
           log.error('Error executing lambda hook', e)
         }
@@ -105,16 +105,16 @@ const registerLambdaHook = () => {
     })
   } else {
     const moduleToPatch = 'datadog-lambda-js'
-    Hook([moduleToPatch], (moduleExports, moduleName, _) => {
+    Hook([moduleToPatch], (moduleExports, moduleName, _, moduleVersion) => {
       moduleName = moduleName.replace(pathSepExpr, '/')
 
       require('./patch')
 
-      for (const { name, file, hook } of instrumentations[moduleToPatch]) {
-        const fullFilename = filename(name, file)
+      for (const { file, hook } of instrumentations[moduleToPatch]) {
+        const fullFilename = filename(moduleToPatch, file)
         if (moduleName === fullFilename) {
           try {
-            moduleExports = hook(moduleExports)
+            moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
           } catch (e) {
             log.error('Error executing lambda hook for datadog-lambda-js', e)
           }
