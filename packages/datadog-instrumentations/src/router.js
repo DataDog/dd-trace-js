@@ -158,7 +158,7 @@ function createWrapRouterMethod (name) {
       }
 
       if (routeAddedChannel.hasSubscribers) {
-        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack?.at(-1) })
       }
 
       const fn = args[0]
@@ -207,7 +207,7 @@ function createWrapRouterMethod (name) {
         }
       }
 
-      if (this.stack.length > offset) {
+      if (this.stack?.length > offset) {
         wrapStack(this.stack.slice(offset), extractMatchers(fn))
       }
 
