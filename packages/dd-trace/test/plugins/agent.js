@@ -11,6 +11,7 @@ const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
+const proxyquire = require('proxyquire')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -370,6 +371,7 @@ module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
+   * @overload
    * @param {String|String[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
@@ -395,7 +397,17 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    tracer = require('../..')
+    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    const proxy = proxyquire('../../src/proxy', {
+      './config': getConfigFresh
+    })
+    const TracerProxy = proxyquire('../../src', {
+      './proxy': proxy
+    })
+    tracer = proxyquire('../../', {
+      './src': TracerProxy
+    })
+
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
@@ -512,15 +524,19 @@ module.exports = {
    * @param {Function} handler
    */
   subscribe (handler) {
-    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
+    traceHandlers.add({ handler })
   },
 
   /**
-   * Remove a handler (TODO: THIS DOES NOTHING)
+   * Remove a handler
    * @param {Function} handler
    */
   unsubscribe (handler) {
-    traceHandlers.delete(handler)
+    for (const traceHandler of traceHandlers) {
+      if (traceHandler.handler === handler) {
+        traceHandlers.delete(traceHandler)
+      }
+    }
   },
 
   /**

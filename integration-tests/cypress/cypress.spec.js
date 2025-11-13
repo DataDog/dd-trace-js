@@ -17,7 +17,7 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('../ci-visibility/web-app-server')
+const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const coverageFixture = require('../ci-visibility/fixtures/coverage.json')
 const {
   TEST_STATUS,
@@ -125,7 +125,7 @@ moduleTypes.forEach(({
 
     this.retries(2)
     this.timeout(80000)
-    let cwd, receiver, childProcess, webAppPort, secondWebAppServer
+    let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     if (type === 'commonJS') {
       testCommand = testCommand(version)
@@ -140,15 +140,10 @@ moduleTypes.forEach(({
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
       await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
-
-      await /** @type {Promise<void>} */ (new Promise(resolve => webAppServer.listen(0, 'localhost', () => {
-        webAppPort = webAppServer.address().port
-        resolve()
-      })))
     })
 
     after(async () => {
-      await new Promise(resolve => webAppServer.close(resolve))
+      // Cleanup second web app server if it exists
       if (secondWebAppServer) {
         await new Promise(resolve => secondWebAppServer.close(resolve))
       }
@@ -156,13 +151,46 @@ moduleTypes.forEach(({
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
+
+      // Create a fresh web server for each test to avoid state issues
+      webAppServer = createWebAppServer()
+      await new Promise((resolve, reject) => {
+        webAppServer.once('error', reject)
+        webAppServer.listen(0, 'localhost', () => {
+          webAppPort = webAppServer.address().port
+          webAppServer.removeListener('error', reject)
+          resolve()
+        })
+      })
     })
 
     // Cypress child processes can sometimes hang or take longer to
     // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
     // because there are pending connections.
     afterEach(async () => {
-      childProcess.kill()
+      if (childProcess && childProcess.pid) {
+        try {
+          childProcess.kill('SIGKILL')
+        } catch (error) {
+          // Process might already be dead - this is fine, ignore error
+        }
+
+        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
+        // The OS will clean up zombies, and fresh server per test prevents port conflicts
+      }
+
+      // Close web server before stopping receiver
+      if (webAppServer) {
+        await new Promise((resolve) => {
+          webAppServer.close((err) => {
+            if (err) {
+              // eslint-disable-next-line no-console
+              console.error('Web server close error:', err)
+            }
+            resolve()
+          })
+        })
+      }
 
       // Add timeout to prevent hanging
       const stopPromise = receiver.stop()
@@ -176,6 +204,9 @@ moduleTypes.forEach(({
         // eslint-disable-next-line no-console
         console.warn('Receiver stop timed out:', error.message)
       }
+
+      // Small delay to allow OS to release ports
+      await new Promise(resolve => setTimeout(resolve, 100))
     })
 
     it('instruments tests with the APM protocol (old agents)', async () => {
