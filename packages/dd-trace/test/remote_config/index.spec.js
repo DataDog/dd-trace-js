@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const getConfig = require('../../../src/config')
+const getConfig = require('../../src/config')
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')
@@ -23,13 +23,14 @@ let remoteConfig
 
 describe('Remote Config index', () => {
   beforeEach(() => {
-    const config = getConfig()
-    config.appsec = {
-      enabled: undefined,
-      eventTracking: {
-        mode: 'identification'
+    config = getConfig({
+      appsec: {
+        enabled: undefined,
+        eventTracking: {
+          mode: 'identification'
+        }
       }
-    }
+    })
 
     rc = {
       updateCapabilities: sinon.spy(),
@@ -116,6 +117,7 @@ describe('Remote Config index', () => {
       let listener
 
       beforeEach(() => {
+        config.appsec.enabled = undefined
         remoteConfig.enable(config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
