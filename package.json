@@ -121,6 +121,7 @@
     "version.js"
   ],
   "dependencies": {
+    "@apm-js-collab/code-transformer": "git+https://github.com/bengl/orchestrion-js.git#bengl/trim-the-rust",
     "@datadog/libdatadog": "0.7.0",
     "@datadog/native-appsec": "10.3.0",
     "@datadog/native-iast-taint-tracking": "4.0.0",
@@ -128,6 +129,7 @@
     "@datadog/openfeature-node-server": "0.1.0-preview.15",
     "@datadog/pprof": "5.12.0",
     "@datadog/sketches-js": "2.1.1",
+    "@datadog/source-map": "npm:source-map@^0.6.0",
     "@datadog/wasm-js-rewriter": "4.0.1",
     "@isaacs/ttlcache": "^2.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",

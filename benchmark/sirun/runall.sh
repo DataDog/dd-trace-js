@@ -25,11 +25,18 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+. "$HOME/.cargo/env"
+cargo install wasm-pack
+
 (
   cd ../../ &&
   npm install --global yarn || (sleep 60 && npm install --global yarn) \
     && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
     && PLUGINS="bluebird|q|graphql|express" yarn services
+  cd ./node_modules/@apm-js-collab/code-transformer
+  yarn install
+  yarn build
 )
 
 # run each test in parallel for a given version of Node.js
