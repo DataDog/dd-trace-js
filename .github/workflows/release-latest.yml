@@ -1,86 +1,136 @@
-name: Release (latest)
+name: Releases
 
 on:
   push:
     branches:
+      - merge_release_workflows
+      - v3.x
+      - v4.x
       - v5.x
+      - workflow_dispatch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  publish:
+  prJob:    
+    name: Print info
     runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
-      contents: write
-      pull-requests: read
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    outputs:
-      pkgjson: ${{ steps.pkg.outputs.json }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/node
-      - run: npm publish --provenance
-      - id: pkg
+      - name: Print GitHub event action
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes --latest
+          echo "${{ github.event.action }}"
+          echo "${{ github.event_name }}"
 
-  status:
-    needs: ['publish']
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-      - run: node scripts/release/status
+  # publish_v3:
+  #   if: github.event_name == 'push' && github.event.action == 'unassigned'
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: npm
+  #     url: https://npmjs.com/package/dd-trace
+  #   permissions:
+  #     id-token: write
+  #     contents: write
+  #     pull-requests: read
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #   outputs:
+  #     pkgjson: ${{ steps.pkg.outputs.json }}
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: ./.github/actions/node
+  #     - run: npm publish --provenance
+  #     - id: pkg
+  #       run: |
+  #         content=`cat ./package.json | tr '\n' ' '`
+  #         echo "json=$content" >> $GITHUB_OUTPUT
+  #     - run: |
+  #         git tag v${{ fromJson(steps.pkg.outputs.json).version }}
+  #         git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+  #     - run: node scripts/release/notes --latest
 
-  docs:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
-    needs: ['publish']
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/node
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: yarn
-      - name: Build
-        working-directory: docs
-        run: |
-          yarn
-          yarn build
-          mv out /tmp/out
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          ref: gh-pages
-      - name: Deploy
-        run: |
-          rm -rf *
-          mv /tmp/out/* .
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add -A
-          git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
-          git push
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+
+
+
+  # publish_v5:
+  #   if: ${{ github.repository == 'octo-org/octo-repo-prod' }}
+  #   runs-on: ubuntu-latest
+  #   environment:
+  #     name: npm
+  #     url: https://npmjs.com/package/dd-trace
+  #   permissions:
+  #     id-token: write
+  #     contents: write
+  #     pull-requests: read
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  #   outputs:
+  #     pkgjson: ${{ steps.pkg.outputs.json }}
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: ./.github/actions/node
+  #     - run: npm publish --provenance
+  #     - id: pkg
+  #       run: |
+  #         content=`cat ./package.json | tr '\n' ' '`
+  #         echo "json=$content" >> $GITHUB_OUTPUT
+  #     - run: |
+  #         git tag v${{ fromJson(steps.pkg.outputs.json).version }}
+  #         git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+  #     - run: node scripts/release/notes --latest
+
+  # status:
+  #   needs: ['publish']
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #     pull-requests: read
+  #   env:
+  #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+  #     - run: node scripts/release/status
+
+  # docs:
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     id-token: write
+  #     contents: write
+  #   needs: ['publish']
+  #   steps:
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #     - uses: ./.github/actions/node
+  #     - id: pkg
+  #       run: |
+  #         content=`cat ./package.json | tr '\n' ' '`
+  #         echo "json=$content" >> $GITHUB_OUTPUT
+  #     - run: yarn
+  #     - name: Build
+  #       working-directory: docs
+  #       run: |
+  #         yarn
+  #         yarn build
+  #         mv out /tmp/out
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+  #       with:
+  #         ref: gh-pages
+  #     - name: Deploy
+  #       run: |
+  #         rm -rf *
+  #         mv /tmp/out/* .
+  #         git config user.name github-actions
+  #         git config user.email github-actions@github.com
+  #         git add -A
+  #         git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
+  #         git push
+  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+
+  # publish_dev:
+  #   if ${{ github.event_name == 'workflow_dispatch' }}
