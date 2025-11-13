@@ -8,7 +8,7 @@ require('./setup/core')
 
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
-const Config = require('../src/config')
+const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -23,7 +23,7 @@ describe('Tracer', () => {
   let config
 
   beforeEach(() => {
-    config = new Config({ service: 'service' })
+    config = getConfig({ service: 'service' })
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()

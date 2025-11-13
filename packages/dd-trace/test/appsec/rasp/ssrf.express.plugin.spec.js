@@ -1,12 +1,15 @@
 'use strict'
 
+const path = require('node:path')
+
 const Axios = require('axios')
+const { assert } = require('chai')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
+const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
@@ -27,7 +30,7 @@ describe('RASP - ssrf', () => {
         app(req, res)
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
@@ -68,8 +71,11 @@ describe('RASP - ssrf', () => {
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
+            // Hack to enforce the module to be loaded once before the actual request
+            const module = require(protocol)
+
             app = (req, res) => {
-              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = module.get(`${protocol}://${req.query.host}`)
               clientRequest.on('error', noop)
               res.end('end')
             }
@@ -232,7 +238,7 @@ describe('RASP - ssrf', () => {
         }
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
