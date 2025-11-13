@@ -1,11 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { ProviderEvents } = require('@openfeature/server-sdk')
 
-require('../setup/core')
+require('../setup/mocha')
 
 describe('FlaggingProvider Initialization Timeout', () => {
   let FlaggingProvider
@@ -62,6 +63,11 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Start initialization (returns a promise)
     const initPromise = provider.initialize()
 
+    // Attach catch handler BEFORE ticking clock to prevent unhandled rejection
+    initPromise.catch(() => {
+      // Expected to reject on timeout
+    })
+
     // Verify initialization is in progress
     expect(provider.initController).to.exist
     expect(provider.initController.isInitializing()).to.be.true
@@ -69,10 +75,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Advance time by 30 seconds (default timeout) and run pending promises
     await clock.tickAsync(30000)
 
-    // Initialization should complete (with timeout error)
-    await initPromise.catch(() => {
-      // Expected to reject on timeout
-    })
+    // Wait for promise to settle
+    await initPromise.catch(() => {})
 
     // Verify initialization is no longer in progress
     expect(provider.initController.isInitializing()).to.be.false
@@ -120,12 +124,15 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     const initPromise = provider.initialize()
 
+    // Attach catch handler BEFORE ticking clock to prevent unhandled rejection
+    initPromise.catch(() => {
+      // Expected to reject
+    })
+
     // Advance time to trigger timeout
     await clock.tickAsync(30000)
 
-    await initPromise.catch(() => {
-      // Expected to reject
-    })
+    await initPromise.catch(() => {})
 
     // Verify setError was called with timeout error
     expect(setErrorSpy).to.have.been.calledOnce
@@ -140,17 +147,20 @@ describe('FlaggingProvider Initialization Timeout', () => {
 
     // Spy on event emitter
     const readyEventSpy = sinon.spy()
-    provider.events.on('ready', readyEventSpy)
+    provider.events.addHandler(ProviderEvents.Ready, readyEventSpy)
 
     const initPromise = provider.initialize()
+
+    // Attach catch handler BEFORE ticking clock to prevent unhandled rejection
+    initPromise.catch(() => {
+      // Expected to reject
+    })
 
     // Trigger timeout
     await clock.tickAsync(30000)
 
     // Wait for initialization to complete/fail
-    await initPromise.catch(() => {
-      // Expected to reject
-    })
+    await initPromise.catch(() => {})
 
     // Configuration is still not set
     expect(provider.getConfiguration()).to.be.undefined
