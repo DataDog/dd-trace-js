@@ -25,8 +25,8 @@ else
   source /usr/local/nvm/nvm.sh
 fi
 
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-curl https://drager.github.io/wasm-pack/installer/init.sh -sSf | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+cargo install wasm-pack
 
 (
   cd ../../ &&
