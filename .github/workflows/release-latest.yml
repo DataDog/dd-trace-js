@@ -14,17 +14,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prJob:    
+  prJob:
+    if: github.event_name == 'push' && github.event.ref == 'refs/heads/merge_release_workflows'
     name: Print info
     runs-on: ubuntu-latest
     steps:
       - name: Print GitHub event action
         run: |
-          cat "${{ github.event_path }}"
-          echo "${{ github.event_name }}"
+          echo "${{ github.event.action }}"
 
   # publish_v3:
-  #   if: github.event_name == 'push' && github.event.action == 'unassigned'
+  #   if: github.event_name == 'push' && github.event.ref == 'refs/heads/merge_release_workflows'
   #   runs-on: ubuntu-latest
   #   environment:
   #     name: npm
