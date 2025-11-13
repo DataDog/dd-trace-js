@@ -88,52 +88,12 @@ jobs:
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
       - run: node scripts/release/notes --latest
 
-  publish-dev:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment:
-      name: npm-dev
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
-      contents: write
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/node
-      - uses: ./.github/actions/install
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
-      - run: npm publish --tag dev
-      - run: |
-          git tag --force dev
-          git push origin :refs/tags/dev
-          git push origin --tags
-
-  # TODO: should run for any release
-  status:
-    needs: ['publish-latest'] #
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-      - run: node scripts/release/status
-
-  # TODO: should run for any release
   docs:
+    needs: 'publish-latest'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: write
-    needs: ['publish-latest'] #
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: ./.github/actions/node
@@ -162,3 +122,40 @@ jobs:
           git push
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
+  publish-dev:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm-dev
+      url: https://npmjs.com/package/dd-trace
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+      - uses: ./.github/actions/install
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+      - run: npm publish --tag dev
+      - run: |
+          git tag --force dev
+          git push origin :refs/tags/dev
+          git push origin --tags
+
+  status:
+  needs: ['publish-latest']
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - run: node scripts/release/status
