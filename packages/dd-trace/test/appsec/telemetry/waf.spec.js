@@ -8,6 +8,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
 const appsecTelemetry = require('../../../src/appsec/telemetry')
+const getConfig = require('../../../src/config')
 
 describe('Appsec Waf Telemetry metrics', () => {
   const wafVersion = '0.0.1'
@@ -40,10 +41,11 @@ describe('Appsec Waf Telemetry metrics', () => {
     }
 
     beforeEach(() => {
-      appsecTelemetry.enable({
-        enabled: true,
-        metrics: true
-      })
+      const config = getConfig()
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsecTelemetry.enable(config)
     })
 
     describe('updateWafRequestsMetricTags', () => {

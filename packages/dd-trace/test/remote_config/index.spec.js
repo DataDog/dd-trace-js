@@ -7,10 +7,11 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-const Config = require('../../src/config')
+const getConfig = require('../../../src/config')
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')
+const appsecTelemetry = require("../../src/appsec/telemetry");
 
 let config
 let rc
@@ -23,14 +24,13 @@ let remoteConfig
 
 describe('Remote Config index', () => {
   beforeEach(() => {
-    config = new Config({
-      appsec: {
-        enabled: undefined,
-        eventTracking: {
-          mode: 'identification'
-        }
+    const config = getConfig()
+    config.appsec = {
+      enabled: undefined,
+      eventTracking: {
+        mode: 'identification'
       }
-    })
+    }
 
     rc = {
       updateCapabilities: sinon.spy(),

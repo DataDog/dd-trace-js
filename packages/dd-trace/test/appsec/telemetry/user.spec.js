@@ -8,6 +8,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
 const appsecTelemetry = require('../../../src/appsec/telemetry')
+const getConfig = require('../../../src/config')
 
 describe('Appsec User Telemetry metrics', () => {
   let count, inc
@@ -26,10 +27,11 @@ describe('Appsec User Telemetry metrics', () => {
 
   describe('if enabled', () => {
     beforeEach(() => {
-      appsecTelemetry.enable({
-        enabled: true,
-        metrics: true
-      })
+      const config = getConfig()
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsecTelemetry.enable(config)
     })
 
     describe('incrementMissingUserLoginMetric', () => {
