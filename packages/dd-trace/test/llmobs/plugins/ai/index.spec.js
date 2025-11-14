@@ -26,7 +26,7 @@ describe('Plugin', () => {
     OPENAI_API_KEY: '<not-a-real-key>'
   })
 
-  const getEvents = useLlmObs({ plugin: 'ai' })
+  const { getEvents } = useLlmObs({ plugin: 'ai' })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai

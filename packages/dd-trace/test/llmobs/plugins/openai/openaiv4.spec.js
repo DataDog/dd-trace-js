@@ -20,7 +20,7 @@ describe('integrations', () => {
   let deepseekOpenai
 
   describe('openai', () => {
-    const getEvents = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
+    const { getEvents } = useLlmObs({ plugin: 'openai', closeOptions: { wipe: true } })
 
     withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../../../../versions/openai@${version}`
