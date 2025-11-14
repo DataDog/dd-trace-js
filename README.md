@@ -1,7 +1,7 @@
 # `dd-trace`: Node.js APM Tracer Library
 
 [![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v5&logo=npm)](https://www.npmjs.com/package/dd-trace)
-[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
+[![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/main/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
 <img align="right" src="https://user-images.githubusercontent.com/551402/208212084-1d0c07e2-4135-4c61-b2da-8f2fddbc66ed.png" alt="Bits the dog  JavaScript" width="200px"/>
 
@@ -66,7 +66,7 @@ Changes associated with each individual release are documented on the [GitHub Re
 
 ## Development and Contribution
 
-Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
+Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/main/CONTRIBUTING.md) document before contributing to this open source project.
 
 
 ## ECMAScript Modules (ESM) Support
@@ -91,7 +91,7 @@ If you would like to trace your bundled application then please read this page o
 
 ## Security Vulnerabilities
 
-Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
+Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/main/SECURITY.md) document if you have found a security issue.
 
 
 ## Datadog With OpenTelemetery

@@ -20,7 +20,7 @@ const {
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
-const main = 'master'
+const main = 'main'
 const releaseLine = params[0]
 
 // Validate release line argument.

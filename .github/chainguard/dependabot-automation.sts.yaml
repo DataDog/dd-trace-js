@@ -4,9 +4,9 @@ subject: repo:DataDog/dd-trace-js:pull_request
 
 claim_pattern:
   event_name: pull_request_target
-  ref: refs/heads/master
+  ref: refs/heads/main
   ref_protected: "true"
-  job_workflow_ref: DataDog/dd-trace-js/.github/workflows/dependabot-automation.yml@refs/heads/master
+  job_workflow_ref: DataDog/dd-trace-js/.github/workflows/dependabot-automation.yml@refs/heads/main
 
 permissions:
   contents: write
