@@ -3117,60 +3117,60 @@ rules:
     })
 
     it('should be false by default', () => {
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
 
     it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', true)
     })
 
     it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
 
     it('should be enabled when appsec is enabled via env var', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', true)
     })
 
     it('should be enabled when appsec is enabled via options', () => {
-      const config = new Config({ appsec: { enabled: true } })
+      const config = getConfig({ appsec: { enabled: true } })
       expect(config).to.have.property('resourceRenamingEnabled', true)
     })
 
     it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
 
     it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
       process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
-      const config = new Config({ appsec: { enabled: true } })
+      const config = getConfig({ appsec: { enabled: true } })
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
 
     it('should enable when appsec is enabled via both env and options', () => {
       process.env.DD_APPSEC_ENABLED = 'true'
-      const config = new Config({ appsec: { enabled: true } })
+      const config = getConfig({ appsec: { enabled: true } })
       expect(config).to.have.property('resourceRenamingEnabled', true)
     })
 
     it('should remain false when appsec is disabled', () => {
       process.env.DD_APPSEC_ENABLED = 'false'
-      const config = new Config()
+      const config = getConfig()
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
 
     it('should remain false when appsec is disabled via options', () => {
-      const config = new Config({ appsec: { enabled: false } })
+      const config = getConfig({ appsec: { enabled: false } })
       expect(config).to.have.property('resourceRenamingEnabled', false)
     })
   })

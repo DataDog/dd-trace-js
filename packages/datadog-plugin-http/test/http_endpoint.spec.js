@@ -36,7 +36,6 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          require('../../dd-trace') // Load tracer
           app = null
           listener = (req, res) => {
             app && app(req, res)
