@@ -1345,9 +1345,6 @@ addHook({
         }
       }
       return returnedValue
-    } catch (error) {
-      testSuiteErrorCh.publish({ error, testSuiteAbsolutePath: this._testPath })
-      throw error
     } finally {
       // Restore original prepareStackTrace
       Error.prepareStackTrace = originalPrepareStackTrace
