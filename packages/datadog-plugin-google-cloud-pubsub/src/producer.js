@@ -87,14 +87,13 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         '_dd.batch.size': String(messageCount),
         '_dd.batch.index': String(i),
         'gcloud.project_id': projectId,
-        'pubsub.topic': topic
+        'pubsub.topic': topic,
+        'x-dd-publish-start-time': String(Math.floor(batchSpan._startTime))
       })
 
       if (batchTraceIdUpper) {
         msg.attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
       }
-
-      msg.attributes['x-dd-publish-start-time'] ??= String(Date.now())
 
       if (this.config.dsmEnabled) {
         const dataStreamsContext = this.tracer.setCheckpoint(
