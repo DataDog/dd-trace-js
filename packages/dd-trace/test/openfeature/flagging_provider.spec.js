@@ -65,7 +65,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       expect(provider).to.exist
-      expect(log.debug).to.have.been.calledWith('[FlaggingProvider] Created')
+      expect(log.debug).to.have.been.calledWith('FlaggingProvider created')
     })
   })
 
@@ -78,7 +78,7 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(ufc)
 
       expect(setConfigSpy).to.have.been.calledOnceWith(ufc)
-      expect(log.debug).to.have.been.calledWith('[FlaggingProvider] Provider configuration updated')
+      expect(log.debug).to.have.been.calledWith('FlaggingProvider provider configuration updated')
     })
 
     it('should handle null/undefined configuration gracefully', () => {
