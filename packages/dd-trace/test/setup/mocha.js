@@ -178,13 +178,20 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 }
 
 /**
+ * @callback withVersionsCallback
+ * @param {string} versionKey - The version string used in the module path
+ * @param {string} moduleName - The name of the module being tested
+ * @param {string} resolvedVersion - The specific version of the module being tested
+ */
+/**
  * @overload
  * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
  *     loaded plugin
  * @param {string|string[]} modules - The name(s) of the module(s) to test, e.g. 'fastify' or ['fastify', 'middie']
  * @param {withVersionsCallback} cb - The callback function to call with the test case data
  * @returns {void}
- *
+ */
+/**
  * @overload
  * @param {string|Plugin} plugin - The name of the plugin to test, e.g. 'fastify', or the exports object of an already
  *     loaded plugin
@@ -196,11 +203,6 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
  * @typedef {object} Plugin
  * @property {string} name
  * @property {string} version
- *
- * @callback withVersionsCallback
- * @param {string} versionKey - The version string used in the module path
- * @param {string} moduleName - The name of the module being tested
- * @param {string} resolvedVersion - The specific version of the module being tested
  */
 function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {
@@ -273,6 +275,7 @@ function withVersions (plugin, modules, range, cb) {
           nodePath = process.env.NODE_PATH
           process.env.NODE_PATH += `${NODE_PATH_SEP}${absNodeModulesPath}`
 
+          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
           require('module').Module._initPaths()
         })
 
@@ -280,6 +283,7 @@ function withVersions (plugin, modules, range, cb) {
 
         after(() => {
           process.env.NODE_PATH = nodePath
+          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
           require('module').Module._initPaths()
         })
       })
@@ -288,13 +292,18 @@ function withVersions (plugin, modules, range, cb) {
 }
 
 /**
+ * @callback withExportsCallback
+ * @param {() => import('module').Module} getExport - A function that returns the module export to test
+ */
+/**
  * @overload
  * @param {string} moduleName - The name of the module being tested
  * @param {string} version - The specific version of the module being tested
  * @param {string[]} exportNames - The names of the module exports to be tested (the default export will always be
  *     tested)
  * @param {withExportsCallback} cb
- *
+ */
+/**
  * @overload
  * @param {string} moduleName - The name of the module being tested
  * @param {string} version - The specific version of the module being tested
@@ -303,9 +312,6 @@ function withVersions (plugin, modules, range, cb) {
  * @param {string} versionRange - The version range in which the given version should reside. If not within this range,
  *     only the default export will be tested.
  * @param {withExportsCallback} cb
- *
- * @callback withExportsCallback
- * @param {function} getExport - A function that returns the module export to test
  */
 function withExports (moduleName, version, exportNames, versionRange, cb) {
   if (typeof versionRange === 'function') {

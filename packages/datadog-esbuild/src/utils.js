@@ -65,7 +65,11 @@ function getSource (url, { format }) {
 /**
  * Generates the pieces of code for the proxy module before the path
  *
- * @param {Object} moduleData { path, internal, context, excludeDefault }
+ * @param {object} moduleData
+ * @param {string} moduleData.path
+ * @param {boolean} moduleData.internal
+ * @param {object} moduleData.context
+ * @param {boolean} moduleData.excludeDefault
  * @returns {Promise<Map>}
  */
 async function processModule ({ path, internal, context, excludeDefault }) {

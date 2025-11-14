@@ -25,7 +25,7 @@ let shouldKill
 /**
  * @param {string} filename
  * @param {string} cwd
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
@@ -69,7 +69,7 @@ let sandbox
  * This _must_ be used with the useSandbox function
  *
  * @param {string} filename
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string[]} expectedTelemetryPoints
  * @param {string} expectedSource
  */
@@ -494,7 +494,7 @@ async function curl (url) {
 /**
  * @param {FakeAgent} agent
  * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
- * @param {function} fn
+ * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
  * @param {boolean} [resolveAtFirstSuccess]
@@ -557,7 +557,7 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {function} [stdioHandler]
+ * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
@@ -594,8 +594,7 @@ function useEnv (env) {
 }
 
 /**
- * @param {unknown[]} args
- * @returns {object}
+ * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
   before(async function () {

@@ -299,7 +299,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * - rejectFirst: false
  * - spanResourceMatch: undefined
  *
- * @typedef {Object} RunCallbackAgainstTracesOptions
+ * @typedef {object} RunCallbackAgainstTracesOptions
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
@@ -317,7 +317,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * Otherwise, it will reject.
  *
  * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
- * @param {RunCallbackAgainstTracesOptions} options={} - An options object
+ * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
  * @param {Set} handlers - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
@@ -341,7 +341,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   /**
    * @type {TracesCallback | AgentlessCallback}
-  */
+   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])

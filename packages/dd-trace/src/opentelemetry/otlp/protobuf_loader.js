@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * @fileoverview Protobuf Loader for OpenTelemetry Logs and Metrics
+ * Protobuf Loader for OpenTelemetry Logs and Metrics
  *
  * This module loads protobuf definitions for OpenTelemetry logs and metrics.
  *

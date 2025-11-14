@@ -51,6 +51,11 @@ describe('runtime', () => {
         expect(moduleName).to.equal(expectedModuleName)
         expect(handlerPath).to.equal(expectedHandlerPath)
       })
+
+      it('throws an error if the handler is malformed', () => {
+        const handler = 'handler'
+        expect(() => _extractModuleNameAndHandlerPath(handler)).to.throw(Error, `Malformed handler name: ${handler}`)
+      })
     })
   })
 })

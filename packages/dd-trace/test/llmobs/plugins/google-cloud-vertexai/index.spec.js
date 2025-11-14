@@ -13,7 +13,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 /**
- * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
+ * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *

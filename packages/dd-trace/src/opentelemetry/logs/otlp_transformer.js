@@ -44,7 +44,7 @@ const SEVERITY_MAP = {
  * https://opentelemetry.io/docs/specs/otlp/#log-data-model
  *
  * @class OtlpTransformer
- * @extends OtlpTransformerBase
+ * @augments OtlpTransformerBase
  */
 class OtlpTransformer extends OtlpTransformerBase {
   /**
@@ -73,7 +73,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Transforms log records to protobuf format.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Protobuf-encoded log records
-   * @private
    */
   #transformToProtobuf (logRecords) {
     const { protoLogsService } = getProtobufTypes()
@@ -92,7 +91,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Transforms log records to JSON format.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} JSON-encoded log records
-   * @private
    */
   #transformToJson (logRecords) {
     const logsData = {
@@ -108,7 +106,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Creates scope logs grouped by instrumentation library.
    * @param {LogRecord[]} logRecords - Array of log records to transform
    * @returns {Object[]} Array of scope log objects
-   * @private
    */
   #transformScope (logRecords) {
     const groupedRecords = this._groupByInstrumentationScope(logRecords)
@@ -135,7 +132,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Transforms a single log record to OTLP format.
    * @param {LogRecord} logRecord - Log record to transform
    * @returns {Object} OTLP log record object
-   * @private
    */
   #transformLogRecord (logRecord) {
     const spanContext = this.#extractSpanContext(logRecord.context)
@@ -182,7 +178,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Extracts span context from the log record's context.
    * @param {Object} logContext - The log record's context
    * @returns {Object|null} Span context or null if not available
-   * @private
    */
   #extractSpanContext (logContext) {
     if (!logContext) return null
@@ -199,7 +194,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Maps OpenTelemetry severity number to protobuf severity number.
    * @param {number} severityNumber - OpenTelemetry severity number
    * @returns {number} Protobuf severity number
-   * @private
    */
   #mapSeverityNumber (severityNumber) {
     const { protoSeverityNumber } = getProtobufTypes()
@@ -211,7 +205,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Converts a hex string to a Buffer.
    * @param {string} hexString - Hex string to convert
    * @returns {Buffer} Buffer containing the hex data
-   * @private
    */
   #hexToBytes (hexString) {
     const cleanHex = hexString ? (hexString.startsWith('0x') ? hexString.slice(2) : hexString) : ''
@@ -223,7 +216,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Transforms log body to OTLP AnyValue format.
    * @param {any} body - Log body to transform
    * @returns {Object} OTLP AnyValue object
-   * @private
    */
   #transformBody (body) {
     if (typeof body === 'string') {
