@@ -5,6 +5,7 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { storage } = require('../../datadog-core')
 const log = require('../../dd-trace/src/log')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
@@ -23,6 +24,10 @@ const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
 const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
+
+// Global map to store ackId -> span context for batched acknowledges
+// This allows us to restore the correct trace context when the batched gRPC call happens
+const ackContextMap = new Map()
 
 const publisherMethods = [
   'createTopic',
@@ -74,7 +79,75 @@ function wrapMethod (method) {
   return function (request) {
     if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
+    // For acknowledge/modifyAckDeadline, try to restore span context from stored map
+    let restoredStore = null
+    if (api === 'acknowledge' || api === 'modifyAckDeadline') {
+      if (request && request.ackIds && request.ackIds.length > 0) {
+        // Try to find a stored context for any of these ack IDs
+        for (const ackId of request.ackIds) {
+          const storedContext = ackContextMap.get(ackId)
+          if (storedContext) {
+            restoredStore = storedContext
+            break
+          }
+        }
+        
+        // Clean up ackIds from the map ONLY for acknowledge, not modifyAckDeadline
+        // ModifyAckDeadline happens first (lease extension), then acknowledge happens later
+        if (api === 'acknowledge') {
+          request.ackIds.forEach(ackId => {
+            if (ackContextMap.has(ackId)) {
+              ackContextMap.delete(ackId)
+            }
+          })
+        }
+      }
+    }
+
     const ctx = { request, api, projectId: this.auth._cachedProjectId }
+    
+    // If we have a restored context, run in that context
+    if (restoredStore) {
+      // CRITICAL: Add the parent span to ctx so the plugin uses it as parent
+      const parentSpan = restoredStore.span
+      if (parentSpan) {
+        ctx.parentSpan = parentSpan
+      }
+      const self = this
+      const args = arguments
+      return storage('legacy').run(restoredStore, () => {
+        return requestStartCh.runStores(ctx, () => {
+          const cb = args[args.length - 1]
+
+          if (typeof cb === 'function') {
+            args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
+              if (error) {
+                ctx.error = error
+                requestErrorCh.publish(ctx)
+              }
+              return requestFinishCh.runStores(ctx, cb, this, ...arguments)
+            })
+            return method.apply(self, args)
+          }
+
+          return method.apply(self, args)
+            .then(
+              response => {
+                requestFinishCh.publish(ctx)
+                return response
+              },
+              error => {
+                ctx.error = error
+                requestErrorCh.publish(ctx)
+                requestFinishCh.publish(ctx)
+                throw error
+              }
+            )
+        })
+      })
+    }
+
+    // Otherwise run normally
     return requestStartCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
 
@@ -120,7 +193,12 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
-    const ctx = {}
+    // Get the current async context store (should contain the pubsub.delivery span)
+    const store = storage('legacy').getStore()
+    
+    // If we have a span in the store, the context is properly set up
+    // The user's message handler will now run in this context and see the active span
+    const ctx = { message, store }
     try {
       return emit.apply(this, arguments)
     } catch (err) {
@@ -129,6 +207,40 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
       throw err
     }
   })
+
+  return obj
+})
+
+// Wrap message.ack() - must hook the subscriber-message.js file directly since Message is not exported from main module
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
+  const Message = obj.Message
+  
+  
+  if (Message && Message.prototype && Message.prototype.ack) {
+    shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
+      // Capture the current active span and create a store with its context
+      const currentStore = storage('legacy').getStore()
+      const activeSpan = currentStore && currentStore.span
+      
+      if (activeSpan) {
+        
+        // CRITICAL: We must store a context that reflects the span's actual trace
+        // The span might have been created with a custom parent (reparented to pubsub.request)
+        // but the async storage might still contain the original context.
+        // So we create a fresh store with the span to ensure the correct trace is preserved.
+        const storeWithSpanContext = { ...currentStore, span: activeSpan }
+        
+        if (this.ackId) {
+          ackContextMap.set(this.ackId, storeWithSpanContext)
+        }
+      } else {
+      }
+      
+      return originalAck.apply(this, arguments)
+    })
+    
+  } else {
+  }
 
   return obj
 })
