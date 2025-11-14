@@ -4,14 +4,14 @@ const { assert } = require('chai')
 
 const { getRootSpan } = require('../../../src/appsec/sdk/utils')
 const DatadogTracer = require('../../../src/tracer')
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const id = require('../../../src/id')
 
 describe('Appsec SDK utils', () => {
   let tracer
 
   before(() => {
-    tracer = new DatadogTracer(new Config({
+    tracer = new DatadogTracer(getConfigFresh({
       enabled: true
     }))
   })

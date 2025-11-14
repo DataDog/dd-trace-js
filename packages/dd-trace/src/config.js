@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+
 const log = require('./log')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
@@ -1557,4 +1558,12 @@ function getAgentUrl (url, options) {
   }
 }
 
-module.exports = Config
+let configInstance = null
+function getConfig (options) {
+  if (!configInstance) {
+    configInstance = new Config(options)
+  }
+  return configInstance
+}
+
+module.exports = getConfig

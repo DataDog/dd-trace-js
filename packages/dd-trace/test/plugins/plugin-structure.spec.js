@@ -21,7 +21,22 @@ const missingPlugins = [
   'datadog-plugin-mongoose', // mongoose tracing is done through mongodb-core instrumentation
   'datadog-plugin-cookie-parser', // cookie-parser does not produce spans
   'datadog-plugin-express-session', // express-session does not produce spans
-  'datadog-plugin-express-mongo-sanitize' // express-mongo-sanitize does not produce spans
+  'datadog-plugin-express-mongo-sanitize', // express-mongo-sanitize does not produce spans
+  'datadog-plugin-multer', // multer does not produce spans
+  'datadog-plugin-url', // url does not produce spans
+  'datadog-plugin-passport-http', // passport-http does not produce spans
+  'datadog-plugin-knex', // knex does not produce spans
+  'datadog-plugin-node-serialize', // node-serialize does not produce spans
+  'datadog-plugin-generic-pool', // generic-pool does not produce spans
+  'datadog-plugin-lodash', // lodash does not produce spans
+  'datadog-plugin-ldapjs', // ldapjs does not produce spans
+  'datadog-plugin-cookie', // cookie does not produce spans
+  'datadog-plugin-crypto', // crypto does not produce spans
+  'datadog-plugin-handlebars', // handlebars does not produce spans
+  'datadog-plugin-process', // process does not produce spans
+  'datadog-plugin-pug', // pug does not produce spans
+  'datadog-plugin-vm', // vm does not produce spans
+  'datadog-plugin-sequelize', // sequelize does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented

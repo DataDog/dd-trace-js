@@ -10,7 +10,7 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
@@ -40,7 +40,7 @@ describe('RASP - sql_injection', () => {
             app(req, res)
           })
 
-          appsec.enable(new Config({
+          appsec.enable(getConfig({
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'resources', 'rasp_rules.json'),

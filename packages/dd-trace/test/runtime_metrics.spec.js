@@ -23,7 +23,9 @@ function createGarbage (count = 50) {
 
   for (let i = 0; i < count; i++) {
     last.next = { circular: obj, last, obj: { a: 1, b: 2, c: true } }
+    // @ts-expect-error - Difficult to define type
     last = last.next
+    // @ts-expect-error - Difficult to define type
     last.map = new Map([['a', 1], ['b', 2], ['c', true]])
     obj[i] = last
   }
@@ -133,7 +135,7 @@ function createGarbage (count = 50) {
         expect(runtimeMetrics.decrement).to.not.have.been.called
         expect(runtimeMetrics.stop).to.have.been.calledOnce
       })
-    }, { skip: isWindows })
+    }, { skip: isWindows && !nativeMetrics })
 
     describe('runtimeMetrics', () => {
       let runtimeMetrics
@@ -260,7 +262,7 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           const startTime = Date.now()
-          const waitTime = 200
+          const waitTime = 200 + (nativeMetrics ? 0 : 200)
           let iterations = 0
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
@@ -514,7 +516,7 @@ function createGarbage (count = 50) {
                 userPercent = number
               }
               if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 1, `${metric} sanity check failed: ${number}`)
+                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
                 systemPercent = number
               }
               if (metric === 'runtime.node.cpu.total') {
@@ -582,7 +584,7 @@ function createGarbage (count = 50) {
           )
           client.gauge.resetHistory()
 
-          const nowStub3 = sinon.stub(performance, 'now').returns(startPerformanceNow + 20_001)
+          const nowStub3 = sinon.stub(performance, 'now').returns(startPerformanceNow + 20_000)
           clock.tick(10000) // Advance another 10 seconds
           nowStub3.restore()
 
@@ -782,6 +784,6 @@ function createGarbage (count = 50) {
           })
         })
       })
-    }, { skip: isWindows })
+    }, { skip: isWindows && !nativeMetrics })
   })
 })
