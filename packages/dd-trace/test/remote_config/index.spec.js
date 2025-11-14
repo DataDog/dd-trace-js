@@ -7,6 +7,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
+const getConfig = require('../../src/config')
 const RuleManager = require('../../src/appsec/rule_manager')
 const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
 const { kPreUpdate } = require('../../src/remote_config/manager')
@@ -16,19 +17,20 @@ let rc
 let RemoteConfigManager
 let UserTracking
 let log
+let telemetry
 let appsec
 let remoteConfig
 
 describe('Remote Config index', () => {
   beforeEach(() => {
-    config = {
+    config = getConfig({
       appsec: {
         enabled: undefined,
         eventTracking: {
           mode: 'identification'
         }
       }
-    }
+    })
 
     rc = {
       updateCapabilities: sinon.spy(),
@@ -48,6 +50,10 @@ describe('Remote Config index', () => {
       error: sinon.stub()
     }
 
+    telemetry = {
+      updateConfig: sinon.stub()
+    }
+
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -57,6 +63,7 @@ describe('Remote Config index', () => {
       './manager': RemoteConfigManager,
       '../appsec/user_tracking': UserTracking,
       '../log': log,
+      '../telemetry': telemetry
     })
   })
 
@@ -110,6 +117,7 @@ describe('Remote Config index', () => {
       let listener
 
       beforeEach(() => {
+        config.appsec.enabled = undefined
         remoteConfig.enable(config, appsec)
 
         listener = rc.setProductHandler.firstCall.args[1]
@@ -138,6 +146,38 @@ describe('Remote Config index', () => {
 
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
+      })
+
+      describe('update config origin activation', () => {
+        const rcConfigAsmEnabling = { asm: { enabled: true } }
+        const rcConfigAsmDisabling = { asm: { enabled: true } }
+
+        it('should update appsec.enabled when applying asm enabling by RC', () => {
+          listener('apply', rcConfigAsmEnabling)
+
+          expect(telemetry.updateConfig).to.have.been.calledOnce
+          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
+          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('remote_config')
+          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(rcConfigAsmEnabling.asm.enabled)
+        })
+
+        it('should update appsec.enabled when modifying asm enabling by RC', () => {
+          listener('modify', rcConfigAsmDisabling)
+
+          expect(telemetry.updateConfig).to.have.been.calledOnce
+          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
+          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('remote_config')
+          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(rcConfigAsmDisabling.asm.enabled)
+        })
+
+        it('should update when unapplying asm enabling by RC', () => {
+          listener('unapply', { asm: { enabled: true } })
+
+          expect(telemetry.updateConfig).to.have.been.calledOnce
+          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
+          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('default')
+          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(config.appsec.enabled)
+        })
       })
 
       describe('auto_user_instrum', () => {

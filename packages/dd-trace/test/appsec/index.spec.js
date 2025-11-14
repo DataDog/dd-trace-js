@@ -1276,9 +1276,8 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(2)
-      expect(metrics.series[0].metric).to.equal('enabled')
-      expect(metrics.series[1].metric).to.equal('waf.init')
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
