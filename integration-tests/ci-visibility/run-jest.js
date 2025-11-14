@@ -41,6 +41,10 @@ if (process.env.DO_NOT_INJECT_GLOBALS) {
   options.injectGlobals = false
 }
 
+if (process.env.WAIT_FOR_UNHANDLED_REJECTIONS) {
+  options.waitForUnhandledRejections = true
+}
+
 jest.runCLI(
   options,
   options.projects

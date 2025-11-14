@@ -112,7 +112,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
+          config: ufcPayloads.testBooleanAndStringFlags
         })
 
         // Wait for RC delivery then evaluate flags
@@ -192,7 +192,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
+          config: ufcPayloads.testBooleanAndStringFlags
         })
 
         setTimeout(async () => {
@@ -257,7 +257,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: { flag_configuration: ufcPayloads.simpleStringFlagForAck }
+        config: ufcPayloads.simpleStringFlagForAck
       })
 
       // Trigger request to start remote config polling
