@@ -8,13 +8,13 @@ const shimmer = require('../../datadog-shimmer')
 
 // Auto-load push subscription plugin for push subscribers
 // This ensures pubsub.delivery spans work even if app doesn't import @google-cloud/pubsub
+// The plugin's constructor subscribes to apm:http:server:request:start immediately (no tracer needed)
+// The tracer is only used at request time when delivery spans are created
 try {
-  const tracer = require('../../dd-trace')
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-  if (tracer._tracer) {
-    const handler = new PushSubscriptionPlugin(tracer._tracer, {})
-    handler.configure({})
-  }
+  const pushPlugin = new PushSubscriptionPlugin(null, {})
+  // Plugin instance kept alive to maintain channel subscription
+  pushPlugin.configure({})
 } catch {
   // Silent - push subscription plugin is optional
 }

@@ -27,9 +27,14 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     // NOTE: Only unwrapped headers will work. Standard wrapped format requires
     // body parsing which hasn't happened yet at this point in the request lifecycle.
     if (req.headers['x-goog-pubsub-message-id']) {
-      log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      log.warn('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      log.warn(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
       this._createDeliverySpanAndActivate({ req, res })
+      return
     }
+
+    // No unwrapped Pub/Sub headers found - likely missing --push-no-wrapper-write-metadata
+    log.warn('[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. Add --push-no-wrapper-write-metadata to your subscription.')
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
