@@ -2,7 +2,7 @@
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, before, beforeEach } = require('tap').mocha
 
 const assert = require('node:assert')
 const Module = require('node:module')
@@ -13,23 +13,15 @@ const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, httpHook
+  const mockedModuleName = '@azure/functions-core'
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
-  })
-
-  beforeEach(() => {
-    startListener = sinon.fake()
-    endListener = sinon.fake()
-
-    moduleLoadStartChannel.subscribe(startListener)
-    moduleLoadEndChannel.subscribe(endListener)
 
     Module.prototype.require = new Proxy(Module.prototype.require, {
       apply (target, thisArg, argArray) {
-        if (argArray[0] === '@azure/functions-core') {
+        if (argArray[0] === mockedModuleName) {
           return {
             version: '1.0.0',
             registerHook: () => { }
@@ -40,20 +32,23 @@ describe('Ritm', () => {
       }
     })
 
-    utilHook = Hook('util')
-    aHook = Hook('module-a')
-    bHook = Hook('module-b')
-    httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
+    function onRequire () {}
+
+    Hook(['util'], onRequire)
+    Hook(['module-a'], onRequire)
+    Hook(['module-b'], onRequire)
+    Hook(['http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
   })
 
-  afterEach(() => {
-    utilHook.unhook()
-    aHook.unhook()
-    bHook.unhook()
-    httpHook.unhook()
+  beforeEach(() => {
+    startListener = sinon.fake()
+    endListener = sinon.fake()
+
+    moduleLoadStartChannel.subscribe(startListener)
+    moduleLoadEndChannel.subscribe(endListener)
   })
 
   it('should shim util', () => {
@@ -88,14 +83,16 @@ describe('Ritm', () => {
   })
 
   it('should fall back to monkey patched module', () => {
+    // @ts-expect-error - Patching module works as expected
     assert.equal(require('http').foo, 1, 'normal hooking still works')
 
-    const fnCore = require('@azure/functions-core')
+    const fnCore = require(mockedModuleName)
     assert.ok(fnCore, 'requiring monkey patched in module works')
     assert.equal(fnCore.version, '1.0.0')
     assert.equal(typeof fnCore.registerHook, 'function')
 
     assert.throws(
+      // @ts-expect-error - Package does not exist
       () => require('package-does-not-exist'),
       /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'

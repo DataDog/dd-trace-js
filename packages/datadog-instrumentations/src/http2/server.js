@@ -13,9 +13,7 @@ const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const emitCh = channel('apm:http2:server:response:emit')
 
-const names = ['http2', 'node:http2']
-
-addHook({ name: names }, http2 => {
+addHook({ name: 'http2' }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
 })
