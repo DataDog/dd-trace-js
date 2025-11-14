@@ -9,9 +9,6 @@ const { getEnvironmentVariable } = require('./config-helper')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
-const { channel } = require('dc-polyfill')
-const spanProcessCh = channel('dd-trace:span:process')
-
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
@@ -57,8 +54,6 @@ class SpanProcessor {
           isChunkRoot = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
-
-          spanProcessCh.publish({ span })
         }
       }
 

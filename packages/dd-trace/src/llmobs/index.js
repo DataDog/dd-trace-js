@@ -12,7 +12,7 @@ const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 
 const { channel } = require('dc-polyfill')
-const spanProcessCh = channel('dd-trace:span:process')
+const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -62,7 +62,7 @@ function enable (config) {
   // span processing
   spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
-  spanProcessCh.subscribe(handleSpanProcess)
+  spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsParentIdInjection)
@@ -86,7 +86,7 @@ function enable (config) {
 function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
-  if (spanProcessCh.hasSubscribers) spanProcessCh.unsubscribe(handleSpanProcess)
+  if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
@@ -133,8 +133,8 @@ function handleRegisterProcessor (userSpanProcessor) {
   spanProcessor.setUserSpanProcessor(userSpanProcessor)
 }
 
-function handleSpanProcess (data) {
-  spanProcessor.process(data)
+function handleSpanProcess (span) {
+  spanProcessor.process(span)
 }
 
 function handleEvalMetricAppend (payload) {

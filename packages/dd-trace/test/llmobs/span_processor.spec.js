@@ -38,7 +38,7 @@ describe('span processor', () => {
     it('should do nothing if llmobs is not enabled', () => {
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
 
-      expect(() => processor.process({ span })).not.to.throw()
+      expect(() => processor.process(span)).not.to.throw()
     })
 
     it('should do nothing if the span is not an llm obs span', () => {
@@ -71,7 +71,7 @@ describe('span processor', () => {
         '_ml_obs.llmobs_parent_id': '1234'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload).to.deep.equal({
@@ -140,7 +140,7 @@ describe('span processor', () => {
         '_ml_obs.meta.metadata': metadata
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.metadata).to.deep.equal({
@@ -167,7 +167,7 @@ describe('span processor', () => {
         '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.output.documents).to.deep.equal([{
@@ -194,7 +194,7 @@ describe('span processor', () => {
         '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.input.documents).to.deep.equal([{
@@ -221,7 +221,7 @@ describe('span processor', () => {
         '_ml_obs.meta.model_name': 'myModel'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta.model_provider).to.equal('custom')
@@ -246,7 +246,7 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta['error.message']).to.equal('error message')
@@ -274,7 +274,7 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'llm'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.meta['error.message']).to.equal('error message')
@@ -302,7 +302,7 @@ describe('span processor', () => {
         '_ml_obs.name': 'mySpan'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.name).to.equal('mySpan')
@@ -324,7 +324,7 @@ describe('span processor', () => {
         '_ml_obs.session_id': '1234'
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.session_id).to.equal('1234')
@@ -347,7 +347,7 @@ describe('span processor', () => {
         '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
       })
 
-      processor.process({ span })
+      processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
       expect(payload.tags).to.include('foo:bar')
