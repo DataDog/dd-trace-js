@@ -72,6 +72,12 @@ describe('SpanProcessor', () => {
     expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
   })
 
+  it('should generate sampling priority when sampling manually', () => {
+    processor.sample(finishedSpan)
+
+    expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
