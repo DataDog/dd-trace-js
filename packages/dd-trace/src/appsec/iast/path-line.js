@@ -2,6 +2,7 @@
 
 const path = require('path')
 const process = require('process')
+const { fileURLToPath } = require('url')
 const { ddBasePath } = require('../../util')
 const { getOriginalPathAndLineFromSourceMap } = require('./taint-tracking/rewriter')
 const pathLine = {
@@ -31,11 +32,11 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
   const result = []
 
   for (const callsite of callSiteFrames) {
-    let filepath = callsite.file
+    let filepath = callsite.file?.startsWith('file://') ? fileURLToPath(callsite.file) : callsite.file
 
     if (globalThis.__DD_ESBUILD_IAST_WITH_SM) {
       const callsiteLocation = {
-        path: getRelativePath(filepath),
+        path: filepath,
         line: callsite.line,
         column: callsite.column
       }
