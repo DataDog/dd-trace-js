@@ -55,7 +55,7 @@ describe('opentelemetry', () => {
   let cwd
   const timeout = 5000
   const dependencies = [
-    '@opentelemetry/api@1.8.0',
+    '@opentelemetry/api@1.9.0',
     '@opentelemetry/instrumentation',
     '@opentelemetry/instrumentation-http',
     '@opentelemetry/instrumentation-express@0.47.1',
