@@ -9,7 +9,7 @@ const dc = require('dc-polyfill')
 
 const producerCh = dc.tracingChannel('apm:azure-service-bus:send')
 
-addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false }, (obj) => {
+addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj) => {
   const ServiceBusClient = obj.ServiceBusClient
   let didItShim = false
   shimmer.wrap(ServiceBusClient.prototype, 'createSender',
@@ -18,6 +18,7 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false
       if (didItShim) return sender
       const senderPrototype = sender.constructor.prototype
       const senderSenderPrototype = sender._sender.constructor.prototype
+
       shimmer.wrap(senderPrototype, 'scheduleMessages', scheduleMessages =>
         function (msg, scheduledEnqueueTimeUtc) {
           const functionName = scheduleMessages.name
@@ -30,14 +31,18 @@ addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'], patchDefault: false
           )
         })
 
+      let didItShimBatch = false
       shimmer.wrap(senderPrototype, 'createMessageBatch', createMessageBatch => async function () {
         const batch = await createMessageBatch.apply(this, arguments)
-        shimmer.wrap(batch.constructor.prototype, 'tryAddMessage', tryAddMessage => function (msg) {
-          const functionName = tryAddMessage.name
-          const config = this._context.config
-          return producerCh.tracePromise(
-            tryAddMessage, { config, functionName, batch, msg }, this, ...arguments)
-        })
+        if (!didItShimBatch) {
+          shimmer.wrap(batch.constructor.prototype, 'tryAddMessage', tryAddMessage => function (msg) {
+            const functionName = tryAddMessage.name
+            const config = this._context.config
+            return producerCh.tracePromise(
+              tryAddMessage, { config, functionName, batch, msg }, this, ...arguments)
+          })
+          didItShimBatch = true
+        }
         return batch
       })
 
