@@ -7,8 +7,10 @@ const assert = require('assert')
 const http = require('http')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
+const { getConfigFresh } = require('../helpers/config')
 
 describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
@@ -25,7 +27,15 @@ describe('OpenTelemetry Meter Provider', () => {
     }
     Object.assign(process.env, envOverrides)
 
-    const tracer = require('../../')
+    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+      './config': getConfigFresh,
+    })
+    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+      './proxy': proxy
+    })
+    const tracer = proxyquire.noPreserveCache()('../../', {
+      './src': TracerProxy
+    })
     tracer._initialized = false
     tracer.init()
     return { tracer, meterProvider: metrics.getMeterProvider() }
