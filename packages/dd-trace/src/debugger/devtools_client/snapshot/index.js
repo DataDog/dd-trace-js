@@ -65,8 +65,11 @@ async function getLocalStateForCallFrame (callFrame, opts = {}) {
   }
 
   // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
-  return () => {
-    processedState = processedState ?? processRawState(rawState, opts.maxLength)
-    return processedState
+  return {
+    processLocalState () {
+      processedState = processedState ?? processRawState(rawState, opts.maxLength)
+      return processedState
+    },
+    fatalSnapshotError: opts.fatalSnapshotError
   }
 }

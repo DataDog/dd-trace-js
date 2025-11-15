@@ -6,6 +6,8 @@ const Fastify = require('fastify')
 
 const fastify = Fastify({ logger: { level: 'error' } })
 
+const COLLECTION_SIZE_THRESHOLD = 500
+
 fastify.get('/deeply-nested-large-object', function handler () {
   // The size of `obj` generated is carefully tuned to never result in a snapshot larger than the 1MB size limit, while
   // still being large enough to trigger the time budget limit. However, the size of `fastify` and `request` is not
@@ -16,24 +18,31 @@ fastify.get('/deeply-nested-large-object', function handler () {
   return { paused: Number(diff) / 1_000_000 }
 })
 
-fastify.get('/large-object-of-primitives', function handler () {
+fastify.get('/object-with-many-properties', function handler () {
   const obj = generateObject(0, 1_000_000) // eslint-disable-line no-unused-vars
   const start = process.hrtime.bigint()
-  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-object-of-primitives
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /object-with-many-properties
   return { paused: Number(diff) / 1_000_000 }
 })
 
-fastify.get('/large-array-of-primitives', function handler () {
-  const arr = Array.from({ length: 1_000_000 }, (_, i) => i) // eslint-disable-line no-unused-vars
+fastify.get('/large-collections', function handler () {
+  const arrOfPrimitives = Array.from({ length: 1_000_000 }, (_, i) => i) // eslint-disable-line no-unused-vars
+  const arrOfObjects = Array.from({ length: 1_000_000 }, (_, i) => ({ i }))
+  const map = new Map(arrOfObjects.map((obj, i) => [i, obj])) // eslint-disable-line no-unused-vars
+  const set = new Set(arrOfObjects) // eslint-disable-line no-unused-vars
   const start = process.hrtime.bigint()
-  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-array-of-primitives
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-collections
   return { paused: Number(diff) / 1_000_000 }
 })
 
-fastify.get('/large-array-of-objects', function handler () {
-  const arr = Array.from({ length: 1_000_000 }, (_, i) => ({ i })) // eslint-disable-line no-unused-vars
+fastify.get('/large-collections-below-size-threshold', function handler () {
+  // eslint-disable-next-line no-unused-vars
+  const arrOfPrimitives = Array.from({ length: COLLECTION_SIZE_THRESHOLD - 1 }, (_, i) => i)
+  const arrOfObjects = Array.from({ length: COLLECTION_SIZE_THRESHOLD - 1 }, (_, i) => ({ i }))
+  const map = new Map(arrOfObjects.map((obj, i) => [i, obj])) // eslint-disable-line no-unused-vars
+  const set = new Set(arrOfObjects) // eslint-disable-line no-unused-vars
   const start = process.hrtime.bigint()
-  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-array-of-objects
+  const diff = process.hrtime.bigint() - start // BREAKPOINT: /large-collections-below-size-threshold
   return { paused: Number(diff) / 1_000_000 }
 })
 

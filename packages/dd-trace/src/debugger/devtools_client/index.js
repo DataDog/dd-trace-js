@@ -6,7 +6,7 @@ const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
-const { ackEmitting } = require('./status')
+const { ackEmitting, ackError } = require('./status')
 const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
@@ -165,16 +165,17 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
-    params.callFrames[0],
-    {
+  let processLocalState, fatalSnapshotError
+  if (numberOfProbesWithSnapshots !== 0) {
+    const opts = {
       maxReferenceDepth,
       maxCollectionSize,
       maxFieldCount,
       maxLength,
       deadlineNs: start + BigInt(config.dynamicInstrumentation.captureTimeoutMs ?? 10) * 1_000_000n
     }
-  )
+    ;({ processLocalState, fatalSnapshotError } = await getLocalStateForCallFrame(params.callFrames[0], opts))
+  }
 
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
@@ -215,6 +216,11 @@ session.on('Debugger.paused', async ({ params }) => {
 
     if (probe.captureSnapshot) {
       const state = processLocalState()
+      if (fatalSnapshotError) {
+        // There was an error collecting the snapshot for this probe, let's not try again
+        probe.captureSnapshot = false
+        ackError(fatalSnapshotError, probe)
+      }
       if (state instanceof Error) {
         snapshot.captureError = state.message
       } else if (state) {

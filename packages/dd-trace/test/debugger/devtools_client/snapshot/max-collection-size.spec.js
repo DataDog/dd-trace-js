@@ -45,7 +45,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertOnBreakpoint(done, config, (_state) => {
             state = _state
           })
-          setAndTriggerBreakpoint(target, 24)
+          setAndTriggerBreakpoint(target, 25)
         })
 
         it('should have expected number of elements in state', function () {
@@ -57,7 +57,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
         })
 
@@ -66,7 +66,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
         })
 
@@ -75,7 +75,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
         })
 
@@ -83,7 +83,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           expect(state.wmap).to.include({
             type: 'WeakMap',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
 
           expect(state.wmap.entries).to.have.lengthOf(maxCollectionSize)
@@ -104,7 +104,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           expect(state.wset).to.include({
             type: 'WeakSet',
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
 
           expect(state.wset.elements).to.have.lengthOf(maxCollectionSize)
@@ -123,7 +123,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: 1000
+            size: 499
           })
         })
       })
