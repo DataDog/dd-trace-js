@@ -1,7 +1,10 @@
 'use strict'
 
 const { Before, Given, When, Then, setWorldConstructor } = require('@cucumber/cucumber')
-const { expect } = require('chai')
+const assert = require('assert')
+
+const ENDPOINT_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL ||
+  `http://127.0.0.1:${process.env.DD_TRACE_AGENT_PORT}`
 
 const CustomWorld = function () {
   this.datadog = 0
@@ -31,18 +34,18 @@ When('run', () => {})
 When('integration', function () {
   const http = require('http')
   return new Promise(resolve => {
-    http.request('http://test:123', () => {
+    http.request(`${ENDPOINT_URL}/info`, { agent: false }, () => {
       resolve()
     }).end()
   })
 })
 
 Then('pass', function () {
-  expect(this.datadog).to.eql('datadog')
+  assert.equal(this.datadog, 'datadog')
 })
 
 Then('fail', function () {
-  expect(this.datadog).to.eql('godatad')
+  assert.equal(this.datadog, 'godatad')
 })
 
 Then('skip', function () {
