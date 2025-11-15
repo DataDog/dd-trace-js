@@ -189,6 +189,7 @@ function toArray (type, elements, maxLength, timeBudgetReached) {
 function toMap (type, pairs, maxLength, timeBudgetReached) {
   if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (pairs === undefined) return notCapturedDepth(type)
+  if (pairs.every(({ value }) => Object.hasOwn(value, timeBudgetSym))) return notCapturedTimeBudget(type)
 
   const result = {
     type,
@@ -201,9 +202,6 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
       // This can be skipped and we can go directly to its children, of which
       // there will always be exactly two, the first containing the key, and the
       // second containing the value of this entry of the Map.
-      if (Object.hasOwn(value, timeBudgetSym)) {
-        return [{ notCapturedReason: 'timeout' }, { notCapturedReason: 'timeout' }]
-      }
       const shouldRedact = shouldRedactMapValue(value.properties[0])
       const key = getPropertyValue(value.properties[0], maxLength)
       const val = shouldRedact
@@ -221,6 +219,7 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
 function toSet (type, values, maxLength, timeBudgetReached) {
   if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (values === undefined) return notCapturedDepth(type)
+  if (values.every(({ value }) => Object.hasOwn(value, timeBudgetSym))) return notCapturedTimeBudget(type)
 
   const result = {
     type,
@@ -233,9 +232,6 @@ function toSet (type, values, maxLength, timeBudgetReached) {
       // `internal#entry`. This can be skipped and we can go directly to its
       // children, of which there will always be exactly one, which contain the
       // actual value in this entry of the Set.
-      if (Object.hasOwn(value, timeBudgetSym)) {
-        return { notCapturedReason: 'timeout' }
-      }
       return getPropertyValue(value.properties[0], maxLength)
     })
   }
