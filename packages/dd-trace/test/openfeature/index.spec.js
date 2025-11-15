@@ -115,9 +115,7 @@ describe('OpenFeature Module', () => {
 
       exposureSubmitCh.publish(exposureEvents)
 
-      expect(mockWriter.append).to.have.been.calledTwice
-      expect(mockWriter.append.firstCall).to.have.been.calledWith(exposureEvents[0])
-      expect(mockWriter.append.secondCall).to.have.been.calledWith(exposureEvents[1])
+      expect(mockWriter.append).to.have.been.calledOnceWith(exposureEvents)
     })
 
     it('flushes the exposures writer', () => {
