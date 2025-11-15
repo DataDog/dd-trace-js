@@ -379,9 +379,17 @@ The following attributes are available to override Datadog-specific options:
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
 * `span.type`: The span type to be used for this span. Will fallback to `custom` if not provided.
 
+### Important: Use the Same OpenTelemetry API Module
+
+dd-trace-js and your application must use the **same instance** of the `@opentelemetry/api` module. Having multiple copies in your `node_modules` will cause spans to become no-ops with all-zero trace IDs.
+
 <h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
 
-dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
+dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration.
+
+**Important:** Similar to `@opentelemetry/api`, dd-trace-js and your application must use the **same instance** of the `@opentelemetry/api-logs` module.
+
+Enable OpenTelemetry logs by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
 
 ```javascript
 require('dd-trace').init()
