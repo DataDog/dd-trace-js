@@ -7,7 +7,7 @@ const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
 
 module.exports = {
-  getRuntimeObject: getObject // TODO: Called once per stack frame, but doesn't retain the `deadlineReached` flag.
+  getRuntimeObject: getObject
 }
 
 /**

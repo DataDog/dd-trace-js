@@ -103,7 +103,7 @@ describe('Debugger snapshot time budget', () => {
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepEqual(out.map, {
       type: 'Map',
-      entries: [[{ notCapturedReason: 'timeout' }, { notCapturedReason: 'timeout' }]]
+      notCapturedReason: 'timeout'
     })
   })
 
@@ -131,7 +131,7 @@ describe('Debugger snapshot time budget', () => {
     const out = processRawState(raw, MAX_LENGTH)
     assert.deepEqual(out.set, {
       type: 'Set',
-      elements: [{ notCapturedReason: 'timeout' }]
+      notCapturedReason: 'timeout'
     })
   })
 })
