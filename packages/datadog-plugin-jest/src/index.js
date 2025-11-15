@@ -282,11 +282,7 @@ class JestPlugin extends CiPlugin {
         log.warn('"ci:jest:test-suite:finish": no span found for test suite absolute path %s', testSuiteAbsolutePath)
         return
       }
-      const hasStatus = testSuiteSpan.context()._tags[TEST_STATUS]
-      if (!hasStatus) {
-        // The status may have been set in 'ci:jest:test-suite:error'
-        testSuiteSpan.setTag(TEST_STATUS, status)
-      }
+      testSuiteSpan.setTag(TEST_STATUS, status)
       if (error) {
         testSuiteSpan.setTag('error', error)
         testSuiteSpan.setTag(TEST_STATUS, 'fail')
@@ -323,7 +319,6 @@ class JestPlugin extends CiPlugin {
       } else if (errorMessage) {
         runningTestSuiteSpan.setTag('error', new Error(errorMessage))
       }
-      runningTestSuiteSpan.setTag(TEST_STATUS, 'fail')
     })
 
     /**

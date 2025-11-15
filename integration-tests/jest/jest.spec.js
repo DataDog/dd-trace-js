@@ -1055,31 +1055,32 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const suites = events.filter(event => event.type === 'test_suite_end')
           // this is not retried by the jest worker, so it's just 3 suites
           assert.equal(suites.length, 3)
-          const failedTestSuites = suites.filter(
+          const badImportTestSuites = suites.filter(
             suite => suite.content.meta[TEST_SUITE] ===
               'ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
           )
-          assert.equal(failedTestSuites.length, 1)
-          const [failedTestSuite] = failedTestSuites
+          assert.equal(badImportTestSuites.length, 1)
+          const [badImportTestSuite] = badImportTestSuites
 
-          assert.equal(failedTestSuite.content.meta[TEST_STATUS], 'fail')
+          // jest still reports the test suite as passing
+          assert.equal(badImportTestSuite.content.meta[TEST_STATUS], 'pass')
           assert.include(
-            failedTestSuite.content.meta[ERROR_MESSAGE],
+            badImportTestSuite.content.meta[ERROR_MESSAGE],
             'a file after the Jest environment has been torn down'
           )
           assert.include(
-            failedTestSuite.content.meta[ERROR_MESSAGE],
+            badImportTestSuite.content.meta[ERROR_MESSAGE],
             'From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'
           )
           // This is the error message that jest should show. We check that we don't mess it up.
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'off-timing-import')
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'afterAll')
-          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'nextTick')
+          assert.include(badImportTestSuite.content.meta[ERROR_MESSAGE], 'off-timing-import')
+          assert.include(badImportTestSuite.content.meta[ERROR_MESSAGE], 'afterAll')
+          assert.include(badImportTestSuite.content.meta[ERROR_MESSAGE], 'nextTick')
 
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
           )
-          assert.equal(passedTestSuites.length, 2)
+          assert.equal(passedTestSuites.length, 3)
         })
 
       childProcess = exec(runTestsCommand, {
