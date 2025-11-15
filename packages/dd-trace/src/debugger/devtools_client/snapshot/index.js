@@ -1,6 +1,6 @@
 'use strict'
 
-const { getRuntimeObject } = require('./collector')
+const { collectObjectProperties } = require('./collector')
 const { processRawState } = require('./processor')
 const log = require('../log')
 
@@ -54,8 +54,12 @@ async function getLocalStateForCallFrame (callFrame, opts = {}) {
     for (const scope of callFrame.scopeChain) {
       if (opts.deadlineReached === true) break // TODO: Variables in scope are silently dropped: Not the best UX
       if (scope.type === 'global') continue // The global scope is too noisy
+
+      // The objectId for a scope points to a pseudo-object whos properties are the actual variables in the scope.
+      // This is why we can just call `collectObjectProperties` directly and expect it to return the in-scope variables
+      // as an array.
       // eslint-disable-next-line no-await-in-loop
-      rawState.push(...await getRuntimeObject(scope.object.objectId, opts))
+      rawState.push(...await collectObjectProperties(scope.object.objectId, opts))
     }
   } catch (err) {
     // TODO: We might be able to get part of the scope chain.
