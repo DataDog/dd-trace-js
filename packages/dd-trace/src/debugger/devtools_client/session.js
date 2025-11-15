@@ -2,6 +2,16 @@
 
 const inspector = require('./inspector_promises_polyfill')
 
-const session = module.exports = new inspector.Session()
+/**
+ * @typedef {import('node:events').EventEmitter & {
+ *   connect: () => void,
+ *   connectToMainThread: () => void
+ *   disconnect: () => void,
+ *   post: (method: string, params?: object) => Promise<any>,
+ * }} CDPSession
+ */
+const session = /** @type {CDPSession} */ (new inspector.Session())
 
 session.connectToMainThread()
+
+module.exports = session
