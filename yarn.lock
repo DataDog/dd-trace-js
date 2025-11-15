@@ -204,10 +204,10 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.27.1"
 
-"@datadog/flagging-core@0.1.0-preview.15":
-  version "0.1.0-preview.15"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.1.0-preview.15.tgz#bd8c21a7a7e96428c584d5b6f103b8011fa4f847"
-  integrity sha512-p6YhX7lHOlD3IhyBerL2OM7EEmOLA0MmjgIvEUX61cbRiK983m51rF8b8zXyiCCp/tdfBSmmsujtPwjMwXGiug==
+"@datadog/flagging-core@0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-0.2.0.tgz#d29d81486068b870c41cebb2524721a71184eb16"
+  integrity sha512-DocYjr8NFJZfsnqzu3MuBUNqgbJquq1doimkKEXI5UImLmz/tR0LO09dd651pBhoz1Pa4SKcnPaxWFLTqxWtsA==
   dependencies:
     spark-md5 "^3.0.2"
 
@@ -238,12 +238,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@0.1.0-preview.15":
-  version "0.1.0-preview.15"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.1.0-preview.15.tgz#f9ec9f9614aefd9c03e83c62ea57c6163843a053"
-  integrity sha512-SXWseSmtEg+mKB2WzCzT5f/m61GEmFNBLchBaPO5w6dECk4jz4g6BXmfLTVdFZXi26/M644niZWHpv9cJVhoqg==
+"@datadog/openfeature-node-server@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-0.2.0.tgz#905032cc6d7d1eb1d6620aabe323ed552366d65a"
+  integrity sha512-Jn8lShFyqNji0tiKntLcCRwu3xrhg93fTTJS3gHSPKMfBDBKxjB9uF8Hu5Ayn2k0QuwJexx5atN9GSiWX0h5qg==
   dependencies:
-    "@datadog/flagging-core" "0.1.0-preview.15"
+    "@datadog/flagging-core" "0.2.0"
     "@openfeature/server-sdk" "~1.18.0"
 
 "@datadog/pprof@5.12.0":
@@ -262,10 +262,10 @@
   resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.1.1.tgz#9ec2251b3c932b4f43e1d164461fa6cb6f28b7d0"
   integrity sha512-d5RjycE+MObE/hU+8OM5Zp4VjTwiPLRa8299fj7muOmR16fb942z8byoMbCErnGh0lBevvgkGrLclQDvINbIyg==
 
-"@datadog/wasm-js-rewriter@4.0.1":
-  version "4.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-4.0.1.tgz#883535e97f6b88b15427f93b5dc5d2d3a01c02b6"
-  integrity sha512-JRa05Je6gw+9+3yZnm/BroQZrEfNwRYCxms56WCCHzOBnoPihQLB0fWy5coVJS29kneCUueUvBvxGp6NVXgdqw==
+"@datadog/wasm-js-rewriter@5.0.1":
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.1.tgz#f227d2e3eb0f83b8a37f190a9ff8fdbde5955782"
+  integrity sha512-EzbV3Lrdt3udQEsbDOVC5gB1y7yxfpBbrSIk4jaEsGjyj0Dbv2HGj7tZjs+qXzIzNonHc8h5El2bYZOGfC2wwg==
   dependencies:
     js-yaml "^4.1.0"
     lru-cache "^7.14.0"
@@ -681,15 +681,15 @@
   resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
   integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
 
-"@openfeature/server-sdk@^1.20.0":
-  version "1.20.0"
-  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.20.0.tgz#43a5d3cffd915742ff64eeef53b7132279df4823"
-  integrity sha512-95L9CCaGVKC6+7rNCmDxjthFvUyPLOUkoYyjg9Y/Cmy0G9D63xrJBsmH6fqHtLifzAu4+E7fWAZ3TIBnnCtr7A==
-
 "@openfeature/server-sdk@~1.18.0":
   version "1.18.0"
   resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
   integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==
+
+"@openfeature/server-sdk@~1.20.0":
+  version "1.20.0"
+  resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.20.0.tgz#43a5d3cffd915742ff64eeef53b7132279df4823"
+  integrity sha512-95L9CCaGVKC6+7rNCmDxjthFvUyPLOUkoYyjg9Y/Cmy0G9D63xrJBsmH6fqHtLifzAu4+E7fWAZ3TIBnnCtr7A==
 
 "@opentelemetry/api-logs@<1.0.0":
   version "0.208.0"

@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
@@ -63,7 +63,7 @@ describe('TextMapPropagator', () => {
       '../../log': log,
       '../../telemetry/metrics': telemetryMetrics
     })
-    config = new Config({ tagsHeaderMaxLength: 512 })
+    config = getConfigFresh({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
     textMap = {
       'x-datadog-trace-id': '123',
@@ -481,7 +481,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract opentracing baggage when baggage is not a propagation style ', () => {
-      config = new Config({
+      config = getConfigFresh({
         tracePropagationStyle: {
           extract: ['datadog', 'tracecontext'],
           inject: ['datadog', 'tracecontext']
@@ -500,7 +500,7 @@ describe('TextMapPropagator', () => {
     })
 
     it('should extract otel baggage items with special characters', () => {
-      config = new Config()
+      config = getConfigFresh()
       propagator = new TextMapPropagator(config)
       const carrier = {
         'x-datadog-trace-id': '123',
@@ -577,7 +577,7 @@ describe('TextMapPropagator', () => {
       })
 
       // should not add baggage when key list is empty
-      config = new Config({
+      config = getConfigFresh({
         baggageTagKeys: ''
       })
       propagator = new TextMapPropagator(config)
@@ -585,7 +585,7 @@ describe('TextMapPropagator', () => {
       expect(spanContextC._trace.tags).to.deep.equal({})
 
       // should not add baggage when key list is empty
-      config = new Config({
+      config = getConfigFresh({
         baggageTagKeys: 'customKey'
       })
       propagator = new TextMapPropagator(config)
@@ -600,7 +600,7 @@ describe('TextMapPropagator', () => {
       })
 
       // should add all baggage to span tags
-      config = new Config({
+      config = getConfigFresh({
         baggageTagKeys: '*'
       })
       propagator = new TextMapPropagator(config)
@@ -653,7 +653,7 @@ describe('TextMapPropagator', () => {
 
     it('should extract baggage when it is the only propagation style', () => {
       removeAllBaggageItems()
-      config = new Config({
+      config = getConfigFresh({
         tracePropagationStyle: {
           extract: ['baggage']
         }
@@ -1396,7 +1396,7 @@ describe('TextMapPropagator', () => {
 
       it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
-        config = new Config({
+        config = getConfigFresh({
           tracePropagationStyle: {
             extract: ['tracecontext', 'datadog']
           }
@@ -1410,7 +1410,7 @@ describe('TextMapPropagator', () => {
 
       it('should set span link to extracted trace when Trace_Propagation_Behavior_Extract is set to restart', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
-        config = new Config({
+        config = getConfigFresh({
           tracePropagationStyle: {
             extract: ['tracecontext', 'datadog']
           }
@@ -1428,7 +1428,7 @@ describe('TextMapPropagator', () => {
 
       it('should not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
-        config = new Config({
+        config = getConfigFresh({
           tracePropagationStyle: {
             extract: ['tracecontext', 'datadog', 'baggage']
           }

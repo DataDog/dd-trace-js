@@ -1,17 +1,19 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../../version')
-const semver = require('semver')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const Axios = require('axios')
-const os = require('os')
-const fs = require('fs')
+const { assert } = require('chai')
+const semver = require('semver')
+
+const { NODE_MAJOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
+const { getConfigFresh } = require('../../helpers/config')
 
 describe('RASP - lfi', () => {
   let axios
@@ -58,7 +60,7 @@ describe('RASP - lfi', () => {
           app(req, res)
         })
 
-        appsec.enable(new Config({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
@@ -111,7 +113,7 @@ describe('RASP - lfi', () => {
         }
 
         function runFsMethodTest (description, options, fn, ...args) {
-          const { vulnerableIndex = 0, ruleEvalCount } = options
+          const { vulnerableIndex = 0, ruleEvalCount, secureFile = '/test.file' } = options
 
           describe(description, () => {
             const getAppFn = options.getAppFn ?? getApp
@@ -129,7 +131,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get('/?file=/test.file')
+              await axios.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -433,21 +435,20 @@ describe('RASP - lfi', () => {
           function getAppFn (fn, args, options) {
             return (req, res) => {
               try {
-                const result = fn(args)
+                const result = fn(req, res, args)
                 options.onfinish?.(result)
               } catch (e) {
                 if (e.message === 'DatadogRaspAbortError') {
                   res.status(418)
+                  res.end('end')
                 }
               }
-              res.render('template')
             }
           }
 
-          runFsMethodTest('rule is eval only once and rendering file accesses are ignored',
-            { getAppFn, ruleEvalCount: 1 }, (args) => {
-              const fs = require('fs')
-              return fs.readFileSync(...args)
+          runFsMethodTest('res.render',
+            { getAppFn, ruleEvalCount: 1, secureFile: 'template' }, (req, res) => {
+              return res.render(req.query.file)
             }, __filename)
         })
       })
@@ -471,7 +472,7 @@ describe('RASP - lfi', () => {
         }
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),

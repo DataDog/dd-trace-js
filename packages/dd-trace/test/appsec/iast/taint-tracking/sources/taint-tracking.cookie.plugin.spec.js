@@ -4,7 +4,7 @@ const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
-const Config = require('../../../../../src/config')
+const { getConfigFresh } = require('../../../../helpers/config')
 const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
@@ -40,7 +40,7 @@ describe('Cookies sourcing with cookies', () => {
 
     function tests (config) {
       beforeEach(() => {
-        iast.enable(new Config({
+        iast.enable(getConfigFresh({
           experimental: {
             iast: {
               enabled: true,

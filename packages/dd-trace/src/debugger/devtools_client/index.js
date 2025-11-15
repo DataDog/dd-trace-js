@@ -58,6 +58,11 @@ if (SUPPORT_ARRAY_BUFFER_RESIZE) {
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
 
+  if (params.reason !== 'other') {
+    // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
+    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
+  }
+
   let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
   let sampled = false
   let numberOfProbesWithSnapshots = 0
@@ -168,7 +173,9 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
 
-  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ${
+  // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
+  // On my machine I'm seeing around 1.7ms of overhead.
+  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ~${
     Number(diff) / 1_000_000
   } ms`)
 

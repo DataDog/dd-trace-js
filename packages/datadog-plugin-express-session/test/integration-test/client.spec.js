@@ -4,7 +4,7 @@ const {
   sandboxCwd, useSandbox, varySandbox, curl,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express-session', 'express-session', version => {
