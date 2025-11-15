@@ -42,7 +42,6 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         } else {
           spanContexts.set(ctx.batch, [span.context()])
         }
-        ctx.batch._spanContexts.push(span.context())
         injectTraceContext(this.tracer, span, ctx.msg)
       }
     }
