@@ -9,7 +9,7 @@ const dc = require('dc-polyfill')
 
 const producerCh = dc.tracingChannel('apm:azure-service-bus:send')
 const isItDefault = new WeakSet()
-addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj, x, y) => {
+addHook({ name: '@azure/service-bus', versions: ['>=7.9.2'] }, (obj) => {
   const ServiceBusClient = obj.ServiceBusClient
   shimmer.wrap(ServiceBusClient.prototype, 'createSender',
     createSender => function (queueOrTopicName) {
