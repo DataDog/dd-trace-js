@@ -153,84 +153,8 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-// Inject trace context into Pub/Sub message attributes
-function injectTraceContext (attributes, pubsub, topicName) {
-  if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
-
-  try {
-    const tracer = require('../../dd-trace')
-    const activeSpan = tracer.scope().active()
-    if (!activeSpan) return
-
-    tracer.inject(activeSpan, 'text_map', attributes)
-
-    // Inject upper 64 bits of 128-bit trace ID for proper span linking
-    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
-    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
-  } catch {
-    // Silently fail - trace context injection is best-effort
-  }
-
-  // Add metadata for consumer correlation
-  if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
-  if (topicName) attributes['pubsub.topic'] = topicName
-}
-
-// Inject trace context into messages at queue time
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
-  log.info(`[DD DEBUG] Topic wrapper hook called, obj.Topic exists: ${!!obj.Topic}`)
-  if (!obj.Topic?.prototype) return obj
-
-  // Wrap Topic.publishMessage (modern API)
-  if (obj.Topic.prototype.publishMessage) {
-    log.info('[DD DEBUG] Wrapping Topic.publishMessage')
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
-      log.info(`[DD DEBUG] Topic.publishMessage called with data: ${!!data}`)
-      if (data && typeof data === 'object') {
-        if (!data.attributes) data.attributes = {}
-        try {
-          injectTraceContext(data.attributes, this.pubsub, this.name)
-        } catch (err) {
-          log.info(`[DD DEBUG] injectTraceContext error: ${err}`)
-        }
-      }
-      return publishMessage.apply(this, arguments)
-    })
-  }
-
-  // Wrap Topic.publish (legacy API) - signature: (data, [attributes], [callback])
-  if (obj.Topic.prototype.publish) {
-    log.info('[DD DEBUG] Wrapping Topic.publish')
-    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (data, attributesOrCallback, callback) {
-      log.info(
-        `[DD DEBUG] Topic.publish called, args: ${arguments.length}, ` +
-        `data type: ${typeof data}, arg2 type: ${typeof attributesOrCallback}`
-      )
-      try {
-        // Only inject if attributes object is provided (and it's not a function/callback)
-        if (attributesOrCallback &&
-            typeof attributesOrCallback === 'object' &&
-            typeof attributesOrCallback !== 'function' &&
-            !Array.isArray(attributesOrCallback) &&
-            !Buffer.isBuffer(attributesOrCallback)) {
-          log.info('[DD DEBUG] Injecting trace context into attributes')
-          injectTraceContext(attributesOrCallback, this.pubsub, this.name)
-        } else {
-          log.info('[DD DEBUG] Skipping trace injection - no attributes object')
-        }
-      } catch (err) {
-        log.info(`[DD DEBUG] Trace injection error: ${err}`)
-      }
-      // Pass through all arguments unchanged
-      log.info('[DD DEBUG] Calling original Topic.publish')
-      return publish.apply(this, arguments)
-    })
-  } else {
-    log.info('[DD DEBUG] Topic.publish does not exist on this version')
-  }
-
-  return obj
-})
+// NOTE: injectTraceContext and Topic.publish wrappers removed temporarily to test if they're causing the timeout
+// The low-level PublisherClient.publish wrapper below should handle span creation
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const { PublisherClient, SchemaServiceClient, SubscriberClient } = obj.v1
