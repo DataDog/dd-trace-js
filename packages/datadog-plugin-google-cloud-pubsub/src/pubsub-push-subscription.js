@@ -131,7 +131,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   _extractProjectTopic (attrs, subscription) {
     const topicName = attrs['pubsub.topic']
     const projectId = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
-    
+
     return {
       projectId,
       topicName: topicName || 'push-subscription-topic'
