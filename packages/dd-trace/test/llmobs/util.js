@@ -74,7 +74,9 @@ function assertWithMockValues (actual, expected, key) {
     const expectedKeys = Object.keys(expected)
     if (actualKeys.length !== expectedKeys.length) {
       assert.fail(
-        `${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length})`
+        `
+        ${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length}).
+        Diff: ${util.inspect(actualKeys)} !== ${util.inspect(expectedKeys)}`
       )
     }
 

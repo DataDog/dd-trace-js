@@ -53,13 +53,17 @@ describe('integrations', () => {
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
           inputMessages: [
-            { content: 'Hello, OpenAI!' }
+            { content: 'Hello, OpenAI!', role: '' }
           ],
           outputMessages: [
-            { content: MOCK_STRING }
+            { content: MOCK_STRING, role: '' }
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'gpt-3.5-turbo-instruct',
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER
+          },
+          modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -107,8 +111,13 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'gpt-3.5-turbo',
+          metrics: {
+            cache_read_input_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER
+          },
+          modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -137,8 +146,8 @@ describe('integrations', () => {
             { text: 'hello world' }
           ],
           outputValue: '[1 embedding(s) returned]',
-          metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'text-embedding-ada-002',
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },
           tags: { ml_app: 'test', integration: 'openai' }
@@ -193,7 +202,12 @@ describe('integrations', () => {
           }],
           metadata: { function_call: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER }
+          metrics: {
+            cache_read_input_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER
+          }
         })
       })
 
@@ -218,8 +232,8 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
-          inputMessages: [{ content: 'Hello, OpenAI!' }],
-          outputMessages: [{ content: '' }],
+          inputMessages: [{ content: 'Hello, OpenAI!', role: '' }],
+          outputMessages: [{ content: '', role: '' }],
           modelName: 'gpt-3.5-turbo',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false },
@@ -232,8 +246,7 @@ describe('integrations', () => {
         })
       })
 
-      // TODO(sabrenner): missing metadata should be recorded even on errors
-      it.skip('submits a chat completion span with an error', async function () {
+      it('submits a chat completion span with an error', async function () {
         if (semifies(realVersion, '<3.2.0')) {
           this.skip()
         }
@@ -272,7 +285,7 @@ describe('integrations', () => {
             { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: 'Hello, OpenAI!' }
           ],
-          outputMessages: [{ content: '' }],
+          outputMessages: [{ content: '', role: '' }],
           modelName: 'gpt-3.5-turbo-instruct',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false, user: 'dd-trace-test' },

@@ -67,6 +67,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!error) {
       const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
+
+      const responseModel = response.model
+      if (responseModel) {
+        // override the model name with the response model (more accurate)
+        this._tagger.tagModelName(span, responseModel)
+      }
     }
   }
 
@@ -85,11 +91,11 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     if (tokenUsage) {
       // Responses API uses input_tokens, Chat/Completions use prompt_tokens
-      const inputTokens = tokenUsage.input_tokens ?? tokenUsage.prompt_tokens
+      const inputTokens = tokenUsage.input_tokens ?? tokenUsage.prompt_tokens ?? 0
       if (inputTokens !== undefined) metrics.inputTokens = inputTokens
 
       // Responses API uses output_tokens, Chat/Completions use completion_tokens
-      const outputTokens = tokenUsage.output_tokens ?? tokenUsage.completion_tokens
+      const outputTokens = tokenUsage.output_tokens ?? tokenUsage.completion_tokens ?? 0
       if (outputTokens !== undefined) metrics.outputTokens = outputTokens
 
       const totalTokens = tokenUsage.total_tokens || (inputTokens + outputTokens)
@@ -105,7 +111,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       } else if (tokenUsage.prompt_tokens_details) {
         // Chat/Completions API - only include if > 0
         const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
-        if (cacheReadTokens) {
+        if (cacheReadTokens != null) {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
@@ -159,6 +165,16 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
+    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+      if (!['tools', 'functions'].includes(key)) {
+        obj[key] = value
+      }
+
+      return obj
+    }, {})
+
+    this._tagger.tagMetadata(span, metadata)
+
     if (error) {
       this._tagger.tagLLMIO(span, messages, [{ content: '' }])
       return
@@ -200,16 +216,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, messages, outputMessages)
-
-    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (!['tools', 'functions'].includes(key)) {
-        obj[key] = value
-      }
-
-      return obj
-    }, {})
-
-    this._tagger.tagMetadata(span, metadata)
   }
 
   #tagResponse (span, inputs, response, error) {
@@ -269,6 +275,15 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'user', content: input })
     }
 
+    const inputMetadata = Object.entries(parameters).reduce((obj, [key, value]) => {
+      if (allowedParamKeys.has(key)) {
+        obj[key] = value
+      }
+      return obj
+    }, {})
+
+    this._tagger.tagMetadata(span, inputMetadata)
+
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
@@ -287,17 +302,13 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       for (const item of response.output) {
         // Handle reasoning type (reasoning responses)
         if (item.type === 'reasoning') {
-          // Extract reasoning text from summary
-          let reasoningText = ''
-          if (Array.isArray(item.summary) && item.summary.length > 0) {
-            const summaryItem = item.summary[0]
-            if (summaryItem.type === 'summary_text' && summaryItem.text) {
-              reasoningText = summaryItem.text
-            }
-          }
           outputMessages.push({
             role: 'reasoning',
-            content: reasoningText
+            content: JSON.stringify({
+              summary: item.summary ?? [],
+              encrypted_content: item.encrypted_content ?? null,
+              id: item.id ?? ''
+            })
           })
         } else if (item.type === 'function_call') {
           // Handle function_call type (responses API tool calls)
@@ -369,24 +380,19 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
-    const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
-      if (allowedParamKeys.has(key)) {
-        obj[key] = value
-      }
-      return obj
-    }, {})
+    const outputMetadata = {}
 
     // Add fields from response object (convert numbers to floats)
-    if (response.temperature !== undefined) metadata.temperature = Number(response.temperature)
-    if (response.top_p !== undefined) metadata.top_p = Number(response.top_p)
-    if (response.tool_choice !== undefined) metadata.tool_choice = response.tool_choice
-    if (response.truncation !== undefined) metadata.truncation = response.truncation
-    if (response.text !== undefined) metadata.text = response.text
+    if (response.temperature !== undefined) outputMetadata.temperature = Number(response.temperature)
+    if (response.top_p !== undefined) outputMetadata.top_p = Number(response.top_p)
+    if (response.tool_choice !== undefined) outputMetadata.tool_choice = response.tool_choice
+    if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
+    if (response.text !== undefined) outputMetadata.text = response.text
     if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
-      metadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
+      outputMetadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
     }
 
-    this._tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }
 }
 
