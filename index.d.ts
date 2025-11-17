@@ -654,6 +654,13 @@ declare namespace tracer {
          * @default false
          */
         enabled?: boolean
+        /**
+         * Timeout in milliseconds for OpenFeature provider initialization.
+         * If configuration is not received within this time, initialization fails.
+         *
+         * @default 30000
+         */
+        timeoutMs?: number
       }
     };
 

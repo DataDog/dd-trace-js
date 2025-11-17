@@ -77,6 +77,7 @@ module.exports = {
   'experimental.enableGetRumData': false,
   'experimental.exporter': undefined,
   'experimental.flaggingProvider.enabled': false,
+  'experimental.flaggingProvider.timeoutMs': 30000,
   flushInterval: 2000,
   flushMinSpans: 1000,
   gitMetadataEnabled: true,

@@ -173,4 +173,158 @@ describe('FlaggingProvider Initialization Timeout', () => {
     expect(readyEventSpy).to.have.been.calledOnce
     expect(provider.getConfiguration()).to.equal(ufc)
   })
+
+  describe('custom timeout configuration', () => {
+    it('should use custom timeout when specified in config', async () => {
+      const customConfig = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true,
+            timeoutMs: 5000 // Custom 5-second timeout
+          }
+        }
+      }
+
+      const provider = new FlaggingProvider(mockTracer, customConfig)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject on timeout
+      })
+
+      // Verify initialization is in progress
+      expect(provider.initController.isInitializing()).to.be.true
+
+      // Advance time by 4.9 seconds (before custom timeout)
+      await clock.tickAsync(4900)
+
+      // Should still be initializing
+      expect(provider.initController.isInitializing()).to.be.true
+
+      // Advance by another 200ms to trigger the 5-second timeout
+      await clock.tickAsync(200)
+
+      // Wait for promise to settle
+      await initPromise.catch(() => {})
+
+      // Should now be timed out
+      expect(provider.initController.isInitializing()).to.be.false
+    })
+
+    it('should call setError with custom timeout value in message', async () => {
+      const customConfig = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true,
+            timeoutMs: 10000 // Custom 10-second timeout
+          }
+        }
+      }
+
+      const provider = new FlaggingProvider(mockTracer, customConfig)
+
+      // Spy on setError method
+      const setErrorSpy = sinon.spy(provider, 'setError')
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {
+        // Expected to reject
+      })
+
+      // Advance time to trigger custom timeout
+      await clock.tickAsync(10000)
+
+      await initPromise.catch(() => {})
+
+      // Verify setError was called with custom timeout error
+      expect(setErrorSpy).to.have.been.calledOnce
+      const errorArg = setErrorSpy.firstCall.args[0]
+      expect(errorArg).to.be.instanceOf(Error)
+      expect(errorArg.message).to.include('Initialization timeout')
+      expect(errorArg.message).to.include('10000ms')
+    })
+
+    it('should default to 30 seconds when timeoutMs is not specified', async () => {
+      const configWithoutTimeout = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true
+            // timeoutMs not specified, should use default
+          }
+        }
+      }
+
+      const provider = new FlaggingProvider(mockTracer, configWithoutTimeout)
+
+      const initPromise = provider.initialize()
+
+      // Attach catch handler
+      initPromise.catch(() => {})
+
+      // Advance time by 29.9 seconds (before default timeout)
+      await clock.tickAsync(29900)
+
+      // Should still be initializing
+      expect(provider.initController.isInitializing()).to.be.true
+
+      // Advance by another 200ms to trigger the default 30-second timeout
+      await clock.tickAsync(200)
+
+      await initPromise.catch(() => {})
+
+      // Should now be timed out
+      expect(provider.initController.isInitializing()).to.be.false
+    })
+
+    it('should not timeout if configuration is set before custom timeout', async () => {
+      const customConfig = {
+        ...mockConfig,
+        experimental: {
+          flaggingProvider: {
+            enabled: true,
+            timeoutMs: 8000 // Custom 8-second timeout
+          }
+        }
+      }
+
+      const provider = new FlaggingProvider(mockTracer, customConfig)
+
+      // Start initialization
+      const initPromise = provider.initialize()
+
+      // Verify initialization is in progress
+      expect(provider.initController.isInitializing()).to.be.true
+
+      // Advance time by 6 seconds (before custom timeout)
+      await clock.tickAsync(6000)
+
+      // Set configuration before timeout
+      const ufc = {
+        flags: {
+          'test-flag': {
+            key: 'test-flag',
+            variations: [
+              { key: 'on', value: true },
+              { key: 'off', value: false }
+            ]
+          }
+        }
+      }
+      provider._setConfiguration(ufc)
+
+      // Wait for initialization to complete
+      await initPromise
+
+      // Verify initialization completed successfully
+      expect(provider.initController.isInitializing()).to.be.false
+      expect(provider.getConfiguration()).to.equal(ufc)
+    })
+  })
 })
