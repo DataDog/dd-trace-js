@@ -23,7 +23,7 @@ const { METRIC_TYPES } = require('./constants')
 /**
  * Base class for all metric instruments.
  *
- * @private
+ *
  */
 class Instrument {
   /**
@@ -117,7 +117,7 @@ class Gauge extends Instrument {
  * Base class for observable (asynchronous) instruments.
  * Implementation of the OpenTelemetry Observable interface:
  * https://open-telemetry.github.io/opentelemetry-js/interfaces/_opentelemetry_api._opentelemetry_api.Observable.html
- * @private
+ *
  */
 class ObservableInstrument extends Instrument {
   #callbacks = []

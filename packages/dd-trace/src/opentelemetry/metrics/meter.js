@@ -50,7 +50,7 @@ class Meter {
    * Gets an existing instrument or creates a new one if it doesn't exist.
    * Instruments are cached by type and normalized (lowercase) name.
    *
-   * @private
+   *
    * @param {string} name - Instrument name (will be normalized to lowercase)
    * @param {string} type - Instrument type (e.g., 'counter', 'histogram', 'gauge')
    * @param {Function} InstrumentClass - Constructor for the instrument type

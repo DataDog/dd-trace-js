@@ -78,7 +78,7 @@ class MeterProvider {
   /**
    * Creates a no-op meter for use when the provider is shutdown.
    * @returns {Meter} A no-op meter instance
-   * @private
+   *
    */
   #createNoOpMeter () {
     return {

@@ -115,7 +115,7 @@ class PeriodicMetricReader {
 
   /**
    * Starts the periodic export timer.
-   * @private
+   *
    */
   #startTimer () {
     if (this.#timer) return
@@ -127,7 +127,7 @@ class PeriodicMetricReader {
 
   /**
    * Clears the periodic export timer.
-   * @private
+   *
    */
   #clearTimer () {
     if (this.#timer) {
@@ -138,7 +138,7 @@ class PeriodicMetricReader {
 
   /**
    * Collects measurements and exports metrics.
-   * @private
+   *
    * @param {Function} [callback] - Called after export completes
    */
   #collectAndExport (callback = () => {}) {
@@ -189,7 +189,7 @@ class PeriodicMetricReader {
 
 /**
  * MetricAggregator aggregates individual measurements into metric data points.
- * @private
+ *
  */
 class MetricAggregator {
   #startTime = Number(process.hrtime.bigint())
@@ -203,7 +203,7 @@ class MetricAggregator {
 
   /**
    * Gets the temporality for a given metric type.
-   * @private
+   *
    * @param {string} type - Metric type from METRIC_TYPES
    * @returns {string} Temporality from TEMPORALITY
    */
@@ -233,7 +233,7 @@ class MetricAggregator {
 
   /**
    * Aggregates measurements into metrics.
-   * @private
+   *
    * @param {Measurement[]} measurements - The measurements to aggregate
    * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
    * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
@@ -296,7 +296,7 @@ class MetricAggregator {
 
   /**
    * Gets unique identifier for a given instrumentation scope.
-   * @private
+   *
    * @param {InstrumentationScope} instrumentationScope - The instrumentation scope
    * @returns {string} - The scope identifier
    */
@@ -306,7 +306,7 @@ class MetricAggregator {
 
   /**
    * Gets unique identifier for a given metric.
-   * @private
+   *
    * @param {string} scopeKey - The scope identifier
    * @param {string} name - The metric name
    * @param {string} type - The metric type from METRIC_TYPES
@@ -319,7 +319,7 @@ class MetricAggregator {
 
   /**
    * Checks if a given metric type is a delta type.
-   * @private
+   *
    * @param {string} type - The metric type from METRIC_TYPES
    * @returns {boolean} - True if the metric type is a delta type
    */
@@ -331,7 +331,7 @@ class MetricAggregator {
 
   /**
    * Applies delta temporality to the metrics.
-   * @private
+   *
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
    * @returns {void}
@@ -376,7 +376,7 @@ class MetricAggregator {
 
   /**
    * Finds or creates a data point for a given metric.
-   * @private
+   *
    * @param {AggregatedMetric} metric - The metric to find or create a data point for
    * @param {Attributes} attributes - The attributes of the metric
    * @param {string} attrKey - The attribute key
@@ -397,7 +397,7 @@ class MetricAggregator {
   /**
    * Records the sum of all values for a given metric.
    * Creates a new data point if it doesn't exist.
-   * @private
+   *
    * @param {AggregatedMetric} metric - The metric to aggregate a sum for
    * @param {number} value - The value to aggregate
    * @param {Attributes} attributes - The attributes of the metric
@@ -430,7 +430,7 @@ class MetricAggregator {
   /**
    * Overwrites the last recorded value for a given metric or
    * creates a new data point if it doesn't exist.
-   * @private
+   *
    * @param {AggregatedMetric} metric - The metric to aggregate a last value for
    * @param {number} value - The value to aggregate
    * @param {Attributes} attributes - The attributes of the metric
@@ -451,7 +451,7 @@ class MetricAggregator {
    * Aggregates histogram values by distributing them into buckets.
    * Tracks count, sum, min, max, and per-bucket counts and creates
    * a new data point if it doesn't exist.
-   * @private
+   *
    * @param {AggregatedMetric} metric - The metric to aggregate a histogram for
    * @param {number} value - The value to aggregate
    * @param {Attributes} attributes - The attributes of the metric
