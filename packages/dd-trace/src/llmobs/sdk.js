@@ -369,7 +369,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_label'
         throw new Error('label must be the specified name of the evaluation metric')
       }
-      if (!metricType || !['categorical', 'score'].includes(metricType)) {
+      if (!metricType || !['categorical', 'score', 'boolean'].includes(metricType)) {
         err = 'invalid_metric_type'
         throw new Error('metricType must be one of "categorical" or "score"')
       }
@@ -380,6 +380,10 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'score' && typeof value !== 'number') {
         err = 'invalid_metric_value'
         throw new Error('value must be a number for a score metric.')
+      }
+      if (metricType === 'boolean' && typeof value !== 'boolean') {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a boolean for a boolean metric')
       }
 
       const evaluationTags = {
