@@ -62,12 +62,6 @@ class AgentWriter extends BaseWriter {
   }
 }
 
-function setHeader (headers, key, value) {
-  if (value) {
-    headers[key] = value
-  }
-}
-
 function getEncoder (protocolVersion) {
   return protocolVersion === '0.5'
     ? require('../../encode/0.5').AgentEncoder
@@ -82,15 +76,14 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
       ...headers,
       'Content-Type': 'application/msgpack',
       'Datadog-Meta-Tracer-Version': tracerVersion,
-      'X-Datadog-Trace-Count': String(count)
+      'X-Datadog-Trace-Count': String(count),
+      'Datadog-Meta-Lang': 'nodejs',
+      'Datadog-Meta-Lang-Version': process.version,
+      'Datadog-Meta-Lang-Interpreter': process.jsEngine || 'v8'
     },
     lookup,
     url
   }
-
-  setHeader(options.headers, 'Datadog-Meta-Lang', 'nodejs')
-  setHeader(options.headers, 'Datadog-Meta-Lang-Version', process.version)
-  setHeader(options.headers, 'Datadog-Meta-Lang-Interpreter', process.jsEngine || 'v8')
 
   log.debug('Request to the agent: %j', options)
 
