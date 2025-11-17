@@ -28,7 +28,13 @@ describe('FlaggingProvider Initialization Timeout', () => {
     mockConfig = {
       service: 'test-service',
       version: '1.0.0',
-      env: 'test'
+      env: 'test',
+      experimental: {
+        flaggingProvider: {
+          enabled: true,
+          timeoutMs: 30000 // Default timeout
+        }
+      }
     }
 
     mockChannel = {
