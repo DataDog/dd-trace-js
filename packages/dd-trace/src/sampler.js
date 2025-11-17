@@ -47,16 +47,20 @@ class Sampler {
    */
   isSampled (span) {
     if (this._rate === 1) {
+      console.log('SAMPLING - rate: 1 - true')
       return true
     }
 
     if (this._rate === 0) {
+      console.log('SAMPLING - rate: 0 - false')
       return false
     }
 
     span = typeof span.context === 'function' ? span.context() : span
 
-    return (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
+    const result = (span._traceId.toBigInt() * SAMPLING_KNUTH_FACTOR) % UINT64_MODULO <= this.#threshold
+    console.log('SAMPLING - result: ' + result)
+    return result
   }
 }
 
