@@ -2,36 +2,89 @@
 
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-
 const tracingChannel = require('dc-polyfill').tracingChannel
+const channel = require('dc-polyfill').channel
 
-const genaiChannel = tracingChannel('apm:google:genai:request')
+const genaiTracingChannel = tracingChannel('apm:google:genai:request')
+const onStreamedChunkCh = channel('apm:google:genai:request:chunk')
 
 function wrapGenerateContent (method) {
-  return function wrappedGenerateContentInternal (func) {
-    console.log('where are we even')
+  return function wrappedGenerateContent (original) {
     return function (...args) {
-      console.log('where are we even', args)
-      if (genaiChannel.hasSubscribers) {
-        const inputs = args[0]
-        const promptText = inputs?.contents || ''
-        const normalizedName = normalizeMethodName(method)
-        console.log('normalized', normalizedName)
-
-        const ctx = {
-          methodName: normalizedName,
-          inputs,
-          promptText,
-          model: args[0].model || 'unknown'
-        }
-        return genaiChannel.tracePromise(func, ctx, this, ...args)
+      if (!genaiTracingChannel.start.hasSubscribers) {
+        return original.apply(this, args)
       }
 
-      return func.apply(this, args)
+      const inputs = args[0]
+      const normalizedName = normalizeMethodName(method)
+
+      const ctx = {
+        methodName: normalizedName,
+        inputs,
+        args,
+        model: inputs?.model || 'unknown'
+      }
+
+      return genaiTracingChannel.start.runStores(ctx, () => {
+        let result
+        try {
+          result = original.apply(this, arguments)
+        } catch (error) {
+          finish(ctx, null, error)
+        }
+
+        return result.then(response => {
+          if (method === 'generateContentStream') {
+            shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
+          } else {
+            finish(ctx, response, null)
+            genaiTracingChannel.end.publish(ctx)
+          }
+          return response
+        }).catch(error => {
+          finish(ctx, null, error)
+          throw error
+        })
+      })
     }
   }
 }
 
+function wrapStreamIterator (iterator, ctx) {
+  return function () {
+    const itr = iterator.apply(this, arguments)
+    shimmer.wrap(itr, 'next', next => function () {
+      return next.apply(this, arguments)
+        .then(res => {
+          const { done, value: chunk } = res
+          onStreamedChunkCh.publish({ ctx, chunk, done })
+
+          if (done) {
+            finish(ctx)
+          }
+
+          return res
+        })
+        .catch(error => {
+          finish(ctx, null, error)
+          throw error
+        })
+    })
+
+    return itr
+  }
+}
+function finish (ctx, result, error) {
+  if (error) {
+    ctx.error = error
+    genaiTracingChannel.error.publish(ctx)
+  }
+
+  // streamed responses are handled and set separately
+  ctx.result ??= result
+
+  genaiTracingChannel.asyncEnd.publish(ctx)
+}
 // Hook the main package entry point
 addHook({
   name: '@google/genai',
@@ -63,141 +116,10 @@ addHook({
 
   return exports
 })
+
 function normalizeMethodName (methodName) {
-  // using regex and built-in method less verbose only slightly slower than a more
-  // verbose nested loop
+  // Convert camelCase to snake_case and add Models prefix
   return 'Models.' + methodName
-    .replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2') // insert underscore before capitals
+    .replaceAll(/([a-z0-9])([A-Z])/g, '$1_$2')
     .toLowerCase()
 }
-
-// const extensions = ['cjs', 'mjs']
-// const paths = [
-//   'dist/index', // Main entry point
-//   'dist/node/index' // Node-specific entry point
-// ]
-
-// for (const extension of extensions) {
-//   for (const path of paths) {
-//     const fullPath = `${path}.${extension}`
-//     console.log('=== REGISTERING HOOK ===')
-//     console.log('Extension:', extension)
-//     console.log('Path:', path)
-//     console.log('Full path:', fullPath)
-//     console.log('Expected moduleName:', `@google/genai/${fullPath}`)
-
-//     addHook({
-//       name: '@google/genai',
-//       file: fullPath,
-//       versions: ['>=1.19.0']
-//     }, exports => {
-//       console.log('=== HOOK TRIGGERED ===')
-//       console.log('Extension:', extension)
-//       console.log('Path:', path)
-//       console.log('Expected fullFilename:', `@google/genai/${path}.${extension}`)
-//       console.log('in the hook', extension, path)
-//       // if (extension === 'cjs') {
-//       shimmer.wrap(exports, 'Models', Models => {
-//         console.log('=== WRAPPING Models CLASS ===')
-//         console.log('Models:', Models)
-//         console.log('Models.prototype:', Models.prototype)
-//         console.log('Models.prototype.generateContent:', typeof Models.prototype.generateContent)
-//         return class extends Models {
-//           constructor (...args) {
-//             super(...args)
-//             console.log('this.constructor.name', this.constructor.name)
-//             if (this.constructor.name) {}
-//             console.log('=== ABOUT TO WRAP generateContent ===')
-//             shimmer.wrap(Models.prototype, 'generateContent',
-//               wrapGenerateContent
-// ('generateContent'))
-//             console.log('=== FINISHED WRAPPING generateContent ===')
-//           }
-//         }
-//       })
-//       // }
-//       return exports
-//     })
-//   }
-// }
-// function wrap (obj, name, channelName, namespace) {
-//   const channel = tracingChannel(channelName)
-//   shimmer.wrap(obj, name, function (original) {
-//     console.log('functio wrap')
-//     return function () {
-//       if (!channel.start.hasSubscribers) {
-//         return original.apply(this, arguments)
-//       }
-//       const ctx = { self: this, arguments }
-//       if (namespace) {
-//         ctx.namespace = namespace
-//       }
-//       return channel.tracePromise(original, ctx, this, ...arguments)
-//     }
-//   })
-// }
-// function normalizeGenAIResourceName (resource) {
-//   switch (resource) {
-//   // completions
-//     case 'completions.create':
-//       return 'createCompletion'
-
-//       // chat completions
-//     case 'generateContentStreamInternal':
-//       return 'createChatCompletion'
-
-//       // embeddings
-//     case 'embeddings.create':
-//       return 'createEmbedding'
-//     default:
-//       return resource
-//   }
-// }
-// }
-// const { addHook } = require('./helpers/instrument')
-// const shimmer = require('../../datadog-shimmer')
-
-// const dc = require('dc-polyfill')
-// const genRequest = dc.tracingChannel('apm:gemini:request')
-// console.log('in gen instru')
-
-// function wrapGenerate (that) {
-//   console.log('in generate!', arguments, that.constructor)
-//   return function (...args) {
-//     console.log('GENERATE', args)
-//     that.constructor.apply(this, args)
-//   }
-// }
-
-// addHook({
-//   name: '@google/genai',
-//   versions: ['>=1.19.0']
-// }, gemini => {
-//   // Wrap generateContent directly on the prototype
-//   console.log('gemini.Models.prototype.generateContent', gemini.Models.prototype.generateContent)
-//   if (gemini.Models && gemini.Models.prototype && typeof gemini.Models.prototype.generateContent === 'function') {
-//     shimmer.wrap(gemini.Models.prototype, 'generateContent', function (original) {
-//       return async function (...args) {
-//         console.log('generateContent called with:', args)
-//         const result = await original.apply(this, args)
-//         console.log('generateContent returned:', result)
-//         return result
-//       }
-//     })
-//   }
-// })
-
-// if (gemini.Models &&
-// gemini.Models.prototype &&
-// typeof gemini.Models.prototype.generateContentInternal === 'function') {
-//   shimmer.wrap(gemini.Models.prototype, 'generateContentInternal',
-//     wrapGenerateContent
-// ('generateContentInternal'))
-// }
-// if (gemini.Models &&
-// gemini.Models.prototype &&
-// typeof gemini.Models.prototype.generateContentStreamInternal === 'function') {
-//   shimmer.wrap(gemini.Models.prototype, 'generateContentStreamInternal',
-//     wrapGenerateContent
-// ('generateContentStreamInternal'))
-// }
