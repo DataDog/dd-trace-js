@@ -11,13 +11,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    // Skip if explicitly disabled (mainly for testing SDK operations)
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    if (process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PUSH_ENABLED === 'false') {
-      log.info('[DD DEBUG] Push subscription plugin DISABLED via env var')
-      return
-    }
-
     log.info('[DD DEBUG] Push subscription plugin initialized, subscribing to HTTP channel')
     // Subscribe to HTTP start channel to intercept PubSub requests
     // We run BEFORE HTTP plugin to set delivery span as active parent

@@ -14,6 +14,18 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
+// Auto-load push subscription plugin when google-cloud-pubsub is loaded
+try {
+  const tracer = require('../../dd-trace')
+  if (tracer._tracer) {
+    const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
+    const handler = new PushSubscriptionPlugin(tracer._tracer, {})
+    handler.configure({})
+  }
+} catch {
+  // Silent - push subscription plugin is optional
+}
+
 const publisherMethods = [
   'createTopic',
   'updateTopic',

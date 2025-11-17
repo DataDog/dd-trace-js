@@ -27,14 +27,11 @@ describe('Plugin', () => {
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
       process.env.DD_DATA_STREAMS_ENABLED = 'true'
-      // Disable push subscription plugin for SDK tests to prevent interference
-      // The push plugin is for HTTP push subscriptions, not SDK operations
-      process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PUSH_ENABLED = 'false'
     })
 
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
-      delete process.env.DD_TRACE_GOOGLE_CLOUD_PUBSUB_PUSH_ENABLED
+      delete process.env.DD_DATA_STREAMS_ENABLED
     })
 
     afterEach(() => {
