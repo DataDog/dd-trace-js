@@ -16,7 +16,7 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
 
 // TODO: Fix this test / esm issue
-describe.skip('esm', () => {
+describe('esm', () => {
   let agent
   let proc
 
