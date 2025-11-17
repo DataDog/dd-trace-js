@@ -5,7 +5,7 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe('IAST - overhead-controller - integration', () => {
+describe.only('IAST - overhead-controller - integration', () => {
   let axios, cwd, agent, proc
 
   useSandbox(
@@ -70,6 +70,7 @@ describe('IAST - overhead-controller - integration', () => {
           console.log(JSON.stringify(payload, (key, value) => {
             if (typeof value === 'bigint') { return value.toString() }
             if (key === 'meta_struct') return 'IGNORED_META_STRUCT'
+            return value
           }
           , 2))
           console.log('--------------------------------')
