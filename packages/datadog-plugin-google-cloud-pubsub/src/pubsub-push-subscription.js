@@ -34,7 +34,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     // No unwrapped Pub/Sub headers found - likely missing --push-no-wrapper-write-metadata
-    log.warn('[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. Add --push-no-wrapper-write-metadata to your subscription.')
+    log.warn(
+      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
+      'Add --push-no-wrapper-write-metadata to your subscription.'
+    )
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
