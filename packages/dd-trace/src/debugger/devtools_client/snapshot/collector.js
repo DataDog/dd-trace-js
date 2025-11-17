@@ -16,7 +16,8 @@ module.exports = {
  * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
  * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
  * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
- * @property {boolean} [deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
+ * @property {Object} [ctx={}] - A context object to track the state/progress of the snapshot collection.
+ * @property {boolean} [ctx.deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
  *   caller, but is used to signal the deadline overrun to the caller.
  */
 
@@ -235,7 +236,7 @@ function removeNonEnumerableProperties (props) {
 }
 
 function overBudget (opts) {
-  if (opts.deadlineReached) return true
-  opts.deadlineReached = process.hrtime.bigint() >= opts.deadlineNs
-  return opts.deadlineReached
+  if (opts.ctx.deadlineReached) return true
+  opts.ctx.deadlineReached = process.hrtime.bigint() >= opts.deadlineNs
+  return opts.ctx.deadlineReached
 }

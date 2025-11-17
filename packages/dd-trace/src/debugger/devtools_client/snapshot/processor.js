@@ -74,7 +74,7 @@ function getPropertyValueRaw (prop, maxLength) {
 }
 
 function getObjectValue (obj, maxLength) {
-  const timeBudgetReached = Object.hasOwn(obj, timeBudgetSym)
+  const timeBudgetReached = obj[timeBudgetSym] === true
 
   switch (obj.subtype) {
     case undefined:
@@ -129,7 +129,7 @@ function toFunctionOrClass (value, maxLength) {
 
   if (classMatch === null) {
     // This is a function
-    const timeBudgetReached = Object.hasOwn(value, timeBudgetSym)
+    const timeBudgetReached = value[timeBudgetSym] === true
     // TODO: Would it make sense to detect if it's an arrow function or not?
     return toObject(value.className, value.properties, maxLength, timeBudgetReached)
   }
@@ -189,7 +189,7 @@ function toArray (type, elements, maxLength, timeBudgetReached) {
 function toMap (type, pairs, maxLength, timeBudgetReached) {
   if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (pairs === undefined) return notCapturedDepth(type)
-  if (pairs.every(({ value }) => Object.hasOwn(value, timeBudgetSym))) return notCapturedTimeBudget(type)
+  if (pairs.length > 0 && pairs.every(({ value }) => value[timeBudgetSym] === true)) return notCapturedTimeBudget(type)
 
   const result = {
     type,
@@ -219,7 +219,9 @@ function toMap (type, pairs, maxLength, timeBudgetReached) {
 function toSet (type, values, maxLength, timeBudgetReached) {
   if (timeBudgetReached === true) return notCapturedTimeBudget(type)
   if (values === undefined) return notCapturedDepth(type)
-  if (values.every(({ value }) => Object.hasOwn(value, timeBudgetSym))) return notCapturedTimeBudget(type)
+  if (values.length > 0 && values.every(({ value }) => value[timeBudgetSym] === true)) {
+    return notCapturedTimeBudget(type)
+  }
 
   const result = {
     type,

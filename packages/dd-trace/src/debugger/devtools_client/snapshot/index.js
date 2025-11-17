@@ -21,41 +21,53 @@ function returnError () {
 
 /**
  * @typedef {Object} GetLocalStateForCallFrameOptions
- * @property {number} [maxReferenceDepth=DEFAULT_MAX_REFERENCE_DEPTH] - The maximum depth of the object to traverse
- * @property {number} [maxCollectionSize=DEFAULT_MAX_COLLECTION_SIZE] - The maximum size of a collection to include
- *   in the snapshot
- * @property {number} [maxFieldCount=DEFAULT_MAX_FIELD_COUNT] - The maximum number of properties on an object to
- *   include in the snapshot
- * @property {number} [maxLength=DEFAULT_MAX_LENGTH] - The maximum length of a string to include in the snapshot
- * @property {bigint} [deadlineNs=BIGINT_MAX] - The deadline in nanoseconds compared to
- *   `process.hrtime.bigint()`. If the deadline is reached, the snapshot will be truncated.
- * @property {boolean} [deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
- *   caller, but is used to signal the deadline overrun to the caller.
+ * @property {number} [maxReferenceDepth] - The maximum depth of the object to traverse. Defaults to
+ *   {@link DEFAULT_MAX_REFERENCE_DEPTH}.
+ * @property {number} [maxCollectionSize] - The maximum size of a collection to include in the snapshot. Defaults to
+ *   {@link DEFAULT_MAX_COLLECTION_SIZE}.
+ * @property {number} [maxFieldCount] - The maximum number of properties on an object to include in the snapshot.
+ *   Defaults to {@link DEFAULT_MAX_FIELD_COUNT}.
+ * @property {number} [maxLength] - The maximum length of a string to include in the snapshot. Defaults to
+ *   {@link DEFAULT_MAX_LENGTH}.
+ * @property {bigint} [deadlineNs] - The deadline in nanoseconds compared to `process.hrtime.bigint()`. Defaults to
+ *   {@link BIGINT_MAX}. If the deadline is reached, the snapshot will be truncated.
  */
 
 /**
  * Get the local state for a call frame.
  *
  * @param {import('inspector').Debugger.CallFrame} callFrame - The call frame to get the local state for
- * @param {GetLocalStateForCallFrameOptions} [opts={}] - The options for the snapshot
+ * @param {GetLocalStateForCallFrameOptions} [opts] - The options for the snapshot
  * @returns {Promise<Object>} The local state for the call frame
  */
-async function getLocalStateForCallFrame (callFrame, opts = {}) {
-  opts.maxReferenceDepth ??= DEFAULT_MAX_REFERENCE_DEPTH
-  opts.maxCollectionSize ??= DEFAULT_MAX_COLLECTION_SIZE
-  opts.maxFieldCount ??= DEFAULT_MAX_FIELD_COUNT
-  opts.maxLength ??= DEFAULT_MAX_LENGTH
-  opts.deadlineNs ??= BIGINT_MAX
-  opts.deadlineReached ??= false
+async function getLocalStateForCallFrame (
+  callFrame,
+  {
+    maxReferenceDepth = DEFAULT_MAX_REFERENCE_DEPTH,
+    maxCollectionSize = DEFAULT_MAX_COLLECTION_SIZE,
+    maxFieldCount = DEFAULT_MAX_FIELD_COUNT,
+    maxLength = DEFAULT_MAX_LENGTH,
+    deadlineNs = BIGINT_MAX
+  } = {}
+) {
   const rawState = []
   let processedState = null
 
   try {
+    const opts = {
+      maxReferenceDepth,
+      maxCollectionSize,
+      maxFieldCount,
+      deadlineNs,
+      ctx: { deadlineReached: false }
+    }
     for (const scope of callFrame.scopeChain) {
-      if (opts.deadlineReached === true) break // TODO: Variables in scope are silently dropped: Not the best UX
       if (scope.type === 'global') continue // The global scope is too noisy
+      const { objectId } = scope.object
+      if (objectId === undefined) continue // I haven't seen this happen, but according to the types it's possible
       // eslint-disable-next-line no-await-in-loop
-      rawState.push(...await getRuntimeObject(scope.object.objectId, opts))
+      rawState.push(...await getRuntimeObject(objectId, opts))
+      if (opts.ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
     }
   } catch (err) {
     // TODO: We might be able to get part of the scope chain.
@@ -66,7 +78,7 @@ async function getLocalStateForCallFrame (callFrame, opts = {}) {
 
   // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`
   return () => {
-    processedState = processedState ?? processRawState(rawState, opts.maxLength)
+    processedState = processedState ?? processRawState(rawState, maxLength)
     return processedState
   }
 }

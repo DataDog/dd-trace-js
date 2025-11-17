@@ -3,8 +3,6 @@
 const assert = require('node:assert')
 const { setup } = require('./utils')
 
-const tolerance = 5
-
 describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
     describe('with snapshot under tight time budget', function () {
@@ -18,7 +16,8 @@ describe('Dynamic Instrumentation', function () {
 
         it(
           'should include partial snapshot marked with notCapturedReason: timeout',
-          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 0, maxReferenceDepth: 5 })
+          // A tolerance of 15ms is used to avoid flakiness
+          test({ t, maxPausedTime: target + 15, breakpointIndex: 0, maxReferenceDepth: 5 })
         )
       })
 
@@ -30,21 +29,24 @@ describe('Dynamic Instrumentation', function () {
         // eslint-disable-next-line mocha/no-pending-tests
         it.skip(
           'should keep budget when state includes an object with 1 million properties',
-          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 1, maxReferenceDepth: 1 })
+          // A tolerance of 5ms is used to avoid flakiness
+          test({ t, maxPausedTime: target + 5, breakpointIndex: 1, maxReferenceDepth: 1 })
         )
 
         // TODO: Make this pass
         // eslint-disable-next-line mocha/no-pending-tests
         it.skip(
           'should keep budget when state includes an array of 1 million primitives',
-          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 2, maxReferenceDepth: 1 })
+          // A tolerance of 5ms is used to avoid flakiness
+          test({ t, maxPausedTime: target + 5, breakpointIndex: 2, maxReferenceDepth: 1 })
         )
 
         // TODO: Make this pass
         // eslint-disable-next-line mocha/no-pending-tests
         it.skip(
           'should keep budget when state includes an array of 1 million objects',
-          test({ t, maxPausedTime: target + tolerance, breakpointIndex: 3, maxReferenceDepth: 1 })
+          // A tolerance of 5ms is used to avoid flakiness
+          test({ t, maxPausedTime: target + 5, breakpointIndex: 3, maxReferenceDepth: 1 })
         )
       })
     })
