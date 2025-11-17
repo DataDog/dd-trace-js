@@ -5,6 +5,11 @@ const crypto = require('crypto')
 
 const app = express()
 
+app.use((req, res, next) => {
+  console.log('REQUEST - start ' + req.url)
+  next()
+  console.log('REQUEST - ending ' + req.url)
+})
 app.get('/one-vulnerability', (req, res) => {
   crypto.createHash('sha1').update('abccc').digest('hex')
 
