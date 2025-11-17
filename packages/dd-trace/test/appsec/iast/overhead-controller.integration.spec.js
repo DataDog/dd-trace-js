@@ -67,8 +67,10 @@ describe('IAST - overhead-controller - integration', () => {
           })
         } catch (e) {
           console.log('--------------------------------')
-          console.log(JSON.stringify(payload, (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value
+          console.log(JSON.stringify(payload, (key, value) => {
+            if (typeof value === 'bigint') { return value.toString() }
+            if (key === 'meta_struct') return 'IGNORED_META_STRUCT'
+          }
           , 2))
           console.log('--------------------------------')
           console.log(e)
