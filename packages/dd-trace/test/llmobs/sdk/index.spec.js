@@ -4,8 +4,9 @@ const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
+const assert = require('node:assert')
 
-const Config = require('../../../src/config')
+const { getConfigFresh } = require('../../helpers/config')
 
 const LLMObsTagger = require('../../../src/llmobs/tagger')
 const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations')
@@ -94,7 +95,7 @@ describe('sdk', () => {
 
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
-      const config = new Config({})
+      const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub(),
         disable () {}
@@ -126,7 +127,7 @@ describe('sdk', () => {
     })
 
     it('does not enable llmobs if env var conflicts', () => {
-      const config = new Config({})
+      const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub()
       }
@@ -149,7 +150,7 @@ describe('sdk', () => {
         disable: sinon.stub()
       }
 
-      const config = new Config({
+      const config = getConfigFresh({
         llmobs: {}
       })
 
@@ -1209,6 +1210,36 @@ describe('sdk', () => {
 
       expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
       Date.now.restore()
+    })
+
+    it('submits a boolean evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        timestampMs: 1234
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+
+      assert.deepEqual(evalMetric, {
+        span_id: '5678',
+        trace_id: '1234',
+        label: 'has_toxicity',
+        metric_type: 'boolean',
+        ml_app: 'mlApp',
+        boolean_value: true,
+        timestamp_ms: 1234,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp']
+      })
+    })
+
+    it('throws an error when submitting a non-boolean boolean evaluation metric', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: 'it is super toxic!'
+      }), { message: 'value must be a boolean for a boolean metric' })
     })
   })
 

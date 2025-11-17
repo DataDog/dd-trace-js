@@ -302,6 +302,7 @@ const openSearchOptions: plugins.opensearch = {
   },
 };
 
+tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
@@ -660,6 +661,12 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     mlApp: 'myApp',
     tags: {},
     timestampMs: Date.now()
+  })
+
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'toxicity',
+    metricType: 'boolean',
+    value: 'true'
   })
 })
 

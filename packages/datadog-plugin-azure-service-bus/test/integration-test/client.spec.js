@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -13,18 +14,10 @@ const spawnEnv = { DD_TRACE_FLUSH_INTERVAL: '2000' }
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('azure-service-bus', '@azure/service-bus', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'@azure/service-bus@${version}'`], false, [
-        './packages/datadog-plugin-azure-service-bus/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'@azure/service-bus@${version}'`], false, [
+      './packages/datadog-plugin-azure-service-bus/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -42,7 +35,7 @@ describe('esm', () => {
         assert.isArray(payload)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(20000)
@@ -153,7 +146,7 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[22][0]).length, 2)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, spawnEnv)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, spawnEnv)
 
       await res
     }).timeout(60000)

@@ -1,6 +1,6 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
 const { assert } = require('chai')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
@@ -26,31 +26,24 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
-  let sandbox, cwd, appFile
+  let cwd, appFile
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  // Dependencies needed for OpenFeature integration tests
+  const dependencies = [
+    'express',
+    '@openfeature/server-sdk',
+    '@openfeature/core',
+  ]
 
-    // Dependencies needed for OpenFeature integration tests
-    const dependencies = [
-      'express',
-      '@openfeature/server-sdk',
-      '@openfeature/core',
-    ]
+  useSandbox(
+    dependencies,
+    false,
+    [path.join(__dirname, 'app')]
+  )
 
-    sandbox = await createSandbox(
-      dependencies,
-      false,
-      [path.join(__dirname, 'app')]
-    )
-
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'app', 'exposure-events.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   describe('FlaggingProvider evaluation generates exposures', () => {
@@ -82,7 +75,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.on('exposures', ({ payload, headers }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 
@@ -119,7 +112,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
+          config: ufcPayloads.testBooleanAndStringFlags
         })
 
         // Wait for RC delivery then evaluate flags
@@ -166,7 +159,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.on('exposures', ({ payload }) => {
           assert.property(payload, 'context')
           assert.property(payload, 'exposures')
-          assert.equal(payload.context.service_name, 'ffe-test-service')
+          assert.equal(payload.context.service, 'ffe-test-service')
           assert.equal(payload.context.version, '1.2.3')
           assert.equal(payload.context.env, 'test')
 
@@ -199,7 +192,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         agent.addRemoteConfig({
           product: RC_PRODUCT,
           id: configId,
-          config: { flag_configuration: ufcPayloads.testBooleanAndStringFlags }
+          config: ufcPayloads.testBooleanAndStringFlags
         })
 
         setTimeout(async () => {
@@ -264,7 +257,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       agent.addRemoteConfig({
         product: RC_PRODUCT,
         id: configId,
-        config: { flag_configuration: ufcPayloads.simpleStringFlagForAck }
+        config: ufcPayloads.simpleStringFlagForAck
       })
 
       // Trigger request to start remote config polling

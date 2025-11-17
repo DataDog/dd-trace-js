@@ -34,7 +34,8 @@ const {
   getLibraryCapabilitiesTags,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
-  getPullRequestBaseBranch
+  getPullRequestBaseBranch,
+  TEST_IS_TEST_FRAMEWORK_WORKER
 } = require('./util/test')
 const { getRepositoryRoot } = require('./util/git')
 const Plugin = require('./plugin')
@@ -311,6 +312,7 @@ module.exports = class CiPlugin extends Plugin {
           span.parent_id = id(span.parent_id)
 
           if (span.name?.startsWith(`${this.constructor.id}.`)) {
+            span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
             // augment with git information (since it will not be available in the worker)
             for (const key in this.testEnvironmentMetadata) {
               // CAREFUL: this bypasses the metadata/metrics distinction

@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const { URL } = require('url')
+
 const log = require('./log')
 const tagger = require('./tagger')
 const set = require('../../datadog-core/src/utils/src/set')
@@ -19,6 +20,7 @@ const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
 const defaults = require('./config_defaults')
 const path = require('path')
+const { DD_MAJOR } = require('../../../version')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -1032,7 +1034,9 @@ class Config {
       opts['iast.requestSampling'] = iastRequestSampling
       this.#optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    if (DD_MAJOR < 6) {
+      opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
+    }
     this.#setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this.#setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this.#setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
@@ -1504,4 +1508,12 @@ function getAgentUrl (url, options) {
   }
 }
 
-module.exports = Config
+let configInstance = null
+function getConfig (options) {
+  if (!configInstance) {
+    configInstance = new Config(options)
+  }
+  return configInstance
+}
+
+module.exports = getConfig

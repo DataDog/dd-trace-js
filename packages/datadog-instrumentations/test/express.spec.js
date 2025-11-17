@@ -5,6 +5,7 @@ const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, before, after } = require('mocha')
 const sinon = require('sinon')
+const semifies = require('semifies')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -12,14 +13,14 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 withVersions('express', 'express', version => {
   describe('express query instrumentation', () => {
     const queryParserReadCh = dc.channel('datadog:query:read:finish')
-    let port, server, requestBody
+    let port, server, requestBody, express
 
     before(() => {
       return agent.load(['express', 'body-parser'], { client: false })
     })
 
     before((done) => {
-      const express = require(`../../../versions/express@${version}`).get()
+      express = require(`../../../versions/express@${version}`).get()
       const app = express()
       app.get('/', (req, res) => {
         requestBody()
@@ -73,5 +74,13 @@ withVersions('express', 'express', version => {
 
       queryParserReadCh.unsubscribe(blockRequest)
     })
+
+    if (semifies(version, '4')) {
+      // Router does not exist in Express 5
+      it('should work correctly when router[method] is called without handler', () => {
+        const router = express.Router()
+        expect(() => { router.bind('/test') }).to.not.throw()
+      })
+    }
   })
 })
