@@ -352,10 +352,11 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   // ============================================================================
 
   _formatFunctionCallMessage (parts, functionCalls, role) {
+    console.log('formatFunctionCallMessage called!!!!!!!!!!', functionCalls)
     const toolCalls = functionCalls.map(part => ({
       name: part.functionCall.name,
       arguments: part.functionCall.args,
-      toolId: part.functionCall.id,
+      toolId: part.functionCall.id || '',
       type: 'function_call'
     }))
 
