@@ -1008,36 +1008,36 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when using off timing imports', () => {
-    onlyLatestIt('reports test suite errors when using off timing import', async () => {
+    onlyLatestIt('reports test suite errors when waitForUnhandledRejections=true', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const suites = events.filter(event => event.type === 'test_suite_end')
-          assert.equal(suites.length, 6)
+          assert.equal(suites.length, 3)
+
           const failedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_SUITE] === 'ci-visibility/jest-bad-import/jest-bad-import-test.js'
           )
-          assert.equal(failedTestSuites.length, 4)
-          failedTestSuites.forEach(suite => {
-            assert.equal(suite.content.meta[TEST_STATUS], 'fail')
-            assert.include(suite.content.meta[ERROR_MESSAGE], 'a file outside of the scope of the test code')
-            assert.equal(suite.content.meta[ERROR_TYPE], 'ReferenceError')
-          })
+          assert.equal(failedTestSuites.length, 1)
+          const [failedTestSuite] = failedTestSuites
+
+          assert.equal(failedTestSuite.content.meta[TEST_STATUS], 'fail')
+          assert.include(failedTestSuite.content.meta[ERROR_MESSAGE], 'a file outside of the scope of the test code')
+          assert.equal(failedTestSuite.content.meta[ERROR_TYPE], 'Error')
+
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
           )
           assert.equal(passedTestSuites.length, 2)
         })
 
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
       childProcess = exec(runTestsCommand, {
         cwd,
         env: {
-          ...restEnvVars,
-          // need --experimental-vm-modules to trigger the error
-          NODE_OPTIONS: `${NODE_OPTIONS} --experimental-vm-modules`,
+          ...getCiVisAgentlessConfig(receiver.port),
           TESTS_TO_RUN: 'jest-bad-import/jest-bad-import-test',
           RUN_IN_PARALLEL: true,
+          WAIT_FOR_UNHANDLED_REJECTIONS: true
         },
         stdio: 'inherit'
       })

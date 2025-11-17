@@ -1,0 +1,22 @@
+{
+  "name": "esbuild-dd-trace-iast-esm",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Basic ESM application to test IAST support on a bundled app with dd-trace via esbuild",
+  "main": "app.mjs",
+  "scripts": {
+    "build": "DD_TRACE_DEBUG=true DD_IAST_ENABLED=true node ./esbuild.mjs && DD_IAST_ENABLED=false node ./esbuild-no-iast.mjs"
+  },
+  "keywords": [
+    "esbuild",
+    "iast",
+    "esm"
+  ],
+  "author": "Carles Capell <carles.capell@datadoghq.com>",
+  "license": "ISC",
+  "dependencies": {
+    "esbuild": "^0.25.9",
+    "express": "^4.21.2"
+  }
+}
