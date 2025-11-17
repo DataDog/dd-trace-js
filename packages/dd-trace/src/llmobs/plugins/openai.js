@@ -226,10 +226,35 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
 
+    // For reusable prompts, extract input from response.instructions if not provided in inputs
+    let actualInput = input
+    if (!actualInput && inputs.prompt && response && response.instructions) {
+      actualInput = response.instructions
+    }
+
     // Handle input - can be string or array of mixed messages
-    if (Array.isArray(input)) {
-      for (const item of input) {
-        if (item.type === 'function_call') {
+    if (Array.isArray(actualInput)) {
+      for (const item of actualInput) {
+        if (item.type === 'message') {
+          // Handle instruction messages (from response.instructions for reusable prompts)
+          const role = item.role
+          if (!role) continue
+
+          let content = ''
+          if (Array.isArray(item.content)) {
+            // Extract text from content items (e.g., { type: 'input_text', text: '...' })
+            const textParts = item.content
+              .filter(c => c.type === 'input_text' && c.text)
+              .map(c => c.text)
+            content = textParts.join('')
+          } else if (typeof item.content === 'string') {
+            content = item.content
+          }
+
+          if (content || role === 'developer') {
+            inputMessages.push({ role, content })
+          }
+        } else if (item.type === 'function_call') {
           // Function call: convert to message with tool_calls
           // Parse arguments if it's a JSON string
           let parsedArgs = item.arguments
@@ -265,9 +290,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           inputMessages.push({ role: item.role, content: item.content })
         }
       }
-    } else {
+    } else if (actualInput) {
       // Simple string input
-      inputMessages.push({ role: 'user', content: input })
+      inputMessages.push({ role: 'user', content: actualInput })
     }
 
     if (error) {

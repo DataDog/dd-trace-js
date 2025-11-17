@@ -751,8 +751,17 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        // Verify prompt metadata
         const spanEvent = llmobsSpans[0]
+
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+        assert(spanEvent.meta.input.messages.length >= 1, 'Should have at least one input message')
+        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
+        assert(userMessage, 'Should have a user message')
+        assert.strictEqual(userMessage.content, 'I saw a cat in the hat and another cat')
+
+        // Verify prompt metadata
         assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
         const prompt = spanEvent.meta.input.prompt
         assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
@@ -778,8 +787,19 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        // Verify prompt metadata
         const spanEvent = llmobsSpans[0]
+
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+        const developerMessage = spanEvent.meta.input.messages.find(m => m.role === 'developer')
+        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
+        assert(developerMessage, 'Should have a developer message')
+        assert.strictEqual(developerMessage.content, 'Reply with "OK".')
+        assert(userMessage, 'Should have a user message')
+        assert.strictEqual(userMessage.content, 'This is a test for testing the tester')
+
+        // Verify prompt metadata
         assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
         const prompt = spanEvent.meta.input.prompt
         assert.strictEqual(prompt.id, 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f')
@@ -806,8 +826,16 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        // Verify prompt metadata
         const spanEvent = llmobsSpans[0]
+
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
+        assert(userMessage, 'Should have a user message')
+        assert.strictEqual(userMessage.content, 'The price of groceries is $99.99.')
+
+        // Verify prompt metadata
         assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
         const prompt = spanEvent.meta.input.prompt
         assert.strictEqual(prompt.id, 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191')
@@ -833,8 +861,16 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        // Verify prompt metadata
         const spanEvent = llmobsSpans[0]
+
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
+        assert(userMessage, 'Should have a user message')
+        assert.strictEqual(userMessage.content, 'I saw a cat in the hat and another ')
+
+        // Verify prompt metadata
         assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
         const prompt = spanEvent.meta.input.prompt
         assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
