@@ -5,7 +5,6 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
@@ -63,10 +62,8 @@ function wrapMethod (method) {
   const api = method.name
 
   return function (request) {
-    log.info(`[DD DEBUG] wrapMethod called for API: ${api}, hasSubscribers: ${requestStartCh.hasSubscribers}`)
     if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
-    log.info(`[DD DEBUG] Creating span for ${api}`)
     const ctx = { request, api, projectId: this.auth._cachedProjectId }
     return requestStartCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
@@ -153,8 +150,59 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-// NOTE: injectTraceContext and Topic.publish wrappers removed temporarily to test if they're causing the timeout
-// The low-level PublisherClient.publish wrapper below should handle span creation
+// Inject trace context into Pub/Sub message attributes
+function injectTraceContext (attributes, pubsub, topicName) {
+  if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
+
+  try {
+    const tracer = require('../../dd-trace')
+    const activeSpan = tracer.scope().active()
+    if (!activeSpan) return
+
+    tracer.inject(activeSpan, 'text_map', attributes)
+
+    // Inject upper 64 bits of 128-bit trace ID for proper span linking
+    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
+    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
+  } catch {
+    // Silently fail - trace context injection is best-effort
+  }
+
+  // Add metadata for consumer correlation
+  if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
+  if (topicName) attributes['pubsub.topic'] = topicName
+}
+
+// Inject trace context into messages at queue time
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
+  if (!obj.Topic?.prototype) return obj
+
+  // Wrap Topic.publishMessage (modern API)
+  if (obj.Topic.prototype.publishMessage) {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
+      if (data && typeof data === 'object') {
+        if (!data.attributes) data.attributes = {}
+        injectTraceContext(data.attributes, this.pubsub, this.name)
+      }
+      return publishMessage.apply(this, arguments)
+    })
+  }
+
+  // Wrap Topic.publish (legacy API)
+  if (obj.Topic.prototype.publish) {
+    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
+      // Normalize arguments: ensure attributes object exists at position [1]
+      if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
+        arguments[1] = {}
+        arguments[2] = attributesOrCallback
+      }
+      injectTraceContext(arguments[1], this.pubsub, this.name)
+      return publish.apply(this, arguments)
+    })
+  }
+
+  return obj
+})
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const { PublisherClient, SchemaServiceClient, SubscriberClient } = obj.v1
