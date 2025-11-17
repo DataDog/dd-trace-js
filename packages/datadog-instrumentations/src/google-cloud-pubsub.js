@@ -6,17 +6,12 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-// Auto-load push subscription plugin for push subscribers
-// This ensures pubsub.delivery spans work even if app doesn't import @google-cloud/pubsub
-// The plugin's constructor subscribes to apm:http:server:request:start immediately (no tracer needed)
-// The tracer is only used at request time when delivery spans are created
+// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-  const pushPlugin = new PushSubscriptionPlugin(null, {})
-  // Plugin instance kept alive to maintain channel subscription
-  pushPlugin.configure({})
+  new PushSubscriptionPlugin(null, {}).configure({})
 } catch {
-  // Silent - push subscription plugin is optional
+  // Push subscription plugin is optional
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -163,25 +158,20 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-// Helper function to inject trace context into Pub/Sub messages
+// Inject trace context into Pub/Sub message attributes
 function injectTraceContext (attributes, pubsub, topicName) {
-  // Skip if already injected
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
   try {
     const tracer = require('../../dd-trace')
     const activeSpan = tracer.scope().active()
+    if (!activeSpan) return
 
-    if (activeSpan) {
-      const ctx = activeSpan.context()
-      tracer.inject(activeSpan, 'text_map', attributes)
+    tracer.inject(activeSpan, 'text_map', attributes)
 
-      // Inject upper 64 bits of 128-bit trace ID for proper span linking
-      const traceIdUpperBits = ctx._trace.tags['_dd.p.tid']
-      if (traceIdUpperBits) {
-        attributes['_dd.p.tid'] = traceIdUpperBits
-      }
-    }
+    // Inject upper 64 bits of 128-bit trace ID for proper span linking
+    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
+    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
   } catch {
     // Silently fail - trace context injection is best-effort
   }
@@ -196,32 +186,25 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
   // Wrap Topic.publishMessage (modern API)
-  if (typeof obj.Topic.prototype.publishMessage === 'function') {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
-      return function (data, attributesOrCallback, callback) {
-        if (data && typeof data === 'object') {
-          if (!data.attributes) data.attributes = {}
-          injectTraceContext(data.attributes, this.pubsub, this.name)
-        }
-        return publishMessage.apply(this, arguments)
+  if (obj.Topic.prototype.publishMessage) {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
+      if (data && typeof data === 'object') {
+        if (!data.attributes) data.attributes = {}
+        injectTraceContext(data.attributes, this.pubsub, this.name)
       }
+      return publishMessage.apply(this, arguments)
     })
   }
 
   // Wrap Topic.publish (legacy API)
-  if (typeof obj.Topic.prototype.publish === 'function') {
+  if (obj.Topic.prototype.publish) {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
-      let attributes = attributesOrCallback
-      if (typeof attributesOrCallback === 'function') {
-        attributes = {}
-        arguments[1] = attributes
+      // Normalize arguments: ensure attributes object exists at position [1]
+      if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
+        arguments[1] = {}
         arguments[2] = attributesOrCallback
-      } else if (!attributes || typeof attributes !== 'object') {
-        attributes = {}
-        arguments[1] = attributes
       }
-
-      injectTraceContext(attributes, this.pubsub, this.name)
+      injectTraceContext(arguments[1], this.pubsub, this.name)
       return publish.apply(this, arguments)
     })
   }
