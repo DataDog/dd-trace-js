@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('./log')
-const format = require('./format')
+const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const { getEnvironmentVariable } = require('./config-helper')
@@ -53,7 +53,7 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = format(span, isChunkRoot)
+          const formattedSpan = spanFormat(span, isChunkRoot)
           isChunkRoot = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
