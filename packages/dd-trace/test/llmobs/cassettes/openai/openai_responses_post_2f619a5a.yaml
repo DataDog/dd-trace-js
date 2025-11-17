@@ -1,0 +1,143 @@
+interactions:
+- request:
+    body: '{"prompt":{"id":"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6","version":"1","variables":{"phrase":"cat
+      in the hat","word":""}}}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '137'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v24.11.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_05b872b3eb4be00501691ae89a89808190af8c0deedc2d4e4e\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763371162,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"I saw a cat in the hat and another \"\n        }\n      ],\n      \"role\":
+        \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
+        \"rs_05b872b3eb4be00501691ae89b1ecc81908ff1713a29f7216e\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_05b872b3eb4be00501691ae89f0b98819087a108e6e447f5b0\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"It looks like your
+        sentence got cut off\\u2014\\u201cI saw a cat in the hat and another\\u2026\\u201d.
+        Could you clarify what you\\u2019d like to say or ask? For example, are you
+        looking to complete the phrase, turn it into a rhyme, or ask a question about
+        it?\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\":
+        true,\n  \"previous_response_id\": null,\n  \"prompt\": {\n    \"id\": \"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6\",\n
+        \   \"variables\": {\n      \"phrase\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"cat in the hat\"\n      },\n      \"word\": {\n        \"type\":
+        \"input_text\",\n        \"text\": \"\"\n      }\n    },\n    \"version\":
+        \"1\"\n  },\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\":
+        null,\n  \"reasoning\": {\n    \"effort\": \"medium\",\n    \"summary\": null\n
+        \ },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\":
+        false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\":
+        \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\":
+        \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 16,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 511,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 448\n    },\n    \"total_tokens\": 527\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 99fe256558a89ed9-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 17 Nov 2025 09:19:27 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=YX_Y9Dp3nN5I8RKLNhtXzZrVR4vtP4XayPZ_6w7ThFg-1763371167-1.0.1.1-sxKoPvsMKRmbx4y1LfkzeVsAFRTzvxUuUVggmLy4VKahUnnXe5f4Jwa2zkemOiAsAODGVxeDuVU4bheOOr8boiroTerg7eJ57nxqVjlF8Fo;
+        path=/; expires=Mon, 17-Nov-25 09:49:27 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=M1G5rxwOMKxi75m2aNm2tkTWTyGkj9haWGjQNZplOWU-1763371167735-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '5131'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '5134'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999777'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_91d268ffeed3482a9a0d1c112944df56
+    status:
+      code: 200
+      message: OK
+version: 1

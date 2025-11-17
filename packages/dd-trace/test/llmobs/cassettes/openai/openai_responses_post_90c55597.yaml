@@ -1,0 +1,140 @@
+interactions:
+- request:
+    body: '{"prompt":{"id":"pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f","version":"2","variables":{"word":"test"}}}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '115'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v24.11.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_07c7ccd6423ef95101691ae88fe40c819f82421a3eebbb6e2b\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763371152,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [\n        {\n          \"type\": \"input_text\",\n          \"text\": \"Reply
+        with \\\"OK\\\".\"\n        }\n      ],\n      \"role\": \"developer\"\n    },\n
+        \   {\n      \"type\": \"message\",\n      \"content\": [\n        {\n          \"type\":
+        \"input_text\",\n          \"text\": \"This is a test for testing the tester\"\n
+        \       }\n      ],\n      \"role\": \"user\"\n    }\n  ],\n  \"max_output_tokens\":
+        null,\n  \"max_tool_calls\": null,\n  \"model\": \"o4-mini-2025-04-16\",\n
+        \ \"output\": [\n    {\n      \"id\": \"rs_07c7ccd6423ef95101691ae8909a98819f896767e436052669\",\n
+        \     \"type\": \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\":
+        \"msg_07c7ccd6423ef95101691ae8915fbc819f90f8c83efc036e67\",\n      \"type\":
+        \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n
+        \         \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\":
+        [],\n          \"text\": \"OK\"\n        }\n      ],\n      \"role\": \"assistant\"\n
+        \   }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\":
+        null,\n  \"prompt\": {\n    \"id\": \"pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f\",\n
+        \   \"variables\": {\n      \"word\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"test\"\n      }\n    },\n    \"version\": \"2\"\n  },\n
+        \ \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": null,\n  \"reasoning\":
+        {\n    \"effort\": \"medium\",\n    \"summary\": null\n  },\n  \"safety_identifier\":
+        null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\":
+        1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n
+        \   \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\":
+        [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n
+        \ \"usage\": {\n    \"input_tokens\": 23,\n    \"input_tokens_details\": {\n
+        \     \"cached_tokens\": 0\n    },\n    \"output_tokens\": 71,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 64\n    },\n    \"total_tokens\": 94\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 99fe2522db3dd3d0-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 17 Nov 2025 09:19:13 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=hXV2p56Ug7QpksxgUKGfVxjIZT0H1ptGoLMV6hmf2sM-1763371153-1.0.1.1-UvOrwNQ3L_Iw1kQdwGBDSIn6Xe6t4cLisz7vSVJSZ7FXODN9csTI.hHp2XC6vmHwhvk38VIFNutKypStyNp2AFoGs757I7Wbj1rIuWX34Nk;
+        path=/; expires=Mon, 17-Nov-25 09:49:13 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=KfTTkgrdX.8GsOq.GwJv8bUZA32weCmGkdSJYU_sk_o-1763371153564-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '1643'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '1647'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999770'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_f74bcdcefcce40d591f1022537bd984b
+    status:
+      code: 200
+      message: OK
+version: 1

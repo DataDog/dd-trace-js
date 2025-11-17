@@ -735,6 +735,115 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' }
         })
       })
+
+      it('submits a response span with prompt tracking - overlapping values', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: 'cat' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        // Verify prompt metadata
+        const spanEvent = llmobsSpans[0]
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
+        assert.strictEqual(prompt.version, '1')
+        assert.deepStrictEqual(prompt.variables, { phrase: 'cat in the hat', word: 'cat' })
+        assert.deepStrictEqual(prompt.chat_template, [
+          { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - partial word match', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+            version: '2',
+            variables: { word: 'test' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        // Verify prompt metadata
+        const spanEvent = llmobsSpans[0]
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f')
+        assert.strictEqual(prompt.version, '2')
+        assert.deepStrictEqual(prompt.variables, { word: 'test' })
+        assert.deepStrictEqual(prompt.chat_template, [
+          { role: 'developer', content: 'Reply with "OK".' },
+          { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - special characters', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+            version: '2',
+            variables: { price: '$99.99', item: 'groceries' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        // Verify prompt metadata
+        const spanEvent = llmobsSpans[0]
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191')
+        assert.strictEqual(prompt.version, '2')
+        assert.deepStrictEqual(prompt.variables, { price: '$99.99', item: 'groceries' })
+        assert.deepStrictEqual(prompt.chat_template, [
+          { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - empty values', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: '' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        // Verify prompt metadata
+        const spanEvent = llmobsSpans[0]
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
+        assert.strictEqual(prompt.version, '1')
+        assert.deepStrictEqual(prompt.variables, { phrase: 'cat in the hat', word: '' })
+        assert.deepStrictEqual(prompt.chat_template, [
+          { role: 'user', content: 'I saw a {{phrase}} and another ' }
+        ])
+      })
     })
   })
 })

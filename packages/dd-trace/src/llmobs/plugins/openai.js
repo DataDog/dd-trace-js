@@ -1,6 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('./base')
+const { extractChatTemplateFromInstructions } = require('../util')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -368,6 +369,33 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+
+    // Handle prompt tracking for reusable prompts
+    if (response && response.prompt && typeof response.prompt === 'object') {
+      const { id, version, variables } = response.prompt
+      if (id && version && variables) {
+        // Normalize variables - OpenAI returns objects with 'text' field, we need simple key-value pairs
+        const normalizedVariables = {}
+        for (const [key, value] of Object.entries(variables)) {
+          normalizedVariables[key] = (value && typeof value === 'object' && value.text !== undefined)
+            ? value.text
+            : value
+        }
+
+        // Extract chat template from response instructions
+        const instructions = response.instructions
+        if (instructions && Array.isArray(instructions)) {
+          const chatTemplate = extractChatTemplateFromInstructions(instructions, normalizedVariables)
+
+          this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+            id,
+            version,
+            variables: normalizedVariables,
+            chat_template: chatTemplate
+          })
+        }
+      }
+    }
 
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
       if (allowedParamKeys.has(key)) {

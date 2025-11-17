@@ -1,0 +1,147 @@
+interactions:
+- request:
+    body: '{"prompt":{"id":"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6","version":"1","variables":{"phrase":"cat
+      in the hat","word":"cat"}}}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '140'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-OS
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Package-Version
+      : - 6.8.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Retry-Count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - X-Stainless-Runtime-Version
+      : - v24.11.1
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_05ffa73cfa22b36601691ae88b75b8819eb373c7ee1d18e454\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763371147,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"I saw a cat in the hat and another cat\"\n        }\n      ],\n      \"role\":
+        \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
+        \"rs_05ffa73cfa22b36601691ae88c0804819eb80351a456f72c40\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_05ffa73cfa22b36601691ae88e7478819ea667169ce66bb2fb\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"Could you tell me
+        a bit more about what you\\u2019d like me to do with that sentence? For example:\\n\\n\\u2022
+        Are you looking for a grammar or style correction (\\u201cI saw a cat wearing
+        a hat and another cat.\\u201d)?  \\n\\u2022 Would you like a paraphrase or
+        clearer wording?  \\n\\u2022 Do you want me to turn it into a short story
+        or poem?  \\n\\u2022 Are you asking for an interpretation of the meaning?
+        \ \\n\\nLet me know which direction you have in mind, and I\\u2019ll be happy
+        to help!\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n
+        \ \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"prompt\":
+        {\n    \"id\": \"pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6\",\n
+        \   \"variables\": {\n      \"phrase\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"cat in the hat\"\n      },\n      \"word\": {\n        \"type\":
+        \"input_text\",\n        \"text\": \"cat\"\n      }\n    },\n    \"version\":
+        \"1\"\n  },\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\":
+        null,\n  \"reasoning\": {\n    \"effort\": \"medium\",\n    \"summary\": null\n
+        \ },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\":
+        false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\":
+        \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\":
+        \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 16,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 366,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 256\n    },\n    \"total_tokens\": 382\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 99fe25054b620344-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Mon, 17 Nov 2025 09:19:11 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=EDi5FhocXMxw.ZI6T9PF14PZfUpk84t12are9y2rQz4-1763371151-1.0.1.1-qw4bNEgyKtbj55nx3aS5sTOoTzqj9CtuLecm6dperV2pWvLS9ZOSPVJIw43KS.80xM7zEbWffmoadzKNTRd0s5V.E0RTzgfdOzROi6469DY;
+        path=/; expires=Mon, 17-Nov-25 09:49:11 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=fYwEKYp7dHrciEM_WQiAqz0zOC7W_1Yx3AhopBKqDj4-1763371151633-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '4137'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '4143'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999775'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_96dff605a441461a83766354be9b4527
+    status:
+      code: 200
+      message: OK
+version: 1
