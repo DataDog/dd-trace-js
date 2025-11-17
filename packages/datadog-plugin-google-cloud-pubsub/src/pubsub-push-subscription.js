@@ -20,13 +20,20 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _handlePubSubRequest ({ req, res }) {
-    // Only check POST requests with PubSub headers
+    // Only check POST requests from Google Cloud services
     if (req.method !== 'POST') return
-    if (!req.headers['x-goog-pubsub-message-id']) return
 
-    log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
-    log.debug(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
-    this._createDeliverySpanAndActivate({ req, res })
+    // First check if this is a Google Cloud request (avoid interfering with other HTTP traffic)
+    const userAgent = req.headers['user-agent'] || ''
+    if (!userAgent.includes('APIs-Google')) return
+
+    // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
+    // NOTE: Only unwrapped headers will work. Standard wrapped format requires
+    // body parsing which hasn't happened yet at this point in the request lifecycle.
+    if (req.headers['x-goog-pubsub-message-id']) {
+      log.debug('[PubSub] Detected unwrapped Pub/Sub push subscription')
+      this._createDeliverySpanAndActivate({ req, res })
+    }
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
