@@ -178,26 +178,21 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
   // Wrap Topic.publishMessage (modern API)
+  // Note: We only wrap publishMessage, not publish, because:
+  // 1. publishMessage has a well-defined data object structure
+  // 2. Topic.publish has complex argument handling that's difficult to wrap safely
+  // 3. Low-level PublisherClient.publish will still create spans for both cases
   if (obj.Topic.prototype.publishMessage) {
     shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
       if (data && typeof data === 'object') {
         if (!data.attributes) data.attributes = {}
-        injectTraceContext(data.attributes, this.pubsub, this.name)
+        try {
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        } catch {
+          // Don't let trace injection break publish flow
+        }
       }
       return publishMessage.apply(this, arguments)
-    })
-  }
-
-  // Wrap Topic.publish (legacy API)
-  if (obj.Topic.prototype.publish) {
-    shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
-      // Normalize arguments: ensure attributes object exists at position [1]
-      if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
-        arguments[1] = {}
-        arguments[2] = attributesOrCallback
-      }
-      injectTraceContext(arguments[1], this.pubsub, this.name)
-      return publish.apply(this, arguments)
     })
   }
 
