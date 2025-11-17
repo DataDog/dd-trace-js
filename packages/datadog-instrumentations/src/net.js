@@ -16,16 +16,10 @@ const errorTCPCh = channel('apm:net:tcp:error')
 const readyCh = channel('apm:net:tcp:ready')
 const connectionCh = channel('apm:net:tcp:connection')
 
-const names = ['net', 'node:net']
-
-addHook({ name: names }, (net, version, name) => {
+addHook({ name: 'net' }, (net) => {
   // explicitly require dns so that net gets an instrumented instance
   // so that we don't miss the dns calls
-  if (name === 'net') {
-    require('dns')
-  } else {
-    require('node:dns')
-  }
+  require('node:dns')
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {

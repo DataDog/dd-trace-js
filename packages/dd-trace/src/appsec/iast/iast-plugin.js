@@ -162,7 +162,7 @@ class IastPlugin extends Plugin {
     loadChannel.subscribe(this.onInstrumentationLoadedListener)
 
     // check for already instrumented modules
-    for (const name in instrumentations) {
+    for (const name of Object.keys(instrumentations)) {
       this._onInstrumentationLoaded(name)
     }
   }
