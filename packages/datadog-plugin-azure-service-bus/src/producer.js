@@ -37,8 +37,9 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       }
 
       if (batchLinksAreEnabled()) {
-        if (spanContexts.has(ctx.batch)) {
-          spanContexts.get(ctx.batch).push(span.context())
+        const spanContext = spanContexts.get(ctx.batch)
+        if (spanContext) {
+          spanContext.push(span.context())
         } else {
           spanContexts.set(ctx.batch, [span.context()])
         }
