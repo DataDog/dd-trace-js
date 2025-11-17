@@ -616,7 +616,7 @@ describe('Plugin', () => {
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
         before(() => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
 
           return agent.load('mongodb-core', {
             dbmPropagationMode: 'full'
@@ -624,7 +624,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          tracer._tracer._prioritySampler.sample.restore()
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
 
           return agent.close({ ritmReset: false })
         })

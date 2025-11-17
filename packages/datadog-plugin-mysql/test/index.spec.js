@@ -499,12 +499,12 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
             expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
 
           connection.query('SELECT 1 + 1 AS solution', () => {
             queryText = connection._protocol._queue[0].sql
@@ -592,12 +592,12 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(() => {
             expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
 
           pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = pool._allConnections[0]._protocol._queue[0].sql

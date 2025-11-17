@@ -3,7 +3,6 @@
 const { expect } = require('chai')
 const assert = require('node:assert')
 const semver = require('semver')
-const sinon = require('sinon')
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -667,6 +666,8 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           client.end(done)
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         it('query config objects should be handled', async () => {
@@ -691,7 +692,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', async () => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           const query = {
             text: 'SELECT $1::text as message'
           }
@@ -703,8 +704,6 @@ describe('Plugin', () => {
 
           await agent.assertSomeTraces(() => {
             expect(queryText).to.include('-00\'*/ SELECT $1::text as message')
-
-            tracer._tracer._prioritySampler.sample.restore()
           })
         })
 

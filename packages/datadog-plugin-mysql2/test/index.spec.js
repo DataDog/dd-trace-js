@@ -490,7 +490,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
@@ -499,7 +499,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
 
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             queryText = connect.sql
@@ -587,7 +587,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          sinon.stub(tracer._tracer._prioritySampler, 'sample')
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
@@ -596,7 +596,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done).finally(() => tracer._tracer._prioritySampler.sample.restore())
+          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
 
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = queryPool.sql
