@@ -32,13 +32,11 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    * Exports metrics via OTLP over HTTP.
    *
    * @param {Map<string, AggregatedMetric>} metrics - Map of metric data to export
-   * @param {Function} resultCallback - Callback function for export result
    *
    * @returns {void}
    */
-  export (metrics, resultCallback) {
+  export (metrics) {
     if (metrics.size === 0) {
-      resultCallback({ code: 0 })
       return
     }
 
@@ -57,7 +55,6 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
       if (result.code === 0) {
         this.recordTelemetry('otel.metrics_export_successes', 1, additionalTags)
       }
-      resultCallback(result)
     })
   }
 }

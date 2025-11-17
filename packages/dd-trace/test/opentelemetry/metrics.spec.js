@@ -872,11 +872,8 @@ describe('OpenTelemetry Meter Provider', () => {
       const obsGauge = meter.createObservableGauge('test')
       obsGauge.addCallback(() => {})
       obsGauge.addCallback('not a function')
-
-      provider.register()
-      assert.strictEqual(warnSpy.callCount, 1)
-      assert.strictEqual(warnSpy.firstCall.args[0], 'Cannot register after shutdown')
-
+      // assert no metrics are exported
+      assert.strictEqual(provider.isShutdown, true)
       warnSpy.restore()
     })
   })

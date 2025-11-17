@@ -28,6 +28,7 @@ const os = require('os')
  * @package
  */
 
+const { metrics } = require('@opentelemetry/api')
 const MeterProvider = require('./meter_provider')
 const PeriodicMetricReader = require('./periodic_metric_reader')
 const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
@@ -71,8 +72,7 @@ function initializeOpenTelemetryMetrics (config) {
   )
 
   const meterProvider = new MeterProvider({ reader })
-
-  meterProvider.register()
+  metrics.setGlobalMeterProvider(meterProvider)
 }
 
 module.exports = {

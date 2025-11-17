@@ -1,10 +1,6 @@
 'use strict'
 
-const { metrics } = require('@opentelemetry/api')
 const Meter = require('./meter')
-const log = require('../../log')
-const { context } = require('@opentelemetry/api')
-const ContextManager = require('../context_manager')
 
 /**
  * @typedef {import('@opentelemetry/api').Meter} Meter
@@ -23,7 +19,7 @@ const ContextManager = require('../context_manager')
  */
 class MeterProvider {
   #meters = new Map()
-  #contextManager = new ContextManager()
+
   /**
    * Creates a new MeterProvider instance with a single reader for Datadog Agent export.
    *
@@ -56,19 +52,6 @@ class MeterProvider {
       this.#meters.set(key, meter)
     }
     return meter
-  }
-
-  /**
-   * Registers this meter provider as the global provider.
-   */
-  register () {
-    if (this.isShutdown) {
-      log.warn('Cannot register after shutdown')
-      return
-    }
-    // Set context manager (may be needed for future trace/metrics correlation)
-    context.setGlobalContextManager(this.#contextManager)
-    metrics.setGlobalMeterProvider(this)
   }
 
   /**
