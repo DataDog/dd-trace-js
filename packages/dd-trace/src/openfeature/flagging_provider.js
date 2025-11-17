@@ -18,13 +18,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // Call parent constructor with required options and timeout
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
-      timeoutMs: config.experimental.flaggingProvider.timeoutMs
+      initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs
     })
 
     this._tracer = tracer
     this._config = config
 
-    log.debug(this.constructor.name + ' created with timeout: ' + config.experimental.flaggingProvider.timeoutMs + 'ms')
+    log.debug(this.constructor.name + ' created with timeout: ' + config.experimental.flaggingProvider.initializationTimeoutMs + 'ms')
   }
 
   /**

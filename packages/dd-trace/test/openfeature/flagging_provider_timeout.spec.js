@@ -32,7 +32,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       experimental: {
         flaggingProvider: {
           enabled: true,
-          timeoutMs: 30000 // Default timeout
+          initializationTimeoutMs: 30_000 // Default timeout
         }
       }
     }
@@ -187,7 +187,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            timeoutMs: 5000 // Custom 5-second timeout
+            initializationTimeoutMs: 5000 // Custom 5-second timeout
           }
         }
       }
@@ -226,7 +226,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
         experimental: {
           flaggingProvider: {
             enabled: true,
-            timeoutMs: 10000 // Custom 10-second timeout
+            initializationTimeoutMs: 10_000 // Custom 10-second timeout
           }
         }
       }

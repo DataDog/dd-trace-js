@@ -660,7 +660,7 @@ declare namespace tracer {
          *
          * @default 30000
          */
-        timeoutMs?: number
+        initializationTimeoutMs?: number
       }
     };
 
