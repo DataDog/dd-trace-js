@@ -15,10 +15,10 @@
 - [ ] API [documentation][3].
 - [ ] CI [jobs/workflows][4].
 
-[1]: https://github.com/DataDog/dd-trace-js/blob/master/index.d.ts
-[2]: https://github.com/DataDog/dd-trace-js/blob/master/docs/test.ts
+[1]: https://github.com/DataDog/dd-trace-js/blob/main/index.d.ts
+[2]: https://github.com/DataDog/dd-trace-js/blob/main/docs/test.ts
 [3]: https://github.com/DataDog/documentation/blob/master/content/en/tracing/trace_collection/library_config/nodejs.md
-[4]: https://github.com/DataDog/dd-trace-js/blob/master/.github/workflows/plugins.yml
+[4]: https://github.com/DataDog/dd-trace-js/blob/main/.github/workflows/plugins.yml
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->

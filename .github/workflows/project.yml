@@ -3,7 +3,7 @@ name: Project
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}

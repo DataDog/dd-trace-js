@@ -520,16 +520,16 @@ describe('getPullRequestBaseBranch', () => {
   context('there is no pull request base branch', () => {
     it('returns the best base branch SHA from local branches', () => {
       const checkAndFetchBranchStub = sinon.stub()
-      const getLocalBranchesStub = sinon.stub().returns(['trunk', 'master', 'feature-branch'])
+      const getLocalBranchesStub = sinon.stub().returns(['trunk', 'main', 'feature-branch'])
 
       const getMergeBaseStub = sinon.stub()
       getMergeBaseStub.withArgs('trunk', 'feature-branch').returns('1234af')
-      getMergeBaseStub.withArgs('master', 'feature-branch').returns('fa4321')
+      getMergeBaseStub.withArgs('main', 'feature-branch').returns('fa4321')
 
       const getCountsStub = sinon.stub()
       getCountsStub.withArgs('trunk', 'feature-branch').returns({ ahead: 0, behind: 0 })
-      // master should be chosen because even though it has the same "ahead" value, it is a default branch
-      getCountsStub.withArgs('master', 'feature-branch').returns({ ahead: 0, behind: 1 })
+      // main should be chosen because even though it has the same "ahead" value, it is a default branch
+      getCountsStub.withArgs('main', 'feature-branch').returns({ ahead: 0, behind: 1 })
 
       const { getPullRequestBaseBranch, POSSIBLE_BASE_BRANCHES } = proxyquire('../../../src/plugins/util/test', {
         './git': {
@@ -548,9 +548,9 @@ describe('getPullRequestBaseBranch', () => {
         expect(checkAndFetchBranchStub).to.have.been.calledWith(baseBranch, 'origin')
       })
       expect(getLocalBranchesStub).to.have.been.calledWith('origin')
-      expect(getMergeBaseStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getMergeBaseStub).to.have.been.calledWith('main', 'feature-branch')
       expect(getMergeBaseStub).to.have.been.calledWith('trunk', 'feature-branch')
-      expect(getCountsStub).to.have.been.calledWith('master', 'feature-branch')
+      expect(getCountsStub).to.have.been.calledWith('main', 'feature-branch')
       expect(getCountsStub).to.have.been.calledWith('trunk', 'feature-branch')
     })
   })

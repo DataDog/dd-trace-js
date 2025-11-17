@@ -3,7 +3,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -24,7 +24,7 @@
       "ci.pipeline.url": "https://ghenterprise.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://ghenterprise.com/ghactions-repo.git"
     }
@@ -33,7 +33,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -54,7 +54,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -63,7 +63,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -84,7 +84,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -93,7 +93,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -114,7 +114,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/bar~",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -123,7 +123,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -144,7 +144,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/~/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -153,7 +153,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -176,7 +176,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/not-my-home/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -185,7 +185,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -208,7 +208,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "~foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -217,7 +217,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "master",
+      "GITHUB_REF": "main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -240,7 +240,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/not-my-home",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -249,7 +249,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "origin/master",
+      "GITHUB_REF": "origin/main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -270,7 +270,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -279,7 +279,7 @@
     {
       "GITHUB_ACTION": "run",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "refs/heads/master",
+      "GITHUB_REF": "refs/heads/main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -300,7 +300,7 @@
       "ci.pipeline.url": "https://github.com/ghactions-repo/actions/runs/ghactions-pipeline-id/attempts/ghactions-run-attempt",
       "ci.provider.name": "github",
       "ci.workspace_path": "/foo/bar",
-      "git.branch": "master",
+      "git.branch": "main",
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/ghactions-repo.git"
     }
@@ -400,7 +400,7 @@
       "GITHUB_ACTION": "run",
       "GITHUB_HEAD_REF": "origin/other",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "origin/master",
+      "GITHUB_REF": "origin/main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
@@ -431,7 +431,7 @@
       "GITHUB_ACTION": "run",
       "GITHUB_HEAD_REF": "refs/heads/other",
       "GITHUB_JOB": "github-job-name",
-      "GITHUB_REF": "refs/heads/master",
+      "GITHUB_REF": "refs/heads/main",
       "GITHUB_REPOSITORY": "ghactions-repo",
       "GITHUB_RUN_ATTEMPT": "ghactions-run-attempt",
       "GITHUB_RUN_ID": "ghactions-pipeline-id",
