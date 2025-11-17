@@ -20,24 +20,13 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _handlePubSubRequest ({ req, res }) {
-    // Only check POST requests
+    // Only check POST requests with PubSub headers
     if (req.method !== 'POST') return
+    if (!req.headers['x-goog-pubsub-message-id']) return
 
-    // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
-    // NOTE: Only unwrapped headers will work. Standard wrapped format requires
-    // body parsing which hasn't happened yet at this point in the request lifecycle.
-    if (req.headers['x-goog-pubsub-message-id']) {
-      log.warn('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
-      log.warn(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
-      this._createDeliverySpanAndActivate({ req, res })
-      return
-    }
-
-    // No unwrapped Pub/Sub headers found - likely missing --push-no-wrapper-write-metadata
-    log.warn(
-      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
-      'Add --push-no-wrapper-write-metadata to your subscription.'
-    )
+    log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+    log.debug(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
+    this._createDeliverySpanAndActivate({ req, res })
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
@@ -48,7 +37,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const tracer = this.tracer || require('../../dd-trace')
     if (!tracer || !tracer._tracer) return
 
-    const parentContext = this._extractContext(messageData, tracer)
+    const parentContext = tracer._tracer.extract('text_map', messageData.attrs) || undefined
     const deliverySpan = this._createDeliverySpan(messageData, parentContext, tracer)
 
     // Finish delivery span when response completes
@@ -83,12 +72,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     const { projectId, topicName } = this._extractProjectTopic(req.headers, subscription)
     return { message, subscription, attrs: req.headers, projectId, topicName }
-  }
-
-  _extractContext (messageData, tracer) {
-    // messageData.attrs is req.headers, so just extract from there
-    // Use the actual tracer instance (_tracer) for proper 128-bit trace ID extraction
-    return tracer._tracer.extract('text_map', messageData.attrs) || undefined
   }
 
   _createDeliverySpan (messageData, parentContext, tracer) {
