@@ -46,23 +46,34 @@ describe('IAST - overhead-controller - integration', () => {
       await axios.request(path, { method })
 
       await agent.assertMessageReceived(({ payload }) => {
-        assert.strictEqual(payload[0][0].type, 'web')
-        assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.property(payload[0][0].meta, '_dd.iast.json')
-        const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        assert.isNotNull(vulnerabilitiesTrace)
+        try {
+          assert.strictEqual(payload[0][0].type, 'web')
+          assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+          assert.property(payload[0][0].meta, '_dd.iast.json')
+          const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
+          assert.isNotNull(vulnerabilitiesTrace)
 
-        const vulnerabilities = {}
-        vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-          const vulnCount = vulnerabilities[v.type]
-          vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
-        })
+          const vulnerabilities = {}
+          vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+            const vulnCount = vulnerabilities[v.type]
+            vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
+          })
 
-        assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
+          assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
 
-        Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
-          assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
-        })
+          Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
+            assert.strictEqual(vulnerabilities[vType],
+              vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
+          })
+        } catch (e) {
+          console.log('--------------------------------')
+          console.log(JSON.stringify(payload, null, 2))
+          console.log('--------------------------------')
+          console.log(e)
+          console.log('--------------------------------')
+
+          throw e
+        }
       }, 1000, 1, true)
     }
 
