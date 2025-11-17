@@ -161,7 +161,7 @@ class OtlpTransformerBase {
  * @returns {string} Stable string representation
  */
 function stableStringify (attributes) {
-  if (attributes == null || typeof attributes !== 'object') {
+  if (attributes == null) {
     return JSON.stringify(attributes)
   }
   // Attributes are sorted by key to ensure consistent serialization regardless of key order.

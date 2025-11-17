@@ -11,6 +11,7 @@ const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
+const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 
 describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
@@ -970,10 +971,10 @@ describe('OpenTelemetry Meter Provider', () => {
         assert(!exportedMetrics.find(m => m.name === 'gauge.overflow'))
         const counter1Metric = exportedMetrics.find(m => m.name === 'counter.sync')
         assert(counter1Metric, 'counter.sync should be exported')
-        assert.strictEqual(counter1Metric.sum.dataPoints.length, 524288)
+        assert.strictEqual(counter1Metric.sum.dataPoints.length, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE)
         assert(warnSpy.getCalls().some(call =>
           call.args[0].includes('Metric queue exceeded limit') &&
-          call.args[0].includes('max: 524288') &&
+          call.args[0].includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
           call.args[0].includes('Dropping 2 measurements')
         ))
       })
@@ -982,7 +983,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const meter = metrics.getMeterProvider().getMeter('test')
       const counter = meter.createCounter('counter.sync')
 
-      for (let i = 0; i < 524288; i++) counter.add(1, { id: `${i}` })
+      for (let i = 0; i < DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE; i++) counter.add(1, { id: `${i}` })
 
       meter.createCounter('counter.overflow').add(1)
       meter.createObservableGauge('gauge.overflow').addCallback((result) => result.observe(1))
