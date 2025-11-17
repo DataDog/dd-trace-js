@@ -4,6 +4,7 @@ const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
+const assert = require('node:assert')
 
 const { getConfigFresh } = require('../../helpers/config')
 
@@ -1209,6 +1210,36 @@ describe('sdk', () => {
 
       expect(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]).to.have.property('timestamp_ms', 1234)
       Date.now.restore()
+    })
+
+    it('submits a boolean evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        timestampMs: 1234
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+
+      assert.deepEqual(evalMetric, {
+        span_id: '5678',
+        trace_id: '1234',
+        label: 'has_toxicity',
+        metric_type: 'boolean',
+        ml_app: 'mlApp',
+        boolean_value: true,
+        timestamp_ms: 1234,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp']
+      })
+    })
+
+    it('throws an error when submitting a non-boolean boolean evaluation metric', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: 'it is super toxic!'
+      }), { message: 'value must be a boolean for a boolean metric' })
     })
   })
 
