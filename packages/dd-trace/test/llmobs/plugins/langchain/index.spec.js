@@ -138,8 +138,8 @@ describe('integrations', () => {
               modelName: 'gpt-3.5-turbo-instruct',
               modelProvider: 'openai',
               name: 'langchain.llms.openai.OpenAI',
-              inputMessages: [{ content: 'What is 2 + 2?' }],
-              outputMessages: [{ content: '\n\n4' }],
+              inputMessages: [{ content: 'What is 2 + 2?', role: '' }],
+              outputMessages: [{ content: '\n\n4', role: '' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
               tags: { ml_app: 'test', integration: 'langchain' }
@@ -160,8 +160,8 @@ describe('integrations', () => {
               modelName: 'text-embedding-3-small',
               modelProvider: 'openai',
               name: 'langchain.llms.openai.OpenAI',
-              inputMessages: [{ content: 'Hello!' }],
-              outputMessages: [{ content: '' }],
+              inputMessages: [{ content: 'Hello!', role: '' }],
+              outputMessages: [{ content: '', role: '' }],
               metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
@@ -205,8 +205,8 @@ describe('integrations', () => {
               modelName: 'command',
               modelProvider: 'cohere',
               name: 'langchain.llms.cohere.Cohere',
-              inputMessages: [{ content: 'Hello!' }],
-              outputMessages: [{ content: 'hello world!' }],
+              inputMessages: [{ content: 'Hello!', role: '' }],
+              outputMessages: [{ content: 'hello world!', role: '' }],
               metadata: MOCK_NOT_NULLISH,
               // @langchain/cohere does not provide token usage in the response
               metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
@@ -251,7 +251,7 @@ describe('integrations', () => {
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
               inputMessages: [{ content: 'Hello!', role: 'user' }],
-              outputMessages: [{ content: '' }],
+              outputMessages: [{ content: '', role: '' }],
               metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
@@ -439,9 +439,10 @@ describe('integrations', () => {
               name: 'langchain.llms.openai.OpenAI',
               inputMessages: [{
                 content: 'System: You are a world class technical documentation writer\n' +
-                'Human: Can you tell me about LangSmith?'
+                'Human: Can you tell me about LangSmith?',
+                role: ''
               }],
-              outputMessages: [{ content: expectedOutput }],
+              outputMessages: [{ content: expectedOutput, role: '' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },
               tags: { ml_app: 'test', integration: 'langchain' }

@@ -85,7 +85,7 @@ class LLMObsTagger {
     if (name) this._setTag(span, NAME, name)
 
     this._setTag(span, SPAN_KIND, kind)
-    if (modelName) this._setTag(span, MODEL_NAME, modelName)
+    if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
@@ -192,6 +192,10 @@ class LLMObsTagger {
 
   changeKind (span, newKind) {
     this._setTag(span, SPAN_KIND, newKind)
+  }
+
+  tagModelName (span, modelName) {
+    this._setTag(span, MODEL_NAME, modelName)
   }
 
   #tagText (span, data, key) {
@@ -324,7 +328,7 @@ class LLMObsTagger {
 
     for (const message of data) {
       if (typeof message === 'string') {
-        messages.push({ content: message })
+        messages.push({ content: message, role: '' })
         continue
       }
       if (message == null || typeof message !== 'object') {
@@ -332,20 +336,30 @@ class LLMObsTagger {
         continue
       }
 
-      const { content = '', role } = message
-      const toolCalls = message.toolCalls
-      const toolResults = message.toolResults
-      const toolId = message.toolId
-      const messageObj = { content }
+      const {
+        role = '',
+        content,
+        toolCalls,
+        toolResults,
+        toolId
+      } = message
+      const messageObj = {}
 
       let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
-      const valid = typeof content === 'string'
-      if (!valid) {
-        this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
+      if (
+        content == null &&
+        toolCalls == null &&
+        toolResults == null
+      ) {
+        messageObj.content = ''
       }
 
-      if (toolCalls) {
+      if (content != null) {
+        condition = this.#tagConditionalString(content, 'Message content', messageObj, 'content') && condition
+      }
+
+      if (toolCalls != null) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
 
         if (filteredToolCalls.length) {
@@ -353,7 +367,7 @@ class LLMObsTagger {
         }
       }
 
-      if (toolResults) {
+      if (toolResults != null) {
         const filteredToolResults = this.#filterToolResults(toolResults)
 
         if (filteredToolResults.length) {
@@ -363,13 +377,13 @@ class LLMObsTagger {
 
       if (toolId) {
         if (role === 'tool') {
-          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id')
+          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id') && condition
         } else {
           log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
         }
       }
 
-      if (valid && condition) {
+      if (condition) {
         messages.push(messageObj)
       }
     }
@@ -380,7 +394,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalString (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'string') {
       this.#handleFailure(`"${type}" must be a string.`)
       return false
@@ -390,7 +404,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalNumber (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'number') {
       this.#handleFailure(`"${type}" must be a number.`)
       return false
@@ -400,7 +414,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalObject (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'object') {
       this.#handleFailure(`"${type}" must be an object.`)
       return false
