@@ -61,7 +61,7 @@ const transforms = module.exports = {
   },
 
   tracingChannelDeclaration (state, node) {
-    const { channelName, moduleName } = state
+    const { channelName, module: { name } } = state
     const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
 
     if (node.body.some(child => child.declarations?.[0]?.id?.name === channelVariable)) return
@@ -83,7 +83,7 @@ const transforms = module.exports = {
             arguments: [
               {
                 type: 'Literal',
-                value: `orchestrion:${moduleName}:${channelName}`
+                value: `orchestrion:${name}:${channelName}`
               }
             ],
             optional: false
