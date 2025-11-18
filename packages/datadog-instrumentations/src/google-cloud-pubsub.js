@@ -81,31 +81,30 @@ function wrapMethod (method) {
 
     // For acknowledge/modifyAckDeadline, try to restore span context from stored map
     let restoredStore = null
-    if (api === 'acknowledge' || api === 'modifyAckDeadline') {
-      if (request && request.ackIds && request.ackIds.length > 0) {
-        // Try to find a stored context for any of these ack IDs
-        for (const ackId of request.ackIds) {
-          const storedContext = ackContextMap.get(ackId)
-          if (storedContext) {
-            restoredStore = storedContext
-            break
+    const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
+    if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
+      // Try to find a stored context for any of these ack IDs
+      for (const ackId of request.ackIds) {
+        const storedContext = ackContextMap.get(ackId)
+        if (storedContext) {
+          restoredStore = storedContext
+          break
+        }
+      }
+
+      // Clean up ackIds from the map ONLY for acknowledge, not modifyAckDeadline
+      // ModifyAckDeadline happens first (lease extension), then acknowledge happens later
+      if (api === 'acknowledge') {
+        request.ackIds.forEach(ackId => {
+          if (ackContextMap.has(ackId)) {
+            ackContextMap.delete(ackId)
           }
-        }
-        
-        // Clean up ackIds from the map ONLY for acknowledge, not modifyAckDeadline
-        // ModifyAckDeadline happens first (lease extension), then acknowledge happens later
-        if (api === 'acknowledge') {
-          request.ackIds.forEach(ackId => {
-            if (ackContextMap.has(ackId)) {
-              ackContextMap.delete(ackId)
-            }
-          })
-        }
+        })
       }
     }
 
     const ctx = { request, api, projectId: this.auth._cachedProjectId }
-    
+
     // If we have a restored context, run in that context
     if (restoredStore) {
       // CRITICAL: Add the parent span to ctx so the plugin uses it as parent
@@ -195,7 +194,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 
     // Get the current async context store (should contain the pubsub.delivery span)
     const store = storage('legacy').getStore()
-    
+
     // If we have a span in the store, the context is properly set up
     // The user's message handler will now run in this context and see the active span
     const ctx = { message, store }
@@ -214,32 +213,27 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 // Wrap message.ack() - must hook the subscriber-message.js file directly since Message is not exported from main module
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
-  
-  
+
   if (Message && Message.prototype && Message.prototype.ack) {
     shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
       // Capture the current active span and create a store with its context
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
-      
+
       if (activeSpan) {
-        
         // CRITICAL: We must store a context that reflects the span's actual trace
         // The span might have been created with a custom parent (reparented to pubsub.request)
         // but the async storage might still contain the original context.
         // So we create a fresh store with the span to ensure the correct trace is preserved.
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
-        
+
         if (this.ackId) {
           ackContextMap.set(this.ackId, storeWithSpanContext)
         }
-      } else {
       }
-      
+
       return originalAck.apply(this, arguments)
     })
-    
-  } else {
   }
 
   return obj
