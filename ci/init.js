@@ -5,7 +5,7 @@ const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
-const { getConfig } = require('../packages/dd-trace/src/config')
+const getConfig = require('../packages/dd-trace/src/config')
 const config = getConfig()
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
