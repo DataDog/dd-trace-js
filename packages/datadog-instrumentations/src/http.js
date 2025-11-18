@@ -1,5 +1,5 @@
 'use strict'
 
 require('./http/client')
-require('./google-cloud-pubsub')
+// require('./google-cloud-pubsub')
 require('./http/server')

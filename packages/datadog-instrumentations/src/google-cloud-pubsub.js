@@ -6,6 +6,19 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+// Auto-load push subscription plugin for push subscribers
+// This ensures pubsub.delivery spans work even if app doesn't import @google-cloud/pubsub
+try {
+  const tracer = require('../../dd-trace')
+  const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
+  if (tracer._tracer) {
+    const handler = new PushSubscriptionPlugin(tracer._tracer, {})
+    handler.configure({})
+  }
+} catch {
+  // Silent - push subscription plugin is optional
+}
+
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
 const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
@@ -13,18 +26,6 @@ const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
 const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
-
-// Auto-load push subscription plugin when google-cloud-pubsub is loaded
-try {
-  const tracer = require('../../dd-trace')
-  if (tracer._tracer) {
-    const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
-    const handler = new PushSubscriptionPlugin(tracer._tracer, {})
-    handler.configure({})
-  }
-} catch {
-  // Silent - push subscription plugin is optional
-}
 
 const publisherMethods = [
   'createTopic',
@@ -162,20 +163,25 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-// Inject trace context into Pub/Sub message attributes
+// Helper function to inject trace context into Pub/Sub messages
 function injectTraceContext (attributes, pubsub, topicName) {
+  // Skip if already injected
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
   try {
     const tracer = require('../../dd-trace')
     const activeSpan = tracer.scope().active()
-    if (!activeSpan) return
 
-    tracer.inject(activeSpan, 'text_map', attributes)
+    if (activeSpan) {
+      const ctx = activeSpan.context()
+      tracer.inject(activeSpan, 'text_map', attributes)
 
-    // Inject upper 64 bits of 128-bit trace ID for proper span linking
-    const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
-    if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
+      // Inject upper 64 bits of 128-bit trace ID for proper span linking
+      const traceIdUpperBits = ctx._trace.tags['_dd.p.tid']
+      if (traceIdUpperBits) {
+        attributes['_dd.p.tid'] = traceIdUpperBits
+      }
+    }
   } catch {
     // Silently fail - trace context injection is best-effort
   }
@@ -190,25 +196,32 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
   // Wrap Topic.publishMessage (modern API)
-  if (obj.Topic.prototype.publishMessage) {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
-      if (data && typeof data === 'object') {
-        if (!data.attributes) data.attributes = {}
-        injectTraceContext(data.attributes, this.pubsub, this.name)
+  if (typeof obj.Topic.prototype.publishMessage === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+      return function (data, attributesOrCallback, callback) {
+        if (data && typeof data === 'object') {
+          if (!data.attributes) data.attributes = {}
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        }
+        return publishMessage.apply(this, arguments)
       }
-      return publishMessage.apply(this, arguments)
     })
   }
 
   // Wrap Topic.publish (legacy API)
-  if (obj.Topic.prototype.publish) {
+  if (typeof obj.Topic.prototype.publish === 'function') {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
-      // Normalize arguments: ensure attributes object exists at position [1]
-      if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
-        arguments[1] = {}
+      let attributes = attributesOrCallback
+      if (typeof attributesOrCallback === 'function') {
+        attributes = {}
+        arguments[1] = attributes
         arguments[2] = attributesOrCallback
+      } else if (!attributes || typeof attributes !== 'object') {
+        attributes = {}
+        arguments[1] = attributes
       }
-      injectTraceContext(arguments[1], this.pubsub, this.name)
+
+      injectTraceContext(attributes, this.pubsub, this.name)
       return publish.apply(this, arguments)
     })
   }
