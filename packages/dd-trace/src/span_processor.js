@@ -62,15 +62,10 @@ class SpanProcessor {
         }
       }
 
-      console.log('formatted length: ' + formatted?.length)
       if (formatted.length !== 0 && trace.isRecording !== false) {
-        console.log('span processor - EXPORTING SPANS')
-        try {
-          this._exporter.export(formatted)
-        } catch (e) {
-          console.log('error exporting spans: ' + e)
-        }
+        this._exporter.export(formatted)
       }
+
       this._erase(trace, active)
     }
 

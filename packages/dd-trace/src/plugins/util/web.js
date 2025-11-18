@@ -347,9 +347,7 @@ const web = {
     context.config.hooks.request(context.span, req, res)
     addResourceTag(context)
 
-    console.log('00 web plugin - FINISHING SPAN - ' + req.url)
     context.span.finish()
-    console.log('01 web plugin - FINISHED SPAN - ' + req.url)
     context.finished = true
   },
 

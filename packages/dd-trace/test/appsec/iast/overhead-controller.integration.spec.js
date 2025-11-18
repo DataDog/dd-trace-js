@@ -43,45 +43,27 @@ describe.only('IAST - overhead-controller - integration', () => {
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
-      console.log('START CHECKING VULNERABILITIES IN ENDPOINT - ' + path)
       await axios.request(path, { method })
 
       await agent.assertMessageReceived(({ payload }) => {
-        try {
-          assert.strictEqual(payload[0][0].type, 'web')
-          assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-          assert.property(payload[0][0].meta, '_dd.iast.json')
-          const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-          assert.isNotNull(vulnerabilitiesTrace)
+        assert.strictEqual(payload[0][0].type, 'web')
+        assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+        assert.property(payload[0][0].meta, '_dd.iast.json')
+        const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
+        assert.isNotNull(vulnerabilitiesTrace)
 
-          const vulnerabilities = {}
-          vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-            const vulnCount = vulnerabilities[v.type]
-            vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
-          })
+        const vulnerabilities = {}
+        vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+          const vulnCount = vulnerabilities[v.type]
+          vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
+        })
 
-          assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
+        assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
 
-          Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
-            assert.strictEqual(vulnerabilities[vType],
-              vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
-          })
-        } catch (e) {
-          console.log('--------------------------------')
-          console.log(JSON.stringify(payload, (key, value) => {
-            if (typeof value === 'bigint') { return value.toString() }
-            if (key === 'meta_struct') return 'IGNORED_META_STRUCT'
-            return value
-          }
-          , 2))
-          console.log('--------------------------------')
-          console.log(e)
-          console.log('--------------------------------')
-
-          throw e
-        }
+        Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
+          assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
+        })
       }, 1000, 1, true)
-      console.log('FINISH CHECKING VULNERABILITIES IN ENDPOINT - ' + path)
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {

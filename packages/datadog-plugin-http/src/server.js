@@ -59,7 +59,7 @@ class HttpServerPlugin extends ServerPlugin {
     if (incomingHttpRequestEnd.hasSubscribers) {
       incomingHttpRequestEnd.publish({ req, res: context.res })
     }
-    console.log('http plugin - FINISHING ALL - ' + req.url)
+
     web.finishAll(context)
   }
 
