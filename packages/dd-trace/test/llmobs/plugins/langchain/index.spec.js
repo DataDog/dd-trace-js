@@ -409,7 +409,7 @@ describe('integrations', () => {
 
             await chain.invoke({ input: 'Can you tell me about LangSmith?' })
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(2)
 
             const workflowSpan = apmSpans[0]
             const llmSpan = apmSpans[1]
@@ -498,7 +498,7 @@ describe('integrations', () => {
             })
             assert.ok(result)
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(5)
 
             const topLevelWorkflow = apmSpans[0]
             const firstSubWorkflow = apmSpans[1]
@@ -605,7 +605,7 @@ describe('integrations', () => {
 
             await chain.batch(['chickens', 'dogs'])
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(3)
 
             const workflowSpan = apmSpans[0]
             const firstLLMSpan = apmSpans[1]
@@ -678,7 +678,7 @@ describe('integrations', () => {
               input: 'What is the powerhouse of the cell?'
             })
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(2)
 
             const workflowSpan = apmSpans[0]
             const llmSpan = apmSpans[1]
@@ -761,7 +761,7 @@ describe('integrations', () => {
 
             await chain.invoke({ foo: 'bar' })
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(3)
 
             const workflowSpan = apmSpans[0]
             const taskSpan = apmSpans[1]
@@ -894,7 +894,7 @@ describe('integrations', () => {
           it('submits a retrieval span with a child embedding span for similaritySearch', async () => {
             await vectorstore.similaritySearch('Biology')
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(2)
 
             // first call was for the embedding span in the beforeEach
             const retrievalSpanEvent = llmobsSpans[0]
@@ -919,7 +919,7 @@ describe('integrations', () => {
           it('submits a retrieval span with a child embedding span for similaritySearchWithScore', async () => {
             await vectorstore.similaritySearchWithScore('Biology')
 
-            const { apmSpans, llmobsSpans } = await getEvents()
+            const { apmSpans, llmobsSpans } = await getEvents(2)
 
             // first call was for the embedding span in the beforeEach
             const retrievalSpanEvent = llmobsSpans[0]

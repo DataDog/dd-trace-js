@@ -402,7 +402,7 @@ describe('Plugin', () => {
 
       const toolCallId = result.steps[0].toolCalls[0].toolCallId
 
-      const { apmSpans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents(4)
 
       let expectedFinalOutput
 
@@ -564,7 +564,7 @@ describe('Plugin', () => {
       const steps = stepsPromise.status.value
       const toolCallId = steps[0].toolCalls[0].toolCallId
 
-      const { apmSpans, llmobsSpans } = await getEvents()
+      const { apmSpans, llmobsSpans } = await getEvents(4)
 
       let expectedFinalOutput
 
