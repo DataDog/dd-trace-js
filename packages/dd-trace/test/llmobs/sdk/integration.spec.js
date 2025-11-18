@@ -6,6 +6,7 @@ const sinon = require('sinon')
 const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
 
 const assert = require('node:assert')
+const agent = require('../../plugins/agent')
 
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -37,7 +38,7 @@ describe('end to end sdk integration tests', () => {
 
     assert.equal(result, 'boom')
 
-    const { apmSpans, llmobsSpans } = await getEvents()
+    const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
 
@@ -86,7 +87,7 @@ describe('end to end sdk integration tests', () => {
 
     agent('my custom input')
 
-    const { apmSpans, llmobsSpans } = await getEvents()
+    const { apmSpans, llmobsSpans } = await getEvents(2)
     assert.equal(apmSpans.length, 3)
     assert.equal(llmobsSpans.length, 2)
 
@@ -167,7 +168,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(2)
       assert.equal(llmobsSpans.length, 2)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
@@ -185,7 +186,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(2)
       assert.equal(llmobsSpans.length, 2)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'span-level-ml-app')
@@ -213,7 +214,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'child-2' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(3)
       assert.equal(llmobsSpans.length, 3)
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
@@ -291,6 +292,7 @@ describe('end to end sdk integration tests', () => {
 
       beforeEach(() => {
         llmobs.registerProcessor(processor)
+        agent.reset() // make sure llmobs requests are cleared
       })
 
       it('does not submit the span', async () => {
@@ -333,7 +335,7 @@ describe('end to end sdk integration tests', () => {
           })
         })
 
-        const { llmobsSpans } = await getEvents()
+        const { llmobsSpans } = await getEvents(2)
         assert.equal(llmobsSpans.length, 2)
 
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
@@ -357,7 +359,7 @@ describe('end to end sdk integration tests', () => {
         llmobs.trace({ kind: 'workflow', name: 'afterAnnotationContext' }, () => {})
       })
 
-      const { llmobsSpans } = await getEvents()
+      const { llmobsSpans } = await getEvents(6)
       assert.equal(llmobsSpans.length, 6)
 
       assert.equal(getTag(llmobsSpans[0], 'foo'), undefined)
