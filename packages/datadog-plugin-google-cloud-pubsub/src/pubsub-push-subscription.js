@@ -10,20 +10,32 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
+    this._subscribed = false
+  }
 
-    log.info('[DD DEBUG] Push subscription plugin initialized, subscribing to HTTP channel')
-    // Subscribe to HTTP start channel to intercept PubSub requests
-    // We run BEFORE HTTP plugin to set delivery span as active parent
-    const startCh = channel('apm:http:server:request:start')
-    startCh.subscribe(({ req, res }) => {
-      this._handlePubSubRequest({ req, res })
-    })
+  configure (config) {
+    super.configure(config)
+
+    // Only subscribe once, and only if not explicitly disabled
+    if (!this._subscribed) {
+      this._subscribed = true
+
+      log.debug('[PubSub] Push subscription plugin configured, subscribing to HTTP channel')
+      // Subscribe to HTTP start channel to intercept PubSub requests
+      // We run BEFORE HTTP plugin to set delivery span as active parent
+      const startCh = channel('apm:http:server:request:start')
+      startCh.subscribe(({ req, res }) => {
+        this._handlePubSubRequest({ req, res })
+      })
+    }
+
+    return config
   }
 
   _handlePubSubRequest ({ req, res }) {
     const userAgent = req.headers['user-agent'] || ''
-    log.info(
-      `[DD DEBUG] Push plugin checking request: ${req.method}, userAgent: ${userAgent}, ` +
+    log.debug(
+      `[PubSub] Push plugin checking request: ${req.method}, userAgent: ${userAgent}, ` +
       `has pubsub header: ${!!req.headers['x-goog-pubsub-message-id']}`
     )
     if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return
