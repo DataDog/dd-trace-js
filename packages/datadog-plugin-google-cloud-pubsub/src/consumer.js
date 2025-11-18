@@ -9,8 +9,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'receive'
 
-  // Reconstruct a SpanContext for the pubsub.request span
-  // This creates proper Identifier objects that the encoder can serialize
   _reconstructPubSubRequestContext (attrs) {
     const traceIdLower = attrs['_dd.pubsub_request.trace_id']
     const spanId = attrs['_dd.pubsub_request.span_id']
@@ -39,51 +37,39 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   bindStart (ctx) {
     const { message } = ctx
     const subscription = message._subscriber._subscription
-    // Get topic from metadata or message attributes (attributes more reliable for pull subscriptions)
     const topic = (subscription.metadata && subscription.metadata.topic) ||
                   (message.attributes && message.attributes['pubsub.topic']) ||
                   (message.attributes && message.attributes['gcloud.project_id'] ? 
                     `projects/${message.attributes['gcloud.project_id']}/topics/unknown` : null)
-    
-    // Extract batch metadata from message attributes
+  
     const batchRequestTraceId = message.attributes?.['_dd.pubsub_request.trace_id']
     const batchRequestSpanId = message.attributes?.['_dd.pubsub_request.span_id']
     const batchSize = message.attributes?.['_dd.batch.size']
     const batchIndex = message.attributes?.['_dd.batch.index']
 
-    // Extract the standard context (this gets us the full 128-bit trace ID, sampling priority, etc.)
     let childOf = this.tracer.extract('text_map', message.attributes) || null
     
-    // Only reparent to pubsub.request for the FIRST message in the batch (index 0)
-    // Messages 2-N are in separate traces and should stay as children of their original parent
     const isFirstMessage = batchIndex === '0' || batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      // Reconstruct a proper SpanContext for the pubsub.request span
-      // This ensures pubsub.receive becomes a child of pubsub.request (not triggerPubsub)
       const pubsubRequestContext = this._reconstructPubSubRequestContext(message.attributes)
       if (pubsubRequestContext) {
         childOf = pubsubRequestContext
       }
     }
 
-    // Extract topic name for better resource naming
     const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
-    // Create pubsub.receive span (note: operation name will be 'google-cloud-pubsub.receive')
-    // Use a separate service name (like push subscriptions do) for better service map visibility
     const baseService = this.tracer._service || 'unknown'
     const serviceName = this.config.service || `${baseService}-pubsub`
     
-    // Build meta object with batch metadata if available
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
       'span.kind': 'consumer',
       'pubsub.delivery_method': 'pull',
-      'pubsub.span_type': 'message_processing', // Easy filtering in Datadog
-      'messaging.operation': 'receive' // Standard tag 
+      'pubsub.span_type': 'message_processing',
+      'messaging.operation': 'receive'
     }
 
-    // Add batch metadata tags for correlation
     if (batchRequestTraceId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
     }
@@ -101,7 +87,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'pubsub.ack': 0
     }
 
-    // Add batch size and index if available
     if (batchSize) {
       metrics['pubsub.batch.message_count'] = Number.parseInt(batchSize, 10)
       metrics['pubsub.batch.size'] = Number.parseInt(batchSize, 10)
@@ -122,12 +107,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       childOf,
       resource: `Message from ${topicName}`, // More descriptive resource name
       type: 'worker',
-      service: serviceName, // Use integration-specific service name
+      service: serviceName,
       meta,
       metrics
     }, ctx) 
 
-    // Add message metadata
+
     if (message.id) {
       span.setTag('pubsub.message_id', message.id)
     }
@@ -135,7 +120,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())
     }
 
-    // Calculate delivery duration if publish time is available
     if (message.attributes) {
       const publishStartTime = message.attributes['x-dd-publish-start-time']
       if (publishStartTime) {
@@ -143,14 +127,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
       }
 
-      // Extract and link to the pubsub.request span that sent this message
       const pubsubRequestTraceId = message.attributes['_dd.pubsub_request.trace_id']
       const pubsubRequestSpanId = message.attributes['_dd.pubsub_request.span_id']
       const batchSize = message.attributes['_dd.batch.size']
       const batchIndex = message.attributes['_dd.batch.index']
 
       if (pubsubRequestTraceId && pubsubRequestSpanId) {
-        // Add span link metadata to connect delivery span to the pubsub.request span
         span.setTag('_dd.pubsub_request.trace_id', pubsubRequestTraceId)
         span.setTag('_dd.pubsub_request.span_id', pubsubRequestSpanId)
         span.setTag('_dd.span_links', `${pubsubRequestTraceId}:${pubsubRequestSpanId}`)

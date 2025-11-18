@@ -12,8 +12,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
-    // Subscribe to HTTP start channel to intercept PubSub requests
-    // We run BEFORE HTTP plugin to set delivery span as active parent
+
     const startCh = channel('apm:http:server:request:start')
     startCh.subscribe(({ req, res }) => {
       this._handlePubSubRequest({ req, res })
@@ -23,7 +22,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   _handlePubSubRequest ({ req, res }) {
     const userAgent = req.headers['user-agent'] || ''
     if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return
-    // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
+
     if (req.headers['x-goog-pubsub-message-id']) {
       log.warn('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
       log.warn(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
@@ -31,7 +30,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    // No unwrapped Pub/Sub headers found - likely missing --push-no-wrapper-write-metadata
     log.warn('[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. Add --push-no-wrapper-write-metadata to your subscription.')
   }
 
@@ -51,11 +49,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const deliverySpan = this._createDeliverySpan(
       messageData,
       isSameTrace ? pubsubRequestContext : originalContext,
-      !isSameTrace, // Add span link only if different trace
+      !isSameTrace,
       tracer
     )
 
-    // Finish delivery span when response completes
     const finishDelivery = () => {
       if (!deliverySpan.finished) {
         deliverySpan.finish()
@@ -85,8 +82,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _extractContext (messageData, tracer) {
-    // messageData.attrs is req.headers, so just extract from there
-    // Use the actual tracer instance (_tracer) for proper 128-bit trace ID extraction
     return tracer._tracer.extract('text_map', messageData.attrs) || undefined
   }
 
@@ -118,6 +113,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   _createDeliverySpan (messageData, parentContext, addSpanLink, tracer) {
     const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription.split('/').pop() || subscription
+
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 
@@ -141,7 +137,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
     this._addBatchMetadata(span, attrs)
 
-    // Add OpenTelemetry span link if needed
     if (addSpanLink && parentContext) {
       if (typeof span.addLink === 'function') {
         span.addLink(parentContext, {})

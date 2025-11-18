@@ -7,7 +7,6 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
 
-// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
@@ -270,19 +269,19 @@ function injectTraceContext (attributes, pubsub, topicName) {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
-  // Wrap Topic.publishMessage (modern API)
-  if (obj.Topic.prototype.publishMessage) {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
-      if (data && typeof data === 'object') {
-        if (!data.attributes) data.attributes = {}
-        injectTraceContext(data.attributes, this.pubsub, this.name)
+  if (typeof obj.Topic.prototype.publishMessage === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+      return function (data, attributesOrCallback, callback) {
+        if (data && typeof data === 'object') {
+          if (!data.attributes) data.attributes = {}
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        }
+        return publishMessage.apply(this, arguments)
       }
-      return publishMessage.apply(this, arguments)
     })
   }
 
-  // Wrap Topic.publish (legacy API)
-  if (obj.Topic.prototype.publish) {
+  if (typeof obj.Topic.prototype.publish === 'function') {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
       if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
         arguments[1] = {}
