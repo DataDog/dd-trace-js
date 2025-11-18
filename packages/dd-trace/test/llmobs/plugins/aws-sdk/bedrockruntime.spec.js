@@ -22,7 +22,7 @@ describe('Plugin', () => {
       AWS_ACCESS_KEY_ID: '00000000000000000000'
     })
 
-    const getEvents = useLlmObs({ plugin: 'aws-sdk' })
+    const { getEvents } = useLlmObs({ plugin: 'aws-sdk' })
 
     withVersions('aws-sdk', ['@aws-sdk/smithy-client', 'aws-sdk'], '>=3', (version, moduleName) => {
       let AWS
