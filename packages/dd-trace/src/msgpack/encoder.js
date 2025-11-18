@@ -1,11 +1,10 @@
 'use strict'
 
-const Chunk = require('./chunk')
+const MsgpackChunk = require('./chunk')
 
 class MsgpackEncoder {
   encode (value) {
-    const bytes = new Chunk()
-
+    const bytes = new MsgpackChunk()
     this.encodeValue(bytes, value)
 
     return bytes.buffer.subarray(0, bytes.length)
