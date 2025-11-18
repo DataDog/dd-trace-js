@@ -23,7 +23,13 @@ describe('FlaggingProvider', () => {
     mockConfig = {
       service: 'test-service',
       version: '1.0.0',
-      env: 'test'
+      env: 'test',
+      experimental: {
+        flaggingProvider: {
+          enabled: true,
+          initializationTimeoutMs: 30_000
+        }
+      }
     }
 
     mockChannel = {
@@ -65,7 +71,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       expect(provider).to.exist
-      expect(log.debug).to.have.been.calledWith('FlaggingProvider created')
+      expect(log.debug).to.have.been.calledWith('FlaggingProvider created with timeout: 30000ms')
     })
   })
 
