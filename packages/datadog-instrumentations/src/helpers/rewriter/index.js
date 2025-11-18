@@ -35,11 +35,13 @@ function rewrite (content, filename, format) {
     filename = filename.replace('file://', '')
 
     for (const inst of instrumentations) {
-      const { astQuery, moduleName, versionRange, filePath, operator, functionQuery } = inst
+      const { astQuery, functionQuery = {}, module: { name, versionRange, filePath } } = inst
+      const { kind } = functionQuery
+      const operator = kind === 'Async' ? 'tracePromise' : 'traceSync' // TODO: traceCallback
       const transform = transforms[operator]
 
-      if (disabled.has(moduleName)) continue
-      if (!filename.endsWith(`${moduleName}/${filePath}`)) continue
+      if (disabled.has(name)) continue
+      if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!transform) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
@@ -51,7 +53,7 @@ function rewrite (content, filename, format) {
 
       const query = astQuery || fromFunctionQuery(functionQuery)
       const selector = esquery.parse(query)
-      const state = { ...inst, format }
+      const state = { ...inst, format, operator }
 
       esquery.traverse(ast, selector, (...args) => transform(state, ...args))
     }
@@ -59,7 +61,7 @@ function rewrite (content, filename, format) {
     if (ast) {
       if (!enableSourceMaps || SourceMapGenerator) return generate(ast)
 
-      // TODO: Can we use the same version of `source-maps` that DI uses?
+      // TODO: Can we use the same version of `source-map` that DI uses?
       SourceMapGenerator ??= require('@datadog/source-map').SourceMapGenerator
 
       const sourceMap = new SourceMapGenerator({ file: filename })
@@ -100,9 +102,7 @@ function satisfies (filename, filePath, versions) {
 // TODO: Support index
 function fromFunctionQuery (functionQuery) {
   const { methodName, functionName, expressionName, className } = functionQuery
-  const kind = functionQuery.kind?.toLowerCase()
-
-  let queries = []
+  const queries = []
 
   if (className) {
     queries.push(
@@ -124,10 +124,6 @@ function fromFunctionQuery (functionQuery) {
       `FunctionExpression[id.name="${expressionName}"][async]`,
       `ArrowFunctionExpression[id.name="${expressionName}"][async]`
     )
-  }
-
-  if (kind) {
-    queries = queries.map(q => q.replaceAll('[async]', `[async="${kind === 'async' ? 'true' : 'false'}"]`))
   }
 
   return queries.join(', ')

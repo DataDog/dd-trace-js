@@ -1,212 +1,235 @@
 [
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/runnables/base.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/runnables/base.cjs"
+    },
     "functionQuery": {
       "methodName": "invoke",
-      "kind": "async",
+      "kind": "Async",
       "className": "RunnableSequence"
     },
-    "operator": "tracePromise",
     "channelName": "RunnableSequence_invoke"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/runnables/base.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/runnables/base.cjs"
+    },
     "functionQuery": {
       "methodName": "batch",
-      "kind": "async",
+      "kind": "Async",
       "className": "RunnableSequence"
     },
-    "operator": "tracePromise",
     "channelName": "RunnableSequence_batch"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/language_models/chat_models.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/language_models/chat_models.cjs"
+    },
     "functionQuery": {
       "methodName": "generate",
-      "kind": "async",
+      "kind": "Async",
       "className": "BaseChatModel"
     },
-    "operator": "tracePromise",
     "channelName": "BaseChatModel_generate"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/language_models/llms.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/language_models/llms.cjs"
+    },
     "functionQuery": {
       "methodName": "generate",
-      "kind": "async"
+      "kind": "Async"
     },
-    "operator": "tracePromise",
     "channelName": "BaseLLM_generate"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/embeddings.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/embeddings.cjs"
+    },
     "functionQuery": {
       "methodName": "embedQuery",
+      "kind": "Async",
       "className": "Embeddings"
     },
-    "operator": "tracePromise",
     "channelName": "Embeddings_embedQuery"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/embeddings.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/embeddings.cjs"
+    },
     "functionQuery": {
       "methodName": "embedDocuments",
+      "kind": "Async",
       "className": "Embeddings"
     },
-    "operator": "tracePromise",
     "channelName": "Embeddings_embedDocuments"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/tools/index.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/tools/index.cjs"
+    },
     "functionQuery": {
       "methodName": "invoke",
-      "kind": "async",
+      "kind": "Async",
       "className": "StructuredTool"
     },
-    "operator": "tracePromise",
     "channelName": "Tool_invoke"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/vectorstores.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/vectorstores.cjs"
+    },
     "functionQuery": {
       "methodName": "similaritySearch",
-      "kind": "async",
+      "kind": "Async",
       "className": "VectorStore"
     },
-    "operator": "tracePromise",
     "channelName": "VectorStore_similaritySearch"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/vectorstores.cjs",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/vectorstores.cjs"
+    },
     "functionQuery": {
       "methodName": "similaritySearchWithScore",
-      "kind": "async",
+      "kind": "Async",
       "className": "VectorStore"
     },
-    "operator": "tracePromise",
     "channelName": "VectorStore_similaritySearchWithScore"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/runnables/base.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/runnables/base.js"
+    },
     "functionQuery": {
       "methodName": "invoke",
-      "kind": "async",
+      "kind": "Async",
       "className": "RunnableSequence"
     },
-    "operator": "tracePromise",
     "channelName": "RunnableSequence_invoke"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/runnables/base.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/runnables/base.js"
+    },
     "functionQuery": {
       "methodName": "batch",
-      "kind": "async",
+      "kind": "Async",
       "className": "RunnableSequence"
     },
-    "operator": "tracePromise",
     "channelName": "RunnableSequence_batch"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/language_models/chat_models.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/language_models/chat_models.js"
+    },
     "functionQuery": {
       "methodName": "generate",
-      "kind": "async",
+      "kind": "Async",
       "className": "BaseChatModel"
     },
-    "operator": "tracePromise",
     "channelName": "BaseChatModel_generate"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/language_models/llms.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/language_models/llms.js"
+    },
     "functionQuery": {
       "methodName": "generate",
-      "kind": "async"
+      "kind": "Async"
     },
-    "operator": "tracePromise",
     "channelName": "BaseLLM_generate"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/embeddings.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/embeddings.js"
+    },
     "functionQuery": {
       "methodName": "embedQuery",
+      "kind": "Async",
       "className": "Embeddings"
     },
-    "operator": "tracePromise",
     "channelName": "Embeddings_embedQuery"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/embeddings.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/embeddings.js"
+    },
     "functionQuery": {
       "methodName": "embedDocuments",
+      "kind": "Async",
       "className": "Embeddings"
     },
-    "operator": "tracePromise",
     "channelName": "Embeddings_embedDocuments"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/tools/index.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/tools/index.js"
+    },
     "functionQuery": {
       "methodName": "invoke",
-      "kind": "async",
+      "kind": "Async",
       "className": "StructuredTool"
     },
-    "operator": "tracePromise",
     "channelName": "Tool_invoke"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/vectorstores.js",
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/vectorstores.js"
+    },
     "functionQuery": {
       "methodName": "similaritySearch",
-      "kind": "async",
+      "kind": "Async",
       "className": "VectorStore"
     },
-    "operator": "tracePromise",
     "channelName": "VectorStore_similaritySearch"
   },
   {
-    "moduleName": "@langchain/core",
-    "versionRange": ">=0.1",
-    "filePath": "dist/vectorstores.js",
+
+    "module": {
+      "name": "@langchain/core",
+      "versionRange": ">=0.1",
+      "filePath": "dist/vectorstores.js"
+    },
     "functionQuery": {
       "methodName": "similaritySearchWithScore",
-      "kind": "async",
+      "kind": "Async",
       "className": "VectorStore"
     },
-    "operator": "tracePromise",
     "channelName": "VectorStore_similaritySearchWithScore"
   }
 ]

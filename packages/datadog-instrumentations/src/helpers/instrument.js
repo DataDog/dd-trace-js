@@ -27,8 +27,9 @@ exports.getHooks = function getHooks (names) {
   names = [names].flat()
 
   return rewriterInstrumentations
-    .filter(inst => names.includes(inst.moduleName))
-    .map(inst => ({ name: inst.moduleName, versions: [inst.versionRange], file: inst.filePath }))
+    .map(inst => inst.module)
+    .filter(({ name }) => names.includes(name))
+    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
 }
 
 /**
