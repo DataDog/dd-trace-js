@@ -443,8 +443,20 @@ describe('Plugin', () => {
       })
 
       function expectSpanWithDefaults (expected) {
-        const prefixedResource = [expected.meta['pubsub.method'], resource].filter(x => x).join(' ')
-        const service = expected.meta['pubsub.method'] ? 'test-pubsub' : 'test'
+        let prefixedResource
+        const method = expected.meta['pubsub.method']
+
+        if (method === 'publish') {
+          // For publish operations, use the new format: "publish to Topic <topic-name>"
+          prefixedResource = `${method} to Topic ${topicName}`
+        } else if (method) {
+          // For other operations, use the old format: "<method> <full-resource-path>"
+          prefixedResource = `${method} ${resource}`
+        } else {
+          prefixedResource = resource
+        }
+
+        const service = method ? 'test-pubsub' : 'test'
         expected = withDefaults({
           name: 'pubsub.request',
           resource: prefixedResource,
