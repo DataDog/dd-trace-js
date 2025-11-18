@@ -203,7 +203,7 @@ describe('integrations', () => {
 
             inputMessages.push({ role: 'user', content: 'Foobar?' })
             inputMessages.push({ role: 'model', content: 'Foobar!' })
-            inputMessages.push({ content: 'Hello, how are you?' })
+            inputMessages.push({ content: 'Hello, how are you?', role: '' })
 
             assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],
