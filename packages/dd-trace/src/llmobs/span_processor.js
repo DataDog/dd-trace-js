@@ -72,7 +72,7 @@ class LLMObsSpanProcessor {
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
-  process ({ span }) {
+  process (span) {
     if (!this.#config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
