@@ -31,8 +31,8 @@ const spanId = id('0234567812345678')
 const spanId2 = id('0254567812345678')
 const spanId3 = id('0264567812345678')
 
-describe('format', () => {
-  let format
+describe('spanFormat', () => {
+  let spanFormat
   let span
   let trace
   let spanContext
@@ -87,10 +87,10 @@ describe('format', () => {
       toSpanId: sinon.stub().returns(spanId3.toString(16))
     }
 
-    format = require('../src/format')
+    spanFormat = require('../src/span_format')
   })
 
-  describe('format', () => {
+  describe('spanFormat', () => {
     it('should format span events', () => {
       span._events = [
         { name: 'Something went so wrong', startTime: 1 },
@@ -101,7 +101,7 @@ describe('format', () => {
         }
       ]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanEvents = trace.span_events
       expect(spanEvents).to.deep.equal([{
         name: 'Something went so wrong',
@@ -115,7 +115,7 @@ describe('format', () => {
     })
 
     it('should convert a span to the correct trace format', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
       expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
@@ -130,7 +130,7 @@ describe('format', () => {
     it('should always set a parent ID', () => {
       span.context()._parentId = null
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.trace_id.toString()).to.equal(span.context()._traceId.toString())
       expect(trace.span_id.toString()).to.equal(span.context()._spanId.toString())
@@ -146,7 +146,7 @@ describe('format', () => {
       it('should infer the tag when span service changes', () => {
         span.context()._tags['service.name'] = 'foo'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(span.setTag).to.have.been.calledWith('_dd.base_service', 'test')
       })
@@ -154,7 +154,7 @@ describe('format', () => {
       it('should infer the tag when no changes occur', () => {
         span.context()._tags['service.name'] = 'test'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(span.setTag).to.not.have.been.called
       })
@@ -162,7 +162,7 @@ describe('format', () => {
       it('should register extra service name', () => {
         span.context()._tags['service.name'] = 'foo'
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(getExtraServices()).to.deep.equal(['foo'])
       })
@@ -173,7 +173,7 @@ describe('format', () => {
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
@@ -186,7 +186,7 @@ describe('format', () => {
       spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
       spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.include({
         [SAMPLING_AGENT_DECISION]: 0.8,
@@ -200,7 +200,7 @@ describe('format', () => {
       spanContext._trace[SAMPLING_LIMIT_DECISION] = 0.2
       spanContext._trace[SAMPLING_RULE_DECISION] = 0.5
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.not.have.keys(
         SAMPLING_AGENT_DECISION,
@@ -214,7 +214,7 @@ describe('format', () => {
         maxPerSecond: 5,
         sampleRate: 1.0
       }
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.include({
         [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
@@ -224,7 +224,7 @@ describe('format', () => {
     })
 
     it('should not add single span ingestion tags if options not present', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.not.have.keys(
         SPAN_SAMPLING_MECHANISM,
@@ -243,7 +243,7 @@ describe('format', () => {
         }
       ]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
       expect(spanLinks).to.deep.equal([{
@@ -275,7 +275,7 @@ describe('format', () => {
       }
       span._links = [link]
 
-      trace = format(span)
+      trace = spanFormat(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
       expect(spanLinks).to.deep.equal([{
@@ -293,7 +293,7 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, true)
+      trace = spanFormat(span, true)
 
       expect(trace.meta).to.include({
         chunk: 'test'
@@ -310,7 +310,7 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, false)
+      trace = spanFormat(span, false)
       expect(trace.meta).to.not.include({
         chunk: 'test'
       })
@@ -326,7 +326,7 @@ describe('format', () => {
         count: 1
       }
 
-      trace = format(span, true)
+      trace = spanFormat(span, true)
 
       expect(trace.meta).to.include({
         foo: ''
@@ -340,14 +340,14 @@ describe('format', () => {
     it('should discard user-defined tags with name HOSTNAME_KEY by default', () => {
       spanContext._tags[HOSTNAME_KEY] = 'some_hostname'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta[HOSTNAME_KEY]).to.be.undefined
     })
 
     it('should include the real hostname of the system if reportHostname is true', () => {
       spanContext._hostname = 'my_hostname'
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta[HOSTNAME_KEY]).to.equal('my_hostname')
     })
@@ -358,7 +358,7 @@ describe('format', () => {
       spanContext._tags['resource.name'] = 'resource'
       spanContext._tags['foo.bar'] = 'foobar'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta['service.name']).to.be.undefined
       expect(trace.meta['span.type']).to.be.undefined
@@ -369,7 +369,7 @@ describe('format', () => {
     it('should extract numeric tags as metrics', () => {
       spanContext._tags = { metric: 50 }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.have.property('metric', 50)
     })
@@ -377,7 +377,7 @@ describe('format', () => {
     it('should extract boolean tags as metrics', () => {
       spanContext._tags = { yes: true, no: false }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.have.property('yes', 1)
       expect(trace.metrics).to.have.property('no', 0)
@@ -386,7 +386,7 @@ describe('format', () => {
     it('should ignore metrics with invalid type', () => {
       spanContext._metrics = { metric: 'test' }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.not.have.property('metric')
     })
@@ -394,7 +394,7 @@ describe('format', () => {
     it('should ignore metrics that are not a number', () => {
       spanContext._metrics = { metric: NaN }
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.not.have.property('metric')
     })
@@ -403,7 +403,7 @@ describe('format', () => {
       const error = new Error('boom')
 
       spanContext._tags.error = error
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
       expect(trace.meta[ERROR_TYPE]).to.equal(error.name)
@@ -416,7 +416,7 @@ describe('format', () => {
       error.name = null
       error.stack = null
       spanContext._tags.error = error
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
       expect(trace.meta).to.not.have.property(ERROR_TYPE)
@@ -426,13 +426,13 @@ describe('format', () => {
     it('should extract the origin', () => {
       spanContext._trace.origin = 'synthetics'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta[ORIGIN_KEY]).to.equal('synthetics')
     })
 
     it('should add the language tag for a basic span', () => {
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta.language).to.equal('javascript')
     })
@@ -441,7 +441,7 @@ describe('format', () => {
       it('should set the error flag when error tag is true', () => {
         spanContext._tags.error = true
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(trace.error).to.equal(1)
       })
@@ -449,7 +449,7 @@ describe('format', () => {
       it('should not set the error flag when error is false', () => {
         spanContext._tags.error = false
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(trace.error).to.equal(0)
       })
@@ -457,7 +457,7 @@ describe('format', () => {
       it('should not extract error to meta', () => {
         spanContext._tags.error = true
 
-        trace = format(span)
+        trace = spanFormat(span)
 
         expect(trace.meta.error).to.be.undefined
       })
@@ -468,7 +468,7 @@ describe('format', () => {
       spanContext._tags[ERROR_MESSAGE] = 'boom'
       spanContext._tags[ERROR_STACK] = ''
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.error).to.equal(1)
     })
@@ -479,7 +479,7 @@ describe('format', () => {
       spanContext._tags[ERROR_STACK] = ''
       spanContext._tags.setTraceError = 1
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.error).to.equal(1)
 
@@ -496,7 +496,7 @@ describe('format', () => {
       spanContext._tags[ERROR_STACK] = ''
       spanContext._name = 'fs.operation'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.error).to.equal(0)
     })
@@ -505,7 +505,7 @@ describe('format', () => {
       spanContext._tags.error = new Error('boom')
       spanContext._name = 'fs.operation'
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.error).to.equal(0)
     })
@@ -519,7 +519,7 @@ describe('format', () => {
       span._startTime = NaN
       span._duration = NaN
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.name).to.equal('null')
       expect(trace.resource).to.equal('null')
@@ -531,7 +531,7 @@ describe('format', () => {
 
     it('should include the sampling priority', () => {
       spanContext._sampling.priority = 0
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[SAMPLING_PRIORITY_KEY]).to.equal(0)
     })
 
@@ -545,7 +545,7 @@ describe('format', () => {
       }
 
       spanContext._tags.nested = tag
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.meta['nested.num']).to.equal('1')
       expect(trace.meta['nested.A']).to.be.undefined
@@ -555,48 +555,48 @@ describe('format', () => {
 
     it('should accept a boolean for measured', () => {
       spanContext._tags[MEASURED] = true
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[MEASURED]).to.equal(1)
     })
 
     it('should accept a numeric value for measured', () => {
       spanContext._tags[MEASURED] = 0
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
     })
 
     it('should accept undefined for measured', () => {
       spanContext._tags[MEASURED] = undefined
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[MEASURED]).to.equal(1)
     })
 
     it('should not measure internal spans', () => {
       spanContext._tags['span.kind'] = 'internal'
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics).to.not.have.property(MEASURED)
     })
 
     it('should not measure unknown spans', () => {
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics).to.not.have.property(MEASURED)
     })
 
     it('should measure non-internal spans', () => {
       spanContext._tags['span.kind'] = 'server'
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[MEASURED]).to.equal(1)
     })
 
     it('should not override explicit measure decision', () => {
       spanContext._tags[MEASURED] = 0
       spanContext._tags['span.kind'] = 'server'
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[MEASURED]).to.equal(0)
     })
 
     it('should possess a process_id tag', () => {
-      trace = format(span)
+      trace = spanFormat(span)
       expect(trace.metrics[PROCESS_ID]).to.equal(process.pid)
     })
 
@@ -605,13 +605,13 @@ describe('format', () => {
       tags.nested = { foo: 'bar' }
       spanContext._tags.nested = tags
 
-      format(span)
+      spanFormat(span)
     })
 
     it('should capture analytics.event', () => {
       spanContext._tags['analytics.event'] = 1
 
-      trace = format(span)
+      trace = spanFormat(span)
 
       expect(trace.metrics).to.have.property('_dd1.sr.eausr', 1)
     })

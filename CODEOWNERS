@@ -98,6 +98,11 @@
 /packages/dd-trace/src/span_sampler.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/span_sampler.spec.js @DataDog/apm-sdk-capabilities-js
 
+# Feature Flagging
+/integration-tests/openfeature/ @DataDog/feature-flagging
+/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
+/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
+
 # CI
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
