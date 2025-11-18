@@ -109,6 +109,7 @@ module.exports = {
   injectForce: null,
   isAzureFunction: false,
   isCiVisibility: false,
+  'ciVisibility.enabled': true,
   isEarlyFlakeDetectionEnabled: false,
   isFlakyTestRetriesEnabled: false,
   flakyTestRetriesCount: 5,

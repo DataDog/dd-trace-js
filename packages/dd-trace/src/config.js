@@ -439,6 +439,7 @@ class Config {
       DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
+      DD_CIVISIBILITY_ENABLED,
       DD_CRASHTRACKING_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_ENABLED,
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
@@ -653,6 +654,7 @@ class Config {
     unprocessedTarget['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     target['appsec.wafTimeout'] = maybeInt(DD_APPSEC_WAF_TIMEOUT)
     unprocessedTarget['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    this.#setBoolean(target, 'ciVisibility.enabled', DD_CIVISIBILITY_ENABLED)
     target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
     target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
     target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
@@ -1040,6 +1042,7 @@ class Config {
     this.#setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     this.#setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this.#setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this.#setBoolean(opts, 'ciVisibility.enabled', options.ciVisibility?.enabled)
     this.#setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     this.#setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
     this.#setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
@@ -1104,6 +1107,11 @@ class Config {
     }
   }
 
+  isCiVisibilityEnabled () {
+    return this.ciVisibility.enabled
+  }
+
+  // Is this the same as IsCiVisibilityEnabled?
   #isCiVisibility () {
     return this.#optionsArg.isCiVisibility ?? this.#defaults.isCiVisibility
   }

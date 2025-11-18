@@ -2,9 +2,11 @@
 
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
-const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
+const { isTrue } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable } = require('../packages/dd-trace/src/config-helper')
+const { getConfig } = require('../packages/dd-trace/src/config')
+const config = getConfig()
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
@@ -24,6 +26,8 @@ function isPackageManager () {
 }
 
 function detectTestWorkerType () {
+  // [I think] these calls to getEnvironmentVariable should stay as-is, because they are specifically looking for
+  // presence of environment variables to detect the test worker type.
   if (getEnvironmentVariable('JEST_WORKER_ID')) return 'jest'
   if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) return 'cucumber'
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'
@@ -43,7 +47,7 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL
 }
 
-let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
+let shouldInit = config.isCiVisibilityEnabled()
 const isAgentlessEnabled = isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
 if (!isTestWorker && isPackageManager()) {
