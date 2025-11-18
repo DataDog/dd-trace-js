@@ -8,7 +8,6 @@ const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 
-const isModernNode = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
 const getExports = async () => {
   const mod = await import('import-in-the-middle/lib/get-exports.mjs')
   return mod.getExports
@@ -82,7 +81,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    if (isModernNode) {
+    if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
       const resolvedGetExports = await getExports()
       exportNames = await resolvedGetExports(srcUrl, context, getSource)
     } else {
