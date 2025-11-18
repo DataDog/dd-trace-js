@@ -183,14 +183,9 @@ function enableRewriter (telemetryVerbosity) {
 }
 
 function isEsmConfigured () {
-  const hasLoaderArg = isFlagPresent('--loader') || isFlagPresent('--experimental-loader')
-  if (hasLoaderArg) return true
-
-  // Fast path for common case when enabled
-  if (require.cache[`${process.cwd()}/node_modules/import-in-the-middle/hook.js`]) {
-    return true
-  }
-  return Object.keys(require.cache).some(file => file.endsWith('import-in-the-middle/hook.js'))
+  return (isFlagPresent('--loader') ||
+    isFlagPresent('--experimental-loader') ||
+    isFlagPresent('--import'))
 }
 
 let enableEsmRewriter = function (telemetryVerbosity) {
