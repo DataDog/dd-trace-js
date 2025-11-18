@@ -19,7 +19,7 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
-const format = require('../packages/dd-trace/src/format')
+const spanFormat = require('../packages/dd-trace/src/span_format')
 const { AgentEncoder: Agent04Encoder } = require('../packages/dd-trace/src/encode/0.4')
 const { AgentEncoder: Agent05Encoder } = require('../packages/dd-trace/src/encode/0.5')
 const config = getConfig({ service: 'benchmark' })
@@ -42,7 +42,7 @@ let writer
 let sampler
 
 const spanStub = require('./stubs/span')
-const span = format(spanStub)
+const span = spanFormat(spanStub)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -96,9 +96,9 @@ suite
       sampler.isSampled(span)
     }
   })
-  .add('format', {
+  .add('spanFormat', {
     fn () {
-      format(spanStub)
+      spanFormat(spanStub)
     }
   })
   .add('encode (0.4)', {
