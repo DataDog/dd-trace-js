@@ -5,7 +5,7 @@ const Axios = require('axios')
 const { assert } = require('chai')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe.only('IAST - overhead-controller - integration', () => {
+describe('IAST - overhead-controller - integration', () => {
   let axios, cwd, agent, proc
 
   useSandbox(
