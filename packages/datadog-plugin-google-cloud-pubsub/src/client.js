@@ -22,7 +22,7 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
         'gcloud.project_id': projectId
       }
     }
-    
+
     // If we have an explicit parent span (from restored context), use it
     if (explicitParent) {
       spanOptions.childOf = explicitParent.context()
