@@ -444,7 +444,6 @@ describe('Plugin', () => {
           { content: 'What is the weather in Tokyo?', role: 'user' }
         ],
         outputMessages: [{
-          content: MOCK_STRING,
           role: 'assistant',
           tool_calls: [{
             tool_id: toolCallId,
