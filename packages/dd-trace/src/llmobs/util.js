@@ -174,14 +174,7 @@ function spanHasError (span) {
   return !!(tags.error || tags['error.type'])
 }
 
-/**
- * Extracts chat templates from OpenAI response instructions by replacing
- * variable values with placeholders (e.g., "hello" -> "{{greeting}}").
- *
- * @param {Array} instructions - Array of instruction objects with role and content
- * @param {Object} variables - Map of variable names to values
- * @returns {Array} Array of template objects with role and content containing placeholders
- */
+// Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders
 function extractChatTemplateFromInstructions (instructions, variables) {
   if (!instructions || !Array.isArray(instructions)) return []
   if (!variables || typeof variables !== 'object') return []
@@ -191,17 +184,10 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   // Build map of values to placeholders
   const valueToPlaceholder = {}
   for (const [varName, varValue] of Object.entries(variables)) {
-    let valueStr
-    if (varValue && typeof varValue === 'object' && varValue.text) {
-      // Handle ResponseInputText objects
-      valueStr = String(varValue.text)
-    } else {
-      valueStr = String(varValue)
-    }
-
-    // Skip empty values
+    const valueStr = (varValue && typeof varValue === 'object' && varValue.text)
+      ? String(varValue.text) // Handle ResponseInputText objects
+      : String(varValue)
     if (!valueStr) continue
-
     valueToPlaceholder[valueStr] = `{{${varName}}}`
   }
 
@@ -224,31 +210,21 @@ function extractChatTemplateFromInstructions (instructions, variables) {
         textParts.push(String(text))
       }
     }
-
     if (textParts.length === 0) continue
 
-    // Combine all text parts
+    // Combine all text parts and replace variable values with placeholders (longest first)
     let fullText = textParts.join('')
-
-    // Replace variable values with placeholders (longest first)
     for (const valueStr of sortedValues) {
       const placeholder = valueToPlaceholder[valueStr]
-      fullText = fullText.replace(new RegExp(escapeRegex(valueStr), 'g'), placeholder)
+      // Escape special regex characters and replace all occurrences
+      const escapedValue = valueStr.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+      fullText = fullText.replaceAll(new RegExp(escapedValue, 'g'), placeholder)
     }
 
     chatTemplate.push({ role, content: fullText })
   }
 
   return chatTemplate
-}
-
-/**
- * Escapes special regex characters in a string
- * @param {string} str - String to escape
- * @returns {string} Escaped string safe for use in RegExp
- */
-function escapeRegex (str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 module.exports = {

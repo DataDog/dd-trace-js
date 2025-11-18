@@ -736,6 +736,27 @@ describe('integrations', () => {
         })
       })
 
+      // Helper function to verify prompt tracking in span events
+      function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages) {
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+
+        for (const expected of expectedInputMessages) {
+          const message = spanEvent.meta.input.messages.find(m => m.role === expected.role)
+          assert(message, `Should have a ${expected.role} message`)
+          assert.strictEqual(message.content, expected.content)
+        }
+
+        // Verify prompt metadata
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, expectedPrompt.id)
+        assert.strictEqual(prompt.version, expectedPrompt.version)
+        assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
+        assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+      }
+
       it('submits a response span with prompt tracking - overlapping values', async function () {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
@@ -751,24 +772,15 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        const spanEvent = llmobsSpans[0]
-
-        // Verify input messages are captured from instructions
-        assert(spanEvent.meta.input.messages, 'Input messages should be present')
-        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
-        assert(spanEvent.meta.input.messages.length >= 1, 'Should have at least one input message')
-        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
-        assert(userMessage, 'Should have a user message')
-        assert.strictEqual(userMessage.content, 'I saw a cat in the hat and another cat')
-
-        // Verify prompt metadata
-        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
-        const prompt = spanEvent.meta.input.prompt
-        assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
-        assert.strictEqual(prompt.version, '1')
-        assert.deepStrictEqual(prompt.variables, { phrase: 'cat in the hat', word: 'cat' })
-        assert.deepStrictEqual(prompt.chat_template, [
-          { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+          version: '1',
+          variables: { phrase: 'cat in the hat', word: 'cat' },
+          chat_template: [
+            { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+          ]
+        }, [
+          { role: 'user', content: 'I saw a cat in the hat and another cat' }
         ])
       })
 
@@ -787,27 +799,17 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        const spanEvent = llmobsSpans[0]
-
-        // Verify input messages are captured from instructions
-        assert(spanEvent.meta.input.messages, 'Input messages should be present')
-        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
-        const developerMessage = spanEvent.meta.input.messages.find(m => m.role === 'developer')
-        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
-        assert(developerMessage, 'Should have a developer message')
-        assert.strictEqual(developerMessage.content, 'Reply with "OK".')
-        assert(userMessage, 'Should have a user message')
-        assert.strictEqual(userMessage.content, 'This is a test for testing the tester')
-
-        // Verify prompt metadata
-        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
-        const prompt = spanEvent.meta.input.prompt
-        assert.strictEqual(prompt.id, 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f')
-        assert.strictEqual(prompt.version, '2')
-        assert.deepStrictEqual(prompt.variables, { word: 'test' })
-        assert.deepStrictEqual(prompt.chat_template, [
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+          version: '2',
+          variables: { word: 'test' },
+          chat_template: [
+            { role: 'developer', content: 'Reply with "OK".' },
+            { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+          ]
+        }, [
           { role: 'developer', content: 'Reply with "OK".' },
-          { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+          { role: 'user', content: 'This is a test for testing the tester' }
         ])
       })
 
@@ -826,23 +828,15 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        const spanEvent = llmobsSpans[0]
-
-        // Verify input messages are captured from instructions
-        assert(spanEvent.meta.input.messages, 'Input messages should be present')
-        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
-        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
-        assert(userMessage, 'Should have a user message')
-        assert.strictEqual(userMessage.content, 'The price of groceries is $99.99.')
-
-        // Verify prompt metadata
-        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
-        const prompt = spanEvent.meta.input.prompt
-        assert.strictEqual(prompt.id, 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191')
-        assert.strictEqual(prompt.version, '2')
-        assert.deepStrictEqual(prompt.variables, { price: '$99.99', item: 'groceries' })
-        assert.deepStrictEqual(prompt.chat_template, [
-          { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+          version: '2',
+          variables: { price: '$99.99', item: 'groceries' },
+          chat_template: [
+            { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+          ]
+        }, [
+          { role: 'user', content: 'The price of groceries is $99.99.' }
         ])
       })
 
@@ -861,23 +855,15 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        const spanEvent = llmobsSpans[0]
-
-        // Verify input messages are captured from instructions
-        assert(spanEvent.meta.input.messages, 'Input messages should be present')
-        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
-        const userMessage = spanEvent.meta.input.messages.find(m => m.role === 'user')
-        assert(userMessage, 'Should have a user message')
-        assert.strictEqual(userMessage.content, 'I saw a cat in the hat and another ')
-
-        // Verify prompt metadata
-        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
-        const prompt = spanEvent.meta.input.prompt
-        assert.strictEqual(prompt.id, 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6')
-        assert.strictEqual(prompt.version, '1')
-        assert.deepStrictEqual(prompt.variables, { phrase: 'cat in the hat', word: '' })
-        assert.deepStrictEqual(prompt.chat_template, [
-          { role: 'user', content: 'I saw a {{phrase}} and another ' }
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+          version: '1',
+          variables: { phrase: 'cat in the hat', word: '' },
+          chat_template: [
+            { role: 'user', content: 'I saw a {{phrase}} and another ' }
+          ]
+        }, [
+          { role: 'user', content: 'I saw a cat in the hat and another ' }
         ])
       })
     })

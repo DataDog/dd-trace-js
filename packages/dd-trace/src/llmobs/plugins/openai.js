@@ -216,7 +216,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
 
-    const { input, model, ...parameters } = inputs
+    const { model, ...parameters } = inputs
+    let input = inputs.input
 
     // Create input messages
     const inputMessages = []
@@ -226,15 +227,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
 
-    // For reusable prompts, extract input from response.instructions if not provided in inputs
-    let actualInput = input
-    if (!actualInput && inputs.prompt && response && response.instructions) {
-      actualInput = response.instructions
+    // For reusable prompts, use response.instructions if no explicit input is provided
+    if (!input && inputs.prompt && response && response.instructions) {
+      input = response.instructions
     }
 
     // Handle input - can be string or array of mixed messages
-    if (Array.isArray(actualInput)) {
-      for (const item of actualInput) {
+    if (Array.isArray(input)) {
+      for (const item of input) {
         if (item.type === 'message') {
           // Handle instruction messages (from response.instructions for reusable prompts)
           const role = item.role
@@ -290,9 +290,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           inputMessages.push({ role: item.role, content: item.content })
         }
       }
-    } else if (actualInput) {
+    } else if (input) {
       // Simple string input
-      inputMessages.push({ role: 'user', content: actualInput })
+      inputMessages.push({ role: 'user', content: input })
     }
 
     if (error) {
