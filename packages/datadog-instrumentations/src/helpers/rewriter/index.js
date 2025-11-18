@@ -62,7 +62,7 @@ function rewrite (content, filename, format) {
       if (!enableSourceMaps || SourceMapGenerator) return generate(ast)
 
       // TODO: Can we use the same version of `source-map` that DI uses?
-      SourceMapGenerator ??= require('@datadog/source-map').SourceMapGenerator
+      SourceMapGenerator ??= require('@datadog/source-map/lib/source-map-generator').SourceMapGenerator
 
       const sourceMap = new SourceMapGenerator({ file: filename })
       const code = generate(ast, { sourceMap })
