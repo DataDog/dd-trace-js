@@ -56,6 +56,7 @@ class PeriodicMetricReader {
   #lastExportedState = new Map()
   #droppedCount = 0
   #timer = null
+  #isShutdown = false
   #exportInterval
   #aggregator
 
@@ -80,7 +81,7 @@ class PeriodicMetricReader {
    * @param {Measurement} measurement - The measurement data
    */
   record (measurement) {
-    if (this.#measurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {
+    if (this.#measurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE || this.#isShutdown) {
       this.#droppedCount++
       return
     }
@@ -101,6 +102,10 @@ class PeriodicMetricReader {
    * @returns {void}
    */
   forceFlush () {
+    if (this.#isShutdown) {
+      log.warn(`PeriodicMetricReader is shutdown. ${this.#droppedCount} measurement(s) were dropped`)
+      return
+    }
     this.#collectAndExport()
   }
 
@@ -109,6 +114,11 @@ class PeriodicMetricReader {
    * @returns {void}
    */
   shutdown () {
+    if (this.#isShutdown) {
+      log.warn('PeriodicMetricReader is already shutdown')
+      return
+    }
+    this.#isShutdown = true
     this.#clearTimer()
     this.forceFlush()
   }

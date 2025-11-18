@@ -29,7 +29,6 @@ class MeterProvider {
    */
   constructor (options = {}) {
     this.reader = options.reader
-    this.isShutdown = false
   }
 
   /**
@@ -41,9 +40,6 @@ class MeterProvider {
    * @returns {Meter} Meter instance
    */
   getMeter (name, version = '', { schemaUrl = '' } = {}) {
-    if (this.isShutdown) {
-      return this.#createNoOpMeter()
-    }
     const normalizedName = name.toLowerCase()
     const key = `${normalizedName}@${version}@${schemaUrl}`
     let meter = this.#meters.get(key)
@@ -52,44 +48,6 @@ class MeterProvider {
       this.#meters.set(key, meter)
     }
     return meter
-  }
-
-  /**
-   * Forces a flush of all pending metrics.
-   * @returns {void}
-   */
-  forceFlush () {
-    if (!this.isShutdown && this.reader) this.reader.forceFlush()
-  }
-
-  /**
-   * Shuts down the meter provider and all associated readers.
-   * @returns {void}
-   */
-  shutdown () {
-    if (!this.isShutdown) {
-      this.isShutdown = true
-      if (this.reader) {
-        this.reader.shutdown()
-      }
-    }
-  }
-
-  /**
-   * Creates a no-op meter for use when the provider is shutdown.
-   * @returns {Meter} A no-op meter instance
-   *
-   */
-  #createNoOpMeter () {
-    return {
-      createCounter: () => ({ add: () => {} }),
-      createUpDownCounter: () => ({ add: () => {} }),
-      createHistogram: () => ({ record: () => {} }),
-      createGauge: () => ({ record: () => {} }),
-      createObservableGauge: () => ({ addCallback: () => {} }),
-      createObservableCounter: () => ({ addCallback: () => {} }),
-      createObservableUpDownCounter: () => ({ addCallback: () => {} })
-    }
   }
 }
 

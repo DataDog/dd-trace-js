@@ -102,8 +102,8 @@ describe('OpenTelemetry Meter Provider', () => {
     process.env = originalEnv
 
     const provider = metrics.getMeterProvider()
-    if (provider && provider.shutdown) {
-      provider.shutdown()
+    if (provider && provider.reader) {
+      provider.reader.shutdown()
     }
     metrics.disable()
 
@@ -594,26 +594,11 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
-    it('returns no-op meter after shutdown', async () => {
-      setupTracer()
-      const provider = metrics.getMeterProvider()
-      await provider.shutdown()
-
-      const meter = metrics.getMeter('test')
-      meter.createCounter('test').add(1)
-      meter.createUpDownCounter('test').add(1)
-      meter.createHistogram('test').record(1)
-      meter.createGauge('test').record(1)
-      meter.createObservableGauge('test').addCallback(() => {})
-      meter.createObservableCounter('test').addCallback(() => {})
-      meter.createObservableUpDownCounter('test').addCallback(() => {})
-    })
-
     it('handles shutdown gracefully', async () => {
       setupTracer()
       const provider = metrics.getMeterProvider()
-      await provider.shutdown()
-      await provider.shutdown() // Second shutdown should be safe
+      await provider.reader.shutdown()
+      await provider.reader.shutdown() // Second shutdown should be safe
     })
 
     it('handles forceFlush', async () => {
@@ -626,7 +611,7 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createCounter('test').add(1)
 
       const provider = metrics.getMeterProvider()
-      await provider.forceFlush()
+      await provider.reader.forceFlush()
       validator()
     })
 
@@ -863,7 +848,7 @@ describe('OpenTelemetry Meter Provider', () => {
 
       setupTracer()
       const provider = metrics.getMeterProvider()
-      provider.shutdown()
+      provider.reader.shutdown()
 
       const meter = provider.getMeter('test')
       meter.createCounter('test').add(1)
@@ -873,12 +858,13 @@ describe('OpenTelemetry Meter Provider', () => {
       const obsGauge = meter.createObservableGauge('test')
       obsGauge.addCallback(() => {})
       obsGauge.addCallback('not a function')
-      // assert no metrics are exported
-      assert.strictEqual(provider.isShutdown, true)
+      provider.reader.forceFlush()
+      assert(warnSpy.calledWith('PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'))
+      provider.reader.shutdown()
+      assert(warnSpy.calledWith('PeriodicMetricReader is already shutdown'))
       warnSpy.restore()
     })
   })
-
   describe('Queue Size Limits', function () {
     function countMetrics (metrics) {
       return metrics.resourceMetrics[0].scopeMetrics[0].metrics.length
@@ -988,7 +974,7 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createCounter('counter.overflow').add(1)
       meter.createObservableGauge('gauge.overflow').addCallback((result) => result.observe(1))
 
-      metrics.getMeterProvider().forceFlush()
+      metrics.getMeterProvider().reader.forceFlush()
       setTimeout(() => { validator(); warnSpy.restore(); done() }, 100)
     })
   })
