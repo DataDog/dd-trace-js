@@ -10,7 +10,7 @@ variables:
   stage: benchmarks
   needs: [ ]
   when: on_success
-  tags: ["runner:apm-k8s-tweaked-metal"]
+  tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   interruptible: true
   timeout: 15m # TODO: Fix worker queueing and reduce this.

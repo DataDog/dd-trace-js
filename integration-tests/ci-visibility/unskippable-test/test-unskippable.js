@@ -1,6 +1,8 @@
+/** Some comment */
 /**
  * @datadog {"unskippable": true}
  */
+/* Some other comment */
 'use strict'
 
 const { expect } = require('chai')

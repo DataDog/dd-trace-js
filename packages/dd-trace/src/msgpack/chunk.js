@@ -7,7 +7,7 @@ const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
  * interfaces so that it can be used seamlessly by any encoder code that expects
  * either.
  */
-class Chunk {
+class MsgpackChunk {
   constructor (minSize = DEFAULT_MIN_SIZE) {
     this.buffer = Buffer.allocUnsafe(minSize)
     this.view = new DataView(this.buffer.buffer)
@@ -66,4 +66,4 @@ class Chunk {
   }
 }
 
-module.exports = Chunk
+module.exports = MsgpackChunk
