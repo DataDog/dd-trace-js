@@ -92,6 +92,10 @@ benchmark-serverless:
   image: $SLS_CI_IMAGE
   tags: ["arch:amd64"]
   when: on_success
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
   needs:
     - benchmark-serverless-trigger
   script:
@@ -101,6 +105,10 @@ benchmark-serverless:
 benchmark-serverless-trigger:
   stage: benchmarks
   needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
