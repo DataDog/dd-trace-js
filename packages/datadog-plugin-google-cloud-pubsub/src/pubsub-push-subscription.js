@@ -10,34 +10,17 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
-    this._subscribed = false
-  }
 
-  configure (config) {
-    super.configure(config)
-
-    // Only subscribe once, and only if not explicitly disabled
-    if (!this._subscribed) {
-      this._subscribed = true
-
-      log.debug('[PubSub] Push subscription plugin configured, subscribing to HTTP channel')
-      // Subscribe to HTTP start channel to intercept PubSub requests
-      // We run BEFORE HTTP plugin to set delivery span as active parent
-      const startCh = channel('apm:http:server:request:start')
-      startCh.subscribe(({ req, res }) => {
-        this._handlePubSubRequest({ req, res })
-      })
-    }
-
-    return config
+    // Subscribe to HTTP start channel to intercept PubSub requests
+    // We run BEFORE HTTP plugin to set delivery span as active parent
+    const startCh = channel('apm:http:server:request:start')
+    startCh.subscribe(({ req, res }) => {
+      this._handlePubSubRequest({ req, res })
+    })
   }
 
   _handlePubSubRequest ({ req, res }) {
     const userAgent = req.headers['user-agent'] || ''
-    log.debug(
-      `[PubSub] Push plugin checking request: ${req.method}, userAgent: ${userAgent}, ` +
-      `has pubsub header: ${!!req.headers['x-goog-pubsub-message-id']}`
-    )
     if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return
     // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
     if (req.headers['x-goog-pubsub-message-id']) {
@@ -148,7 +131,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   _extractProjectTopic (attrs, subscription) {
     const topicName = attrs['pubsub.topic']
     const projectId = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
-
     return {
       projectId,
       topicName: topicName || 'push-subscription-topic'
