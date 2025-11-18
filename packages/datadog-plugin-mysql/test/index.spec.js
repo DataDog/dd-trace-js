@@ -468,6 +468,8 @@ describe('Plugin', () => {
           connection.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -504,7 +506,7 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(traces => {
             expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
+          }).then(done, done)
 
           connection.query('SELECT 1 + 1 AS solution', () => {
             queryText = connection._protocol._queue[0].sql
@@ -561,6 +563,8 @@ describe('Plugin', () => {
           pool.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -597,7 +601,7 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(() => {
             expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
+          }).then(done, done)
 
           pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = pool._allConnections[0]._protocol._queue[0].sql

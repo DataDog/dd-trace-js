@@ -459,6 +459,8 @@ describe('Plugin', () => {
           connection.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -499,7 +501,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
+          }).then(done, done)
 
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             queryText = connect.sql
@@ -556,6 +558,8 @@ describe('Plugin', () => {
           pool.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -596,7 +600,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done).finally(() => tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } }))
+          }).then(done, done)
 
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = queryPool.sql
