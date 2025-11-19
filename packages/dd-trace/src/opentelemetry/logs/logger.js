@@ -5,10 +5,12 @@ const { context } = require('@opentelemetry/api')
 const packageVersion = require('../../../../../package.json').version
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
+ * @typedef {import('@opentelemetry/api-logs').LoggerProvider} LoggerProvider
  * @typedef {import('@opentelemetry/api').SpanContext} SpanContext
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/resources').Resource} Resource
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
+ * @typedef {import('@opentelemetry/core').InstrumentationLibrary} InstrumentationLibrary
  */
 
 /**
@@ -26,12 +28,15 @@ class Logger {
    * Creates a new Logger instance.
    *
    * @param {LoggerProvider} loggerProvider - Parent logger provider
-   * @param {InstrumentationScope} [instrumentationScope] - Instrumentation scope information (newer API)
-   * @param {Object} [instrumentationLibrary] - Instrumentation library information (legacy API) [DEPRECATED in v1.3.0]
-   * @param {InstrumentationScope} [instrumentationScope.name] - Library name (defaults to 'dd-trace-js')
-   * @param {InstrumentationScope} [instrumentationScope.version] - Library version (defaults to tracer version)
-   * @param {string} [instrumentationLibrary.name] - Library name (legacy, defaults to 'dd-trace-js')
-   * @param {string} [instrumentationLibrary.version] - Library version (legacy, defaults to tracer version)
+   * @param {InstrumentationScope} [instrumentationScope] - Instrumentation scope information (newer API).
+   *  `name` defaults to 'dd-trace-js';
+   *  `version` defaults to tracer version;
+   *  `schemaUrl` defaults to '';
+   * @param {InstrumentationLibrary} [instrumentationLibrary]
+   *  - Instrumentation library information (legacy API) [DEPRECATED in v1.3.0].
+   *  `name` defaults to 'dd-trace-js';
+   *  `version` defaults to tracer version;
+   *  `schemaUrl` defaults to '';
    */
   constructor (loggerProvider, instrumentationScope, instrumentationLibrary) {
     this.loggerProvider = loggerProvider

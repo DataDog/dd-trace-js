@@ -111,7 +111,7 @@ function constructChatCompletionResponseFromStreamedChunks (chunks, n) {
  * Constructs the entire response from a stream of OpenAI responses chunks.
  * The responses API uses event-based streaming with delta chunks.
  * @param {Array<Record<string, any>>} chunks
- * @returns {Record<string, any>}
+ * @returns {Record<string, any>|undefined}
  */
 function constructResponseResponseFromStreamedChunks (chunks) {
   // The responses API streams events with different types:
