@@ -12,7 +12,7 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
 
     if (api === 'publish') return
 
-    const explicitParent = ctx.parentSpan // From restored context in wrapMethod
+    const explicitParent = ctx.parentSpan
     const spanOptions = {
       service: this.config.service || this.serviceName(),
       resource: [api, request.name].filter(Boolean).join(' '),
@@ -23,7 +23,6 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
       }
     }
 
-    // If we have an explicit parent span (from restored context), use it
     if (explicitParent) {
       spanOptions.childOf = explicitParent.context()
     }
