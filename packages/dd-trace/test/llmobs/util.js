@@ -39,8 +39,8 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
  *
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
@@ -98,10 +98,10 @@ function assertWithMockValues (actual, expected, key) {
  *
  * Dynamic fields, like metrics, metadata, tags, traceId, and output can be asserted with mock values.
  * All other fields are asserted in a larger diff assertion.
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  */
-function assertLlmObsSpanEvent (actual, expected = {}) {
+function assertLlmObsSpanEvent (actual, expected) {
   const {
     spanKind,
     name,

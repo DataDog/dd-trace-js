@@ -155,7 +155,7 @@ class LLMObsSpanProcessor {
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
-    if (processedSpan === null) return null
+    if (processedSpan === undefined) return null
 
     if (processedSpan.input) {
       if (inputType === 'messages') {
@@ -269,7 +269,7 @@ class LLMObsSpanProcessor {
   /**
    * Runs the user span processor, emitting telemetry and adding some guardrails against invalid return types
    * @param {LLMObservabilitySpan} span
-   * @returns {LLMObservabilitySpan | null}
+   * @returns {LLMObservabilitySpan | undefined}
    */
   #runProcessor (span) {
     const processor = this.#userSpanProcessor
@@ -279,12 +279,12 @@ class LLMObsSpanProcessor {
 
     try {
       const processedLLMObsSpan = processor(span)
-      if (processedLLMObsSpan === null) return null
+      if (processedLLMObsSpan === null) return
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
         error = true
         logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null, dropping span.')
-        return null
+        return
       }
 
       return processedLLMObsSpan
