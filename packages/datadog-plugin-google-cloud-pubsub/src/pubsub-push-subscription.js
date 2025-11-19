@@ -10,7 +10,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
-
     // Subscribe to HTTP start channel to intercept PubSub requests
     // We run BEFORE HTTP plugin to set delivery span as active parent
     const startCh = channel('apm:http:server:request:start')
@@ -73,17 +72,13 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   _createDeliverySpan (messageData, parentContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
-
     const subscriptionName = subscription.split('/').pop() || subscription
-
-    // Extract publish time from custom header (set by producer after gRPC call completes)
-    // This ensures delivery span starts AFTER grpc.client and represents full delivery latency
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 
     const span = tracer._tracer.startSpan('pubsub.delivery', {
       childOf: parentContext,
-      startTime, // Start span at publish time (in milliseconds)
+      startTime,
       tags: {
         'span.kind': 'consumer',
         component: 'google-cloud-pubsub',
