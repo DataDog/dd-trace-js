@@ -700,9 +700,10 @@ class Config {
     unprocessedTarget['dynamicInstrumentation.uploadInterval'] = DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
     this.#setString(target, 'env', DD_ENV || tags.env)
     this.#setBoolean(target, 'experimental.flaggingProvider.enabled', DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED)
-    target['experimental.flaggingProvider.initializationTimeoutMs'] = maybeInt(
-      DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS || DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
-    )
+    const timeoutEnvVar = DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS || DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+    if (timeoutEnvVar != null) {
+      target['experimental.flaggingProvider.initializationTimeoutMs'] = maybeInt(timeoutEnvVar)
+    }
     this.#setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
     this.#setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     this.#setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)

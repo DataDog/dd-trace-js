@@ -290,17 +290,6 @@ describe('FlaggingProvider Initialization Timeout', () => {
       // Set environment variable for 8-second timeout
       process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '8000'
 
-      // Config without timeout (should use env var)
-      const configWithoutTimeout = {
-        ...mockConfig,
-        experimental: {
-          flaggingProvider: {
-            enabled: true
-            // initializationTimeoutMs not specified - should use env var
-          }
-        }
-      }
-
       // Need to reload the config module to pick up env var
       delete require.cache[require.resolve('../../src/config')]
       const Config = require('../../src/config')
@@ -368,7 +357,8 @@ describe('FlaggingProvider Initialization Timeout', () => {
       expect(errorArg.message).to.include('6000ms')
     })
 
-    it('should prioritize DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS over DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS', async () => {
+    it('should prioritize DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS ' +
+       'over DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS', async () => {
       // Set both environment variables - experimental should take priority
       process.env.DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '10000'
       process.env.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS = '4000'
