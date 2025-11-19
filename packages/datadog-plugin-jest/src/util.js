@@ -62,6 +62,7 @@ function getJestTestName (test, shouldStripSeed = false) {
 }
 
 const globalDocblockRegExp = /^\s*(\/\*\*?(.|\r?\n)*?\*\/)/
+const MAX_COMMENTS_CHECKED = 10
 
 function isMarkedAsUnskippable (test) {
   let testSource
@@ -86,7 +87,7 @@ function isMarkedAsUnskippable (test) {
       docblocks = parse(comment)
     } catch {
       // Skip unparsable comment and continue scanning
-      if (commentsChecked++ >= 10) {
+      if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
         return false
       }
       continue
@@ -103,7 +104,7 @@ function isMarkedAsUnskippable (test) {
       }
     }
 
-    if (commentsChecked++ >= 10) {
+    if (commentsChecked++ >= MAX_COMMENTS_CHECKED) {
       return false
     }
 

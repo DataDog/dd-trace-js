@@ -56,6 +56,7 @@ dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
 dev,eslint-plugin-cypress,MIT,Copyright (c) 2019 Cypress.io
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
+dev,eslint-plugin-jsdoc,BSD-3-Clause,Copyright Gajus Kuizinas
 dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
