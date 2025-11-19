@@ -177,11 +177,11 @@ function wrapMethod (method) {
 }
 
 function massWrap (obj, methods, wrapper) {
-  methods.forEach(method => {
+  for (const method of methods) {
     if (typeof obj[method] === 'function') {
       shimmer.wrap(obj, method, wrapper)
     }
-  })
+  }
 }
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
@@ -264,7 +264,6 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   return obj
 })
 
-// Inject trace context into Pub/Sub message attributes
 function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
 
@@ -275,19 +274,16 @@ function injectTraceContext (attributes, pubsub, topicName) {
 
     tracer.inject(activeSpan, 'text_map', attributes)
 
-    // Inject upper 64 bits of 128-bit trace ID for proper span linking
     const traceIdUpperBits = activeSpan.context()._trace.tags['_dd.p.tid']
     if (traceIdUpperBits) attributes['_dd.p.tid'] = traceIdUpperBits
   } catch {
     // Silently fail - trace context injection is best-effort
   }
 
-  // Add metadata for consumer correlation
   if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
   if (topicName) attributes['pubsub.topic'] = topicName
 }
 
-// Inject trace context into messages at queue time
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
@@ -305,7 +301,6 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   // Wrap Topic.publish (legacy API)
   if (obj.Topic.prototype.publish) {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
-      // Normalize arguments: ensure attributes object exists at position [1]
       if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
         arguments[1] = {}
         arguments[2] = attributesOrCallback
