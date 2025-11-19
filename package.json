@@ -182,6 +182,7 @@
     "eslint": "^9.39.0",
     "eslint-plugin-cypress": "^5.2.0",
     "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsdoc": "^61.1.12",
     "eslint-plugin-mocha": "^11.2.0",
     "eslint-plugin-n": "^17.23.1",
     "eslint-plugin-promise": "^7.2.1",

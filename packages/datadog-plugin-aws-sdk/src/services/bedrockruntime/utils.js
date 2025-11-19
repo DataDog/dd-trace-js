@@ -27,8 +27,9 @@ const PROVIDER = {
  * Coerce the chunks into a single response body.
  *
  * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
- * @param {string} provider
- * @returns {Object}
+ * @param {string} modelProvider
+ * @param {string} modelName
+ * @returns {Generation | Record<never, never>}
  */
 function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
   const modelProviderUpper = modelProvider.toUpperCase()

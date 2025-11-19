@@ -118,6 +118,9 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addSub (channelName, handler) {
+    /**
+     * @type {typeof handler}
+     */
     const wrappedHandler = (...args) => {
       try {
         return handler.apply(this, args)
