@@ -598,7 +598,7 @@ describe('Plugin', () => {
           }, () => {})
         })
 
-        it('DBM propagation should inject service mode after eixsting array comment', done => {
+        it('DBM propagation should inject service mode after existing array comment', done => {
           agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -676,7 +676,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-00'`
+                `traceparent='00-${traceId}-${spanId}-01'`
               )
             })
             .then(done)
@@ -684,6 +684,60 @@ describe('Plugin', () => {
 
           server.insert(`test.${collection}`, [{ a: 1 }], () => {})
         })
+      })
+
+      describe('with dbmPropagationMode full but sampling disabled', () => {
+        before(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        })
+
+        after(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it(
+          'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
+          done => {
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+                const spanId = span.span_id.toString(16).padStart(16, '0')
+
+                expect(startSpy.called).to.be.true
+                const { comment } = startSpy.getCall(0).args[0].ops
+                expect(comment).to.include(`traceparent='00-${traceId}-${spanId}-00'`)
+              })
+              .then(done)
+              .catch(done)
+
+            server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+          })
       })
     })
   })

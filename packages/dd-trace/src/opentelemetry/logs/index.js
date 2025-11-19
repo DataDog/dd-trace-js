@@ -7,7 +7,7 @@ const os = require('os')
  */
 
 /**
- * @fileoverview OpenTelemetry Logs Implementation for dd-trace-js
+ * OpenTelemetry Logs Implementation for `dd-trace-js`
  *
  * This package provides a custom OpenTelemetry Logs implementation that integrates
  * with the Datadog tracing library. It includes all necessary components for
