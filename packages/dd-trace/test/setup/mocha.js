@@ -65,9 +65,6 @@ function withNamingSchema (
         const { opName, serviceName } = expected[versionName]
 
         it('should conform to the naming schema', function () {
-          this.retries(3)
-          this.timeout(25000)
-
           return new Promise((resolve, reject) => {
             const agentPromise = agent
               .assertSomeTraces(traces => {
@@ -81,7 +78,7 @@ function withNamingSchema (
 
                 expect(span).to.have.property('name', expectedOpName)
                 expect(span).to.have.property('service', expectedServiceName)
-              }, { timeoutMs: 25000 })
+              })
 
             const testPromise = spanProducerFn(reject)
 
@@ -110,9 +107,6 @@ function withNamingSchema (
       const { serviceName } = expected.v1
 
       it('should pass service name through', function () {
-        this.retries(3)
-        this.timeout(15000)
-
         return new Promise((resolve, reject) => {
           const agentPromise = agent
             .assertSomeTraces(traces => {
@@ -121,7 +115,7 @@ function withNamingSchema (
                 ? serviceName()
                 : serviceName
               expect(span).to.have.property('service', expectedServiceName)
-            }, { timeoutMs: 15000 })
+            })
 
           const testPromise = spanProducerFn(reject)
 
@@ -134,7 +128,6 @@ function withNamingSchema (
 
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), function () {
-    this.timeout(10000)
     let computePeerServiceSpy
 
     beforeEach(() => {
