@@ -2,8 +2,16 @@
 
 const { tracingChannel } = require('dc-polyfill')
 
+function _sanitizeChannelName (channelName) {
+  // remove tracing prefix if it exists from channel name
+  if (channelName.startsWith('tracing:')) {
+    return channelName.slice(8)
+  }
+  return channelName
+}
+
 function createWrapper (channelName, operator) {
-  const channel = tracingChannel(channelName)
+  const channel = tracingChannel(_sanitizeChannelName(channelName))
 
   return function (original) {
     return function (...args) {
@@ -69,7 +77,7 @@ function createWrapper (channelName, operator) {
 }
 
 function createEventWrapper (channelName, finishEventName) {
-  const channel = tracingChannel(channelName)
+  const channel = tracingChannel(_sanitizeChannelName(channelName))
 
   return function (original) {
     return function (...args) {

@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,17 +13,10 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  withVersions('amqp10', 'amqp10', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'amqp10@${version}'`, 'rhea'], false, [
-        './packages/datadog-plugin-amqp10/test/integration-test/*'])
-    })
 
-    after(async () => {
-      await sandbox.remove()
-    })
+  withVersions('amqp10', 'amqp10', version => {
+    useSandbox([`'amqp10@${version}'`, 'rhea'], false, [
+      './packages/datadog-plugin-amqp10/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -40,7 +34,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'amqp.send'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

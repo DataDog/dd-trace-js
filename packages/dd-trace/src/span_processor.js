@@ -47,11 +47,14 @@ class SpanProcessor {
       this._spanSampler.sample(spanContext)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      let isChunkRoot = true
+
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = format(span)
+          const formattedSpan = format(span, isChunkRoot)
+          isChunkRoot = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
 

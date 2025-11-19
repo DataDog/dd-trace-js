@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,18 +13,10 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   // test against later versions because server.mjs uses newer package syntax
   withVersions('google-cloud-pubsub', '@google-cloud/pubsub', '>=4.0.0', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'@google-cloud/pubsub@${version}'`], false, ['./packages/dd-trace/src/id.js',
-        './packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'@google-cloud/pubsub@${version}'`], false, ['./packages/dd-trace/src/id.js',
+      './packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -41,7 +34,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'pubsub.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, undefined,
         { PUBSUB_EMULATOR_HOST: 'localhost:8081' })
 
       await res

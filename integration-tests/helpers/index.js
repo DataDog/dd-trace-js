@@ -1,9 +1,7 @@
 'use strict'
 
-const { promisify } = require('util')
 const childProcess = require('child_process')
-const { fork, spawn } = childProcess
-const exec = promisify(childProcess.exec)
+const { execSync, fork, spawn } = childProcess
 const http = require('http')
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
@@ -13,13 +11,21 @@ const path = require('path')
 const assert = require('assert')
 const FakeAgent = require('./fake-agent')
 const id = require('../../packages/dd-trace/src/id')
-const { version } = require('../../package.json')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
+const { BUN, withBun } = require('./bun')
 
+const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
+
+const { DEBUG } = process.env
 
 // This is set by the setShouldKill function
 let shouldKill
+
+// Symbol constants for dynamic value matching in assertObjectContains
+const ANY_STRING = Symbol.for('test.ANY_STRING')
+const ANY_NUMBER = Symbol.for('test.ANY_NUMBER')
+const ANY_VALUE = Symbol.for('test.ANY_VALUE')
 
 /**
  * @param {string} filename
@@ -214,26 +220,36 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   }))
 }
 
-async function execHelper (command, options) {
-  /* eslint-disable no-console */
+function log (...args) {
+  DEBUG === 'true' && console.log(...args) // eslint-disable-line no-console
+}
+
+function error (...args) {
+  DEBUG === 'true' && console.error(...args) // eslint-disable-line no-console
+}
+
+function execHelper (command, options) {
   try {
-    console.log('Exec START: ', command)
-    await exec(command, options)
-    console.log('Exec SUCCESS: ', command)
-  } catch (error) {
-    console.error('Exec ERROR: ', command, error)
-    if (command.startsWith('yarn')) {
+    log('Exec START: ', command)
+    execSync(command, options)
+    log('Exec SUCCESS: ', command)
+  } catch (execError) {
+    error('Exec ERROR: ', command, execError)
+    if (command.startsWith(BUN)) {
       try {
-        console.log('Exec RETRY START: ', command)
-        await exec(command, options)
-        console.log('Exec RETRY SUCESS: ', command)
+        log('Exec RETRY BACKOFF: 60 seconds')
+        execSync('sleep 60')
+        log('Exec RETRY START: ', command)
+        execSync(command, options)
+        log('Exec RETRY SUCESS: ', command)
       } catch (retryError) {
-        console.error('Exec RETRY ERROR', command, retryError)
+        error('Exec RETRY ERROR', command, retryError)
+        throw retryError
       }
-      throw error
+    } else {
+      throw execError
     }
   }
-  /* eslint-enable no-console */
 }
 
 /**
@@ -242,9 +258,12 @@ async function execHelper (command, options) {
  * @param {string[]} integrationTestsPaths
  * @param {string} [followUpCommand]
  */
-
-async function createSandbox (dependencies = [], isGitRepo = false,
-  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
+async function createSandbox (
+  dependencies = [],
+  isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'],
+  followUpCommand
+) {
   const cappedDependencies = dependencies.map(dep => {
     if (builtinModules.includes(dep)) return dep
 
@@ -257,65 +276,77 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   })
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
-  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  const { NODE_OPTIONS, ...restOfEnv } = withBun(process.env)
   const noSandbox = String(process.env.TESTING_NO_INTEGRATION_SANDBOX)
   if (noSandbox === '1' || noSandbox.toLowerCase() === 'true') {
     // Execute integration tests without a sandbox. This is useful when you have other components
     // yarn-linked into dd-trace and want to run the integration tests against them.
 
     // Link dd-trace to itself, then...
-    await execHelper('yarn link')
-    await execHelper('yarn link dd-trace')
+    execHelper('yarn link')
+    execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
     return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   }
-  const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, `dd-trace-${version}.tgz`)
-  const allDependencies = [`file:${out}`].concat(cappedDependencies)
+  const folder = path.join(sandboxRoot, id().toString())
+  const out = path.join(sandboxRoot, 'dd-trace.tgz')
+  const deps = cappedDependencies.concat(`file:${out}`)
 
-  await fs.mkdir(folder)
-  const preferOfflineFlag = process.env.OFFLINE === '1' || process.env.OFFLINE === 'true' ? ' --prefer-offline' : ''
-  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines${preferOfflineFlag}`
+  await fs.mkdir(folder, { recursive: true })
   const addOptions = { cwd: folder, env: restOfEnv }
-  await execHelper(`npm pack --silent --pack-destination ${folder}`, { env: restOfEnv }) // TODO: cache this
+  const addFlags = ['--trust']
+  if (!existsSync(out)) {
+    execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${out}`, { env: restOfEnv })
+  }
 
-  await execHelper(addCommand, addOptions)
+  if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
+    addFlags.push('--prefer-offline')
+  }
+
+  if (DEBUG !== 'true') {
+    addFlags.push('--silent')
+  }
+
+  execHelper(`${BUN} add ${deps.join(' ')} ${addFlags.join(' ')}`, {
+    ...addOptions,
+    timeout: 90_000
+  })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
-      await execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+      execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
     } else {
-      await execHelper(`cp -R ${path} ${folder}`)
+      execHelper(`cp -R ${path} ${folder}`)
     }
   }
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
-    await execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+    execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
   } else {
-    await execHelper(`sync ${folder}`)
+    execHelper(`sync ${folder}`)
   }
 
   if (followUpCommand) {
-    await execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
+    execHelper(followUpCommand, { cwd: folder, env: restOfEnv })
   }
 
   if (isGitRepo) {
-    await execHelper('git init', { cwd: folder })
+    execHelper('git init', { cwd: folder })
     await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
-    await execHelper('git config user.email "john@doe.com"', { cwd: folder })
-    await execHelper('git config user.name "John Doe"', { cwd: folder })
-    await execHelper('git config commit.gpgsign false', { cwd: folder })
+    execHelper('git config user.email "john@doe.com"', { cwd: folder })
+    execHelper('git config user.name "John Doe"', { cwd: folder })
+    execHelper('git config commit.gpgsign false', { cwd: folder })
 
     // Create a unique local bare repo for this test
     const localRemotePath = path.join(folder, '..', `${path.basename(folder)}-remote.git`)
     if (!existsSync(localRemotePath)) {
-      await execHelper(`git init --bare ${localRemotePath}`)
+      execHelper(`git init --bare ${localRemotePath}`)
     }
 
-    await execHelper('git add -A', { cwd: folder })
-    await execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
-    await execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
-    await execHelper('git push --set-upstream origin HEAD', { cwd: folder })
+    execHelper('git add -A', { cwd: folder })
+    execHelper('git commit -m "first commit" --no-verify', { cwd: folder })
+    execHelper(`git remote add origin ${localRemotePath}`, { cwd: folder })
+    execHelper('git push --set-upstream origin HEAD', { cwd: folder })
   }
 
   return {
@@ -324,9 +355,9 @@ async function createSandbox (dependencies = [], isGitRepo = false,
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
-        return exec(`Remove-Item -Recurse -Path "${folder}"`, { shell: 'powershell.exe' })
+        return execHelper(`Remove-Item -Recurse -Path "${folder}"`, { shell: 'powershell.exe' })
       } else {
-        return exec(`rm -rf ${folder}`)
+        return execHelper(`rm -rf ${folder}`)
       }
     }
   }
@@ -337,7 +368,6 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  */
 /**
  * @overload
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedVariant] - The name of the named variant to use.
@@ -352,14 +382,13 @@ async function createSandbox (dependencies = [], isGitRepo = false,
  * in the file that's different in each variant. There must always be a "default" variant,
  * whose value is the original text within the file that will be replaced.
  *
- * @param {object} sandbox - A `sandbox` as returned from `createSandbox`
  * @param {string} filename - The file that will be copied and modified for each variant.
  * @param {Variants} variants - The variants.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (sandbox, filename, variants, namedVariant, packageName = variants) {
+function varySandbox (filename, variants, namedVariant, packageName = variants) {
   if (typeof variants === 'string') {
-    const bindingName = variants
+    const bindingName = namedVariant || variants
     variants = {
       default: `import ${bindingName} from '${packageName}'`,
       star: namedVariant
@@ -523,16 +552,29 @@ function checkSpansForServiceName (spans, name) {
 }
 
 /**
+ * @overload
+ * @param {string} cwd
+ * @param {string} serverFile
+ * @param {string|number} agentPort
+ * @param {Record<string, string|undefined>} [additionalEnvArgs]
+ */
+/**
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
  * @param {function} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
-async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
+  if (typeof stdioHandler !== 'function' && !additionalEnvArgs) {
+    additionalEnvArgs = stdioHandler
+    stdioHandler = undefined
+  }
+  additionalEnvArgs = additionalEnvArgs || {}
   let env = /** @type {Record<string, string|undefined>} */ ({
     NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: String(agentPort)
+    DD_TRACE_AGENT_PORT: String(agentPort),
+    DD_TRACE_FLUSH_INTERVAL: '0'
   })
   env = { ...process.env, ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
@@ -558,16 +600,17 @@ function useEnv (env) {
 
 /**
  * @param {unknown[]} args
+ * @returns {object}
  */
 function useSandbox (...args) {
-  before(async () => {
+  before(async function () {
+    this.timeout(300_000)
     sandbox = await createSandbox(...args)
   })
 
-  after(() => {
-    const oldSandbox = sandbox
-    sandbox = undefined
-    return oldSandbox.remove()
+  after(function () {
+    this.timeout(30_000)
+    return sandbox.remove()
   })
 }
 
@@ -592,8 +635,8 @@ function setShouldKill (value) {
 }
 
 // @ts-expect-error assert.partialDeepStrictEqual does not exist on older Node.js versions
-// eslint-disable-next-line n/no-unsupported-features/node-builtins
-const assertObjectContains = assert.partialDeepStrictEqual || function assertObjectContains (actual, expected) {
+
+const assertObjectContains = function assertObjectContains (actual, expected) {
   if (Array.isArray(expected)) {
     assert.ok(Array.isArray(actual), `Expected array but got ${typeof actual}`)
     let startIndex = 0
@@ -620,7 +663,13 @@ const assertObjectContains = assert.partialDeepStrictEqual || function assertObj
   }
 
   for (const [key, val] of Object.entries(expected)) {
-    if (val !== null && typeof val === 'object') {
+    if (val === ANY_STRING) {
+      assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
+    } else if (val === ANY_NUMBER) {
+      assert.strictEqual(typeof actual[key], 'number', `Expected ${key} to be a number but got ${typeof actual[key]}`)
+    } else if (val === ANY_VALUE) {
+      assert.ok(actual[key] !== undefined, `Expected ${key} to be present but it was undefined`)
+    } else if (val !== null && typeof val === 'object') {
       assert.ok(Object.hasOwn(actual, key))
       assert.notStrictEqual(actual[key], null)
       assert.strictEqual(typeof actual[key], 'object')
@@ -648,7 +697,6 @@ module.exports = {
   telemetryForwarder,
   assertTelemetryPoints,
   runAndCheckWithTelemetry,
-  createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
@@ -656,8 +704,11 @@ module.exports = {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
   useEnv,
-  useSandbox,
-  sandboxCwd,
   setShouldKill,
-  varySandbox
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  ANY_STRING,
+  ANY_NUMBER,
+  ANY_VALUE
 }

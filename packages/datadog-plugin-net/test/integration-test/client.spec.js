@@ -2,9 +2,10 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
@@ -12,18 +13,13 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['net'], false, [
-      './packages/datadog-plugin-net/test/integration-test/*'])
-    variants = varySandbox(sandbox, 'server.mjs', 'net', 'createConnection')
-  })
+  useSandbox(['net'], false, [
+    './packages/datadog-plugin-net/test/integration-test/*'])
 
-  after(async () => {
-    await sandbox.remove()
+  before(async function () {
+    variants = varySandbox('server.mjs', 'net', 'createConnection')
   })
 
   beforeEach(async () => {
@@ -46,7 +42,7 @@ describe('esm', () => {
           assert.strictEqual(metaContainsNet, true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

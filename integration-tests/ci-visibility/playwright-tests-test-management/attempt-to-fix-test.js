@@ -26,4 +26,8 @@ test.describe('attempt to fix', () => {
       textToAssert
     ])
   })
+
+  test('should attempt to fix passed test', async () => {
+    expect(true).toBe(true)
+  })
 })

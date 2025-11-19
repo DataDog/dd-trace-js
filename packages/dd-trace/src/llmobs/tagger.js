@@ -29,6 +29,7 @@ const {
   DECORATOR,
   PROPAGATED_ML_APP_KEY
 } = require('./constants/tags')
+const { storage } = require('./storage')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -97,6 +98,17 @@ class LLMObsTagger {
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
+
+    // apply annotation context
+    const annotationContext = storage.getStore()?.annotationContext
+
+    // apply annotation context tags
+    const tags = annotationContext?.tags
+    if (tags) this.tagSpanTags(span, tags)
+
+    // apply annotation context name
+    const annotationContextName = annotationContext?.name
+    if (annotationContextName) this._setTag(span, NAME, annotationContextName)
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -280,11 +292,17 @@ class LLMObsTagger {
         continue
       }
 
-      const { result, toolId, type } = toolResult
+      const { result, toolId, name = '', type } = toolResult
       const toolResultObj = {}
 
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      // name can be empty string, so always include it
+      if (typeof name === 'string') {
+        toolResultObj.name = name
+      } else {
+        this.#handleFailure(`[LLMObs] Expected tool result name to be a string, instead got "${typeof name}"`)
+      }
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -320,12 +338,12 @@ class LLMObsTagger {
       const toolId = message.toolId
       const messageObj = { content }
 
+      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
+
       const valid = typeof content === 'string'
       if (!valid) {
         this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
       }
-
-      let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
       if (toolCalls) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)

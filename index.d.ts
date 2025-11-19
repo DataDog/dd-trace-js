@@ -135,9 +135,24 @@ interface Tracer extends opentracing.Tracer {
   dogstatsd: tracer.DogStatsD;
 
   /**
+   * Data Streams manual checkpointer API.
+   */
+  dataStreamsCheckpointer: tracer.DataStreamsCheckpointer;
+
+  /**
    * LLM Observability SDK
    */
   llmobs: tracer.llmobs.LLMObs;
+
+  /**
+   * OpenFeature Provider with Remote Config integration.
+   *
+   * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
+   * Enable with DD_FLAGGING_PROVIDER_ENABLED=true.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  openfeature: tracer.OpenFeatureProvider;
 
   /**
    * AI Guard SDK
@@ -166,14 +181,17 @@ interface Tracer extends opentracing.Tracer {
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
+  "ai": tracer.plugins.ai;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "bee-queue": tracer.plugins.bee_queue;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
   "child_process": tracer.plugins.child_process;
@@ -199,7 +217,7 @@ interface Plugins {
   "ioredis": tracer.plugins.ioredis;
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
-  "kafkajs": tracer.plugins.kafkajs
+  "kafkajs": tracer.plugins.kafkajs;
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
@@ -210,6 +228,7 @@ interface Plugins {
   "moleculer": tracer.plugins.moleculer;
   "mongodb-core": tracer.plugins.mongodb_core;
   "mongoose": tracer.plugins.mongoose;
+  "mqtt": tracer.plugins.mqtt;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
@@ -624,6 +643,21 @@ declare namespace tracer {
          */
         maxContentSize?: number
       }
+
+      /**
+       * Configuration for Feature Flagging & Experimentation.
+       *
+       * @beta This feature is in preview and not ready for production use
+       */
+      flaggingProvider?: {
+        /**
+         * Whether to enable the feature flagging provider.
+         * Requires Remote Config to be properly configured.
+         *
+         * @default false
+         */
+        enabled?: boolean
+      }
     };
 
     /**
@@ -787,6 +821,8 @@ declare namespace tracer {
 
         /** Whether to enable request body collection on RASP event
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         bodyCollection?: boolean
       },
@@ -811,20 +847,28 @@ declare namespace tracer {
       },
       /**
        * Configuration for extended headers collection tied to security events
+       *
+       * @deprecated Use UI and Remote Configuration to enable extended data collection
        */
       extendedHeadersCollection?: {
         /** Whether to enable extended headers collection
          * @default false
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         enabled: boolean,
 
         /** Whether to redact collected headers
          * @default true
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         redaction: boolean,
 
         /** Specifies the maximum number of headers collected.
          * @default 50
+         *
+         * @deprecated Use UI and Remote Configuration to enable extended data collection
          */
         maxHeaders: number,
       }
@@ -991,6 +1035,29 @@ declare namespace tracer {
     flush(): void
   }
 
+  /**
+   * Manual Data Streams Monitoring checkpointer API.
+   */
+  export interface DataStreamsCheckpointer {
+    /**
+     * Sets a produce checkpoint and injects the DSM context into the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param target The target of data (topic, exchange, stream name).
+     * @param carrier The carrier object to inject DSM context into.
+     */
+    setProduceCheckpoint (type: string, target: string, carrier: any): void;
+
+    /**
+     * Sets a consume checkpoint and extracts DSM context from the provided carrier.
+     * @param type The streaming technology (e.g., kafka, kinesis, sns).
+     * @param source The source of data (topic, exchange, stream name).
+     * @param carrier The carrier object to extract DSM context from.
+     * @param manualCheckpoint Whether this checkpoint was manually set. Defaults to true.
+     * @returns The DSM context associated with the current pathway.
+     */
+    setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
+  }
+
   export interface EventTrackingV2 {
     /**
      * Links a successful login event to the current trace. Will link the passed user to the current trace with Appsec.setUser() internally.
@@ -1087,6 +1154,65 @@ declare namespace tracer {
     setUser(user: User): void
 
     eventTrackingV2: EventTrackingV2
+  }
+
+  /**
+   * Flagging Provider (OpenFeature-compatible).
+   *
+   * Wraps @datadog/openfeature-node-server with Remote Config integration for dynamic flag configuration.
+   * Implements the OpenFeature Provider interface for flag evaluation.
+   *
+   * @beta This feature is in preview and not ready for production use
+   */
+  export interface OpenFeatureProvider {
+    /**
+     * Metadata about this provider.
+     */
+    metadata: { name: string; [key: string]: any };
+
+    /**
+     * Resolves a boolean flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveBooleanEvaluation(flagKey: string, defaultValue: boolean, context: object, logger: object): Promise<{ value: boolean; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a string flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveStringEvaluation(flagKey: string, defaultValue: string, context: object, logger: object): Promise<{ value: string; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves a number flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveNumberEvaluation(flagKey: string, defaultValue: number, context: object, logger: object): Promise<{ value: number; reason?: string; [key: string]: any }>;
+
+    /**
+     * Resolves an object flag value.
+     *
+     * @param flagKey The key of the flag to evaluate
+     * @param defaultValue The default value to return if evaluation fails
+     * @param context Evaluation context (e.g., user attributes)
+     * @param logger Optional logger instance
+     * @returns Promise resolving to evaluation result with value and reason
+     */
+    resolveObjectEvaluation<T = any>(flagKey: string, defaultValue: T, context: object, logger: object): Promise<{ value: T; reason?: string; [key: string]: any }>;
   }
 
   export namespace aiguard {
@@ -1522,6 +1648,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
+     */
+    interface ai extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
      */
     interface amqp10 extends Instrumentation {}
@@ -1577,12 +1709,6 @@ declare namespace tracer {
      */
     interface aws_sdk extends Instrumentation {
       /**
-       * Whether to add a suffix to the service name so that each AWS service has its own service name.
-       * @default true
-       */
-      splitByAwsService?: boolean;
-
-      /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
        * @default false
@@ -1611,6 +1737,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * @azure/event-hubs module
+     */
+    interface azure_event_hubs extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * @azure/functions module.
     */
     interface azure_functions extends Instrumentation {}
@@ -1620,12 +1752,19 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
      * on the tracer.
      */
+    /**
+     * This plugin automatically instruments the
+     * [bee-queue](https://github.com/npmjs/package/bee-queue) message queue library.
+     */
+    interface bee_queue extends Instrumentation {}
+
     interface bunyan extends Integration {}
 
     /**
@@ -2103,6 +2242,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mysql](https://github.com/mysqljs/mysql) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [mqtt](https://github.com/npmjs/package/mqtt) message queue library.
+     */
+    interface mqtt extends Instrumentation {}
+
     interface mysql extends Instrumentation {
       service?: string | ((params: any) => string);
     }
@@ -2698,7 +2843,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 
@@ -2842,6 +2990,15 @@ declare namespace tracer {
        * @param options An object containing the label, metric type, value, and tags of the evaluation metric.
        */
       submitEvaluation (spanContext: llmobs.ExportedLLMObsSpan, options: llmobs.EvaluationOptions): void
+
+
+      /**
+       * Annotates all spans, including auto-instrumented spans, with the provided tags created in the context of the callback function.
+       * @param options The annotation context options.
+       * @param fn The callback over which to apply the annotation context options.
+       * @returns The result of the function.
+       */
+      annotationContext<T> (options: llmobs.AnnotationContextOptions, fn: () => T): T
 
       /**
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
@@ -3002,6 +3159,18 @@ declare namespace tracer {
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
       tags?: { [key: string]: any }
+    }
+
+    interface AnnotationContextOptions {
+      /**
+       * Dictionary of JSON serializable key-value tag pairs to set or update on the LLMObs span regarding the span's context.
+       */
+      tags?: { [key: string]: any },
+
+      /**
+       * Set to override the span name for any spans annotated within the returned context.
+       */
+      name?: string,
     }
 
     /**

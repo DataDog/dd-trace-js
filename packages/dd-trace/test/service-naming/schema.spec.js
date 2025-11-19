@@ -90,5 +90,37 @@ describe('Service naming', () => {
         expect(dummySchema.messaging.inbound.kafka.serviceName).to.be.calledWith(opts)
       })
     })
+
+    describe('Auto-registration for unknown integrations', () => {
+      it('should auto-generate operation names for unknown messaging producers', () => {
+        const result = resolver.getOpName('messaging', 'producer', 'bee-queue', {})
+        expect(result).to.equal('bee-queue.send')
+      })
+
+      it('should auto-generate operation names for unknown messaging consumers', () => {
+        const result = resolver.getOpName('messaging', 'consumer', 'bee-queue', {})
+        expect(result).to.equal('bee-queue.process')
+      })
+
+      it('should auto-generate operation names for unknown web servers', () => {
+        const result = resolver.getOpName('web', 'server', 'polka', {})
+        expect(result).to.equal('polka.request')
+      })
+
+      it('should auto-generate operation names for unknown storage clients', () => {
+        const result = resolver.getOpName('storage', 'client', 'better-sqlite3', {})
+        expect(result).to.equal('better-sqlite3.query')
+      })
+
+      it('should use identityService for unknown integrations', () => {
+        const result = resolver.getServiceName('messaging', 'producer', 'bee-queue', { tracerService: 'my-app' })
+        expect(result).to.equal('my-app')
+      })
+
+      it('should handle completely unknown type/kind combinations', () => {
+        const result = resolver.getOpName('unknown-type', 'unknown-kind', 'unknown-plugin', {})
+        expect(result).to.equal('unknown-plugin.operation')
+      })
+    })
   })
 })

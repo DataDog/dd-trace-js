@@ -17,10 +17,15 @@ describe('describe', function () {
     console.log('afterEach')
   })
 
-  it('is not nested', function () {
+  it('is not nested', function (done) {
     // eslint-disable-next-line no-console
     console.log('is not nested')
-    expect(process.env.SHOULD_FAIL ? globalAttempts++ : 1).to.equal(1)
+    try {
+      expect(process.env.SHOULD_FAIL ? globalAttempts++ : 1).to.equal(1)
+      done()
+    } catch (error) {
+      done(error)
+    }
   })
 
   context('context', () => {

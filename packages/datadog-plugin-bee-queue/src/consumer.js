@@ -18,25 +18,28 @@ class BeeQueueConsumerPlugin extends ConsumerPlugin {
   }
 
   subscribe () {
+    // Subscribe to diagnostic channels for each instrumented operation
+    // For traceHandler: :asyncStart, :error, :asyncEnd channels
+    // Note: :error may not always fire; fallback error handling in finish()
+    // TracingChannel from dc-polyfill adds 'tracing:' prefix automatically
     this.addBind('tracing:apm:bee-queue:queue:process:asyncStart', (ctx) => this.queueProcessStart(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:process:error', (ctx) => this.error(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:process:asyncEnd', (ctx) => this.finish(ctx))
+    this.addSub('tracing:apm:bee-queue:queue:process:error', (ctx) => this.error(ctx))
     this.addSub('tracing:apm:bee-queue:queue:process:asyncEnd', (ctx) => this.finish(ctx))
   }
 
   queueProcessStart (ctx) {
     const tags = Extractors.queueProcessConsumer(ctx)
     const options = {
-      resource: tags['resource.name'] || 'process',
-      meta: tags
+      meta: tags,
+      resource: tags['resource.name'] || 'process'
     }
     return this.startSpan(options, ctx)
   }
 
   error (ctx) {
     const span = ctx?.currentStore?.span
-    if (span) {
-      this.addError(span, ctx.error)
+    if (span && ctx.error) {
+      this.addError(ctx.error, span)
     }
     return ctx.parentStore
   }
@@ -44,6 +47,12 @@ class BeeQueueConsumerPlugin extends ConsumerPlugin {
   finish (ctx) {
     const span = ctx?.currentStore?.span
     if (span) {
+      // If there's an error in the context, add it to the span
+      // This handles cases where :error channel wasn't published but ctx.error exists
+      // (e.g., with tracePromise when promise rejects)
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
       super.finish(ctx)
     }
     return ctx.parentStore

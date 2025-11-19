@@ -262,7 +262,6 @@ const elasticsearchOptions: plugins.elasticsearch = {
 
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
-  splitByAwsService: false,
   batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},
@@ -303,13 +302,16 @@ const openSearchOptions: plugins.opensearch = {
   },
 };
 
+tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('bee-queue');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -383,6 +385,7 @@ tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
 tracer.use('mongodb-core');
 tracer.use('mongoose');
+tracer.use('mqtt');
 tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');

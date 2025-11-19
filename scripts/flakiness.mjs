@@ -7,6 +7,9 @@ const {
   BRANCH,
   CI,
   DAYS = '1',
+  GITHUB_REPOSITORY,
+  GITHUB_RUN_ID,
+  MERGE = 'true',
   OCCURRENCES = '1',
   UNTIL
 } = process.env
@@ -38,6 +41,7 @@ let totalCount = 0
 let flakeCount = 0
 
 async function checkWorkflowRuns (id, page = 1) {
+  // This only gets the last attempt of every run.
   const response = await octokit.rest.actions.listWorkflowRuns({
     owner: 'DataDog',
     repo: 'dd-trace-js',
@@ -67,7 +71,7 @@ async function checkWorkflowRuns (id, page = 1) {
 
     flakeCount++
 
-    promises.push(checkWorkflowJobs(run.id))
+    promises.push(checkWorkflowJobs(run.id, run.run_attempt - 1))
   }
 
   promises.push(checkWorkflowRuns(id, page + 1))
@@ -75,9 +79,11 @@ async function checkWorkflowRuns (id, page = 1) {
   return Promise.all(promises)
 }
 
-async function checkWorkflowJobs (id, page = 1) {
+async function checkWorkflowJobs (id, attempt, page = 1) {
+  if (attempt < 1) return
+
   const response = await octokit.rest.actions.listJobsForWorkflowRunAttempt({
-    attempt_number: 1, // ignore other attempts to keep things simple
+    attempt_number: attempt,
     owner: 'DataDog',
     repo: 'dd-trace-js',
     run_id: id,
@@ -87,14 +93,12 @@ async function checkWorkflowJobs (id, page = 1) {
 
   const { jobs } = response.data
 
-  // We've reached the last page and there are no more results.
-  if (jobs.length === 0) return
-
   for (const job of jobs) {
     if (job.conclusion !== 'failure') continue
 
     const workflow = job.workflow_name
-    const name = job.name.split(' ')[0] // Merge matrix runs of same job together.
+    // Merge matrix runs of same job together.
+    const name = MERGE === 'true' ? job.name.split(' ')[0] : job.name
 
     flaky[workflow] ??= {}
     flaky[workflow][name] ??= []
@@ -105,7 +109,13 @@ async function checkWorkflowJobs (id, page = 1) {
     }
   }
 
-  return checkWorkflowJobs(id, page + 1)
+  // We've reached the last page and there are no more results.
+  if (jobs.length < 100) {
+    // Check previous attempt to include successive failures.
+    return checkWorkflowJobs(id, attempt - 1)
+  }
+
+  return checkWorkflowJobs(id, attempt, page + 1)
 }
 
 await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
@@ -138,10 +148,9 @@ if (Object.keys(flaky).length === 0) {
       if (urls.length < OCCURRENCES) continue
       // Padding is needed because Slack doesn't show single digits as links.
       const markdownLinks = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
-      const slackLinks = urls.map((url, idx) => `<${url}|${String(idx + 1).padStart(2, '0')}>`)
       const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
       markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
-      slack += `         ○   ${job} (${slackLinks.join(', ')})${runsBadge}\\n`
+      slack += `         ○   ${job} (${urls.length})${runsBadge}\\n`
     }
   }
 
@@ -151,6 +160,13 @@ if (Object.keys(flaky).length === 0) {
   markdown += `* Flaky runs: ${flakeCount}\n`
   markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
   markdown += `* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+
+  if (GITHUB_REPOSITORY && GITHUB_RUN_ID) {
+    const link = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
+
+    slack += '\\n'
+    slack += `View full report with links to failures on <${link}|GitHub>.`
+  }
 
   slack += '\\n'
   slack += '*Flakiness stats*\\n'

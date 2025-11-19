@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,17 +13,10 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  withVersions('iovalkey', 'iovalkey', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'iovalkey@${version}'`], false, [
-        './packages/datadog-plugin-iovalkey/test/integration-test/*'])
-    })
 
-    after(async () => {
-      await sandbox.remove()
-    })
+  withVersions('iovalkey', 'iovalkey', version => {
+    useSandbox([`'iovalkey@${version}'`], false, [
+      './packages/datadog-plugin-iovalkey/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -40,7 +34,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'valkey.command'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

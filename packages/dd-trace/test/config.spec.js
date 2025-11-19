@@ -8,12 +8,14 @@ const proxyquire = require('proxyquire')
 const { readFileSync } = require('node:fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const path = require('node:path')
 
 require('./setup/core')
 
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../version')
 
 describe('Config', () => {
   let Config
@@ -35,7 +37,6 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
-  const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
   function reloadLoggerAndConfig () {
     log = proxyquire('../src/log', {})
@@ -480,7 +481,7 @@ describe('Config', () => {
         value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
         origin: 'default'
       },
-      { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
+      { name: 'remoteConfig.enabled', value: true, origin: 'default' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
@@ -500,7 +501,7 @@ describe('Config', () => {
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
+      { name: 'telemetry.enabled', value: true, origin: 'default' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
@@ -882,7 +883,6 @@ describe('Config', () => {
       { name: 'service', value: 'service', origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
-      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
@@ -1171,8 +1171,12 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.requestSampling', 50)
-    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
-      'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+    if (DD_MAJOR < 6) {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+    } else {
+      expect(config).to.not.have.property('iast.securityControlsConfiguration')
+    }
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', true)
@@ -1260,7 +1264,7 @@ describe('Config', () => {
       { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'code' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
       { name: 'iast.requestSampling', value: 50, origin: 'code' },
-      {
+      DD_MAJOR < 6 && {
         name: 'iast.securityControlsConfiguration',
         value: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
         origin: 'code'
@@ -1290,7 +1294,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
-    ])
+    ].filter(v => v))
   })
 
   it('should initialize from the options with url taking precedence', () => {
@@ -1503,6 +1507,7 @@ describe('Config', () => {
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
     process.env.DD_TRACE_MIDDLEWARE_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = '2000'
+    process.env.DD_TRACE_FLUSH_INTERVAL = '2000'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
@@ -1583,6 +1588,7 @@ describe('Config', () => {
         enableGetRumData: false
       },
       flushMinSpans: 500,
+      flushInterval: 500,
       hostname: 'server',
       iast: {
         dbRowsToTaint: 3,
@@ -1673,6 +1679,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.property('flushMinSpans', 500)
+    expect(config).to.have.property('flushInterval', 500)
     expect(config).to.have.nested.property('iast.dbRowsToTaint', 3)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -1682,8 +1689,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.requestSampling', 30)
-    expect(config).to.have.nested.property('iast.securityControlsConfiguration',
-      'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
+    if (DD_MAJOR < 6) {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method2')
+    } else {
+      expect(config).to.have.nested.property('iast.securityControlsConfiguration',
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method1')
+    }
     expect(config).to.have.nested.property('iast.stackTrace.enabled', false)
     expect(config).to.have.nested.property('llmobs.agentlessEnabled', false)
     expect(config).to.have.nested.property('llmobs.mlApp', 'myOtherMlApp')
@@ -2461,6 +2473,8 @@ describe('Config', () => {
   context('sci embedding', () => {
     const DUMMY_COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
     const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
+    const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
+    const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folder')
     let ddTags
     beforeEach(() => {
       ddTags = process.env.DD_TAGS
@@ -2470,6 +2484,7 @@ describe('Config', () => {
       delete process.env.DD_GIT_COMMIT_SHA
       delete process.env.DD_GIT_REPOSITORY_URL
       delete process.env.DD_TRACE_GIT_METADATA_ENABLED
+      delete process.env.DD_GIT_FOLDER_PATH
       process.env.DD_TAGS = ddTags
     })
     it('reads DD_GIT_* env vars', () => {
@@ -2499,9 +2514,10 @@ describe('Config', () => {
     })
     it('does not crash if git.properties is not available', () => {
       process.env.DD_GIT_PROPERTIES_FILE = '/does/not/exist'
-      const config = new Config({})
-      expect(config).to.have.property('commitSHA', undefined)
-      expect(config).to.have.property('repositoryUrl', undefined)
+      expect(() => {
+        const config = new Config({})
+        expect(config).to.be.an('object')
+      }).to.not.throw()
     })
     it('does not read git.properties if env vars are passed', () => {
       process.env.DD_GIT_PROPERTIES_FILE = DD_GIT_PROPERTIES_FILE
@@ -2529,6 +2545,34 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+    it('reads .git/ folder if it is available', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      const config = new Config({})
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dd-trace-js.git')
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+    })
+    it('does not crash if .git/ folder is not available', () => {
+      process.env.DD_GIT_FOLDER_PATH = '/does/not/exist/'
+      expect(() => {
+        const config = new Config({})
+        expect(config).to.be.an('object')
+      }).to.not.throw()
+    })
+    it('does not read .git/ folder if env vars are passed', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_COMMIT_SHA = DUMMY_COMMIT_SHA
+      process.env.DD_GIT_REPOSITORY_URL = 'https://github.com:DataDog/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
+      expect(config).to.have.property('repositoryUrl', 'https://github.com:DataDog/dd-trace-js.git')
+    })
+    it('still reads .git/ if one of the env vars is missing', () => {
+      process.env.DD_GIT_FOLDER_PATH = DD_GIT_FOLDER_PATH
+      process.env.DD_GIT_REPOSITORY_URL = 'git@github.com:DataDog/dummy-dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('commitSHA', '964886d9ec0c9fc68778e4abb0aab4d9982ce2b5')
+      expect(config).to.have.property('repositoryUrl', 'git@github.com:DataDog/dummy-dd-trace-js.git')
     })
   })
 
@@ -2777,7 +2821,7 @@ describe('Config', () => {
 
     afterEach(() => {
       process.env = env
-      fs.rmdirSync(tempDir, { recursive: true })
+      fs.rmSync(tempDir, { recursive: true })
     })
 
     it('should apply host wide config', () => {
@@ -2922,6 +2966,127 @@ apm_configuration_default:
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
       const stableConfig = new Config()
       expect(stableConfig).to.not.have.property('stableConfig')
+    })
+
+    it('should support all extended configs across product areas', () => {
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_TRACE_PROPAGATION_STYLE: "tracecontext"
+  DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED: true
+
+  DD_APPSEC_TRACE_RATE_LIMIT: 100
+  DD_APPSEC_MAX_STACK_TRACES: 2
+  DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: "password|token"
+
+  DD_IAST_REQUEST_SAMPLING: 50
+  DD_IAST_MAX_CONCURRENT_REQUESTS: 10
+
+  DD_TELEMETRY_HEARTBEAT_INTERVAL: 42
+  DD_TELEMETRY_METRICS_ENABLED: false
+
+  DD_LLMOBS_ML_APP: "my-llm-app"
+
+  DD_PROFILING_EXPORTERS: "agent"
+
+  DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: "/tmp/probes"
+`)
+      const config = new Config()
+
+      // Tracing
+      expect(config).to.have.nested.property('traceId128BitGenerationEnabled', true)
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext'])
+      expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext'])
+
+      // Appsec
+      expect(config).to.have.nested.property('appsec.rateLimit', 100)
+      expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
+      expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', 'password|token')
+
+      // IAST
+      expect(config).to.have.nested.property('iast.requestSampling', 50)
+      expect(config).to.have.nested.property('iast.maxConcurrentRequests', 10)
+
+      // Telemetry
+      expect(config).to.have.nested.property('telemetry.heartbeatInterval', 42000)
+      expect(config).to.have.nested.property('telemetry.metrics', false)
+
+      // LLMObs
+      expect(config).to.have.nested.property('llmobs.mlApp', 'my-llm-app')
+
+      // Profiling
+      expect(config).to.have.nested.property('profiling.exporters', 'agent')
+
+      // Dynamic Instrumentation
+      expect(config).to.have.nested.property('dynamicInstrumentation.probeFile', '/tmp/probes')
+    })
+
+    // Regression test for fields that were previously set directly from environment variables
+    // before they were supported by stable config as well.
+    it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
+      // Test 1: Local stable config should work
+      fs.writeFileSync(
+        process.env.DD_TEST_LOCAL_CONFIG_PATH,
+        `
+apm_configuration_default:
+  DD_API_KEY: "local-api-key"
+  DD_APP_KEY: "local-app-key"
+  DD_INSTRUMENTATION_INSTALL_ID: "local-install-id"
+  DD_INSTRUMENTATION_INSTALL_TIME: "1234567890"
+  DD_INSTRUMENTATION_INSTALL_TYPE: "local_install"
+  DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
+  DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 5
+`)
+      let config = new Config()
+      expect(config).to.have.property('apiKey', 'local-api-key')
+      expect(config).to.have.property('appKey', 'local-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'local-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '1234567890')
+      expect(config).to.have.nested.property('installSignature.type', 'local_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 5)
+
+      // Test 2: Env vars should take precedence over local stable config
+      process.env.DD_API_KEY = 'env-api-key'
+      process.env.DD_APP_KEY = 'env-app-key'
+      process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'env-api-key')
+      expect(config).to.have.property('appKey', 'env-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'env-install-id')
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 7)
+
+      // Test 3: Fleet stable config should take precedence over env vars
+      fs.writeFileSync(
+        process.env.DD_TEST_FLEET_CONFIG_PATH,
+        `
+rules:
+  - selectors:
+    - origin: language
+      matches:
+        - nodejs
+      operator: equals
+    configuration:
+      DD_API_KEY: "fleet-api-key"
+      DD_APP_KEY: "fleet-app-key"
+      DD_INSTRUMENTATION_INSTALL_ID: "fleet-install-id"
+      DD_INSTRUMENTATION_INSTALL_TIME: "9999999999"
+      DD_INSTRUMENTATION_INSTALL_TYPE: "fleet_install"
+      DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: ""
+      DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
+      DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: 15
+`)
+      config = new Config()
+      expect(config).to.have.property('apiKey', 'fleet-api-key')
+      expect(config).to.have.property('appKey', 'fleet-app-key')
+      expect(config).to.have.nested.property('installSignature.id', 'fleet-install-id')
+      expect(config).to.have.nested.property('installSignature.time', '9999999999')
+      expect(config).to.have.nested.property('installSignature.type', 'fleet_install')
+      expect(config).to.have.nested.property('cloudPayloadTagging.requestsEnabled', false)
+      expect(config).to.have.nested.property('cloudPayloadTagging.responsesEnabled', true)
+      expect(config).to.have.nested.property('cloudPayloadTagging.maxDepth', 15)
     })
   })
 

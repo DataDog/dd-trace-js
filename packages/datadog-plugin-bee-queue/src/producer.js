@@ -18,68 +18,54 @@ class BeeQueueProducerPlugin extends ProducerPlugin {
   }
 
   subscribe () {
-    this.addBind('tracing:apm:bee-queue:queue:close:start', (ctx) => this.queueCloseStart(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:close:error', (ctx) => this.error(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:close:end', (ctx) => this.finish(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:connect:start', (ctx) => this.queueConnectStart(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:connect:error', (ctx) => this.error(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:connect:end', (ctx) => this.finish(ctx))
-    this.addBind('tracing:apm:bee-queue:queue:connect:asyncEnd', (ctx) => this.finish(ctx))
-    this.addSub('tracing:apm:bee-queue:queue:connect:end', (ctx) => this.finish(ctx))
-    this.addSub('tracing:apm:bee-queue:queue:connect:asyncEnd', (ctx) => this.finish(ctx))
-
-    // job.save spans for production
+    // Subscribe to diagnostic channels for each instrumented operation
+    // For tracePromise: :start, :error, :asyncEnd channels
+    // Note: :error may not always fire; fallback error handling in finish()
     this.addBind('tracing:apm:bee-queue:job:save:start', (ctx) => this.jobSaveStart(ctx))
-    this.addBind('tracing:apm:bee-queue:job:save:error', (ctx) => this.error(ctx))
-    this.addBind('tracing:apm:bee-queue:job:save:end', (ctx) => this.finish(ctx))
-    this.addBind('tracing:apm:bee-queue:job:save:asyncEnd', (ctx) => this.finish(ctx))
+    this.addSub('tracing:apm:bee-queue:job:save:error', (ctx) => this.error(ctx))
     this.addSub('tracing:apm:bee-queue:job:save:end', (ctx) => this.finish(ctx))
     this.addSub('tracing:apm:bee-queue:job:save:asyncEnd', (ctx) => this.finish(ctx))
-    this.addSub('tracing:apm:bee-queue:job:save:error', (ctx) => this.error(ctx))
-  }
-
-  queueCloseStart (ctx) {
-    const tags = Extractors.queueCloseProducer(ctx)
-    const options = {
-      resource: tags['resource.name'] || 'close',
-      meta: tags
-    }
-    return this.startSpan(options, ctx)
-  }
-
-  queueConnectStart (ctx) {
-    const tags = Extractors.queueConnectProducer(ctx)
-    const options = {
-      resource: tags['resource.name'] || 'connect',
-      meta: tags
-    }
-    return this.startSpan(options, ctx)
+    this.addBind('tracing:apm:bee-queue:queue:saveall:start', (ctx) => this.queueSaveallStart(ctx))
+    this.addSub('tracing:apm:bee-queue:queue:saveall:error', (ctx) => this.error(ctx))
+    this.addSub('tracing:apm:bee-queue:queue:saveall:end', (ctx) => this.finish(ctx))
+    this.addSub('tracing:apm:bee-queue:queue:saveall:asyncEnd', (ctx) => this.finish(ctx))
   }
 
   jobSaveStart (ctx) {
-    const tags = {
-      'messaging.system': 'bee-queue',
-      'messaging.destination.name': ctx.self?.queue?.name || ctx.this?.queue?.name || 'unknown',
-      'messaging.operation': 'produce'
-    }
+    const tags = Extractors.jobSaveProducer(ctx)
     const options = {
-      resource: 'produce',
-      meta: tags
+      meta: tags,
+      resource: tags['resource.name'] || 'save'
+    }
+    return this.startSpan(options, ctx)
+  }
+
+  queueSaveallStart (ctx) {
+    const tags = Extractors.queueSaveallProducer(ctx)
+    const options = {
+      meta: tags,
+      resource: tags['resource.name'] || 'saveAll'
     }
     return this.startSpan(options, ctx)
   }
 
   error (ctx) {
-    const span = (ctx && ctx.currentStore && ctx.currentStore.span) || (ctx && ctx.parentStore && ctx.parentStore.span)
-    if (span) {
-      this.addError(span, ctx && ctx.error)
+    const span = ctx?.currentStore?.span
+    if (span && ctx.error) {
+      this.addError(ctx.error, span)
     }
-    return ctx && ctx.parentStore
+    return ctx.parentStore
   }
 
   finish (ctx) {
     const span = ctx?.currentStore?.span
     if (span) {
+      // If there's an error in the context, add it to the span
+      // This handles cases where :error channel wasn't published but ctx.error exists
+      // (e.g., with tracePromise when promise rejects)
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
       super.finish(ctx)
     }
     return ctx.parentStore

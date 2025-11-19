@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
@@ -12,29 +13,21 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   // limit v4 tests while the IITM issue is resolved or a workaround is introduced
   // this is only relevant for `openai` >=4.0 <=4.1
   // issue link: https://github.com/DataDog/import-in-the-middle/issues/60
   withVersions('openai', 'openai', '>=3 <4.0.0 || >4.1.0', (version) => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox(
-        [
-          `'openai@${version}'`,
-          'nock',
-          '@openai/agents',
-          '@openai/agents-core',
-        ],
-        false,
-        ['./packages/datadog-plugin-openai/test/integration-test/*']
-      )
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox(
+      [
+        `'openai@${version}'`,
+        'nock',
+        '@openai/agents',
+        '@openai/agents-core',
+      ],
+      false,
+      ['./packages/datadog-plugin-openai/test/integration-test/*']
+    )
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -56,7 +49,7 @@ describe('esm', () => {
       })
 
       proc = await spawnPluginIntegrationTestProc(
-        sandbox.folder,
+        sandboxCwd(),
         'server.mjs',
         agent.port,
         null,

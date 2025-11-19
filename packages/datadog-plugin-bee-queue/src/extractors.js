@@ -4,30 +4,38 @@
 
 'use strict'
 
-const BeeQueueExtractors = {
-  queueProcessConsumer (ctx) {
-    return {
-      'messaging.system': 'bee-queue',
-      'messaging.destination.name': ctx.self?.name || ctx.this?.name || 'unknown',
-      'messaging.operation': 'process'
-    }
-  },
-
-  queueCloseProducer (ctx) {
-    return {
-      'messaging.system': 'bee-queue',
-      'messaging.destination.name': ctx.self?.name || ctx.this?.name || 'unknown',
-      'messaging.operation': 'close'
-    }
-  },
-
-  queueConnectProducer (ctx) {
-    return {
-      'messaging.system': 'bee-queue',
-      'messaging.destination.name': ctx.self?.name || ctx.this?.name || 'unknown',
-      'messaging.operation': 'connect'
-    }
+function jobSaveProducer (ctx) {
+  return {
+    'component': 'bee-queue',
+    'span.kind': 'producer',
+    'messaging.system': 'bee-queue',
+    'messaging.destination.name': ctx.self?.queue?.name || ctx.this?.queue?.name,
+    'messaging.operation': 'produce'
   }
 }
 
-module.exports = BeeQueueExtractors
+function queueProcessConsumer (ctx) {
+  return {
+    'component': 'bee-queue',
+    'span.kind': 'consumer',
+    'messaging.system': 'bee-queue',
+    'messaging.destination.name': ctx.self?.name || ctx.this?.name,
+    'messaging.operation': 'process',
+    'span.kind': 'consumer'
+  }
+}
+
+function queueSaveallProducer (ctx) {
+  return {
+    'component': 'bee-queue',
+    'span.kind': 'producer',
+    'messaging.system': 'bee-queue',
+    'messaging.operation': 'produce_bulk'
+  }
+}
+
+module.exports = {
+  'jobSaveProducer': jobSaveProducer,
+  'queueProcessConsumer': queueProcessConsumer,
+  'queueSaveallProducer': queueSaveallProducer
+}

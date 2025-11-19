@@ -356,6 +356,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
         reject(e)
       } else {
         error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
+        console.log('error', error.message.slice(0, 100))
       }
     }
   }

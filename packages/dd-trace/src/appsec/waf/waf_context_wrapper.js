@@ -141,7 +141,7 @@ class WAFContextWrapper {
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(result.events)
+        Reporter.reportAttack(result)
       }
 
       Reporter.reportAttributes(result.attributes)

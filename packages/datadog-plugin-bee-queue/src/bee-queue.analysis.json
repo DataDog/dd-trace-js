@@ -4,64 +4,92 @@
     "version": "1.7.1"
   },
   "category": "messaging",
+  "analysis_metadata": {
+    "total_methods_analyzed": 3,
+    "methods_selected": 3,
+    "selection_threshold": 0,
+    "selection_reasoning": "Methods selected based on agent analysis and APM semantics"
+  },
   "orchestrion_config": {
     "instrumentations": [
       {
         "module_name": "bee-queue",
-        "version_range": ">=1.0.0",
-        "file_path": "lib/queue.js",
+        "version_range": "^1.7.1",
+        "function_query": {
+          "name": "save",
+          "type": "method",
+          "kind": "sync",
+          "class": "Job"
+        },
+        "operator": "tracePromise",
+        "channel_name": "apm:bee-queue:job:save",
+        "operation": "produce",
+        "role": "producer",
+        "priority": "critical",
+        "tags": {},
+        "context_capture": {
+          "messaging.system": "'bee-queue'",
+          "messaging.destination.name": "args[0][0].queue.name",
+          "messaging.operation": "'produce'",
+          "span.kind": "'producer'",
+          "messaging.message.id": null,
+          "messaging.message.payload_size_bytes": null
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Saves a job and enqueues it for processing - this is the primary message production method that adds jobs to the Redis queue",
+        "file_path": "lib/job.js",
+        "line_number": 245
+      },
+      {
+        "module_name": "bee-queue",
+        "version_range": "^1.7.1",
         "function_query": {
           "name": "process",
           "type": "method",
           "kind": "sync",
           "class": "Queue"
         },
-        "role": "consumer",
         "operator": "traceHandler",
         "channel_name": "apm:bee-queue:queue:process",
+        "operation": "process",
+        "role": "consumer",
+        "priority": "critical",
+        "tags": {},
         "context_capture": {
-          "messaging.system": "this.client.server_info.redis_mode",
+          "messaging.system": "'bee-queue'",
           "messaging.destination.name": "this.name",
-          "messaging.operation": "methodName"
-        }
+          "messaging.operation": "'process'",
+          "span.kind": "'consumer'",
+          "messaging.message.id": null
+        },
+        "analysis_score": 100,
+        "selection_reasoning": "Registers a handler function that processes jobs from the queue - creates spans for each job processing attempt by wrapping the user-provided handler",
+        "file_path": "lib/queue.js",
+        "line_number": 932
       },
       {
         "module_name": "bee-queue",
-        "version_range": ">=1.0.0",
-        "file_path": "lib/queue.js",
+        "version_range": "^1.7.1",
         "function_query": {
-          "name": "close",
+          "name": "saveAll",
           "type": "method",
           "kind": "sync",
           "class": "Queue"
         },
-        "role": "producer",
-        "operator": "traceSync",
-        "channel_name": "apm:bee-queue:queue:close",
-        "context_capture": {
-          "messaging.system": "this.client.server_info.redis_mode",
-          "messaging.destination.name": "this.name",
-          "messaging.operation": "methodName"
-        }
-      },
-      {
-        "module_name": "bee-queue",
-        "version_range": ">=1.0.0",
-        "file_path": "lib/queue.js",
-        "function_query": {
-          "name": "connect",
-          "type": "method",
-          "kind": "sync",
-          "class": "Queue"
-        },
-        "role": "producer",
         "operator": "tracePromise",
-        "channel_name": "apm:bee-queue:queue:connect",
+        "channel_name": "apm:bee-queue:queue:saveall",
+        "operation": "produce_bulk",
+        "role": "producer",
+        "priority": "important",
+        "tags": {},
         "context_capture": {
-          "messaging.system": "\"redis\"",
-          "messaging.destination.name": "this.name",
-          "messaging.operation": "\"connect\""
-        }
+          "messaging.system": "'bee-queue'",
+          "messaging.operation": "'produce_bulk'"
+        },
+        "analysis_score": 50,
+        "selection_reasoning": "Bulk job creation method that saves multiple jobs in a pipelined request - batch variant of produce operation",
+        "file_path": "lib/queue.js",
+        "line_number": 932
       }
     ]
   }

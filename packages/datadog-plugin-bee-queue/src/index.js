@@ -2,8 +2,8 @@
 'use strict'
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
-const BeeQueueConsumerPlugin = require('./consumer')
 const BeeQueueProducerPlugin = require('./producer')
+const BeeQueueConsumerPlugin = require('./consumer')
 
 class BeeQueuePlugin extends CompositePlugin {
   static get id () {
@@ -12,8 +12,8 @@ class BeeQueuePlugin extends CompositePlugin {
 
   static get plugins () {
     return {
-      consumer: BeeQueueConsumerPlugin,
-      producer: BeeQueueProducerPlugin
+      producer: BeeQueueProducerPlugin,
+      consumer: BeeQueueConsumerPlugin
     }
   }
 }

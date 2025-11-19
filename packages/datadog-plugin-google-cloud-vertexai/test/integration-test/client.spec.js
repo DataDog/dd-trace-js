@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -12,22 +13,14 @@ const { assert } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([
-        `@google-cloud/vertexai@${version}`,
-        'sinon'
-      ], false, [
-        './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([
+      `@google-cloud/vertexai@${version}`,
+      'sinon'
+    ], false, [
+      './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*'
+    ])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -45,7 +38,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'vertexai.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

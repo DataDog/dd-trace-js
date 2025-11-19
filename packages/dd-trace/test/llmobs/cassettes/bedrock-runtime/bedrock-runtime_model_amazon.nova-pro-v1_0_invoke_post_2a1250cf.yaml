@@ -1,0 +1,52 @@
+interactions:
+- request:
+    body: '{"system":[{"text":"Please respond with one sentence."}],"messages":[{"role":"user","content":[{"text":"What
+      is the capital of France?"}]}],"inferenceConfig":{"maxTokens":512,"topP":0.1,"topK":20,"temperature":0.5}}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      Accept-Encoding:
+      - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '215'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#20.16.0 api/bedrock-runtime#3.422.0
+    method: POST
+    uri: https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.nova-pro-v1:0/invoke
+  response:
+    body:
+      string: '{"output":{"message":{"content":[{"text":"The capital of France is
+        Paris."}],"role":"assistant"}},"stopReason":"end_turn","usage":{"inputTokens":13,"outputTokens":7,"totalTokens":20,"cacheReadInputTokenCount":0,"cacheWriteInputTokenCount":0}}'
+    headers:
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '242'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 02 Oct 2025 19:46:53 GMT
+      X-Amzn-Bedrock-Cache-Read-Input-Token-Count:
+      - '0'
+      X-Amzn-Bedrock-Cache-Write-Input-Token-Count:
+      - '0'
+      X-Amzn-Bedrock-Input-Token-Count:
+      - '13'
+      X-Amzn-Bedrock-Invocation-Latency:
+      - '317'
+      X-Amzn-Bedrock-Output-Token-Count:
+      - '7'
+      x-amzn-RequestId:
+      - 28246f17-fca0-4a5b-bada-a5b715a86d09
+    status:
+      code: 200
+      message: OK
+version: 1

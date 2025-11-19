@@ -85,6 +85,7 @@ only-tracing-with-runtime-metrics-enabled:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing-with-runtime-metrics-enabled
+    DD_RUNTIME_METRICS_ENABLED: "true"
     # Must be set to ensure consistent benchmark result naming and tagging
     CI_JOB_NAME: only-tracing-with-runtime-metrics-enabled
   parallel:

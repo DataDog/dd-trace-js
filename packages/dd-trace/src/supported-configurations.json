@@ -693,6 +693,9 @@
     "DD_TRACE_BEAUTIFUL_LOGS": [
       "A"
     ],
+    "DD_TRACE_BEE_QUEUE_ENABLED": [
+      "A"
+    ],
     "DD_TRACE_BLUEBIRD_ENABLED": [
       "A"
     ],
@@ -1039,6 +1042,9 @@
       "A"
     ],
     "DD_TRACE_MONGOOSE_ENABLED": [
+      "A"
+    ],
+    "DD_TRACE_MQTT_ENABLED": [
       "A"
     ],
     "DD_TRACE_MQUERY_ENABLED": [

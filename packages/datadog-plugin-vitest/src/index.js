@@ -6,6 +6,7 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 const {
   TEST_STATUS,
+  VITEST_POOL,
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
@@ -90,9 +91,9 @@ class VitestPlugin extends CiPlugin {
       onDone(isQuarantined)
     })
 
-    this.addSub('ci:vitest:test:is-modified', ({ modifiedTests, testSuiteAbsolutePath, onDone }) => {
+    this.addSub('ci:vitest:test:is-modified', ({ modifiedFiles, testSuiteAbsolutePath, onDone }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedTests, this.constructor.id)
+      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
 
       onDone(isModified)
     })
@@ -344,7 +345,6 @@ class VitestPlugin extends CiPlugin {
         finishAllTraceSpans(testSuiteSpan)
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
-      // TODO: too frequent flush - find for method in worker to decrease frequency
       this.tracer._exporter.flush(onFinish)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
@@ -373,6 +373,7 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      vitestPool,
       onFinish
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -393,6 +394,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
+      if (vitestPool) {
+        this.testSessionSpan.setTag(VITEST_POOL, vitestPool)
       }
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')

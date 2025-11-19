@@ -2,7 +2,8 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
@@ -18,19 +19,11 @@ const describe = version.NODE_MAJOR >= 20
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'tedious@${version}'`], false, [
-        './packages/datadog-plugin-tedious/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'tedious@${version}'`], false, [
+      './packages/datadog-plugin-tedious/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -48,7 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'tedious.request'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
 
       await res
     }).timeout(20000)

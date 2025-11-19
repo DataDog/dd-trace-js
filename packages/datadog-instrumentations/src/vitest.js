@@ -32,7 +32,7 @@ const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
 const testManagementTestsCh = channel('ci:vitest:test-management-tests')
-const impactedTestsCh = channel('ci:vitest:modified-tests')
+const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
@@ -60,6 +60,7 @@ let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let isSessionStarted = false
+let vitestPool = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -92,7 +93,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      _ddModifiedTests: modifiedTests
+      _ddModifiedFiles: modifiedFiles
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -106,7 +107,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -121,7 +122,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       isImpactedTestsEnabled: false,
-      modifiedTests: {}
+      modifiedFiles: {}
     }
   }
 }
@@ -151,6 +152,18 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
 
 function isCliApiPackage (vitestPackage) {
   return vitestPackage.s?.name === 'startVitest'
+}
+
+function isTestPackage (testPackage) {
+  return testPackage.V?.name === 'VitestTestRunner'
+}
+
+function hasForksPoolWorker (vitestPackage) {
+  return vitestPackage.f?.name === 'ForksPoolWorker'
+}
+
+function hasThreadsPoolWorker (vitestPackage) {
+  return vitestPackage.T?.name === 'ThreadsPoolWorker'
 }
 
 function getSessionStatus (state) {
@@ -240,7 +253,9 @@ function getSortWrapper (sort, frameworkVersion) {
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
       } catch {
         log.warn('Could not send library configuration to workers.')
@@ -272,7 +287,9 @@ function getSortWrapper (sort, frameworkVersion) {
             // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
             // Note: setting this.ctx.config.provide directly does not work because it's cached
             try {
-              const workspaceProject = this.ctx.getCoreWorkspaceProject()
+              const workspaceProject = this.ctx.getCoreWorkspaceProject
+                ? this.ctx.getCoreWorkspaceProject()
+                : this.ctx.getRootProject()
               workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
               workspaceProject._provided._ddKnownTests = knownTests
               workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
@@ -290,7 +307,9 @@ function getSortWrapper (sort, frameworkVersion) {
 
     if (isDiEnabled) {
       try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject()
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
         workspaceProject._provided._ddIsDiEnabled = isDiEnabled
       } catch {
         log.warn('Could not send Dynamic Instrumentation configuration to workers.')
@@ -305,7 +324,9 @@ function getSortWrapper (sort, frameworkVersion) {
       } else {
         const testManagementTests = receivedTestManagementTests
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
           workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
           workspaceProject._provided._ddTestManagementTests = testManagementTests
@@ -316,14 +337,16 @@ function getSortWrapper (sort, frameworkVersion) {
     }
 
     if (isImpactedTestsEnabled) {
-      const { err, modifiedTests } = await getChannelPromise(impactedTestsCh)
+      const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
       if (err) {
         log.error('Could not get modified tests.')
       } else {
         try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject()
+          const workspaceProject = this.ctx.getCoreWorkspaceProject
+            ? this.ctx.getCoreWorkspaceProject()
+            : this.ctx.getRootProject()
           workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
-          workspaceProject._provided._ddModifiedTests = modifiedTests
+          workspaceProject._provided._ddModifiedFiles = modifiedFiles
         } catch {
           log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
         }
@@ -375,6 +398,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      vitestPool,
       onFinish
     })
 
@@ -404,11 +428,27 @@ function getCreateCliWrapper (vitestPackage, frameworkVersion) {
 }
 
 function threadHandler (thread) {
-  if (workerProcesses.has(thread.process)) {
+  const { runtime } = thread
+  let workerProcess
+  if (runtime === 'child_process') {
+    vitestPool = 'child_process'
+    workerProcess = thread.process
+  } else if (runtime === 'worker_threads') {
+    vitestPool = 'worker_threads'
+    workerProcess = thread.thread
+  } else {
+    vitestPool = 'unknown'
+  }
+  if (!workerProcess) {
+    log.error('Vitest error: could not get process or thread from TinyPool#run')
     return
   }
-  workerProcesses.add(thread.process)
-  thread.process.on('message', (message) => {
+
+  if (workerProcesses.has(workerProcess)) {
+    return
+  }
+  workerProcesses.add(workerProcess)
+  workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
         workerReportTraceCh.publish(message.data)
@@ -419,11 +459,7 @@ function threadHandler (thread) {
   })
 }
 
-addHook({
-  name: 'tinypool',
-  versions: ['>=1.0.0'],
-  file: 'dist/index.js'
-}, (TinyPool) => {
+function wrapTinyPoolRun (TinyPool) {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     this.threads.forEach(threadHandler)
@@ -431,25 +467,83 @@ addHook({
     this.threads.forEach(threadHandler)
     return runResult
   })
+}
+
+addHook({
+  name: 'tinypool',
+  // version from tinypool@0.8 was used in vitest@1.6.0
+  versions: ['>=0.8.0 <1.0.0'],
+  file: 'dist/esm/index.js'
+}, (TinyPool) => {
+  wrapTinyPoolRun(TinyPool)
+  return TinyPool
+})
+
+addHook({
+  name: 'tinypool',
+  versions: ['>=1.0.0'],
+  file: 'dist/index.js'
+}, (TinyPool) => {
+  wrapTinyPoolRun(TinyPool)
 
   return TinyPool
 })
+
+function getWrappedOn (on) {
+  return function (event, callback) {
+    if (event !== 'message') {
+      return on.apply(this, arguments)
+    }
+    // `arguments[1]` is the callback function, which
+    // we modify to intercept our messages to not interfere
+    // with vitest's own messages
+    arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
+      if (message.type !== 'Buffer' && Array.isArray(message)) {
+        const [interprocessCode, data] = message
+        if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+          workerReportTraceCh.publish(data)
+        } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+          workerReportLogsCh.publish(data)
+        }
+        // If we execute the callback vitest crashes, as the message is not supported
+        return
+      }
+      return callback.apply(this, arguments)
+    })
+    return on.apply(this, arguments)
+  }
+}
 
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (!isCliApiPackage(cliApiPackage)) {
     return cliApiPackage
   }
   shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+
+  if (hasForksPoolWorker(cliApiPackage)) {
+    // function is async
+    shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
+      vitestPool = 'child_process'
+      this.env.DD_VITEST_WORKER = '1'
+
+      return start.apply(this, arguments)
+    })
+    shimmer.wrap(cliApiPackage.f.prototype, 'on', getWrappedOn)
+  }
+
+  if (hasThreadsPoolWorker(cliApiPackage)) {
+    // function is async
+    shimmer.wrap(cliApiPackage.T.prototype, 'start', start => function () {
+      vitestPool = 'worker_threads'
+      this.env.DD_VITEST_WORKER = '1'
+      return start.apply(this, arguments)
+    })
+    shimmer.wrap(cliApiPackage.T.prototype, 'on', getWrappedOn)
+  }
   return cliApiPackage
 }
 
-addHook({
-  name: 'vitest',
-  versions: ['>=1.6.0'],
-  file: 'dist/runners.js'
-}, (vitestPackage) => {
-  const { VitestTestRunner } = vitestPackage
-
+function wrapVitestTestRunner (VitestTestRunner) {
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
@@ -464,7 +558,7 @@ addHook({
       testManagementAttemptToFixRetries,
       testManagementTests,
       isImpactedTestsEnabled,
-      modifiedTests
+      modifiedFiles
     } = getProvidedContext()
 
     if (isTestManagementTestsEnabled) {
@@ -499,7 +593,7 @@ addHook({
 
     if (isImpactedTestsEnabled) {
       isModifiedCh.publish({
-        modifiedTests,
+        modifiedFiles,
         testSuiteAbsolutePath: task.file.filepath,
         onDone: (isImpacted) => {
           if (isImpacted) {
@@ -744,6 +838,30 @@ addHook({
 
       return result
     })
+}
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/test.*'
+}, (testPackage) => {
+  if (!isTestPackage(testPackage)) {
+    return testPackage
+  }
+
+  wrapVitestTestRunner(testPackage.V)
+
+  return testPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <4.0.0'],
+  file: 'dist/runners.js'
+}, (vitestPackage) => {
+  const { VitestTestRunner } = vitestPackage
+
+  wrapVitestTestRunner(VitestTestRunner)
 
   return vitestPackage
 })

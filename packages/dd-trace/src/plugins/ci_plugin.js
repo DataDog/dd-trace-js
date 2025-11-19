@@ -33,8 +33,9 @@ const {
   DI_DEBUG_ERROR_LINE_SUFFIX,
   getLibraryCapabilitiesTags,
   getPullRequestDiff,
-  getModifiedTestsFromDiff,
-  getPullRequestBaseBranch
+  getModifiedFilesFromDiff,
+  getPullRequestBaseBranch,
+  TEST_IS_TEST_FRAMEWORK_WORKER
 } = require('./util/test')
 const { getRepositoryRoot } = require('./util/git')
 const Plugin = require('./plugin')
@@ -275,11 +276,11 @@ module.exports = class CiPlugin extends Plugin {
       })
     })
 
-    this.addBind(`ci:${this.constructor.id}:modified-tests`, (ctx) => {
+    this.addBind(`ci:${this.constructor.id}:modified-files`, (ctx) => {
       return ctx.currentStore
     })
 
-    this.addSub(`ci:${this.constructor.id}:modified-tests`, ({ onDone }) => {
+    this.addSub(`ci:${this.constructor.id}:modified-files`, ({ onDone }) => {
       const {
         [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
@@ -290,9 +291,10 @@ module.exports = class CiPlugin extends Plugin {
 
       if (baseBranchSha) {
         const diff = getPullRequestDiff(baseBranchSha, commitHeadSha)
-        const modifiedTests = getModifiedTestsFromDiff(diff)
-        if (modifiedTests) {
-          return onDone({ err: null, modifiedTests })
+        const modifiedFiles = getModifiedFilesFromDiff(diff)
+
+        if (modifiedFiles) {
+          return onDone({ err: null, modifiedFiles })
         }
       }
 
@@ -310,6 +312,7 @@ module.exports = class CiPlugin extends Plugin {
           span.parent_id = id(span.parent_id)
 
           if (span.name?.startsWith(`${this.constructor.id}.`)) {
+            span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
             // augment with git information (since it will not be available in the worker)
             for (const key in this.testEnvironmentMetadata) {
               // CAREFUL: this bypasses the metadata/metrics distinction

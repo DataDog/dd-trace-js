@@ -8,7 +8,8 @@ const fs = require('fs')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -50,9 +51,12 @@ const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
-  DD_CAPABILITIES_IMPACTED_TESTS
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  VITEST_POOL,
+  TEST_IS_TEST_FRAMEWORK_WORKER
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
 
@@ -62,20 +66,17 @@ const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
-    let sandbox, cwd, receiver, childProcess, testOutput
+    let cwd, receiver, childProcess, testOutput
 
-    before(async function () {
-      sandbox = await createSandbox([
-        `vitest@${version}`,
-        `@vitest/coverage-istanbul@${version}`,
-        `@vitest/coverage-v8@${version}`,
-        'tinypool'
-      ], true)
-      cwd = sandbox.folder
-    })
+    useSandbox([
+      `vitest@${version}`,
+      `@vitest/coverage-istanbul@${version}`,
+      `@vitest/coverage-v8@${version}`,
+      'tinypool'
+    ], true)
 
-    after(async () => {
-      await sandbox.remove()
+    before(function () {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {
@@ -88,126 +89,151 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
-    it('can run and report tests', (done) => {
-      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-        const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+    const poolConfig = ['forks', 'threads']
 
-        metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+    poolConfig.forEach((poolConfig) => {
+      it(`can run and report tests with pool=${poolConfig}`, async () => {
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+              DD_TEST_SESSION_NAME: 'my-test-session',
+              POOL_CONFIG: poolConfig,
+              DD_SERVICE: undefined
+            },
+            stdio: 'pipe'
           }
-        })
-
-        const events = payloads.flatMap(({ payload }) => payload.events)
-
-        const testSessionEvent = events.find(event => event.type === 'test_session_end')
-        const testModuleEvent = events.find(event => event.type === 'test_module_end')
-        const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-        const testEvents = events.filter(event => event.type === 'test')
-
-        assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
-        assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-        assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
-        assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
-        assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
-        assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
-
-        const passedSuite = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-passed-suite.mjs'
-        )
-        assert.equal(passedSuite.content.meta[TEST_STATUS], 'pass')
-
-        const failedSuite = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-suite.mjs'
-        )
-        assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
-
-        const failedSuiteHooks = testSuiteEvents.find(
-          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs'
-        )
-        assert.equal(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
-
-        assert.includeMembers(testEvents.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
-          ]
         )
 
-        const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-        assert.includeMembers(
-          failedTests.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
-          ]
-        )
+            metadataDicts.forEach(metadata => {
+              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+              }
+            })
 
-        const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
-        assert.includeMembers(
-          skippedTests.map(test => test.content.resource),
-          [
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
-          ]
-        )
+            const testSessionEvent = events.find(event => event.type === 'test_session_end')
 
-        testEvents.forEach(test => {
-          assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
-          assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
-          assert.equal(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-        })
+            if (poolConfig === 'threads') {
+              assert.equal(testSessionEvent.content.meta[VITEST_POOL], 'worker_threads')
+            } else {
+              assert.equal(testSessionEvent.content.meta[VITEST_POOL], 'child_process')
+            }
 
-        testSuiteEvents.forEach(testSuite => {
-          assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
-          assert.isTrue(
-            testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
-          )
-          assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
-          assert.exists(testSuite.content.metrics[DD_HOST_CPU_COUNT])
-        })
-        // TODO: check error messages
-      }).then(() => done()).catch(done)
+            const testModuleEvent = events.find(event => event.type === 'test_module_end')
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-            DD_TEST_SESSION_NAME: 'my-test-session',
-            DD_SERVICE: undefined
-          },
-          stdio: 'pipe'
-        }
-      )
+            assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
+            assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+            assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
+            assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
+            assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
+            assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
+
+            const passedSuite = testSuiteEvents.find(
+              suite =>
+                suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-passed-suite.mjs'
+            )
+            assert.equal(passedSuite.content.meta[TEST_STATUS], 'pass')
+
+            const failedSuite = testSuiteEvents.find(
+              suite =>
+                suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-suite.mjs'
+            )
+            assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
+
+            const failedSuiteHooks = testSuiteEvents.find(
+              suite =>
+                suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs'
+            )
+            assert.equal(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
+
+            assert.includeMembers(testEvents.map(test => test.content.resource),
+              [
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-first-describe can report failed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-first-describe can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-second-describe can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-second-describe can report more',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
+              ]
+            )
+
+            const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
+
+            assert.includeMembers(
+              failedTests.map(test => test.content.resource),
+              [
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-first-describe can report failed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
+              ]
+            )
+
+            const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
+
+            assert.includeMembers(
+              skippedTests.map(test => test.content.resource),
+              [
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
+              ]
+            )
+
+            testEvents.forEach(test => {
+              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
+              if (poolConfig === 'forks') {
+                assert.equal(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+              }
+              assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
+              assert.exists(test.content.metrics[DD_HOST_CPU_COUNT])
+              assert.equal(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+            })
+
+            testSuiteEvents.forEach(testSuite => {
+              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
+              if (poolConfig === 'forks') {
+                assert.equal(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+              }
+              assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
+              assert.isTrue(
+                testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility')
+              )
+              assert.equal(testSuite.content.metrics[TEST_SOURCE_START], 1)
+              assert.exists(testSuite.content.metrics[DD_HOST_CPU_COUNT])
+            })
+          })
+        ])
+      })
     })
 
     context('flaky test retries', () => {
@@ -399,7 +425,10 @@ versions.forEach((version) => {
     })
 
     // total code coverage only works for >=2.0.0
-    if (version === 'latest') {
+    // v4 dropped support for Node 18. Every test but this once passes, so we'll leave them
+    // for now. The breaking change is in https://github.com/vitest-dev/vitest/commit/9a0bf2254
+    // shipped in https://github.com/vitest-dev/vitest/releases/tag/v4.0.0-beta.12
+    if (version === 'latest' && NODE_MAJOR >= 20) {
       const coverageProviders = ['v8', 'istanbul']
 
       coverageProviders.forEach((coverageProvider) => {
@@ -1899,6 +1928,54 @@ versions.forEach((version) => {
 
             runQuarantineTest(done, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
           })
+        })
+
+        it('does not crash if the request to get test management tests fails', async () => {
+          let testOutput = ''
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: false
+          })
+          receiver.setTestManagementTestsResponseCode(500)
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // it is not retried
+              assert.equal(tests.length, 1)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                DD_TRACE_DEBUG: '1'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
+            eventsPromise
+          ])
+          assert.include(testOutput, 'Test management tests could not be fetched')
         })
       })
     }

@@ -20,6 +20,10 @@ const messaging = {
       opName: () => 'bee-queue.send',
       serviceName: identityService
     },
+    mqtt: {
+      opName: () => 'mqtt.send',
+      serviceName: identityService
+    },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
       serviceName: identityService
@@ -47,6 +51,10 @@ const messaging = {
     amqp10: amqpInbound,
     'bee-queue': {
       opName: () => 'bee-queue.process',
+      serviceName: identityService
+    },
+    mqtt: {
+      opName: () => 'mqtt.process',
       serviceName: identityService
     },
     'google-cloud-pubsub': {

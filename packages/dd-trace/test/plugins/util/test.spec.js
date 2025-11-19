@@ -21,7 +21,7 @@ const {
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
   getNumFromKnownTests,
-  getModifiedTestsFromDiff,
+  getModifiedFilesFromDiff,
   isModifiedTest
 } = require('../../../src/plugins/util/test')
 
@@ -378,7 +378,7 @@ describe('getNumFromKnownTests', () => {
   })
 })
 
-describe('getModifiedTestsFromDiff', () => {
+describe('getModifiedFilesFromDiff', () => {
   it('should parse git diff and return modified lines per file', () => {
     const diff = `diff --git a/test/file1.js b/test/file1.js
 index 1234567..89abcde 100644
@@ -401,13 +401,13 @@ index 1234567..89abcde 100644
       'test/file2.js': [5]
     }
 
-    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+    expect(getModifiedFilesFromDiff(diff)).to.eql(expected)
   })
 
   it('should return null for empty or invalid diff', () => {
-    expect(getModifiedTestsFromDiff('')).to.be.null
-    expect(getModifiedTestsFromDiff(null)).to.be.null
-    expect(getModifiedTestsFromDiff(undefined)).to.be.null
+    expect(getModifiedFilesFromDiff('')).to.be.null
+    expect(getModifiedFilesFromDiff(null)).to.be.null
+    expect(getModifiedFilesFromDiff(undefined)).to.be.null
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -427,7 +427,7 @@ index 1234567..89abcde 100644
       'test/file.js': [2, 4, 6]
     }
 
-    expect(getModifiedTestsFromDiff(diff)).to.eql(expected)
+    expect(getModifiedFilesFromDiff(diff)).to.eql(expected)
   })
 })
 
@@ -436,59 +436,59 @@ describe('isModifiedTest', () => {
     const testFramework = 'jest'
 
     it('should return true when test lines overlap with modified lines', () => {
-      const modifiedTests = {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 3, modifiedTests, testFramework)).to.be.true // overlaps with line 2
-      expect(isModifiedTest('test/file.js', 3, 5, modifiedTests, testFramework)).to.be.true // overlaps with line 4
-      expect(isModifiedTest('test/file.js', 5, 7, modifiedTests, testFramework)).to.be.true // overlaps with line 6
+      expect(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework)).to.be.true // overlaps with line 2
+      expect(isModifiedTest('test/file.js', 3, 5, modifiedFiles, testFramework)).to.be.true // overlaps with line 4
+      expect(isModifiedTest('test/file.js', 5, 7, modifiedFiles, testFramework)).to.be.true // overlaps with line 6
     })
 
     it('should return false when test lines do not overlap with modified lines', () => {
-      const modifiedTests = {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 7, 9, modifiedTests, testFramework)).to.be.false
-      expect(isModifiedTest('test/file.js', 0, 1, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/file.js', 7, 9, modifiedFiles, testFramework)).to.be.false
+      expect(isModifiedTest('test/file.js', 0, 1, modifiedFiles, testFramework)).to.be.false
     })
 
     it('should return false when file is not in modified tests', () => {
-      const modifiedTests = {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 3, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/other.js', 1, 3, modifiedFiles, testFramework)).to.be.false
     })
 
     it('should handle single line tests', () => {
-      const modifiedTests = {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 2, 2, modifiedTests, testFramework)).to.be.true
-      expect(isModifiedTest('test/file.js', 3, 3, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/file.js', 2, 2, modifiedFiles, testFramework)).to.be.true
+      expect(isModifiedTest('test/file.js', 3, 3, modifiedFiles, testFramework)).to.be.false
     })
   })
 
   describe('when tests frameworks do not support granular impacted tests', () => {
     const testFramework = 'playwright'
 
-    it('should return true when test file is in modifiedTests', () => {
-      const modifiedTests = {
+    it('should return true when test file is in modifiedFiles', () => {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6],
         'test/other.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/file.js', 1, 10, modifiedTests, testFramework)).to.be.true
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.true
+      expect(isModifiedTest('test/file.js', 1, 10, modifiedFiles, testFramework)).to.be.true
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework)).to.be.true
     })
 
-    it('should return false when test file is not in modifiedTests', () => {
-      const modifiedTests = {
+    it('should return false when test file is not in modifiedFiles', () => {
+      const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      expect(isModifiedTest('test/other.js', 1, 10, modifiedTests, testFramework)).to.be.false
+      expect(isModifiedTest('test/other.js', 1, 10, modifiedFiles, testFramework)).to.be.false
     })
   })
 
-  it('should handle empty modifiedTests object', () => {
+  it('should handle empty modifiedFiles object', () => {
     expect(isModifiedTest('test/file.js', 1, 10, {}, 'jest')).to.be.false
   })
 })

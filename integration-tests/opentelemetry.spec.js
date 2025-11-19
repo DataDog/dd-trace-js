@@ -1,6 +1,6 @@
 'use strict'
 
-const { FakeAgent, createSandbox } = require('./helpers')
+const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
 const { assert } = require('chai')
@@ -52,30 +52,29 @@ function nearNow (ts, now = Date.now(), range = 1000) {
 describe('opentelemetry', () => {
   let agent
   let proc
-  let sandbox
   let cwd
   const timeout = 5000
+  const dependencies = [
+    '@opentelemetry/api@1.8.0',
+    '@opentelemetry/instrumentation',
+    '@opentelemetry/instrumentation-http',
+    '@opentelemetry/instrumentation-express@0.47.1',
+    'express@4', // TODO: Remove pinning once our tests support Express v5
+    '@opentelemetry/sdk-node',
+    // Needed because sdk-node doesn't start a tracer without an exporter
+    '@opentelemetry/exporter-jaeger'
+  ]
+
+  useSandbox(dependencies)
 
   before(async () => {
-    const dependencies = [
-      '@opentelemetry/api@1.8.0',
-      '@opentelemetry/instrumentation',
-      '@opentelemetry/instrumentation-http',
-      '@opentelemetry/instrumentation-express@0.47.1',
-      'express@4', // TODO: Remove pinning once our tests support Express v5
-      '@opentelemetry/sdk-node',
-      // Needed because sdk-node doesn't start a tracer without an exporter
-      '@opentelemetry/exporter-jaeger'
-    ]
-    sandbox = await createSandbox(dependencies)
-    cwd = sandbox.folder
+    cwd = sandboxCwd()
     agent = await new FakeAgent().start()
   })
 
   after(async () => {
     proc.kill()
     await agent.stop()
-    await sandbox.remove()
   })
 
   it("should not capture telemetry DD and OTEL vars don't conflict", async () => {

@@ -1,24 +1,18 @@
 'use strict'
 
 const { useEnv } = require('../../../../../../integration-tests/helpers')
-const chai = require('chai')
-const { expect } = chai
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
 
 const { NODE_MAJOR } = require('../../../../../../version')
 
 const {
-  expectedLLMObsLLMSpanEvent,
-  expectedLLMObsNonLLMSpanEvent,
-  deepEqualWithMockValues,
+  assertLlmObsSpanEvent,
   MOCK_STRING,
   useLlmObs,
   MOCK_NUMBER,
   MOCK_OBJECT
 } = require('../../util')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
@@ -37,11 +31,14 @@ describe('Plugin', () => {
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
     let openai
+    let openaiVersion
 
     beforeEach(function () {
       ai = require(`../../../../../../versions/ai@${version}`).get()
 
-      const OpenAI = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
+      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      openaiVersion = OpenAIModule.version()
+      const OpenAI = OpenAIModule.get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
         compatibility: 'strict'
@@ -49,33 +46,41 @@ describe('Plugin', () => {
     })
 
     it('creates a span for generateText', async () => {
-      await ai.generateText({
+      const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
-        maxTokens: 100,
         temperature: 0.5
-      })
+      }
+
+      if (semifies(realVersion, '>=5.0.0')) {
+        options.maxOutputTokens = 100
+      } else {
+        options.maxTokens = 100
+      }
+
+      await ai.generateText(options)
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {}
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+        expectedWorkflowMetadata.maxOutputTokens = 100
+      } else {
+        expectedWorkflowMetadata.maxSteps = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
         outputValue: MOCK_STRING,
-        metadata: {
-          maxTokens: 100,
-          temperature: 0.5,
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' },
       })
-
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -91,12 +96,9 @@ describe('Plugin', () => {
           max_tokens: 100,
           temperature: 0.5,
         },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
 
     it('creates a span for generateObject', async () => {
@@ -118,22 +120,25 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {
+        schema: MOCK_OBJECT,
+        output: 'object',
+      }
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'generateObject',
         spanKind: 'workflow',
         inputValue: 'Invent a character for a video game',
         outputValue: MOCK_STRING,
-        metadata: {
-          schema: MOCK_OBJECT,
-          output: 'object',
-          maxRetries: MOCK_NUMBER,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -142,12 +147,9 @@ describe('Plugin', () => {
         name: 'doGenerate',
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' }
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
 
     it('creates a span for embed', async () => {
@@ -158,20 +160,24 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowSpanEvent = {
         span: apmSpans[0],
         name: 'embed',
         spanKind: 'workflow',
         inputValue: 'hello world',
         outputValue: '[1 embedding(s) returned with size 1536]',
-        metadata: {
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
-      })
+        tags: { ml_app: 'test', integration: 'ai' }
+      }
 
-      const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowSpanEvent.metadata = {
+          maxRetries: MOCK_NUMBER
+        }
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'embedding',
@@ -180,12 +186,9 @@ describe('Plugin', () => {
         name: 'doEmbed',
         inputDocuments: [{ text: 'hello world' }],
         outputValue: '[1 embedding(s) returned with size 1536]',
-        tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' }
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedEmbeddingSpan)
     })
 
     it('creates a span for embedMany', async () => {
@@ -196,20 +199,23 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowSpanEvent = {
         span: apmSpans[0],
         name: 'embedMany',
         spanKind: 'workflow',
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
         outputValue: '[2 embedding(s) returned with size 1536]',
-        metadata: {
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
-      })
+        tags: { ml_app: 'test', integration: 'ai' }
+      }
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowSpanEvent.metadata = {
+          maxRetries: MOCK_NUMBER
+        }
+      }
 
-      const expectedEmbeddingSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'embedding',
@@ -218,22 +224,25 @@ describe('Plugin', () => {
         name: 'doEmbed',
         inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
         outputValue: '[2 embedding(s) returned with size 1536]',
-        tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' }
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedEmbeddingSpan)
     })
 
     it('creates a span for streamText', async () => {
-      const result = await ai.streamText({
+      const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
         temperature: 0.5
-      })
+      }
+      if (semifies(realVersion, '>=5.0.0')) {
+        options.maxOutputTokens = 100
+      } else {
+        options.maxTokens = 100
+      }
+      const result = await ai.streamText(options)
 
       const textStream = result.textStream
 
@@ -241,20 +250,22 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedMetadata =
+        semifies(realVersion, '>=5.0.0')
+          ? { maxRetries: MOCK_NUMBER, maxOutputTokens: 100 }
+          : { maxSteps: MOCK_NUMBER }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
         outputValue: 'Hello! How can I assist you today?', // assert text from stream is fully captured
-        metadata: {
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metadata: expectedMetadata,
+        tags: { ml_app: 'test', integration: 'ai' }
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -265,17 +276,14 @@ describe('Plugin', () => {
           { content: 'You are a helpful assistant', role: 'system' },
           { content: 'Hello, OpenAI!', role: 'user' }
         ],
+        outputMessages: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
         },
-        outputMessages: [{ content: 'Hello! How can I assist you today?', role: 'assistant' }],
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' }
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
 
     it('creates a span for streamObject', async () => {
@@ -303,21 +311,25 @@ describe('Plugin', () => {
 
       const expectedCharacter = { name: 'Zara Nightshade', age: 28, height: "5'7\"" }
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {
+        schema: MOCK_OBJECT,
+        output: 'object',
+      }
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'streamObject',
         spanKind: 'workflow',
         inputValue: 'Invent a character for a video game',
         outputValue: JSON.stringify(expectedCharacter),
-        metadata: {
-          schema: MOCK_OBJECT,
-          output: 'object',
-          maxRetries: MOCK_NUMBER,
-        },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' }
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -329,17 +341,14 @@ describe('Plugin', () => {
           content: JSON.stringify(expectedCharacter),
           role: 'assistant'
         }],
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' }
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' }
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
 
     it('creates a span for a tool call', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -360,7 +369,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -372,43 +381,58 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
       }
 
-      await ai.generateText({
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
+      }
+
+      const result = await ai.generateText({
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
+
+      const toolCallId = result.steps[0].toolCalls[0].toolCallId
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const workflowSpan = llmobsSpans[0]
-      const llmSpan = llmobsSpans[1]
-      const toolCallSpan = llmobsSpans[2]
-      const llmSpan2 = llmobsSpans[3]
+      let expectedFinalOutput
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
-        : 'The current weather in Tokyo is 72°F.'
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput = 'The current temperature in Tokyo is 72°F.'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details about the weather, just let me know!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {}
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+      } else {
+        expectedWorkflowMetadata.maxSteps = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'generateText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
         outputValue: expectedFinalOutput,
-        metadata: {
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -423,7 +447,7 @@ describe('Plugin', () => {
           content: MOCK_STRING,
           role: 'assistant',
           tool_calls: [{
-            tool_id: MOCK_STRING,
+            tool_id: toolCallId,
             name: 'weather',
             arguments: {
               location: 'Tokyo'
@@ -431,25 +455,21 @@ describe('Plugin', () => {
             type: 'function'
           }]
         }],
-        metadata: {
-          max_tokens: 100,
-          temperature: 0.5,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[2], {
         span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         name: 'weather',
         spanKind: 'tool',
         inputValue: '{"location":"Tokyo"}',
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[3], {
         span: apmSpans[3],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -463,7 +483,7 @@ describe('Plugin', () => {
             content: '',
             role: 'assistant',
             tool_calls: [{
-              tool_id: MOCK_STRING,
+              tool_id: toolCallId,
               name: 'weather',
               arguments: {
                 location: 'Tokyo'
@@ -474,27 +494,18 @@ describe('Plugin', () => {
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: MOCK_STRING
+            tool_id: toolCallId
           }
         ],
         outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
-        metadata: {
-          max_tokens: 100,
-          temperature: 0.5,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
-
-      expect(workflowSpan).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmSpan).to.deepEqualWithMockValues(expectedLlmSpan)
-      expect(toolCallSpan).to.deepEqualWithMockValues(expectedToolCallSpan)
-      expect(llmSpan2).to.deepEqualWithMockValues(expectedLlmSpan2)
     })
 
     it('created a span for a tool call from a stream', async () => {
       let tools
-      let maxStepsArg = {}
+      let additionalOptions = {}
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -515,7 +526,7 @@ describe('Plugin', () => {
           })
         }
 
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
+        additionalOptions = { stopWhen: ai.stepCountIs(5) }
       } else {
         tools = [ai.tool({
           id: 'weather',
@@ -527,7 +538,15 @@ describe('Plugin', () => {
           })
         })]
 
-        maxStepsArg = { maxSteps: 5 }
+        additionalOptions = { maxSteps: 5 }
+      }
+
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        additionalOptions.providerOptions = {
+          openai: {
+            store: false
+          }
+        }
       }
 
       const result = await ai.streamText({
@@ -535,39 +554,49 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'What is the weather in Tokyo?',
         tools,
-        ...maxStepsArg,
+        ...additionalOptions
       })
 
       const textStream = result.textStream
 
       for await (const part of textStream) {} // eslint-disable-line
 
+      const stepsPromise = result._steps ?? result.stepsPromise
+      const steps = stepsPromise.status.value
+      const toolCallId = steps[0].toolCalls[0].toolCallId
+
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const workflowSpan = llmobsSpans[0]
-      const llmSpan = llmobsSpans[1]
-      const toolCallSpan = llmobsSpans[2]
-      const llmSpan2 = llmobsSpans[3]
+      let expectedFinalOutput
 
-      const expectedFinalOutput = semifies(realVersion, '>=5.0.0')
-        ? 'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
-        : 'The current weather in Tokyo is 72°F.'
+      if (semifies(openaiVersion, '>=2.0.50')) {
+        expectedFinalOutput =
+        'The current temperature in Tokyo is 72°F. If you need more detailed weather information, feel free to ask!'
+      } else if (semifies(realVersion, '>=5.0.0')) {
+        expectedFinalOutput =
+          'The current temperature in Tokyo is 72°F. If you need more details or specific forecasts, feel free to ask!'
+      } else {
+        expectedFinalOutput = 'The current weather in Tokyo is 72°F.'
+      }
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {}
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+      } else {
+        expectedWorkflowMetadata.maxSteps = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'streamText',
         spanKind: 'workflow',
         inputValue: 'What is the weather in Tokyo?',
         outputValue: expectedFinalOutput,
-        metadata: {
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -582,7 +611,7 @@ describe('Plugin', () => {
           content: MOCK_STRING,
           role: 'assistant',
           tool_calls: [{
-            tool_id: MOCK_STRING,
+            tool_id: toolCallId,
             name: 'weather',
             arguments: {
               location: 'Tokyo'
@@ -590,34 +619,28 @@ describe('Plugin', () => {
             type: 'function'
           }]
         }],
-        metadata: {
-          max_tokens: 100,
-          temperature: 0.5,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedToolCallSpan = expectedLLMObsNonLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[2], {
         span: apmSpans[2],
         parentId: llmobsSpans[0].span_id,
         /**
-         * MOCK_STRING used as the stream implementation for ai does not finish the initial llm spans
+         * Before ai@4.0.2, the stream implementation did not finish the initial llm spans
          * first to associate the tool call id with the tool itself (by matching descriptions).
          *
-         * Usually, this would mean the tool call name is 'toolCall'.
-         *
-         * However, because we used mocked responses, the second time this test is called, the tool call
-         * will have the name 'weather' instead. We just assert that the name exists and is a string to simplify.
+         * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
+         * versions. In v5+, this is resolved as the tool name is not its index in the tools array, but its actual name.
          */
-        name: MOCK_STRING,
+        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') ? 'toolCall' : 'weather',
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan2 = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[3], {
         span: apmSpans[3],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -631,7 +654,7 @@ describe('Plugin', () => {
             content: '',
             role: 'assistant',
             tool_calls: [{
-              tool_id: MOCK_STRING,
+              tool_id: toolCallId,
               name: 'weather',
               arguments: {
                 location: 'Tokyo'
@@ -642,55 +665,55 @@ describe('Plugin', () => {
           {
             content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
             role: 'tool',
-            tool_id: MOCK_STRING
+            tool_id: toolCallId
           }
         ],
         outputMessages: [{ content: expectedFinalOutput, role: 'assistant' }],
-        metadata: {
-          max_tokens: 100,
-          temperature: 0.5,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
-
-      expect(workflowSpan).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmSpan).to.deepEqualWithMockValues(expectedLlmSpan)
-      expect(toolCallSpan).to.deepEqualWithMockValues(expectedToolCallSpan)
-      expect(llmSpan2).to.deepEqualWithMockValues(expectedLlmSpan2)
     })
 
     it('creates a span that respects the functionId', async () => {
-      await ai.generateText({
+      const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
-        maxTokens: 100,
         temperature: 0.5,
         experimental_telemetry: {
           functionId: 'test'
         }
-      })
+      }
+
+      if (semifies(realVersion, '>=5.0.0')) {
+        options.maxOutputTokens = 100
+      } else {
+        options.maxTokens = 100
+      }
+
+      await ai.generateText(options)
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowSpan = expectedLLMObsNonLLMSpanEvent({
+      const expectedWorkflowMetadata = {}
+      if (semifies(realVersion, '>=5.0.0')) {
+        expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
+        expectedWorkflowMetadata.maxOutputTokens = 100
+      } else {
+        expectedWorkflowMetadata.maxSteps = MOCK_NUMBER
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
         name: 'test.generateText',
         spanKind: 'workflow',
         inputValue: 'Hello, OpenAI!',
         outputValue: MOCK_STRING,
-        metadata: {
-          maxTokens: 100,
-          temperature: 0.5,
-          maxSteps: MOCK_NUMBER,
-          maxRetries: MOCK_NUMBER,
-        },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metadata: expectedWorkflowMetadata,
+        tags: { ml_app: 'test', integration: 'ai' },
       })
 
-      const expectedLlmSpan = expectedLLMObsLLMSpanEvent({
+      assertLlmObsSpanEvent(llmobsSpans[1], {
         span: apmSpans[1],
         parentId: llmobsSpans[0].span_id,
         spanKind: 'llm',
@@ -706,12 +729,9 @@ describe('Plugin', () => {
           max_tokens: 100,
           temperature: 0.5,
         },
-        tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        tags: { ml_app: 'test', language: 'javascript', integration: 'ai' },
+        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        tags: { ml_app: 'test', integration: 'ai' },
       })
-
-      expect(llmobsSpans[0]).to.deepEqualWithMockValues(expectedWorkflowSpan)
-      expect(llmobsSpans[1]).to.deepEqualWithMockValues(expectedLlmSpan)
     })
   })
 })

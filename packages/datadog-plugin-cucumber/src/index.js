@@ -51,7 +51,8 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
+
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
 class CucumberPlugin extends CiPlugin {
@@ -407,7 +408,7 @@ class CucumberPlugin extends CiPlugin {
     this.addSub('ci:cucumber:is-modified-test', ({
       scenarios,
       testFileAbsolutePath,
-      modifiedTests,
+      modifiedFiles,
       stepIds,
       stepDefinitions,
       setIsModified
@@ -418,7 +419,7 @@ class CucumberPlugin extends CiPlugin {
           testScenarioPath,
           scenario.location.line,
           scenario.steps[scenario.steps.length - 1].location.line,
-          modifiedTests,
+          modifiedFiles,
           'cucumber'
         )
         if (isModified) {
@@ -436,7 +437,7 @@ class CucumberPlugin extends CiPlugin {
           stepDefinition.uri,
           testStartLineStep,
           testEndLineStep,
-          modifiedTests,
+          modifiedFiles,
           'cucumber'
         )
         if (isModified) {

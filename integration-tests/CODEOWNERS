@@ -1,2 +1,3 @@
 # CODEOWNERS for testing purposes
 ci-visibility/subproject @datadog-dd-trace-js
+ci-visibility/ @datadog-dd-trace-js

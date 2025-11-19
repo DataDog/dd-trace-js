@@ -99,6 +99,13 @@ describe('Remote Config index', () => {
       expect(rc.setProductHandler).to.not.have.been.called
     })
 
+    it('should always enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
+      remoteConfig.enable(config)
+
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
+    })
+
     describe('ASM_FEATURES remote config listener', () => {
       let listener
 
@@ -214,6 +221,8 @@ describe('Remote Config index', () => {
       RemoteConfigCapabilities.ASM_CUSTOM_RULES,
       RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE,
       RemoteConfigCapabilities.ASM_TRUSTED_IPS,
+      RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES,
+      RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS,
       RemoteConfigCapabilities.ASM_EXCLUSION_DATA,
       RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT,
       RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT,

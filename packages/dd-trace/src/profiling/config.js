@@ -25,6 +25,7 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED, // used for testing
+      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
@@ -42,7 +43,6 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_UPLOAD_TIMEOUT,
-      DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_SERVICE,
@@ -242,6 +242,26 @@ class Config {
 
     this.profilers = ensureProfilers(profilers, this)
   }
+
+  get systemInfoReport () {
+    const report = {
+      asyncContextFrameEnabled: this.asyncContextFrameEnabled,
+      codeHotspotsEnabled: this.codeHotspotsEnabled,
+      cpuProfilingEnabled: this.cpuProfilingEnabled,
+      debugSourceMaps: this.debugSourceMaps,
+      endpointCollectionEnabled: this.endpointCollectionEnabled,
+      heapSamplingInterval: this.heapSamplingInterval,
+      oomMonitoring: { ...this.oomMonitoring },
+      profilerTypes: this.profilers.map(p => p.type),
+      sourceMap: this.sourceMap,
+      timelineEnabled: this.timelineEnabled,
+      timelineSamplingEnabled: this.timelineSamplingEnabled,
+      uploadCompression: { ...this.uploadCompression },
+      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled
+    }
+    delete report.oomMonitoring.exportCommand
+    return report
+  }
 }
 
 module.exports = { Config }
@@ -249,9 +269,27 @@ module.exports = { Config }
 function getProfilers ({
   DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS
 }) {
-  // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
+  // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to space + wall
   // Use a Set to avoid duplicates
-  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'wall,space').split(','))
+  // NOTE: space profiler is very deliberately in the first position. This way
+  // when profilers are stopped sequentially one after the other to create
+  // snapshots the space profile won't include memory taken by profiles created
+  // before it in the sequence. That memory is ultimately transient and will be
+  // released when all profiles are subsequently encoded.
+  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'space,wall').split(','))
+
+  let spaceExplicitlyEnabled = false
+  // Add/remove space depending on the value of DD_PROFILING_HEAP_ENABLED
+  if (DD_PROFILING_HEAP_ENABLED != null) {
+    if (isTrue(DD_PROFILING_HEAP_ENABLED)) {
+      if (!profilers.has('space')) {
+        profilers.add('space')
+        spaceExplicitlyEnabled = true
+      }
+    } else if (isFalse(DD_PROFILING_HEAP_ENABLED)) {
+      profilers.delete('space')
+    }
+  }
 
   // Add/remove wall depending on the value of DD_PROFILING_WALLTIME_ENABLED
   if (DD_PROFILING_WALLTIME_ENABLED != null) {
@@ -259,19 +297,23 @@ function getProfilers ({
       profilers.add('wall')
     } else if (isFalse(DD_PROFILING_WALLTIME_ENABLED)) {
       profilers.delete('wall')
+      profilers.delete('cpu') // remove alias too
     }
   }
 
-  // Add/remove wall depending on the value of DD_PROFILING_HEAP_ENABLED
-  if (DD_PROFILING_HEAP_ENABLED != null) {
-    if (isTrue(DD_PROFILING_HEAP_ENABLED)) {
-      profilers.add('space')
-    } else if (isFalse(DD_PROFILING_HEAP_ENABLED)) {
-      profilers.delete('space')
+  const profilersArray = [...profilers]
+  // If space was added through DD_PROFILING_HEAP_ENABLED, ensure it is in the
+  // first position. Basically, the only way for it not to be in the first
+  // position is if it was explicitly specified in a different position in
+  // DD_PROFILING_PROFILERS.
+  if (spaceExplicitlyEnabled) {
+    const spaceIdx = profilersArray.indexOf('space')
+    if (spaceIdx > 0) {
+      profilersArray.splice(spaceIdx, 1)
+      profilersArray.unshift('space')
     }
   }
-
-  return [...profilers]
+  return profilersArray
 }
 
 function getExportStrategy (name, options) {

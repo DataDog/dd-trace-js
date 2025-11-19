@@ -169,13 +169,13 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:is-modified', ({ modifiedTests, file, onDone }) => {
+    this.addSub('ci:mocha:test:is-modified', ({ modifiedFiles, file, onDone }) => {
       const testPath = getTestSuitePath(file, this.repositoryRoot)
       const isModified = isModifiedTest(
         testPath,
         null,
         null,
-        modifiedTests,
+        modifiedFiles,
         this.constructor.id
       )
 

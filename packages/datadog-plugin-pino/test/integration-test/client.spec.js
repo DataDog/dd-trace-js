@@ -2,8 +2,9 @@
 
 const {
   FakeAgent,
-  createSandbox,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -12,19 +13,14 @@ const { expect } = require('chai')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   withVersions('pino', 'pino', version => {
-    before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'pino@${version}'`],
-        false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'pino')
-    })
+    useSandbox([`'pino@${version}'`],
+      false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
 
-    after(async () => {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server.mjs', 'pino')
     })
 
     beforeEach(async () => {
@@ -39,7 +35,7 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
+          sandboxCwd(),
           variants[variant],
           agent.port,
           (data) => {

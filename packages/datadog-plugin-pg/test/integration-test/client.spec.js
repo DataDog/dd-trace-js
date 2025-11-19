@@ -2,9 +2,10 @@
 
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
@@ -14,15 +15,14 @@ const semver = require('semver')
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   withVersions('pg', 'pg', (version, _, realVersion) => {
+    useSandbox([`'pg@${version}'`], false, [
+      './packages/datadog-plugin-pg/test/integration-test/*'])
+
     before(async function () {
-      this.timeout(20000)
-      sandbox = await createSandbox([`'pg@${version}'`], false, [
-        './packages/datadog-plugin-pg/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', {
+      variants = varySandbox('server.mjs', {
         default: 'import pg from \'pg\'',
         star: semver.satisfies(realVersion, '<8.15.0')
           ? 'import * as mod from \'pg\'; const pg = { Client: mod.Client || mod.default.Client }'
@@ -31,10 +31,6 @@ describe('esm', () => {
           ? 'import { default as pg } from \'pg\';'
           : 'import { Client } from \'pg\'; const pg = { Client }'
       })
-    })
-
-    after(async () => {
-      await sandbox.remove()
     })
 
     beforeEach(async () => {
@@ -54,7 +50,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'pg.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

@@ -52,9 +52,9 @@ describe('config', () => {
 
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
-    expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
-    expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
+    expect(config.profilers[0]).to.be.an.instanceof(SpaceProfiler)
+    expect(config.profilers[1]).to.be.an.instanceof(WallProfiler)
+    expect(config.profilers[1].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
     expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
     expect(config.uploadCompression.method).to.equal('gzip')
@@ -175,6 +175,40 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+  })
+
+  it('should ensure space profiler is ordered first with DD_PROFILING_HEAP_ENABLED', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_HEAP_ENABLED: '1'
+    }
+    const options = {
+      logger: nullLogger
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
+    expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
+    expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
+  })
+
+  it('should ensure space profiler order is preserved when explicitly set with DD_PROFILING_PROFILERS', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall,space',
+      DD_PROFILING_HEAP_ENABLED: '1'
+    }
+    const options = {
+      logger: nullLogger
+    }
+
+    const config = new Config(options)
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(2 + (samplingContextsAvailable ? 1 : 0))
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[1]).to.be.an.instanceOf(SpaceProfiler)
   })
 
   it('should be able to read some env vars', () => {
@@ -403,6 +437,45 @@ describe('config', () => {
       })
     } else {
       expect(config.oomMonitoring.enabled).to.be.false
+    }
+  })
+
+  it('should allow configuring exporters by string or string array', async () => {
+    const checks = [
+      'agent',
+      ['agent']
+    ]
+
+    for (const exporters of checks) {
+      const config = new Config({
+        sourceMap: false,
+        exporters
+      })
+
+      expect(config.exporters[0].export).to.be.a('function')
+    }
+  })
+
+  it('should allow configuring profilers by string or string arrays', async () => {
+    const checks = [
+      ['space', SpaceProfiler],
+      ['wall', WallProfiler, EventsProfiler],
+      ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
+      ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
+      [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
+      [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
+    ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
+
+    for (const [profilers, ...expected] of checks) {
+      const config = new Config({
+        sourceMap: false,
+        profilers
+      })
+
+      expect(config.profilers.length).to.equal(expected.length)
+      for (let i = 0; i < expected.length; i++) {
+        expect(config.profilers[i]).to.be.instanceOf(expected[i])
+      }
     }
   })
 

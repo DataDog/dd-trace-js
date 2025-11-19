@@ -25,7 +25,7 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 const testManagementTestsCh = channel('ci:cucumber:test-management-tests')
-const impactedTestsCh = channel('ci:cucumber:modified-tests')
+const modifiedFilesCh = channel('ci:cucumber:modified-files')
 const isModifiedCh = channel('ci:cucumber:is-modified-test')
 
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
@@ -80,7 +80,7 @@ let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
-let modifiedTests = {}
+let modifiedFiles = {}
 let numTestRetries = 0
 let knownTests = {}
 let skippedSuites = []
@@ -259,7 +259,7 @@ function wrapRun (pl, isLatestVersion, version) {
     testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => async (testCase) => {
+      this.eventBroadcaster.on('envelope', async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -289,7 +289,7 @@ function wrapRun (pl, isLatestVersion, version) {
             testStartCh.runStores(newCtx, () => {})
           }
         }
-      }))
+      })
       let promise
 
       testFnCh.runStores(ctx, () => {
@@ -537,9 +537,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     if (isImpactedTestsEnabled) {
-      const impactedTestsResponse = await getChannelPromise(impactedTestsCh)
+      const impactedTestsResponse = await getChannelPromise(modifiedFilesCh)
       if (!impactedTestsResponse.err) {
-        modifiedTests = impactedTestsResponse.modifiedTests
+        modifiedFiles = impactedTestsResponse.modifiedFiles
       }
     }
 
@@ -655,7 +655,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       isModifiedCh.publish({
         scenarios,
         testFileAbsolutePath: gherkinDocument.uri,
-        modifiedTests,
+        modifiedFiles,
         stepIds,
         stepDefinitions: this.supportCodeLibrary.stepDefinitions,
         setIsModified
@@ -1000,7 +1000,7 @@ addHook({
 
     if (isImpactedTestsEnabled) {
       this.options.worldParameters._ddImpactedTestsEnabled = isImpactedTestsEnabled
-      this.options.worldParameters._ddModifiedTests = modifiedTests
+      this.options.worldParameters._ddModifiedFiles = modifiedFiles
     }
 
     return startWorker.apply(this, arguments)
@@ -1036,7 +1036,7 @@ addHook({
       }
       isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
       if (isImpactedTestsEnabled) {
-        modifiedTests = this.options.worldParameters._ddModifiedTests
+        modifiedFiles = this.options.worldParameters._ddModifiedFiles
       }
     }
   )
