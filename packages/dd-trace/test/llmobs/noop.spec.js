@@ -3,7 +3,9 @@
 const { expect } = require('chai')
 const { describe, it, before } = require('mocha')
 
-describe('noop', () => {
+const assert = require('node:assert')
+
+describe.only('noop', () => {
   let tracer
   let llmobs
 
@@ -12,12 +14,45 @@ describe('noop', () => {
     llmobs = tracer.llmobs
   })
 
-  const nonTracingOps = ['enable', 'disable', 'annotate', 'exportSpan', 'submitEvaluation', 'flush']
-  for (const op of nonTracingOps) {
-    it(`using "${op}" should not throw`, () => {
-      llmobs[op]()
+  it('using "enable" should not throw', () => {
+    llmobs.enable()
+  })
+
+  it('using "disable" should not throw', () => {
+    llmobs.disable()
+  })
+
+  it('using "annotate" should not throw', () => {
+    llmobs.annotate()
+  })
+
+  it('using "exportSpan" should not throw', () => {
+    llmobs.exportSpan()
+  })
+
+  it('using "submitEvaluation" should not throw', () => {
+    llmobs.submitEvaluation()
+  })
+
+  it('using "flush" should not throw', () => {
+    llmobs.flush()
+  })
+
+  it('using "registerProcessor" should not throw', () => {
+    llmobs.registerProcessor(() => {})
+  })
+
+  it('using "deregisterProcessor" should not throw', () => {
+    llmobs.deregisterProcessor()
+  })
+
+  it('using "annotationContext" should not throw', () => {
+    const result = llmobs.annotationContext({}, () => {
+      return 5
     })
-  }
+
+    assert.equal(result, 5)
+  })
 
   describe('trace', () => {
     it('should not throw with just a span', () => {
