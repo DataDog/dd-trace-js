@@ -21,7 +21,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       ? messages.slice(1).map(msg => this._extractSpanLink(msg.attributes)).filter(Boolean)
       : []
 
-    // Extract parent from first message
     const firstAttrs = messages[0]?.attributes
     const parentData = firstAttrs?.['x-datadog-trace-id'] && firstAttrs['x-datadog-parent-id']
       ? {
@@ -32,7 +31,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         }
       : null
 
-    // Create pubsub.request span
     const topicName = topic.split('/').pop() || topic
     const batchSpan = this.startSpan({
       childOf: parentData ? this._extractParentContext(parentData) : undefined,
@@ -57,12 +55,9 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     const batchTraceId = spanCtx.toTraceId()
     const batchSpanId = spanCtx.toSpanId()
     const batchTraceIdUpper = spanCtx._trace.tags['_dd.p.tid']
-
-    // Convert to hex for storage (simpler, used directly by span links)
     const batchTraceIdHex = BigInt(batchTraceId).toString(16).padStart(16, '0')
     const batchSpanIdHex = BigInt(batchSpanId).toString(16).padStart(16, '0')
 
-    // Add span links as metadata
     if (spanLinkData.length) {
       batchSpan.setTag('_dd.span_links', JSON.stringify(
         spanLinkData.map(link => ({
@@ -73,7 +68,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       ))
     }
 
-    // Add metadata to all messages
     messages.forEach((msg, i) => {
       msg.attributes = msg.attributes || {}
 
@@ -119,7 +113,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       ctx.batchSpan.setTag('error', ctx.error)
       ctx.batchSpan.finish()
     }
-    return super.bindError(ctx)
+    return ctx.parentStore
   }
 
   _extractSpanLink (attrs) {
