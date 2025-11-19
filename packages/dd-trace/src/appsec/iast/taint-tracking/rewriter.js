@@ -185,7 +185,8 @@ function enableRewriter (telemetryVerbosity) {
 function isEsmConfigured () {
   return (isFlagPresent('--loader') ||
     isFlagPresent('--experimental-loader') ||
-    isFlagPresent('--import'))
+    isFlagPresent('dd-trace/initialize.mjs')) ||
+    isFlagPresent('dd-trace/register.js')
 }
 
 let enableEsmRewriter = function (telemetryVerbosity) {
