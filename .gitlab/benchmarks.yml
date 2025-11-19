@@ -30,7 +30,7 @@ variables:
       - data_integrity_failure
       - runner_system_failure
       - scheduler_failure
-      - api_failures
+      - api_failure
 
 benchmarks-pr-comment:
   stage: benchmarks-pr-comment
