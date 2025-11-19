@@ -78,7 +78,6 @@ function wrapMethod (method) {
     let restoredStore = null
     const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
     if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
-      // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
         const storedContext = ackContextMap.get(ackId)
         if (storedContext) {

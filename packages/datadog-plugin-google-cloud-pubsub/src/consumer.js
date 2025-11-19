@@ -39,16 +39,17 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const subscription = message._subscriber._subscription
     const topic = (subscription.metadata && subscription.metadata.topic) ||
                   (message.attributes && message.attributes['pubsub.topic']) ||
-                  (message.attributes && message.attributes['gcloud.project_id'] ? 
-                    `projects/${message.attributes['gcloud.project_id']}/topics/unknown` : null)
-  
+                  (message.attributes && message.attributes['gcloud.project_id']
+                    ? `projects/${message.attributes['gcloud.project_id']}/topics/unknown`
+                    : null)
+
     const batchRequestTraceId = message.attributes?.['_dd.pubsub_request.trace_id']
     const batchRequestSpanId = message.attributes?.['_dd.pubsub_request.span_id']
     const batchSize = message.attributes?.['_dd.batch.size']
     const batchIndex = message.attributes?.['_dd.batch.index']
 
     let childOf = this.tracer.extract('text_map', message.attributes) || null
-    
+
     const isFirstMessage = batchIndex === '0' || batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
       const pubsubRequestContext = this._reconstructPubSubRequestContext(message.attributes)
@@ -60,7 +61,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
     const baseService = this.tracer._service || 'unknown'
     const serviceName = this.config.service || `${baseService}-pubsub`
-    
+
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
@@ -102,16 +103,15 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       const size = Number.parseInt(batchSize, 10)
       meta['pubsub.batch.description'] = `Message ${index + 1} of ${size}`
     }
-    
+
     const span = this.startSpan({
       childOf,
-      resource: `Message from ${topicName}`, // More descriptive resource name
+      resource: `Message from ${topicName}`,
       type: 'worker',
       service: serviceName,
       meta,
       metrics
-    }, ctx) 
-
+    }, ctx)
 
     if (message.id) {
       span.setTag('pubsub.message_id', message.id)
