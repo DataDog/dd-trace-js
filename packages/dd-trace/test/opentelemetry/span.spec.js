@@ -19,7 +19,7 @@ const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
-const format = require('../../src/format')
+const spanFormat = require('../../src/span_format')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -406,20 +406,20 @@ describe('OTel Span', () => {
       startTime: datenow
     }])
 
-    let formatted = format(span._ddSpan)
+    let formatted = spanFormat(span._ddSpan)
     expect(formatted).to.have.property('error', 0)
     expect(formatted.meta).to.not.have.property('doNotSetTraceError')
 
     // Set error code
     span.setStatus({ code: 2, message: 'error' })
 
-    formatted = format(span._ddSpan)
+    formatted = spanFormat(span._ddSpan)
     expect(formatted).to.have.property('error', 1)
 
     span.recordException(new Error('foobar'), Date.now())
 
     // Keep the error set to 1
-    formatted = format(span._ddSpan)
+    formatted = spanFormat(span._ddSpan)
     expect(formatted).to.have.property('error', 1)
     expect(formatted).to.have.property('meta')
     expect(formatted.meta).to.have.property('error.message', 'foobar')

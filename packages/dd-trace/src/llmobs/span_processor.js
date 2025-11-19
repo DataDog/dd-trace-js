@@ -72,7 +72,7 @@ class LLMObsSpanProcessor {
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
-  process ({ span }) {
+  process (span) {
     if (!this.#config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
@@ -160,7 +160,7 @@ class LLMObsSpanProcessor {
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
-    if (processedSpan === null) return null
+    if (processedSpan === undefined) return null
 
     if (processedSpan.input) {
       if (inputType === 'messages') {
@@ -274,7 +274,7 @@ class LLMObsSpanProcessor {
   /**
    * Runs the user span processor, emitting telemetry and adding some guardrails against invalid return types
    * @param {LLMObservabilitySpan} span
-   * @returns {LLMObservabilitySpan | null}
+   * @returns {LLMObservabilitySpan | undefined}
    */
   #runProcessor (span) {
     const processor = this.#userSpanProcessor
@@ -284,12 +284,12 @@ class LLMObsSpanProcessor {
 
     try {
       const processedLLMObsSpan = processor(span)
-      if (processedLLMObsSpan === null) return null
+      if (processedLLMObsSpan === null) return
 
       if (!(processedLLMObsSpan instanceof LLMObservabilitySpan)) {
         error = true
         logger.warn('User span processor must return an instance of an LLMObservabilitySpan or null, dropping span.')
-        return null
+        return
       }
 
       return processedLLMObsSpan
