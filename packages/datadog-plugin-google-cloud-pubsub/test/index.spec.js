@@ -460,9 +460,19 @@ describe('Plugin', () => {
           prefixedResource = resource
         }
 
+        // Determine the default operation name based on span kind
+        let defaultOpName = 'pubsub.request'
+        if (spanKind === 'consumer') {
+          defaultOpName = expectedSchema.receive.opName
+        } else if (spanKind === 'producer') {
+          defaultOpName = expectedSchema.send.opName
+        } else {
+          defaultOpName = expectedSchema.controlPlane.opName
+        }
+
         const service = method ? 'test-pubsub' : 'test'
         expected = withDefaults({
-          name: 'pubsub.request',
+          name: defaultOpName,
           resource: prefixedResource,
           service,
           error: 0,
