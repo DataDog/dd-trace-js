@@ -1,19 +1,20 @@
 'use strict'
 
+const { spawn } = require('child_process')
 const fs = require('fs')
+const assert = require('node:assert/strict')
 const Path = require('path')
+
 const { expect } = require('chai')
 const semver = require('semver')
 const sinon = require('sinon')
-const { spawn } = require('child_process')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { useEnv } = require('../../../integration-tests/helpers')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
-const { useEnv } = require('../../../integration-tests/helpers')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 const tracerRequirePath = '../../dd-trace'
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
@@ -116,11 +117,11 @@ describe('Plugin', () => {
       it('should attach an error to the span', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('error', 1)
+            assert.strictEqual(traces[0][0].error, 1)
             // the message content differs on OpenAI version, even between patches
-            expect(traces[0][0].meta['error.message']).to.exist
-            expect(traces[0][0].meta).to.have.property('error.type', 'Error')
-            expect(traces[0][0].meta['error.stack']).to.exist
+            assert.ok(traces[0][0].meta['error.message'] != null)
+            assert.strictEqual(traces[0][0].meta['error.type'], 'Error')
+            assert.ok(traces[0][0].meta['error.stack'] != null)
           })
 
         const params = {
@@ -148,16 +149,16 @@ describe('Plugin', () => {
 
         const expectedTags = ['error:1']
 
-        expect(metricStub).to.have.been.calledWith('openai.request.error', 1, 'c', expectedTags)
-        expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+        sinon.assert.calledWith(metricStub, 'openai.request.error', 1, 'c', expectedTags)
+        sinon.assert.calledWith(metricStub, 'openai.request.duration') // timing value not guaranteed
 
-        expect(metricStub).to.not.have.been.calledWith('openai.tokens.prompt')
-        expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
-        expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
-        expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.requests')
-        expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.tokens')
-        expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
-        expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
+        sinon.assert.neverCalledWith(metricStub, 'openai.tokens.prompt')
+        sinon.assert.neverCalledWith(metricStub, 'openai.tokens.completion')
+        sinon.assert.neverCalledWith(metricStub, 'openai.tokens.total')
+        sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.requests')
+        sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.tokens')
+        sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.requests')
+        sinon.assert.neverCalledWith(metricStub, 'openai.ratelimit.remaining.tokens')
       })
 
       describe('maintains context', () => {
@@ -174,14 +175,14 @@ describe('Plugin', () => {
 
             if (semver.satisfies(realVersion, '>=4.0.0')) {
               const result = await openai.completions.create(params)
-              expect(result.id).to.exist
+              assert.ok(result.id != null)
             } else {
               const result = await openai.createCompletion(params)
-              expect(result.data.id).to.exist
+              assert.ok(result.data.id != null)
             }
 
             tracer.trace('child of outer', innerSpan => {
-              expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+              assert.strictEqual(innerSpan.context()._parentId, outerSpan.context()._spanId)
             })
           })
         })
@@ -212,12 +213,12 @@ describe('Plugin', () => {
             })
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             tracer.trace('child of outer', innerSpan => {
-              expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+              assert.strictEqual(innerSpan.context()._parentId, outerSpan.context()._spanId)
             })
           })
         })
@@ -227,23 +228,23 @@ describe('Plugin', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
+              assert.strictEqual(traces[0][0].type, 'openai')
               if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'completions.create')
+                assert.strictEqual(traces[0][0].resource, 'completions.create')
               } else {
-                expect(traces[0][0]).to.have.property('resource', 'createCompletion')
+                assert.strictEqual(traces[0][0].resource, 'createCompletion')
               }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               expect(traces[0][0].meta).to.have.property(
                 'openai.request.endpoint', '/vcr/openai/completions'
               )
 
-              expect(traces[0][0].meta).to.have.property('component', 'openai')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'openai')
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo-instruct')
-              expect(traces[0][0].meta).to.have.property('openai.response.model')
+              assert.strictEqual(traces[0][0].meta.component, 'openai')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'openai')
+              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-3.5-turbo-instruct')
+              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
 
           const params = {
@@ -257,25 +258,25 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.completions.create(params)
-            expect(result.id).to.exist
+            assert.ok(result.id != null)
           } else {
             const result = await openai.createCompletion(params)
-            expect(result.data.id).to.exist
+            assert.ok(result.data.id != null)
           }
 
           await checkTraces
 
           clock.tick(10 * 1000)
 
-          expect(metricStub).to.have.been.called
-          expect(externalLoggerStub).to.have.been.called
+          sinon.assert.called(metricStub)
+          sinon.assert.called(externalLoggerStub)
         })
 
         it('tags multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               // Multiple response choice tags removed - basic span validation
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
             })
 
           const params = {
@@ -289,10 +290,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.completions.create(params)
-            expect(result.id).to.exist
+            assert.ok(result.id != null)
           } else {
             const result = await openai.createCompletion(params)
-            expect(result.data.id).to.exist
+            assert.ok(result.data.id != null)
           }
 
           await checkTraces
@@ -308,7 +309,7 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('openai.response.model')
+                assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
               })
 
             const params = {
@@ -323,8 +324,8 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('text')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'text'))
             }
 
             await checkTraces
@@ -333,7 +334,7 @@ describe('Plugin', () => {
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('openai.response.model')
+                assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
               })
 
             const params = {
@@ -351,9 +352,9 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
+              assert.ok(Object.hasOwn(part, 'choices'))
               if (part.choices.length) { // last usage chunk will have no choices
-                expect(part.choices[0]).to.have.property('text')
+                assert.ok(Object.hasOwn(part.choices[0], 'text'))
               }
             }
 
@@ -364,7 +365,7 @@ describe('Plugin', () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
                 // Multiple response choice tags removed - basic span validation
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -379,8 +380,8 @@ describe('Plugin', () => {
             const stream = await openai.completions.create(params)
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('text')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'text'))
             }
 
             await checkTraces
@@ -391,19 +392,19 @@ describe('Plugin', () => {
       it('create embedding', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
+              assert.strictEqual(traces[0][0].resource, 'embeddings.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
+              assert.strictEqual(traces[0][0].resource, 'createEmbedding')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/embeddings')
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/embeddings')
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-embedding-ada-002')
-            expect(traces[0][0].meta).to.have.property('openai.response.model')
+            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'text-embedding-ada-002')
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
           })
 
         const params = {
@@ -414,42 +415,42 @@ describe('Plugin', () => {
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.embeddings.create(params)
-          expect(result.model).to.exist
+          assert.ok(result.model != null)
         } else {
           const result = await openai.createEmbedding(params)
-          expect(result.data.model).to.exist
+          assert.ok(result.data.model != null)
         }
 
         await checkTraces
 
-        expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+        sinon.assert.calledWith(metricStub, 'openai.request.duration') // timing value not guaranteed
       })
 
       it('list models', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'models.list')
+              assert.strictEqual(traces[0][0].resource, 'models.list')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'listModels')
+              assert.strictEqual(traces[0][0].resource, 'listModels')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/models')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/models')
 
-            expect(traces[0][0].metrics).to.have.property('openai.response.count')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.models.list()
-          expect(result.object).to.eql('list')
-          expect(result.data.length).to.exist
+          assert.deepStrictEqual(result.object, 'list')
+          assert.ok(result.data.length != null)
         } else {
           const result = await openai.listModels()
-          expect(result.data.object).to.eql('list')
-          expect(result.data.data.length).to.exist
+          assert.deepStrictEqual(result.data.object, 'list')
+          assert.ok(result.data.data.length != null)
         }
 
         await checkTraces
@@ -458,29 +459,29 @@ describe('Plugin', () => {
       it('retrieve model', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'models.retrieve')
+              assert.strictEqual(traces[0][0].resource, 'models.retrieve')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
+              assert.strictEqual(traces[0][0].resource, 'retrieveModel')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
             // TODO: this might be a bug...
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
-            expect(traces[0][0].meta).to.have.property('openai.request.id', 'gpt-4')
-            expect(traces[0][0].meta).to.have.property('openai.response.owned_by', 'openai')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/models/*')
+            assert.strictEqual(traces[0][0].meta['openai.request.id'], 'gpt-4')
+            assert.strictEqual(traces[0][0].meta['openai.response.owned_by'], 'openai')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.models.retrieve('gpt-4')
 
-          expect(result.id).to.eql('gpt-4')
+          assert.deepStrictEqual(result.id, 'gpt-4')
         } else {
           const result = await openai.retrieveModel('gpt-4')
 
-          expect(result.data.id).to.eql('gpt-4')
+          assert.deepStrictEqual(result.data.id, 'gpt-4')
         }
 
         await checkTraces
@@ -489,19 +490,19 @@ describe('Plugin', () => {
       it('delete model', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
               const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
-              expect(traces[0][0]).to.have.property('resource', `models.${method}`)
+              assert.strictEqual(traces[0][0].resource, `models.${method}`)
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'deleteModel')
+              assert.strictEqual(traces[0][0].resource, 'deleteModel')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'DELETE')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/models/*')
 
-            expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
+            assert.strictEqual(traces[0][0].metrics['openai.response.deleted'], 1)
             expect(traces[0][0].meta).to.have.property(
               'openai.response.id', 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
             )
@@ -511,11 +512,11 @@ describe('Plugin', () => {
           const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
           const result = await openai.models[method]('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
 
-          expect(result.deleted).to.eql(true)
+          assert.deepStrictEqual(result.deleted, true)
         } else {
           const result = await openai.deleteModel('ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
 
-          expect(result.data.deleted).to.eql(true)
+          assert.deepStrictEqual(result.data.deleted, true)
         }
 
         await checkTraces
@@ -524,30 +525,30 @@ describe('Plugin', () => {
       it('list files', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.list')
+              assert.strictEqual(traces[0][0].resource, 'files.list')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'listFiles')
+              assert.strictEqual(traces[0][0].resource, 'listFiles')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
+            assert.strictEqual(traces[0][0].error, 0)
 
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/files')
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].metrics).to.have.property('openai.response.count')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/files')
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.files.list()
 
-          expect(result.data.length).to.exist
-          expect(result.data[0].id).to.exist
+          assert.ok(result.data.length != null)
+          assert.ok(result.data[0].id != null)
         } else {
           const result = await openai.listFiles()
 
-          expect(result.data.data.length).to.exist
-          expect(result.data.data[0].id).to.exist
+          assert.ok(result.data.data.length != null)
+          assert.ok(result.data.data[0].id != null)
         }
 
         await checkTraces
@@ -560,25 +561,25 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.create')
+              assert.strictEqual(traces[0][0].resource, 'files.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createFile')
+              assert.strictEqual(traces[0][0].resource, 'createFile')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/files')
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/files')
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
 
-            expect(traces[0][0].meta).to.have.property('openai.request.filename', 'fine-tune.jsonl')
-            expect(traces[0][0].meta).to.have.property('openai.request.purpose', 'fine-tune')
-            expect(traces[0][0].meta).to.have.property('openai.response.purpose', 'fine-tune')
-            expect(traces[0][0].meta).to.have.property('openai.response.status')
-            expect(traces[0][0].meta['openai.response.id']).to.match(/^file-/)
-            expect(traces[0][0].meta).to.have.property('openai.response.filename', 'fine-tune.jsonl')
-            expect(traces[0][0].metrics).to.have.property('openai.response.bytes')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            assert.strictEqual(traces[0][0].meta['openai.request.filename'], 'fine-tune.jsonl')
+            assert.strictEqual(traces[0][0].meta['openai.request.purpose'], 'fine-tune')
+            assert.strictEqual(traces[0][0].meta['openai.response.purpose'], 'fine-tune')
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
+            assert.match(traces[0][0].meta['openai.response.id'], /^file-/)
+            assert.strictEqual(traces[0][0].meta['openai.response.filename'], 'fine-tune.jsonl')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -587,12 +588,12 @@ describe('Plugin', () => {
             purpose: 'fine-tune'
           })
 
-          expect(result.filename).to.eql('fine-tune.jsonl')
+          assert.deepStrictEqual(result.filename, 'fine-tune.jsonl')
         } else {
           const result = await openai.createFile(fs.createReadStream(
             Path.join(__dirname, 'fine-tune.jsonl')), 'fine-tune')
 
-          expect(result.data.filename).to.eql('fine-tune.jsonl')
+          assert.deepStrictEqual(result.data.filename, 'fine-tune.jsonl')
         }
 
         await checkTraces
@@ -601,33 +602,33 @@ describe('Plugin', () => {
       it('retrieve file', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.retrieve')
+              assert.strictEqual(traces[0][0].resource, 'files.retrieve')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
+              assert.strictEqual(traces[0][0].resource, 'retrieveFile')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.response.filename', 'fine-tune.jsonl')
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
-            expect(traces[0][0].meta).to.have.property('openai.response.purpose', 'fine-tune')
-            expect(traces[0][0].meta).to.have.property('openai.response.status')
-            expect(traces[0][0].metrics).to.have.property('openai.response.bytes')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            assert.strictEqual(traces[0][0].meta['openai.response.filename'], 'fine-tune.jsonl')
+            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'file-RpTpuvRVtnKpdKZb7DDGto')
+            assert.strictEqual(traces[0][0].meta['openai.response.purpose'], 'fine-tune')
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.status'))
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.bytes'))
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const result = await openai.files.retrieve('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.filename).to.exist
+          assert.ok(result.filename != null)
         } else {
           const result = await openai.retrieveFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.data.filename).to.exist
+          assert.ok(result.data.filename != null)
         }
 
         await checkTraces
@@ -636,32 +637,32 @@ describe('Plugin', () => {
       it('download file', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.retrieveContent')
+              assert.strictEqual(traces[0][0].resource, 'files.retrieveContent')
             } else if (semver.satisfies(realVersion, '>=4.17.1') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'files.content')
+              assert.strictEqual(traces[0][0].resource, 'files.content')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'downloadFile')
+              assert.strictEqual(traces[0][0].resource, 'downloadFile')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*/content')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*/content')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
           const result = await openai.files.retrieveContent('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result).to.exist
+          assert.ok(result != null)
         } else if (semver.satisfies(realVersion, '>=4.17.1')) {
           const result = await openai.files.content('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.constructor.name).to.eql('Response')
+          assert.deepStrictEqual(result.constructor.name, 'Response')
         } else {
           const result = await openai.downloadFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.data).to.exist
+          assert.ok(result.data != null)
         }
 
         await checkTraces
@@ -670,31 +671,31 @@ describe('Plugin', () => {
       it('delete file', async () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
               const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
-              expect(traces[0][0]).to.have.property('resource', `files.${method}`)
+              assert.strictEqual(traces[0][0].resource, `files.${method}`)
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'deleteFile')
+              assert.strictEqual(traces[0][0].resource, 'deleteFile')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'DELETE')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/files/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'file-RpTpuvRVtnKpdKZb7DDGto')
-            expect(traces[0][0].metrics).to.have.property('openai.response.deleted')
+            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'file-RpTpuvRVtnKpdKZb7DDGto')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.deleted'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
           const method = semver.satisfies(realVersion, '>=5.0.0') ? 'delete' : 'del'
           const result = await openai.files[method]('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.deleted).to.eql(true)
+          assert.deepStrictEqual(result.deleted, true)
         } else {
           const result = await openai.deleteFile('file-RpTpuvRVtnKpdKZb7DDGto')
 
-          expect(result.data.deleted).to.eql(true)
+          assert.deepStrictEqual(result.data.deleted, true)
         }
 
         await checkTraces
@@ -708,23 +709,23 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.17.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
+              assert.strictEqual(traces[0][0].resource, 'fine_tuning.jobs.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createFineTune')
+              assert.strictEqual(traces[0][0].resource, 'createFineTune')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/fine_tuning/jobs'
             )
 
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-4.1-mini-2025-04-14')
-            expect(traces[0][0].meta['openai.response.id']).to.match(/^ftjob-/)
-            expect(traces[0][0].meta).to.have.property('openai.response.model', 'gpt-4.1-mini-2025-04-14')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4.1-mini-2025-04-14')
+            assert.match(traces[0][0].meta['openai.response.id'], /^ftjob-/)
+            assert.strictEqual(traces[0][0].meta['openai.response.model'], 'gpt-4.1-mini-2025-04-14')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
         const params = {
@@ -733,7 +734,7 @@ describe('Plugin', () => {
         }
 
         const result = await openai.fineTuning.jobs.create(params)
-        expect(result.id).to.exist
+        assert.ok(result.id != null)
 
         await checkTraces
       })
@@ -745,24 +746,24 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.17.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
+              assert.strictEqual(traces[0][0].resource, 'fine_tuning.jobs.retrieve')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
+              assert.strictEqual(traces[0][0].resource, 'retrieveFineTune')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*')
 
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-            expect(traces[0][0].meta).to.have.property('openai.response.model')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
         const result = await openai.fineTuning.jobs.retrieve('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-        expect(result.id).to.eql('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+        assert.deepStrictEqual(result.id, 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
 
         await checkTraces
       })
@@ -774,23 +775,23 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
+              assert.strictEqual(traces[0][0].resource, 'fine_tuning.jobs.cancel')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
+              assert.strictEqual(traces[0][0].resource, 'cancelFineTune')
             }
 
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
-            expect(traces[0][0].meta).to.have.property('openai.response.id', 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-            expect(traces[0][0].metrics).to.have.property('openai.response.created_at')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*/cancel')
+            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.created_at'))
           })
 
         const result = await openai.fineTuning.jobs.cancel('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-        expect(result.id).to.eql('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
+        assert.deepStrictEqual(result.id, 'ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
 
         await checkTraces
       })
@@ -802,23 +803,23 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
+              assert.strictEqual(traces[0][0].resource, 'fine_tuning.jobs.listEvents')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
+              assert.strictEqual(traces[0][0].resource, 'listFineTuneEvents')
             }
 
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/events')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/fine_tuning/jobs/*/events')
 
-            expect(traces[0][0].metrics).to.have.property('openai.response.count')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
 
         const result = await openai.fineTuning.jobs.listEvents('ftjob-q9CUUUsHJemGUVQ1Ecc01zcf')
-        expect(result.body.object).to.eql('list')
+        assert.deepStrictEqual(result.body.object, 'list')
 
         await checkTraces
       })
@@ -830,24 +831,24 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
+              assert.strictEqual(traces[0][0].resource, 'fine_tuning.jobs.list')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
+              assert.strictEqual(traces[0][0].resource, 'listFineTunes')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/fine_tuning/jobs'
             )
 
-            expect(traces[0][0].metrics).to.have.property('openai.response.count')
+            assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
 
         const result = await openai.fineTuning.jobs.list()
-        expect(result.body.object).to.eql('list')
+        assert.deepStrictEqual(result.body.object, 'list')
 
         await checkTraces
       })
@@ -859,19 +860,19 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'moderations.create')
+              assert.strictEqual(traces[0][0].resource, 'moderations.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createModeration')
+              assert.strictEqual(traces[0][0].resource, 'createModeration')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-            expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/vcr/openai/moderations')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/moderations')
 
-            expect(traces[0][0].meta['openai.response.id']).to.match(/^modr-/)
-            expect(traces[0][0].meta).to.have.property('openai.response.model')
+            assert.match(traces[0][0].meta['openai.response.id'], /^modr-/)
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -879,13 +880,13 @@ describe('Plugin', () => {
             input: 'I want to harm the robots'
           })
 
-          expect(result.results[0].flagged).to.eql(true)
+          assert.deepStrictEqual(result.results[0].flagged, true)
         } else {
           const result = await openai.createModeration({
             input: 'I want to harm the robots'
           })
 
-          expect(result.data.results[0].flagged).to.eql(true)
+          assert.deepStrictEqual(result.data.results[0].flagged, true)
         }
 
         await checkTraces
@@ -899,19 +900,19 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
+              assert.strictEqual(traces[0][0].type, 'openai')
               if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'images.generate')
+                assert.strictEqual(traces[0][0].resource, 'images.generate')
               } else {
-                expect(traces[0][0]).to.have.property('resource', 'createImage')
+                assert.strictEqual(traces[0][0].resource, 'createImage')
               }
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               expect(traces[0][0].meta).to.have.property(
                 'openai.request.endpoint', '/vcr/openai/images/generations'
               )
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'dall-e-3')
+              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'dall-e-3')
             })
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -924,9 +925,9 @@ describe('Plugin', () => {
             })
 
             if (responseFormat === 'url') {
-              expect(result.data[0].url.startsWith('https://')).to.be.true
+              assert.strictEqual(result.data[0].url.startsWith('https://'), true)
             } else {
-              expect(result.data[0].b64_json).to.exist
+              assert.ok(result.data[0].b64_json != null)
             }
           } else {
             const result = await openai.createImage({
@@ -938,9 +939,9 @@ describe('Plugin', () => {
             })
 
             if (responseFormat === 'url') {
-              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              assert.strictEqual(result.data.data[0].url.startsWith('https://'), true)
             } else {
-              expect(result.data.data[0].b64_json).to.exist
+              assert.ok(result.data.data[0].b64_json != null)
             }
           }
 
@@ -961,15 +962,15 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'images.edit')
+              assert.strictEqual(traces[0][0].resource, 'images.edit')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
+              assert.strictEqual(traces[0][0].resource, 'createImageEdit')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/edits'
             )
@@ -988,7 +989,7 @@ describe('Plugin', () => {
           response_format: 'url',
         })
 
-        expect(result.data[0].url.startsWith('https://')).to.be.true
+        assert.strictEqual(result.data[0].url.startsWith('https://'), true)
 
         await checkTraces
       })
@@ -1005,15 +1006,15 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'images.createVariation')
+              assert.strictEqual(traces[0][0].resource, 'images.createVariation')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
+              assert.strictEqual(traces[0][0].resource, 'createImageVariation')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/images/variations'
             )
@@ -1027,12 +1028,12 @@ describe('Plugin', () => {
             response_format: 'url'
           })
 
-          expect(result.data[0].url.startsWith('https://')).to.be.true
+          assert.strictEqual(result.data[0].url.startsWith('https://'), true)
         } else {
           const result = await openai.createImageVariation(
             fs.createReadStream(Path.join(__dirname, 'image.png')), 1, '256x256', 'url')
 
-          expect(result.data.data[0].url.startsWith('https://')).to.be.true
+          assert.strictEqual(result.data.data[0].url.startsWith('https://'), true)
         }
 
         await checkTraces
@@ -1050,20 +1051,20 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'audio.transcriptions.create')
+              assert.strictEqual(traces[0][0].resource, 'audio.transcriptions.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createTranscription')
+              assert.strictEqual(traces[0][0].resource, 'createTranscription')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
+            assert.strictEqual(traces[0][0].error, 0)
 
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/transcriptions'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-4o-mini-transcribe')
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
+            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4o-mini-transcribe')
           })
 
         const result = await openai.audio.transcriptions.create({
@@ -1075,10 +1076,10 @@ describe('Plugin', () => {
           language: 'en'
         })
 
-        expect(result.text).to.eql('Hello friend.')
+        assert.deepStrictEqual(result.text, 'Hello friend.')
 
         await checkTraces
-        expect(externalLoggerStub).to.have.been.called
+        sinon.assert.called(externalLoggerStub)
       })
 
       it('create translation', async function () {
@@ -1093,20 +1094,20 @@ describe('Plugin', () => {
 
         const checkTraces = agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'openai.request')
-            expect(traces[0][0]).to.have.property('type', 'openai')
+            assert.strictEqual(traces[0][0].name, 'openai.request')
+            assert.strictEqual(traces[0][0].type, 'openai')
             if (DD_MAJOR < 6) {
-              expect(traces[0][0]).to.have.property('resource', 'audio.translations.create')
+              assert.strictEqual(traces[0][0].resource, 'audio.translations.create')
             } else {
-              expect(traces[0][0]).to.have.property('resource', 'createTranslation')
+              assert.strictEqual(traces[0][0].resource, 'createTranslation')
             }
-            expect(traces[0][0]).to.have.property('error', 0)
+            assert.strictEqual(traces[0][0].error, 0)
 
             expect(traces[0][0].meta).to.have.property(
               'openai.request.endpoint', '/vcr/openai/audio/translations'
             )
-            expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-            expect(traces[0][0].meta).to.have.property('openai.request.model', 'whisper-1')
+            assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
+            assert.strictEqual(traces[0][0].meta['openai.request.model'], 'whisper-1')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1117,7 +1118,7 @@ describe('Plugin', () => {
             temperature: 0.5
           })
 
-          expect(result.text).to.exist
+          assert.ok(result.text != null)
         } else {
           const result = await openai.createTranslation(
             fs.createReadStream(Path.join(__dirname, 'translation.m4a')),
@@ -1127,12 +1128,12 @@ describe('Plugin', () => {
             0.5
           )
 
-          expect(result.data.text).to.exist
+          assert.ok(result.data.text != null)
         }
 
         await checkTraces
 
-        expect(externalLoggerStub).to.have.been.called
+        sinon.assert.called(externalLoggerStub)
       })
 
       describe('chat completions', function () {
@@ -1145,22 +1146,22 @@ describe('Plugin', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
+              assert.strictEqual(traces[0][0].type, 'openai')
               if (semver.satisfies(realVersion, '>=4.0.0') && DD_MAJOR < 6) {
-                expect(traces[0][0]).to.have.property('resource', 'chat.completions.create')
+                assert.strictEqual(traces[0][0].resource, 'chat.completions.create')
               } else {
-                expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
+                assert.strictEqual(traces[0][0].resource, 'createChatCompletion')
               }
-              expect(traces[0][0]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][0].error, 0)
 
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+              assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
               expect(traces[0][0].meta).to.have.property(
                 'openai.request.endpoint', '/vcr/openai/chat/completions'
               )
 
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
-              expect(traces[0][0].meta).to.have.property('openai.response.model')
+              assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-3.5-turbo')
+              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
 
           const params = {
@@ -1184,35 +1185,35 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
 
             const result = await prom
 
-            expect(result.id).to.exist
-            expect(result.model).to.exist
-            expect(result.choices[0].message.role).to.eql('assistant')
-            expect(result.choices[0].message.content).to.exist
-            expect(result.choices[0].finish_reason).to.exist
+            assert.ok(result.id != null)
+            assert.ok(result.model != null)
+            assert.deepStrictEqual(result.choices[0].message.role, 'assistant')
+            assert.ok(result.choices[0].message.content != null)
+            assert.ok(result.choices[0].finish_reason != null)
           } else {
             const result = await openai.createChatCompletion(params)
 
-            expect(result.data.id).to.exist
-            expect(result.data.model).to.exist
-            expect(result.data.choices[0].message.role).to.eql('assistant')
-            expect(result.data.choices[0].message.content).to.exist
-            expect(result.data.choices[0].finish_reason).to.exist
+            assert.ok(result.data.id != null)
+            assert.ok(result.data.model != null)
+            assert.deepStrictEqual(result.data.choices[0].message.role, 'assistant')
+            assert.ok(result.data.choices[0].message.content != null)
+            assert.ok(result.data.choices[0].finish_reason != null)
           }
 
           await checkTraces
 
-          expect(externalLoggerStub).to.have.been.called
+          sinon.assert.called(externalLoggerStub)
         })
 
         it('tags multiple responses', async () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0].meta).to.have.property('openai.response.model')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
+              assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))
             })
 
           const params = {
@@ -1236,13 +1237,13 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
 
             const result = await prom
-            expect(result.choices).to.have.lengthOf(3)
+            assert.strictEqual(result.choices.length, 3)
           } else {
             const result = await openai.createChatCompletion(params)
-            expect(result.data.choices).to.have.lengthOf(3)
+            assert.strictEqual(result.data.choices.length, 3)
           }
 
           await checkTraces
@@ -1252,7 +1253,7 @@ describe('Plugin', () => {
           const checkTraces = agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span).to.have.property('name', 'openai.request')
+              assert.strictEqual(span.name, 'openai.request')
             })
 
           const params = {
@@ -1278,10 +1279,10 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.chat.completions.create(params)
-            expect(result.id).to.exist
+            assert.ok(result.id != null)
           } else {
             const result = await openai.createChatCompletion(params)
-            expect(result.data.id).to.exist
+            assert.ok(result.data.id != null)
           }
 
           await checkTraces
@@ -1294,7 +1295,7 @@ describe('Plugin', () => {
 
           const checkTraces = agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
+              assert.strictEqual(traces[0][0].name, 'openai.request')
             })
 
           const params = {
@@ -1319,15 +1320,15 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const result = await openai.chat.completions.create(params)
-            expect(result.choices[0].finish_reason).to.eql('tool_calls')
+            assert.deepStrictEqual(result.choices[0].finish_reason, 'tool_calls')
           } else {
             const result = await openai.createChatCompletion(params)
-            expect(result.data.choices[0].finish_reason).to.eql('tool_calls')
+            assert.deepStrictEqual(result.data.choices[0].finish_reason, 'tool_calls')
           }
 
           await checkTraces
 
-          expect(externalLoggerStub).to.have.been.called
+          sinon.assert.called(externalLoggerStub)
         })
 
         describe('streamed responses', function () {
@@ -1340,7 +1341,7 @@ describe('Plugin', () => {
           it('makes a successful call', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1363,12 +1364,12 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
             const stream = await prom
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             await checkTraces
@@ -1377,7 +1378,7 @@ describe('Plugin', () => {
           it('tags multiple responses', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1400,12 +1401,12 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
             const stream = await prom
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             await checkTraces
@@ -1414,7 +1415,7 @@ describe('Plugin', () => {
           it('makes a successful call with usage included', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1440,13 +1441,13 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
             const stream = await prom
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
+              assert.ok(Object.hasOwn(part, 'choices'))
               if (part.choices.length) { // last usage chunk will have no choices
-                expect(part.choices[0]).to.have.property('delta')
+                assert.ok(Object.hasOwn(part.choices[0], 'delta'))
               }
             }
 
@@ -1456,7 +1457,7 @@ describe('Plugin', () => {
           it('tags multiple responses 2', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1479,12 +1480,12 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            expect(prom).to.have.property('withResponse')
+            assert.ok(Object.hasOwn(prom, 'withResponse'))
             const stream = await prom
 
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             await checkTraces
@@ -1493,7 +1494,7 @@ describe('Plugin', () => {
           it('excludes image_url from usage', async () => {
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1520,8 +1521,8 @@ describe('Plugin', () => {
 
             const stream = await openai.chat.completions.create(params)
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             await checkTraces
@@ -1534,7 +1535,7 @@ describe('Plugin', () => {
 
             const checkTraces = agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                assert.strictEqual(traces[0][0].name, 'openai.request')
               })
 
             const params = {
@@ -1559,8 +1560,8 @@ describe('Plugin', () => {
 
             const stream = await openai.chat.completions.create(params)
             for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('delta')
+              assert.ok(Object.hasOwn(part, 'choices'))
+              assert.ok(Object.hasOwn(part.choices[0], 'delta'))
             }
 
             await checkTraces
@@ -1576,7 +1577,7 @@ describe('Plugin', () => {
         const checkTraces = agent
           .assertSomeTraces(traces => {
             const span = traces[0][0]
-            expect(span).to.have.property('name', 'openai.request')
+            assert.strictEqual(span.name, 'openai.request')
           })
 
         const parse = semver.satisfies(realVersion, '>=5.0.0')
@@ -1596,9 +1597,9 @@ describe('Plugin', () => {
           user: 'dd-trace-test',
         })
 
-        expect(prom).to.have.property('withResponse')
+        assert.ok(Object.hasOwn(prom, 'withResponse'))
         const response = await prom
-        expect(response.choices[0].message.content).to.exist
+        assert.ok(response.choices[0].message.content != null)
 
         await checkTraces
       })

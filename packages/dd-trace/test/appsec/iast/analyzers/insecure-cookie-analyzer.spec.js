@@ -1,20 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
 
-const { prepareTestServerForIast } = require('../utils')
-const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
-const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')
 const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
-
+const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')
+const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const { prepareTestServerForIast } = require('../utils')
 describe('insecure cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
-    expect(INSECURE_COOKIE).to.be.equals('INSECURE_COOKIE')
+    assert.strictEqual(INSECURE_COOKIE, 'INSECURE_COOKIE')
   })
 
   it('InsecureCookieAnalyzer extends CookieAnalyzer', () => {
-    expect(CookieAnalyzer.isPrototypeOf(insecureCookieAnalyzer.constructor)).to.be.true
+    assert.strictEqual(CookieAnalyzer.isPrototypeOf(insecureCookieAnalyzer.constructor), true)
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
@@ -31,7 +31,7 @@ describe('insecure cookie analyzer', () => {
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value')
       }, INSECURE_COOKIE, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.equals('key')
+        assert.strictEqual(vulnerabilities[0].evidence.value, 'key')
       })
 
       testThatRequestHasVulnerability((req, res) => {

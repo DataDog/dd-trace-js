@@ -1,6 +1,4 @@
 'use strict'
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -39,7 +37,7 @@ describe('Scheduler', () => {
       scheduler.start()
       clock.tick(1)
 
-      expect(stub).to.have.been.calledOnce
+      sinon.assert.calledOnce(stub)
     })
 
     it('should call the callback once the async operation is done and a delay has passed', () => {
@@ -48,21 +46,21 @@ describe('Scheduler', () => {
 
       scheduler.start()
       clock.tick(1)
-      expect(stub).to.have.been.calledOnce
+      sinon.assert.calledOnce(stub)
 
       clock.tick(INTERVAL)
-      expect(stub).to.have.been.calledOnce
+      sinon.assert.calledOnce(stub)
 
       cb()
       clock.tick(1)
-      expect(stub).to.have.been.calledOnce
+      sinon.assert.calledOnce(stub)
 
       clock.tick(INTERVAL)
-      expect(stub).to.have.been.calledTwice
+      sinon.assert.calledTwice(stub)
 
       cb()
       clock.tick(INTERVAL)
-      expect(stub).to.have.been.calledThrice
+      sinon.assert.calledThrice(stub)
     })
   })
 
@@ -76,7 +74,7 @@ describe('Scheduler', () => {
       scheduler.stop()
       clock.tick(INTERVAL)
 
-      expect(stub).to.have.been.calledOnce
+      sinon.assert.calledOnce(stub)
     })
   })
 })

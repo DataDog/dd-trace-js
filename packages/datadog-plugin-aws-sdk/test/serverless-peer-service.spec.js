@@ -1,15 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
-
+const assert = require('node:assert/strict')
 const { promisify } = require('node:util')
 
+const { after, before, describe, it } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const helpers = require('./kinesis_helpers')
 const { setup } = require('./spec_helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Plugin', () => {
   describe('Serverless', function () {
     this.retries(5)
@@ -65,8 +64,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
 
           await Promise.all([
@@ -132,8 +131,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
@@ -194,8 +193,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
@@ -246,8 +245,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
             .then(done, done)
 
@@ -289,8 +288,8 @@ describe('Plugin', () => {
             const spans = traces[0]
             const awsSpan = spans.find(s => s.name === 'aws.request')
             const httpSpan = spans.find(s => s.name === 'http.request')
-            expect(awsSpan.meta['peer.service']).to.equal(peerService)
-            expect(httpSpan.meta['peer.service']).to.equal(peerService)
+            assert.strictEqual(awsSpan.meta['peer.service'], peerService)
+            assert.strictEqual(httpSpan.meta['peer.service'], peerService)
           }, { timeoutMs: 15000 })
         })
       })

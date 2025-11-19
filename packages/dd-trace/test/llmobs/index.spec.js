@@ -1,13 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, after } = require('mocha')
-const sinon = require('sinon')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const AgentInfoExporter = require('../../src/exporters/common/agent-info-exporter')
-
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -81,7 +82,7 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
@@ -91,7 +92,7 @@ describe('module', () => {
         'x-datadog-tags': ''
       }
       injectCh.publish({ carrier })
-      expect(carrier['x-datadog-tags']).to.equal(',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
@@ -101,19 +102,19 @@ describe('module', () => {
         'x-datadog-tags': ''
       }
       injectCh.publish({ carrier })
-      expect(carrier['x-datadog-tags']).to.equal('')
+      assert.strictEqual(carrier['x-datadog-tags'], '')
     })
   })
 
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
       it('throws an error', () => {
-        expect(() => llmobsModule.enable({
+        assert.throws(() => llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true
           }
-        })).to.throw(
-          'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
+        }),
+        'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
           'Ensure these configurations are set before running your application.'
         )
       })
@@ -121,7 +122,7 @@ describe('module', () => {
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        expect(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } })).to.throw()
+        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
       })
     })
 
@@ -170,13 +171,13 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw()
+            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
           })
         })
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } })).to.throw()
+            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
           })
         })
 
@@ -219,7 +220,7 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          expect(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } })).to.throw(
+          assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
             'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
             'Ensure these configurations are set before running your application.'
           )
@@ -228,7 +229,7 @@ describe('module', () => {
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          expect(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' })).to.throw()
+          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
         })
       })
 
@@ -258,9 +259,9 @@ describe('module', () => {
 
     llmobsModule.disable()
 
-    expect(injectCh.hasSubscribers).to.be.false
-    expect(evalMetricAppendCh.hasSubscribers).to.be.false
-    expect(spanFinishCh.hasSubscribers).to.be.false
-    expect(flushCh.hasSubscribers).to.be.false
+    assert.strictEqual(injectCh.hasSubscribers, false)
+    assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
+    assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(flushCh.hasSubscribers, false)
   })
 })

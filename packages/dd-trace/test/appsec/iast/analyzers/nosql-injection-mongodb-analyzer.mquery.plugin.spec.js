@@ -1,16 +1,16 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe } = require('mocha')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const fs = require('node:fs')
 
-const { prepareTestServerForIastInExpress } = require('../utils')
+const axios = require('axios')
+const { after, before, describe } = require('mocha')
+
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
-
+const { prepareTestServerForIastInExpress } = require('../utils')
 describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
@@ -78,9 +78,9 @@ describe('nosql injection detection with mquery', () => {
                     })
                     .exec()
 
-                  expect(result).to.not.be.undefined
-                  expect(result.length).to.equal(1)
-                  expect(result[0].id).to.be.equal(1)
+                  assert.notStrictEqual(result, undefined)
+                  assert.strictEqual(result.length, 1)
+                  assert.strictEqual(result[0].id, 1)
                 } catch (e) {
                   // do nothing
                 }
@@ -103,9 +103,9 @@ describe('nosql injection detection with mquery', () => {
                       name: req.query.key
                     })
                     .then((result) => {
-                      expect(result).to.not.be.undefined
-                      expect(result.length).to.equal(1)
-                      expect(result[0].id).to.be.equal(1)
+                      assert.notStrictEqual(result, undefined)
+                      assert.strictEqual(result.length, 1)
+                      assert.strictEqual(result[0].id, 1)
 
                       res.end()
                     })

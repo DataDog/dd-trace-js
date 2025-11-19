@@ -1,13 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const { SourceIastPlugin } = require('../../../../../src/appsec/iast/iast-plugin')
 const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
-
 describe('Kafka consumer plugin', () => {
   let kafkaConsumerPlugin
   let addSub, handler
@@ -93,9 +94,9 @@ describe('Kafka consumer plugin', () => {
   it('should not fail with an unknown kafka message', () => {
     const message = {}
 
-    expect(() => {
+    assert.doesNotThrow(() => {
       handler({ message })
-    }).to.not.throw()
+    })
   })
 
   it('should not fail with an unknown kafka message II', () => {
@@ -103,8 +104,8 @@ describe('Kafka consumer plugin', () => {
       key: 'key'
     }
 
-    expect(() => {
+    assert.doesNotThrow(() => {
       handler({ message })
-    }).to.not.throw()
+    })
   })
 })

@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -73,12 +75,12 @@ describe('Remote Config index', () => {
 
       remoteConfig.enable(config)
 
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
       expect(rc.updateCapabilities)
         .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
-      expect(rc.setProductHandler).to.have.been.calledWith('ASM_FEATURES')
-      expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
+      sinon.assert.calledWith(rc.setProductHandler, 'ASM_FEATURES')
+      assert.strictEqual(typeof rc.setProductHandler.firstCall.args[1], 'function')
     })
 
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
@@ -86,12 +88,12 @@ describe('Remote Config index', () => {
 
       remoteConfig.enable(config)
 
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION)
+      sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
+      sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION)
       expect(rc.updateCapabilities)
         .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
-      expect(rc.setProductHandler).to.have.been.calledOnceWith('ASM_FEATURES')
-      expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
+      sinon.assert.calledOnceWith(rc.setProductHandler, 'ASM_FEATURES')
+      assert.strictEqual(typeof rc.setProductHandler.firstCall.args[1], 'function')
     })
 
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
@@ -99,11 +101,11 @@ describe('Remote Config index', () => {
 
       remoteConfig.enable(config)
 
-      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
+      sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
       expect(rc.updateCapabilities)
         .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
-      expect(rc.setProductHandler).to.not.have.been.called
+      sinon.assert.notCalled(rc.setProductHandler)
     })
 
     it('should always enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
@@ -126,26 +128,26 @@ describe('Remote Config index', () => {
       it('should enable appsec when listener is called with apply and enabled', () => {
         listener('apply', { asm: { enabled: true } })
 
-        expect(appsec.enable).to.have.been.called
+        sinon.assert.called(appsec.enable)
       })
 
       it('should enable appsec when listener is called with modify and enabled', () => {
         listener('modify', { asm: { enabled: true } })
 
-        expect(appsec.enable).to.have.been.called
+        sinon.assert.called(appsec.enable)
       })
 
       it('should disable appsec when listener is called with unapply and enabled', () => {
         listener('unapply', { asm: { enabled: true } })
 
-        expect(appsec.disable).to.have.been.calledOnce
+        sinon.assert.calledOnce(appsec.disable)
       })
 
       it('should not do anything when listener is called with apply and malformed data', () => {
         listener('apply', {})
 
-        expect(appsec.enable).to.not.have.been.called
-        expect(appsec.disable).to.not.have.been.called
+        sinon.assert.notCalled(appsec.enable)
+        sinon.assert.notCalled(appsec.disable)
       })
 
       describe('update config origin activation', () => {
@@ -155,28 +157,28 @@ describe('Remote Config index', () => {
         it('should update appsec.enabled when applying asm enabling by RC', () => {
           listener('apply', rcConfigAsmEnabling)
 
-          expect(telemetry.updateConfig).to.have.been.calledOnce
-          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
-          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('remote_config')
-          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(rcConfigAsmEnabling.asm.enabled)
+          sinon.assert.calledOnce(telemetry.updateConfig)
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'remote_config')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, rcConfigAsmEnabling.asm.enabled)
         })
 
         it('should update appsec.enabled when modifying asm enabling by RC', () => {
           listener('modify', rcConfigAsmDisabling)
 
-          expect(telemetry.updateConfig).to.have.been.calledOnce
-          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
-          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('remote_config')
-          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(rcConfigAsmDisabling.asm.enabled)
+          sinon.assert.calledOnce(telemetry.updateConfig)
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'remote_config')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, rcConfigAsmDisabling.asm.enabled)
         })
 
         it('should update when unapplying asm enabling by RC', () => {
           listener('unapply', { asm: { enabled: true } })
 
-          expect(telemetry.updateConfig).to.have.been.calledOnce
-          expect(telemetry.updateConfig.firstCall.args[0][0].name).to.be.equal('appsec.enabled')
-          expect(telemetry.updateConfig.firstCall.args[0][0].origin).to.be.equal('default')
-          expect(telemetry.updateConfig.firstCall.args[0][0].value).to.be.equal(config.appsec.enabled)
+          sinon.assert.calledOnce(telemetry.updateConfig)
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].name, 'appsec.enabled')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].origin, 'default')
+          assert.strictEqual(telemetry.updateConfig.firstCall.args[0][0].value, config.appsec.enabled)
         })
       })
 
@@ -191,14 +193,14 @@ describe('Remote Config index', () => {
         it('should not update collection mode when not a string', () => {
           listener('apply', { auto_user_instrum: { mode: 123 } }, configId)
 
-          expect(UserTracking.setCollectionMode).to.not.have.been.called
+          sinon.assert.notCalled(UserTracking.setCollectionMode)
         })
 
         it('should throw when called two times with different config ids', () => {
           listener('apply', rcConfig, configId)
 
-          expect(() => listener('apply', rcConfig, 'anotherId')).to.throw()
-          expect(log.error).to.have.been.calledOnceWithExactly(
+          assert.throws(() => listener('apply', rcConfig, 'anotherId'))
+          sinon.assert.calledOnceWithExactly(log.error,
             '[RC] Multiple auto_user_instrum received in ASM_FEATURES. Discarding config'
           )
         })
@@ -206,13 +208,13 @@ describe('Remote Config index', () => {
         it('should update collection mode when called with apply', () => {
           listener('apply', rcConfig, configId)
 
-          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
+          sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, rcConfig.auto_user_instrum.mode)
         })
 
         it('should update collection mode when called with modify', () => {
           listener('modify', rcConfig, configId)
 
-          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(rcConfig.auto_user_instrum.mode)
+          sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, rcConfig.auto_user_instrum.mode)
         })
 
         it('should revert collection mode when called with unapply', () => {
@@ -221,7 +223,7 @@ describe('Remote Config index', () => {
 
           listener('unapply', rcConfig, configId)
 
-          expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly(config.appsec.eventTracking.mode)
+          sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, config.appsec.eventTracking.mode)
         })
 
         it('should not revert collection mode when called with unapply and unknown id', () => {
@@ -230,7 +232,7 @@ describe('Remote Config index', () => {
 
           listener('unapply', rcConfig, 'unknownId')
 
-          expect(UserTracking.setCollectionMode).to.not.have.been.called
+          sinon.assert.notCalled(UserTracking.setCollectionMode)
         })
       })
     })
@@ -287,8 +289,8 @@ describe('Remote Config index', () => {
         config.appsec = {}
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities).to.not.have.been.called
-        expect(rc.setProductHandler).to.not.have.been.called
+        sinon.assert.notCalled(rc.updateCapabilities)
+        sinon.assert.notCalled(rc.setProductHandler)
       })
 
       it('should not enable when custom appsec rules are provided', () => {
@@ -296,8 +298,8 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
-        expect(rc.setProductHandler).to.have.been.called
+        sinon.assert.neverCalledWith(rc.updateCapabilities, 'ASM_ACTIVATION')
+        sinon.assert.called(rc.setProductHandler)
       })
 
       it('should enable when using default rules', () => {
@@ -307,10 +309,10 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM')
-        expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DATA')
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DD')
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM')
+        sinon.assert.calledWithExactly(rc.on, kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec is manually enabled', () => {
@@ -320,10 +322,10 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
 
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
-        expect(rc.setProductHandler).to.have.been.calledWith('ASM')
-        expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DATA')
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM_DD')
+        sinon.assert.calledWith(rc.setProductHandler, 'ASM')
+        sinon.assert.calledWithExactly(rc.on, kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -358,10 +360,10 @@ describe('Remote Config index', () => {
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, false)
 
-        expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
-        expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')
-        expect(rc.removeProductHandler).to.have.been.calledWith('ASM')
-        expect(rc.off).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        sinon.assert.calledWith(rc.removeProductHandler, 'ASM_DATA')
+        sinon.assert.calledWith(rc.removeProductHandler, 'ASM_DD')
+        sinon.assert.calledWith(rc.removeProductHandler, 'ASM')
+        sinon.assert.calledWithExactly(rc.off, kPreUpdate, RuleManager.updateWafFromRC)
       })
     })
   })

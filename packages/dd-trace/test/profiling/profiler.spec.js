@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -231,16 +233,16 @@ describe('profiler', function () {
 
       const { profiles, start, end, tags } = await exporterPromise
 
-      expect(profiles).to.have.property('wall')
-      expect(profiles.wall).to.be.instanceOf(Buffer)
-      expect(profiles.wall.indexOf(magicBytes)).to.equal(0)
-      expect(profiles).to.have.property('space')
-      expect(profiles.space).to.be.instanceOf(Buffer)
-      expect(profiles.space.indexOf(magicBytes)).to.equal(0)
+      assert.ok(Object.hasOwn(profiles, 'wall'))
+      assert.ok(profiles.wall instanceof Buffer)
+      assert.strictEqual(profiles.wall.indexOf(magicBytes), 0)
+      assert.ok(Object.hasOwn(profiles, 'space'))
+      assert.ok(profiles.space instanceof Buffer)
+      assert.strictEqual(profiles.space.indexOf(magicBytes), 0)
       expect(start).to.be.a('date')
       expect(end).to.be.a('date')
-      expect(end - start).to.equal(65000)
-      expect(tags).to.have.property('foo', 'foo')
+      assert.strictEqual(end - start, 65000)
+      assert.strictEqual(tags.foo, 'foo')
     }
 
     it('should export uncompressed profiles', async () => {
@@ -296,8 +298,8 @@ describe('profiler', function () {
       sinon.assert.calledWithMatch(startWall, 'Started wall profiler')
       sinon.assert.calledWithMatch(startSpace, 'Started space profiler')
 
-      expect(collectWall.args[0]()).to.match(/^Collected wall profile: /)
-      expect(collectSpace.args[0]()).to.match(/^Collected space profile: /)
+      assert.match(collectWall.args[0](), /^Collected wall profile: /)
+      assert.match(collectSpace.args[0](), /^Collected space profile: /)
 
       sinon.assert.calledWithMatch(submit, 'Submitted profiles')
     })
@@ -311,7 +313,7 @@ describe('profiler', function () {
       const { start, end } = exporter.export.args[0][0]
       expect(start).to.be.a('date')
       expect(end).to.be.a('date')
-      expect(end - start).to.equal(65000)
+      assert.strictEqual(end - start, 65000)
 
       sinon.assert.calledOnce(exporter.export)
 
@@ -324,7 +326,7 @@ describe('profiler', function () {
       expect(start2).to.be.greaterThanOrEqual(end)
       expect(start2).to.be.a('date')
       expect(end2).to.be.a('date')
-      expect(end2 - start2).to.equal(65000)
+      assert.strictEqual(end2 - start2, 65000)
 
       sinon.assert.calledOnce(exporter.export)
     })
@@ -333,7 +335,7 @@ describe('profiler', function () {
       await profiler._start({ profilers, exporters, sourceMap: false })
 
       const options = profilers[0].start.args[0][0]
-      expect(options).to.have.property('mapper', undefined)
+      assert.strictEqual(options.mapper, undefined)
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
@@ -342,7 +344,7 @@ describe('profiler', function () {
       await profiler._start({ profilers, exporters, sourceMap: true })
 
       const options = profilers[0].start.args[0][0]
-      expect(options).to.have.property('mapper')
+      assert.ok(Object.hasOwn(options, 'mapper'))
         .which.equals(mapper)
     })
 
@@ -350,8 +352,8 @@ describe('profiler', function () {
       const error = new Error('fail')
       sourceMapCreate.rejects(error)
       await profiler._start({ profilers, exporters, logger, sourceMap: true })
-      expect(consoleLogger.error.args[0][0]).to.equal(error)
-      expect(profiler.enabled).to.equal(true)
+      assert.strictEqual(consoleLogger.error.args[0][0], error)
+      assert.strictEqual(profiler.enabled, true)
     })
   })
 
@@ -386,11 +388,11 @@ describe('profiler', function () {
 
     it('should increment profiled intervals after one interval elapses', async () => {
       await profiler._start({ profilers, exporters })
-      expect(profiler.profiledIntervals).to.equal(0)
+      assert.strictEqual(profiler.profiledIntervals, 0)
 
       clock.tick(interval)
 
-      expect(profiler.profiledIntervals).to.equal(1)
+      assert.strictEqual(profiler.profiledIntervals, 1)
       sinon.assert.notCalled(exporter.export)
     })
 

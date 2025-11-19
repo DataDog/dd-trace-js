@@ -1,17 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { AsyncLocalStorage } = require('node:async_hooks')
-
-const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Plugin', () => {
   let tracer
   let restify
@@ -46,16 +45,16 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', 'restify.request')
-                expect(traces[0][0]).to.have.property('service', 'test')
-                expect(traces[0][0]).to.have.property('type', 'web')
-                expect(traces[0][0]).to.have.property('resource', 'GET')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '404')
-                expect(traces[0][0].meta).to.have.property('component', 'restify')
-                expect(traces[0][0].meta).to.have.property('_dd.integration', 'restify')
+                assert.strictEqual(traces[0][0].name, 'restify.request')
+                assert.strictEqual(traces[0][0].service, 'test')
+                assert.strictEqual(traces[0][0].type, 'web')
+                assert.strictEqual(traces[0][0].resource, 'GET')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '404')
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
+                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'restify')
               })
               .then(done)
               .catch(done)
@@ -79,9 +78,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                expect(traces[0][0].meta).to.have.property('component', 'restify')
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)
@@ -108,9 +107,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                expect(traces[0][0].meta).to.have.property('component', 'restify')
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)
@@ -147,7 +146,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(warningSpy).to.not.have.been.called
+                sinon.assert.notCalled(warningSpy)
               })
               .then(done)
               .catch(done)
@@ -170,7 +169,7 @@ describe('Plugin', () => {
           let next
 
           server.pre((req, res, next) => {
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
             next()
           })
 
@@ -180,12 +179,12 @@ describe('Plugin', () => {
           })
 
           server.use((req, res, next) => {
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
             next()
           })
 
           server.get('/user', (req, res, next) => {
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
             res.send(200)
             done()
             next()
@@ -213,9 +212,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-                expect(traces[0][0].meta).to.have.property('component', 'restify')
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)
@@ -237,7 +236,7 @@ describe('Plugin', () => {
 
           server.get('/user', (req, res, next) => {
             try {
-              expect(storage.getStore()).to.equal(store)
+              assert.strictEqual(storage.getStore(), store)
               done()
             } catch (e) {
               done(e)
@@ -276,11 +275,11 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('resource', 'GET /error')
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'uncaught')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/error`)
-                expect(traces[0][0].meta).to.have.property('http.status_code', '599')
-                expect(traces[0][0].meta).to.have.property('component', 'restify')
+                assert.strictEqual(traces[0][0].resource, 'GET /error')
+                assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'uncaught')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/error`)
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '599')
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)

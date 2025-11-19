@@ -1,15 +1,12 @@
 'use strict'
-
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
-
 const assert = require('node:assert')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { after, before, describe, it } = require('mocha')
 
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const hostname = 'localhost'
 // TODO: Use another port or db instance to differentiate it better from defaults
 const port = '1521'
@@ -110,7 +107,7 @@ describe('Plugin', () => {
             const span = {}
             return tracer.scope().activate(span, async () => {
               await connection.execute(dbQuery)
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
 
@@ -137,7 +134,7 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               connection.execute(dbQuery, () => {
                 try {
-                  expect(tracer.scope().active()).to.equal(span)
+                  assert.strictEqual(tracer.scope().active(), span)
                 } catch (e) {
                   return done(e)
                 }
@@ -244,7 +241,7 @@ describe('Plugin', () => {
 
           it('should restore the parent context in the callback', async () => {
             await connection.execute(dbQuery)
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
           })
 
           it('should instrument errors', async () => {

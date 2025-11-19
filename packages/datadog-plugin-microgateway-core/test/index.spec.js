@@ -1,18 +1,17 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const semver = require('semver')
-
+const assert = require('node:assert/strict')
 const http = require('node:http')
 const os = require('node:os')
 
-const agent = require('../../dd-trace/test/plugins/agent')
-const proxy = require('./proxy')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const proxy = require('./proxy')
 describe('Plugin', () => {
   let Gateway
   let gateway
@@ -83,16 +82,16 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = traces[0]
 
-              expect(spans[0]).to.have.property('name', 'microgateway.request')
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('http.url', `http://localhost:${gatewayPort}/v1/foo`)
-              expect(spans[0].meta).to.have.property('http.method', 'GET')
-              expect(spans[0].meta).to.have.property('http.status_code', '200')
-              expect(spans[0].meta).to.have.property('component', 'microgateway')
-              expect(spans[0].meta).to.have.property('_dd.integration', 'microgateway')
+              assert.strictEqual(spans[0].name, 'microgateway.request')
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].type, 'web')
+              assert.strictEqual(spans[0].resource, 'GET /v1')
+              assert.strictEqual(spans[0].meta['span.kind'], 'server')
+              assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${gatewayPort}/v1/foo`)
+              assert.strictEqual(spans[0].meta['http.method'], 'GET')
+              assert.strictEqual(spans[0].meta['http.status_code'], '200')
+              assert.strictEqual(spans[0].meta.component, 'microgateway')
+              assert.strictEqual(spans[0].meta['_dd.integration'], 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -102,7 +101,7 @@ describe('Plugin', () => {
 
         it('should propagate context to plugins', done => {
           const onrequest = (req, res, options, cb) => {
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
             cb()
           }
 
@@ -136,12 +135,12 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = traces[0]
 
-              expect(spans[0]).to.have.property('name', 'microgateway.request')
-              expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'microgateway')
+              assert.strictEqual(spans[0].name, 'microgateway.request')
+              assert.strictEqual(spans[0].resource, 'GET /v1')
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -165,12 +164,12 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = traces[0]
 
-              expect(spans[0]).to.have.property('name', 'microgateway.request')
-              expect(spans[0]).to.have.property('resource', 'GET /v1')
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'microgateway')
+              assert.strictEqual(spans[0].name, 'microgateway.request')
+              assert.strictEqual(spans[0].resource, 'GET /v1')
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'microgateway')
             })
             .then(done)
             .catch(done)
@@ -182,7 +181,7 @@ describe('Plugin', () => {
 
         if (semver.intersects(version, '>=2.3.3')) {
           it('should re-expose any exports', () => {
-            expect(Gateway.Logging).to.be.an('object')
+            assert.ok(typeof Gateway.Logging === 'object' && Gateway.Logging !== null)
           })
         }
       })

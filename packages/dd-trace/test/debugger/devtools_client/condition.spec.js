@@ -1,8 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { before, beforeEach, describe, it } = require('mocha')
 require('../../setup/mocha')
 
 const {
@@ -72,9 +72,9 @@ describe('Expresion language', function () {
 
         if (execute === false) {
           if (expected instanceof Error) {
-            expect(() => compile(ast)).to.throw(expected.constructor, expected.message)
+            assert.throws(() => compile(ast), expected.constructor, expected.message)
           } else {
-            expect(compile(ast)).to.equal(expected)
+            assert.strictEqual(compile(ast), expected)
           }
           return
         }
@@ -90,13 +90,13 @@ describe('Expresion language', function () {
         const args = Object.values(vars)
 
         if (expected instanceof Error) {
-          expect(() => fn(...args)).to.throw(expected.constructor, expected.message)
+          assert.throws(() => fn(...args), expected.constructor, expected.message)
         } else {
           const result = runWithDebug(fn, args)
           if (expected !== null && typeof expected === 'object') {
-            expect(result).to.deep.equal(expected)
+            assert.deepStrictEqual(result, expected)
           } else {
-            expect(result).to.equal(expected)
+            assert.strictEqual(result, expected)
           }
         }
       })
@@ -105,24 +105,24 @@ describe('Expresion language', function () {
 
   describe('templateRequiresEvaluation', function () {
     it('should return false, if the template does not require evaluation', function () {
-      expect(templateRequiresEvaluation([{ str: 'foo' }])).to.equal(false)
-      expect(templateRequiresEvaluation([{ str: 'foo' }, { str: 'bar' }])).to.equal(false)
+      assert.strictEqual(templateRequiresEvaluation([{ str: 'foo' }]), false)
+      assert.strictEqual(templateRequiresEvaluation([{ str: 'foo' }, { str: 'bar' }]), false)
     })
 
     it('should return true, if the template requires evaluation', function () {
-      expect(templateRequiresEvaluation([{ dsl: '{foo}', json: { ref: 'foo' } }])).to.equal(true)
-      expect(templateRequiresEvaluation([{ str: 'foo: ' }, { dsl: '{foo}', json: { ref: 'foo' } }])).to.equal(true)
+      assert.strictEqual(templateRequiresEvaluation([{ dsl: '{foo}', json: { ref: 'foo' } }]), true)
+      assert.strictEqual(templateRequiresEvaluation([{ str: 'foo: ' }, { dsl: '{foo}', json: { ref: 'foo' } }]), true)
     })
   })
 
   describe('compileSegments', function () {
     it('strings only: should return expected string', function () {
-      expect(compileSegments([{ str: 'foo' }])).to.deep.equal('["foo"]')
-      expect(compileSegments([{ str: 'foo' }, { str: 'bar' }])).to.deep.equal('["foo","bar"]')
+      assert.deepStrictEqual(compileSegments([{ str: 'foo' }]), '["foo"]')
+      assert.deepStrictEqual(compileSegments([{ str: 'foo' }, { str: 'bar' }]), '["foo","bar"]')
     })
 
     it('dsl only: should return expected string if dsl compiles to simple evaluation', function () {
-      expect(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
+      assert.deepStrictEqual(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }]),
         `[(() => {
           try {
             const result = foo
@@ -137,12 +137,12 @@ describe('Expresion language', function () {
     it('dsl only: should return expected string if dsl compiles to function', function () {
       const result = compileSegments([{ dsl: 'foo.bar', json: { getmember: [{ ref: 'foo' }, 'bar'] } }])
       const prefix = '[(() => {\n          try {\n            const result = '
-      expect(result.slice(0, prefix.length)).to.equal(prefix)
-      expect(result.slice(prefix.length)).to.match(/^\(\([^)]+\) => \{/)
+      assert.strictEqual(result.slice(0, prefix.length), prefix)
+      assert.match(result.slice(prefix.length), /^\(\([^)]+\) => \{/)
     })
 
     it('mixed: should return expected string', function () {
-      expect(compileSegments([{ str: 'foo: ' }, { dsl: 'foo', json: { ref: 'foo' } }])).to.deep.equal(
+      assert.deepStrictEqual(compileSegments([{ str: 'foo: ' }, { dsl: 'foo', json: { ref: 'foo' } }]),
         `["foo: ",(() => {
           try {
             const result = foo

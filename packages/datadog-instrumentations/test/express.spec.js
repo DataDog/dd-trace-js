@@ -1,15 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
-const sinon = require('sinon')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const semifies = require('semifies')
+const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 withVersions('express', 'express', version => {
   describe('express query instrumentation', () => {
     const queryParserReadCh = dc.channel('datadog:query:read:finish')
@@ -44,8 +45,8 @@ withVersions('express', 'express', version => {
     it('should not abort the request by default', async () => {
       const res = await axios.get(`http://localhost:${port}/`)
 
-      expect(requestBody).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(requestBody)
+      assert.strictEqual(res.data, 'DONE')
     })
 
     it('should not abort the request with non blocker subscription', async () => {
@@ -54,8 +55,8 @@ withVersions('express', 'express', version => {
 
       const res = await axios.get(`http://localhost:${port}/`)
 
-      expect(requestBody).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(requestBody)
+      assert.strictEqual(res.data, 'DONE')
 
       queryParserReadCh.unsubscribe(noop)
     })
@@ -70,7 +71,7 @@ withVersions('express', 'express', version => {
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
       expect(requestBody).not.to.be.called
-      expect(res.data).to.be.equal('BLOCKED')
+      assert.strictEqual(res.data, 'BLOCKED')
 
       queryParserReadCh.unsubscribe(blockRequest)
     })
@@ -79,7 +80,7 @@ withVersions('express', 'express', version => {
       // Router does not exist in Express 5
       it('should work correctly when router[method] is called without handler', () => {
         const router = express.Router()
-        expect(() => { router.bind('/test') }).to.not.throw()
+        assert.doesNotThrow(() => { router.bind('/test') })
       })
     }
   })

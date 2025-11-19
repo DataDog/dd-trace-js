@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -69,9 +70,9 @@ describe('Plugin', () => {
 
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
-                expect(results).to.not.be.null
-                expect(fields).to.not.be.null
-                expect(tracer.scope().active()).to.equal(span)
+                assert.notStrictEqual(results, null)
+                assert.notStrictEqual(fields, null)
+                assert.strictEqual(tracer.scope().active(), span)
               } catch (e) {
                 done(e)
               }
@@ -82,7 +83,7 @@ describe('Plugin', () => {
 
         it('should run the callback in the parent context', done => {
           connection.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -91,7 +92,7 @@ describe('Plugin', () => {
           const query = connection.query('SELECT 1 + 1 AS solution')
 
           query.on('result', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -296,7 +297,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom')
+            assert.strictEqual(traces[0][0].service, 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: '127.0.0.1',
               user: 'root',
@@ -351,7 +352,7 @@ describe('Plugin', () => {
 
         it('should run the callback in the parent context', done => {
           pool.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -363,10 +364,10 @@ describe('Plugin', () => {
           tracer.trace('test', () => {
             tracer.scope().activate(span1, () => {
               pool.query('SELECT 1 + 1 AS solution', () => {
-                expect(tracer.scope().active() === span1).to.eql(true)
+                assert.deepStrictEqual(tracer.scope().active() === span1, true)
                 tracer.scope().activate(span2, () => {
                   pool.query('SELECT 1 + 1 AS solution', () => {
-                    expect(tracer.scope().active() === span2).to.eql(true)
+                    assert.deepStrictEqual(tracer.scope().active() === span2, true)
                     done()
                   })
                 })
@@ -393,7 +394,7 @@ describe('Plugin', () => {
         it('should contain comment in query text', done => {
           const connect = connection.query('SELECT 1 + 1 AS solution', (...args) => {
             try {
-              expect(connect.sql).to.equal('/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+              assert.strictEqual(connect.sql, '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
               `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
@@ -442,7 +443,7 @@ describe('Plugin', () => {
         it('DBM propagation should handle special characters', done => {
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             try {
-              expect(connect.sql).to.equal(
+              assert.strictEqual(connect.sql,
                 '/*dddb=\'db\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
               done()
@@ -482,7 +483,7 @@ describe('Plugin', () => {
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
-            expect(queryText).to.equal(
+            assert.strictEqual(queryText,
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
@@ -510,7 +511,7 @@ describe('Plugin', () => {
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            assert.strictEqual(traces[0][0].meta['_dd.dbm_trace_injected'], 'true')
             done()
           })
           connection.query('SELECT 1 + 1 AS solution', () => {
@@ -541,7 +542,7 @@ describe('Plugin', () => {
         it('should contain comment in query text', done => {
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             try {
-              expect(queryPool.sql).to.equal(
+              assert.strictEqual(queryPool.sql,
                 '/*dddb=\'db\',dddbs=\'post\',dde=\'tester\',ddh=\'127.0.0.1\',' +
                 `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
@@ -581,7 +582,7 @@ describe('Plugin', () => {
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
-            expect(queryText).to.equal(
+            assert.strictEqual(queryText,
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
@@ -609,7 +610,7 @@ describe('Plugin', () => {
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            assert.strictEqual(traces[0][0].meta['_dd.dbm_trace_injected'], 'true')
             done()
           })
           pool.query('SELECT 1 + 1 AS solution', () => {

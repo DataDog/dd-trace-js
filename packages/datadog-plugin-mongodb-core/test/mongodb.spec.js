@@ -1,15 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const semver = require('semver')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
 
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const ddpv = require('mocha/package.json').version
 
 const withTopologies = fn => {
@@ -98,14 +98,14 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const resource = `insert test.${collectionName}`
 
-                expect(span).to.have.property('name', expectedSchema.outbound.opName)
-                expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(span).to.have.property('resource', resource)
-                expect(span).to.have.property('type', 'mongodb')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('db.name', `test.${collectionName}`)
-                expect(span.meta).to.have.property('out.host', '127.0.0.1')
-                expect(span.meta).to.have.property('component', 'mongodb')
+                assert.strictEqual(span.name, expectedSchema.outbound.opName)
+                assert.strictEqual(span.service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.type, 'mongodb')
+                assert.strictEqual(span.meta['span.kind'], 'client')
+                assert.strictEqual(span.meta['db.name'], `test.${collectionName}`)
+                assert.strictEqual(span.meta['out.host'], '127.0.0.1')
+                assert.strictEqual(span.meta.component, 'mongodb')
               })
               .then(done)
               .catch(done)
@@ -256,8 +256,8 @@ describe('Plugin', () => {
                 const resource = 'planCacheListPlans test.$cmd'
                 const query = '{}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -275,8 +275,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -293,8 +293,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_bin":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -313,8 +313,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -331,8 +331,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_time":{"$timestamp":"0"}}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -349,8 +349,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -367,8 +367,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = '{"_id":"1234"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -386,8 +386,8 @@ describe('Plugin', () => {
                 const resource = 'aggregate test.$cmd'
                 const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -407,8 +407,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collectionName}`
                 const query = `{"_id":"${id}"}`
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -420,12 +420,12 @@ describe('Plugin', () => {
 
           it('should run the callback in the parent context', done => {
             const insertPromise = collection.insertOne({ a: 1 }, {}, () => {
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
               done()
             })
             if (insertPromise && insertPromise.then) {
               insertPromise.then(() => {
-                expect(tracer.scope().active()).to.be.null
+                assert.strictEqual(tracer.scope().active(), null)
                 done()
               })
             }
@@ -459,8 +459,8 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -474,7 +474,7 @@ describe('Plugin', () => {
               const span = traces[0][0]
               const resource = `find test.${collectionName} {"_bin":"?"}`
 
-              expect(span).to.have.property('resource', resource)
+              assert.strictEqual(span.resource, resource)
             })
             .then(done)
             .catch(done)
@@ -541,9 +541,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -592,9 +592,9 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -686,9 +686,9 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
-                expect(traces[0]).to.have.length(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
-                expect(span.name).to.equal('test.parent')
+                assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
 
@@ -726,16 +726,16 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0]).to.have.length.at.least(2)
+                assert.ok(traces[0].length >= 2)
                 const rootSpan = traces[0][0]
 
-                expect(rootSpan.name).to.equal('test.parent')
+                assert.strictEqual(rootSpan.name, 'test.parent')
 
                 // assert that some child spans were created, these are the heartbeat spans
                 // don't assert on exact number of spans because it's dynamic
                 for (const childSpan of traces[0].slice(1)) {
-                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
-                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
+                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
                 }
               })
               .then(done)
@@ -774,9 +774,9 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 // Should only receive the trace for the parent span
-                expect(traces[0]).to.have.length(1)
+                assert.strictEqual(traces[0].length, 1)
                 const span = traces[0][0]
-                expect(span.name).to.equal('test.parent')
+                assert.strictEqual(span.name, 'test.parent')
               })
               .then(done)
 
@@ -813,16 +813,16 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0]).to.have.length.at.least(2)
+                assert.ok(traces[0].length >= 2)
                 const rootSpan = traces[0][0]
 
-                expect(rootSpan.name).to.equal('test.parent')
+                assert.strictEqual(rootSpan.name, 'test.parent')
 
                 // assert that some child spans were created, these are the heartbeat spans
                 // don't assert on exact number of spans because it's dynamic
                 for (const childSpan of traces[0].slice(1)) {
-                  expect(childSpan.name).to.equal(expectedSchema.outbound.opName)
-                  expect(childSpan.parent_id.toString()).to.equal(rootSpan.span_id.toString()) // Verify parent-child
+                  assert.strictEqual(childSpan.name, expectedSchema.outbound.opName)
+                  assert.strictEqual(childSpan.parent_id.toString(), rootSpan.span_id.toString()) // Verify parent-child
                 }
               })
               .then(done)

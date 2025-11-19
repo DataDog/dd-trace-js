@@ -1,8 +1,11 @@
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, describe, it } = require('mocha')
 
 const sinon = require('sinon')
 const semver = require('semver')
@@ -41,10 +44,10 @@ describe('Sns', function () {
           parentId = span.parent_id.toString()
         }
 
-        expect(parentId).to.not.equal('0')
-        expect(parentId).to.equal(spanId)
+        assert.notStrictEqual(parentId, '0')
+        assert.strictEqual(parentId, spanId)
         childSpansFound += 1
-        expect(childSpansFound).to.equal(childSpans)
+        assert.strictEqual(childSpansFound, childSpans)
         childSpansFound = 0
       }, { timeoutMs: 20000 }).then(done, done)
     }
@@ -120,8 +123,8 @@ describe('Sns', function () {
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
-          expect(span.resource).to.equal(`publish ${TopicArn}`)
-          expect(span.meta).to.include({
+          assert.strictEqual(span.resource, `publish ${TopicArn}`)
+          assertObjectContains(span.meta, {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -153,8 +156,8 @@ describe('Sns', function () {
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
-          expect(span.resource).to.equal(`publish ${TopicArn}`)
-          expect(span.meta).to.include({
+          assert.strictEqual(span.resource, `publish ${TopicArn}`)
+          assertObjectContains(span.meta, {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -183,8 +186,8 @@ describe('Sns', function () {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            expect(span.resource).to.equal(`publish ${TopicArn}`)
-            expect(span.meta).to.include({
+            assert.strictEqual(span.resource, `publish ${TopicArn}`)
+            assertObjectContains(span.meta, {
               'aws.sns.topic_arn': TopicArn,
               topicname: 'TestTopic',
               aws_service: 'SNS',
@@ -197,7 +200,7 @@ describe('Sns', function () {
               'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
               'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
             })
-            expect(span.meta).to.have.property('aws.response.body.MessageId')
+            assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.publish({
@@ -215,8 +218,8 @@ describe('Sns', function () {
         it('redacts user-defined keys to suppress in response', done => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            expect(span.resource).to.equal(`getTopicAttributes ${TopicArn}`)
-            expect(span.meta).to.include({
+            assert.strictEqual(span.resource, `getTopicAttributes ${TopicArn}`)
+            assertObjectContains(span.meta, {
               'aws.sns.topic_arn': TopicArn,
               topicname: 'TestTopic',
               aws_service: 'SNS',
@@ -260,8 +263,8 @@ describe('Sns', function () {
               agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal('publish')
-                expect(span.meta).to.include({
+                assert.strictEqual(span.resource, 'publish')
+                assertObjectContains(span.meta, {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
@@ -279,8 +282,8 @@ describe('Sns', function () {
               agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal('publish')
-                expect(span.meta).to.include({
+                assert.strictEqual(span.resource, 'publish')
+                assertObjectContains(span.meta, {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
@@ -300,8 +303,8 @@ describe('Sns', function () {
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span.resource).to.equal(`confirmSubscription ${TopicArn}`)
-              expect(span.meta).to.include({
+              assert.strictEqual(span.resource, `confirmSubscription ${TopicArn}`)
+              assertObjectContains(span.meta, {
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
                 topicname: 'TestTopic',
@@ -427,10 +430,10 @@ describe('Sns', function () {
 
               for (const message in data.Messages) {
                 const recordData = JSON.parse(data.Messages[message].Body)
-                expect(recordData.MessageAttributes).to.have.property('_datadog')
+                assert.ok(Object.hasOwn(recordData.MessageAttributes, '_datadog'))
 
                 const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
-                expect(attributes).to.have.property('x-datadog-trace-id')
+                assert.ok(Object.hasOwn(attributes, 'x-datadog-trace-id'))
               }
             })
             sns.publishBatch({
@@ -486,8 +489,8 @@ describe('Sns', function () {
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
-          expect(span.resource).to.equal(`publish ${TopicArn}`)
-          expect(span.meta).to.include({
+          assert.strictEqual(span.resource, `publish ${TopicArn}`)
+          assertObjectContains(span.meta, {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -554,7 +557,7 @@ describe('Sns', function () {
                   publishSpanMeta = span.meta
                 }
 
-                expect(publishSpanMeta).to.include({
+                assertObjectContains(publishSpanMeta, {
                   'pathway.hash': expectedProducerHash
                 })
               }).then(done, done)
@@ -585,7 +588,7 @@ describe('Sns', function () {
                   consumeSpanMeta = span.meta
                 }
 
-                expect(consumeSpanMeta).to.include({
+                assertObjectContains(consumeSpanMeta, {
                   'pathway.hash': expectedConsumerHash
                 })
               }).then(done, done)
@@ -604,8 +607,8 @@ describe('Sns', function () {
               })
             }
           })
-          expect(statsPointsReceived).to.be.at.least(1)
-          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          assert.ok(statsPointsReceived >= 1)
+          assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }).then(done, done)
 
         sns.subscribe(subParams, () => {
@@ -624,8 +627,8 @@ describe('Sns', function () {
               })
             }
           })
-          expect(statsPointsReceived).to.be.at.least(2)
-          expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+          assert.ok(statsPointsReceived >= 2)
+          assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
         }).then(done, done)
 
         sns.subscribe(subParams, () => {
@@ -662,8 +665,8 @@ describe('Sns', function () {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(3)
-            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            assert.ok(statsPointsReceived >= 3)
+            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }, { timeoutMs: 2000 }).then(done, done)
 
           sns.subscribe(subParams, () => {

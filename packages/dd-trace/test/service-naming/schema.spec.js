@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -21,12 +23,12 @@ describe('Service naming', () => {
     })
 
     it('Should default to v0 when required', () => {
-      expect(singleton.version).to.be.equal('v0')
+      assert.strictEqual(singleton.version, 'v0')
     })
 
     it('Should grab the version given by `spanAttributeSchema`', () => {
       singleton.configure({ spanAttributeSchema: 'MyShinyNewVersion' })
-      expect(singleton.version).to.be.equal('MyShinyNewVersion')
+      assert.strictEqual(singleton.version, 'MyShinyNewVersion')
     })
 
     describe('Name resolution proxy', () => {
@@ -43,12 +45,12 @@ describe('Service naming', () => {
 
       it('should forward additional args to opName', () => {
         singleton.opName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getOpName).to.have.been.calledWith('messaging', 'producer', 'redis', extra)
+        sinon.assert.calledWith(versions.v0.getOpName, 'messaging', 'producer', 'redis', extra)
       })
 
       it('should forward additional args to serviceName and add configured service', () => {
         singleton.serviceName('messaging', 'producer', 'redis', extra)
-        expect(versions.v0.getServiceName).to.have.been.calledWith(
+        sinon.assert.calledWith(versions.v0.getServiceName,
           'messaging',
           'producer',
           'redis',

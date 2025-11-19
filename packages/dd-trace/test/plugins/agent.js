@@ -1,18 +1,18 @@
 'use strict'
 
 const assert = require('assert')
-const util = require('util')
 const http = require('http')
-const bodyParser = require('body-parser')
-const msgpack = require('@msgpack/msgpack')
-const express = require('express')
 const path = require('path')
-const ritm = require('../../src/ritm')
-const { storage } = require('../../../datadog-core')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { expect } = require('chai')
+const util = require('util')
+
+const msgpack = require('@msgpack/msgpack')
+const bodyParser = require('body-parser')
+const express = require('express')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { storage } = require('../../../datadog-core')
+const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -273,7 +273,7 @@ function assertIntegrationName (traces) {
             // ignore everything that has no component (i.e. manual span)
             // ignore everything that has already the component == _dd.integration
             if (span?.meta?.component && span.meta.component !== span.meta['_dd.integration']) {
-              expect(span.meta['_dd.integration']).to.equal(
+              assert.strictEqual(span.meta['_dd.integration'],
                 currentIntegrationName,
                   `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
                   but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`

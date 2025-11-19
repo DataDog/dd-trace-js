@@ -1,20 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
 
-const { prepareTestServerForIast } = require('../utils')
-const { NO_SAMESITE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
 const noSamesiteCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-samesite-cookie-analyzer')
-
+const { NO_SAMESITE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const { prepareTestServerForIast } = require('../utils')
 describe('no SameSite cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
-    expect(NO_SAMESITE_COOKIE).to.be.equals('NO_SAMESITE_COOKIE')
+    assert.strictEqual(NO_SAMESITE_COOKIE, 'NO_SAMESITE_COOKIE')
   })
 
   it('NoSamesiteCookieAnalyzer extends CookieAnalyzer', () => {
-    expect(CookieAnalyzer.isPrototypeOf(noSamesiteCookieAnalyzer.constructor)).to.be.true
+    assert.strictEqual(CookieAnalyzer.isPrototypeOf(noSamesiteCookieAnalyzer.constructor), true)
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
@@ -30,7 +30,7 @@ describe('no SameSite cookie analyzer', () => {
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value')
       }, NO_SAMESITE_COOKIE, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.equals('key')
+        assert.strictEqual(vulnerabilities[0].evidence.value, 'key')
       })
 
       testThatRequestHasVulnerability((req, res) => {

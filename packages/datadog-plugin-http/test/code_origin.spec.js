@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-
 describe('Plugin', () => {
   describe('http', () => {
     describe('Code Origin for Spans', () => {
@@ -34,14 +34,14 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span.meta).to.have.property('_dd.code_origin.type', 'exit')
+              assert.strictEqual(span.meta['_dd.code_origin.type'], 'exit')
 
               // Just validate that frame 0 tags are present. The detailed validation is performed in a different test.
-              expect(span.meta).to.have.property('_dd.code_origin.frames.0.file')
-              expect(span.meta).to.have.property('_dd.code_origin.frames.0.line')
-              expect(span.meta).to.have.property('_dd.code_origin.frames.0.column')
-              expect(span.meta).to.have.property('_dd.code_origin.frames.0.method')
-              expect(span.meta).to.have.property('_dd.code_origin.frames.0.type')
+              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.file'))
+              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.line'))
+              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.column'))
+              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.method'))
+              assert.ok(Object.hasOwn(span.meta, '_dd.code_origin.frames.0.type'))
             })
             .then(done)
             .catch(done)

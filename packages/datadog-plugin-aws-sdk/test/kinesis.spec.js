@@ -1,8 +1,9 @@
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 /* eslint-disable @stylistic/max-len */
 'use strict'
-
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -91,8 +92,8 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.have.property('_datadog')
-            expect(data._datadog).to.have.property('x-datadog-trace-id')
+            assert.ok(Object.hasOwn(data, '_datadog'))
+            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
 
             done()
           })
@@ -108,8 +109,8 @@ describe('Kinesis', function () {
 
             for (const record in data.Records) {
               const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
-              expect(recordData).to.have.property('_datadog')
-              expect(recordData._datadog).to.have.property('x-datadog-trace-id')
+              assert.ok(Object.hasOwn(recordData, '_datadog'))
+              assert.ok(Object.hasOwn(recordData._datadog, 'x-datadog-trace-id'))
             }
 
             done()
@@ -124,8 +125,8 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.have.property('_datadog')
-            expect(data._datadog).to.have.property('x-datadog-trace-id')
+            assert.ok(Object.hasOwn(data, '_datadog'))
+            assert.ok(Object.hasOwn(data._datadog, 'x-datadog-trace-id'))
 
             done()
           })
@@ -143,7 +144,7 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
 
-            expect(data).to.not.have.property('_datadog')
+            assert.ok(!Object.hasOwn(data, '_datadog'))
 
             done()
           })
@@ -153,13 +154,13 @@ describe('Kinesis', function () {
       it('generates tags for proper input', done => {
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
-          expect(span.meta).to.include({
+          assertObjectContains(span.meta, {
             streamname: streamName,
             aws_service: 'Kinesis',
             region: 'us-east-1'
           })
-          expect(span.resource).to.equal(`putRecord ${streamName}`)
-          expect(span.meta).to.have.property('streamname', streamName)
+          assert.strictEqual(span.resource, `putRecord ${streamName}`)
+          assert.strictEqual(span.meta.streamname, streamName)
         }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, () => {})
@@ -181,7 +182,7 @@ describe('Kinesis', function () {
             helpers.getTestData(kinesis, streamName, data, (err, data) => {
               if (err) return done(err)
 
-              expect(data).not.to.have.property('_datadog')
+              assert.ok(!Object.hasOwn(data, '_datadog'))
 
               done()
             })
@@ -252,7 +253,7 @@ describe('Kinesis', function () {
             getRecordSpanMeta = span.meta
           }
 
-          expect(getRecordSpanMeta).to.include({
+          assertObjectContains(getRecordSpanMeta, {
             'pathway.hash': expectedConsumerHash
           })
         }, { timeoutMs: 10000 }).then(done, done)
@@ -273,7 +274,7 @@ describe('Kinesis', function () {
             putRecordSpanMeta = span.meta
           }
 
-          expect(putRecordSpanMeta).to.include({
+          assertObjectContains(putRecordSpanMeta, {
             'pathway.hash': expectedProducerHash
           })
         }).then(done, done)
@@ -292,8 +293,8 @@ describe('Kinesis', function () {
               })
             }
           })
-          expect(statsPointsReceived).to.be.at.least(1)
-          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          assert.ok(statsPointsReceived >= 1)
+          assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
@@ -310,8 +311,8 @@ describe('Kinesis', function () {
               })
             }
           }, { timeoutMs: 10000 })
-          expect(statsPointsReceived).to.be.at.least(2)
-          expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+          assert.ok(statsPointsReceived >= 2)
+          assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
@@ -332,8 +333,8 @@ describe('Kinesis', function () {
               })
             }
           }, { timeoutMs: 10000 })
-          expect(statsPointsReceived).to.equal(1)
-          expect(agent.dsmStatsExistWithParentHash(agent, '0')).to.equal(true)
+          assert.strictEqual(statsPointsReceived, 1)
+          assert.strictEqual(agent.dsmStatsExistWithParentHash(agent, '0'), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
         agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
@@ -365,8 +366,8 @@ describe('Kinesis', function () {
               })
             }
           })
-          expect(statsPointsReceived).to.be.at.least(3)
-          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          assert.ok(statsPointsReceived >= 3)
+          assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {

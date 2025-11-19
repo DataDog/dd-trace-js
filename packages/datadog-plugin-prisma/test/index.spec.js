@@ -1,18 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, before, after } = require('mocha')
-
+const assert = require('node:assert/strict')
+const { execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
-const { execSync } = require('node:child_process')
 
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { expect } = require('chai')
+const { after, before, beforeEach, describe, it } = require('mocha')
+
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let prisma
   let prismaClient
@@ -46,19 +46,19 @@ describe('Plugin', () => {
 
         it('should do automatic instrumentation', async () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
-            expect(traces[0][0].resource).to.equal('queryRaw')
-            expect(traces[0][0].meta).to.have.property('prisma.type', 'client')
-            expect(traces[0][0].meta).to.have.property('prisma.method', 'queryRaw')
-            expect(traces[0][0]).to.have.property('name', expectedSchema.client.opName)
-            expect(traces[0][0]).to.have.property('service', expectedSchema.client.serviceName)
+            assert.strictEqual(traces[0][0].resource, 'queryRaw')
+            assert.strictEqual(traces[0][0].meta['prisma.type'], 'client')
+            assert.strictEqual(traces[0][0].meta['prisma.method'], 'queryRaw')
+            assert.strictEqual(traces[0][0].name, expectedSchema.client.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.client.serviceName)
 
             // grabbing actual db query span
             const engineDBSpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-            expect(engineDBSpan).to.have.property('resource', 'SELECT 1')
-            expect(engineDBSpan).to.have.property('type', 'sql')
-            expect(engineDBSpan.meta).to.have.property('span.kind', 'client')
-            expect(engineDBSpan).to.have.property('name', expectedSchema.engine.opName)
-            expect(engineDBSpan).to.have.property('service', expectedSchema.engine.serviceName)
+            assert.strictEqual(engineDBSpan.resource, 'SELECT 1')
+            assert.strictEqual(engineDBSpan.type, 'sql')
+            assert.strictEqual(engineDBSpan.meta['span.kind'], 'client')
+            assert.strictEqual(engineDBSpan.name, expectedSchema.engine.opName)
+            assert.strictEqual(engineDBSpan.service, expectedSchema.engine.serviceName)
           })
 
           await Promise.all([
@@ -115,18 +115,18 @@ describe('Plugin', () => {
 
         it('should generate engine span from array of spans', async () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
-            expect(traces[0].length).to.equal(2)
-            expect(traces[0][0].span_id).to.equal(traces[0][1].parent_id)
-            expect(traces[0][0].name).to.equal('prisma.engine')
-            expect(traces[0][0].resource).to.equal('query')
-            expect(traces[0][0].meta).to.have.property('prisma.type', 'engine')
-            expect(traces[0][0].meta).to.have.property('prisma.name', 'query')
-            expect(traces[0][1].name).to.equal('prisma.engine')
-            expect(traces[0][1].resource).to.equal('SELECT 1')
-            expect(traces[0][1].type).to.equal('sql')
-            expect(traces[0][1].meta).to.have.property('prisma.type', 'engine')
-            expect(traces[0][1].meta).to.have.property('prisma.name', 'db_query')
-            expect(traces[0][1].meta).to.have.property('db.type', 'postgres')
+            assert.strictEqual(traces[0].length, 2)
+            assert.strictEqual(traces[0][0].span_id, traces[0][1].parent_id)
+            assert.strictEqual(traces[0][0].name, 'prisma.engine')
+            assert.strictEqual(traces[0][0].resource, 'query')
+            assert.strictEqual(traces[0][0].meta['prisma.type'], 'engine')
+            assert.strictEqual(traces[0][0].meta['prisma.name'], 'query')
+            assert.strictEqual(traces[0][1].name, 'prisma.engine')
+            assert.strictEqual(traces[0][1].resource, 'SELECT 1')
+            assert.strictEqual(traces[0][1].type, 'sql')
+            assert.strictEqual(traces[0][1].meta['prisma.type'], 'engine')
+            assert.strictEqual(traces[0][1].meta['prisma.name'], 'db_query')
+            assert.strictEqual(traces[0][1].meta['db.type'], 'postgres')
           })
 
           const engineSpans = [
@@ -170,14 +170,14 @@ describe('Plugin', () => {
           const tracingPromise = agent.assertSomeTraces(traces => {
             // Find the db_query span
             const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
-            expect(dbQuerySpan).to.exist
+            assert.ok(dbQuerySpan != null)
 
             // Verify database connection attributes are present
-            expect(dbQuerySpan.meta).to.have.property('db.name', 'postgres')
-            expect(dbQuerySpan.meta).to.have.property('db.user', 'foo')
-            expect(dbQuerySpan.meta).to.have.property('out.host', 'localhost')
-            expect(dbQuerySpan.meta).to.have.property('network.destination.port', '5432')
-            expect(dbQuerySpan.meta).to.have.property('db.type', 'postgres')
+            assert.strictEqual(dbQuerySpan.meta['db.name'], 'postgres')
+            assert.strictEqual(dbQuerySpan.meta['db.user'], 'foo')
+            assert.strictEqual(dbQuerySpan.meta['out.host'], 'localhost')
+            assert.strictEqual(dbQuerySpan.meta['network.destination.port'], '5432')
+            assert.strictEqual(dbQuerySpan.meta['db.type'], 'postgres')
           })
 
           const engineSpans = [

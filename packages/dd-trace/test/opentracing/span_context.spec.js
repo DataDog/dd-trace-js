@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../setup/core')
@@ -40,7 +40,7 @@ describe('SpanContext', () => {
     }
     const spanContext = new SpanContext(props)
 
-    expect(spanContext).to.deep.equal({
+    assert.deepStrictEqual(spanContext, {
       _traceId: '123',
       _spanId: '456',
       _parentId: '789',
@@ -70,7 +70,7 @@ describe('SpanContext', () => {
       spanId: '456'
     })
 
-    expect(spanContext).to.deep.equal({
+    assert.deepStrictEqual(spanContext, {
       _traceId: '123',
       _spanId: '456',
       _parentId: null,
@@ -103,7 +103,7 @@ describe('SpanContext', () => {
     })
     second._sampling.priority = 2
 
-    expect(first._sampling).to.have.property('priority', 2)
+    assert.strictEqual(first._sampling.priority, 2)
   })
 
   describe('toTraceId()', () => {
@@ -113,7 +113,7 @@ describe('SpanContext', () => {
         spanId: id('456', 10)
       })
 
-      expect(spanContext.toTraceId()).to.equal('123')
+      assert.strictEqual(spanContext.toTraceId(), '123')
     })
   })
 
@@ -124,7 +124,7 @@ describe('SpanContext', () => {
         spanId: id('456', 10)
       })
 
-      expect(spanContext.toSpanId()).to.equal('456')
+      assert.strictEqual(spanContext.toSpanId(), '456')
     })
   })
 
@@ -135,7 +135,7 @@ describe('SpanContext', () => {
         spanId: id('456', 16)
       })
 
-      expect(spanContext.toTraceparent()).to.equal('00-00000000000000000000000000000123-0000000000000456-00')
+      assert.strictEqual(spanContext.toTraceparent(), '00-00000000000000000000000000000123-0000000000000456-00')
     })
 
     it('should return the traceparent with 128-bit trace ID from the tag', () => {
@@ -146,7 +146,7 @@ describe('SpanContext', () => {
 
       spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
 
-      expect(spanContext.toTraceparent()).to.equal('00-00000000000007890000000000000123-0000000000000456-00')
+      assert.strictEqual(spanContext.toTraceparent(), '00-00000000000007890000000000000123-0000000000000456-00')
     })
 
     it('should return the traceparent with 128-bit trace ID from the traceparent', () => {
@@ -157,7 +157,7 @@ describe('SpanContext', () => {
 
       spanContext._trace.tags['_dd.p.tid'] = '0000000000000789'
 
-      expect(spanContext.toTraceparent()).to.equal('00-00000000000007890000000000000123-0000000000000456-00')
+      assert.strictEqual(spanContext.toTraceparent(), '00-00000000000007890000000000000123-0000000000000456-00')
     })
   })
 })

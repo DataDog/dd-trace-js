@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -258,7 +258,7 @@ describe('TracerProxy', () => {
   describe('uninitialized', () => {
     describe('init', () => {
       it('should return itself', () => {
-        expect(proxy.init()).to.equal(proxy)
+        assert.strictEqual(proxy.init(), proxy)
       })
 
       it('should initialize and configure an instance of DatadogTracer', () => {
@@ -266,17 +266,17 @@ describe('TracerProxy', () => {
 
         proxy.init(options)
 
-        expect(Config).to.have.been.calledWith(options)
-        expect(DatadogTracer).to.have.been.calledWith(config)
-        expect(remoteConfig.enable).to.have.been.calledOnceWith(config)
+        sinon.assert.calledWith(Config, options)
+        sinon.assert.calledWith(DatadogTracer, config)
+        sinon.assert.calledOnceWith(remoteConfig.enable, config)
       })
 
       it('should not initialize twice', () => {
         proxy.init()
         proxy.init()
 
-        expect(DatadogTracer).to.have.been.calledOnce
-        expect(remoteConfig.enable).to.have.been.calledOnce
+        sinon.assert.calledOnce(DatadogTracer)
+        sinon.assert.calledOnce(remoteConfig.enable)
       })
 
       it('should not enable remote config when disabled', () => {
@@ -284,8 +284,8 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(DatadogTracer).to.have.been.calledOnce
-        expect(remoteConfig.enable).to.not.have.been.called
+        sinon.assert.calledOnce(DatadogTracer)
+        sinon.assert.notCalled(remoteConfig.enable)
       })
 
       it('should not initialize when disabled', () => {
@@ -293,13 +293,13 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(DatadogTracer).to.not.have.been.called
+        sinon.assert.notCalled(DatadogTracer)
       })
 
       it('should not capture runtimeMetrics by default', () => {
         proxy.init()
 
-        expect(runtimeMetrics.start).to.not.have.been.called
+        sinon.assert.notCalled(runtimeMetrics.start)
       })
 
       it('should support applying remote config', () => {
@@ -309,9 +309,9 @@ describe('TracerProxy', () => {
 
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
 
-        expect(config.configure).to.have.been.calledWith(conf)
-        expect(tracer.configure).to.have.been.calledWith(config)
-        expect(pluginManager.configure).to.have.been.calledWith(config)
+        sinon.assert.calledWith(config.configure, conf)
+        sinon.assert.calledWith(tracer.configure, config)
+        sinon.assert.calledWith(pluginManager.configure, config)
       })
 
       it('should support enabling debug logs for tracer flares', () => {
@@ -326,8 +326,8 @@ describe('TracerProxy', () => {
           name: 'flare-log-level.debug'
         })
 
-        expect(flare.enable).to.have.been.calledWith(config)
-        expect(flare.prepare).to.have.been.calledWith(logLevel)
+        sinon.assert.calledWith(flare.enable, config)
+        sinon.assert.calledWith(flare.prepare, logLevel)
       })
 
       it('should support sending tracer flares', () => {
@@ -345,8 +345,8 @@ describe('TracerProxy', () => {
           uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
         })
 
-        expect(flare.enable).to.have.been.calledWith(config)
-        expect(flare.send).to.have.been.calledWith(task)
+        sinon.assert.calledWith(flare.enable, config)
+        sinon.assert.calledWith(flare.send, task)
       })
 
       it('should cleanup flares when the config is removed', () => {
@@ -362,7 +362,7 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_CONFIG')('apply', conf)
         handlers.get('AGENT_CONFIG')('unapply', conf)
 
-        expect(flare.disable).to.have.been.called
+        sinon.assert.called(flare.disable)
       })
 
       it('should setup FFE_FLAGS product handler when openfeature provider is enabled', () => {
@@ -374,7 +374,7 @@ describe('TracerProxy', () => {
         const flagConfig = { flags: { 'test-flag': {} } }
         handlers.get('FFE_FLAGS')('apply', flagConfig)
 
-        expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
+        sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
       })
 
       it('should handle FFE_FLAGS modify action', () => {
@@ -386,7 +386,7 @@ describe('TracerProxy', () => {
         const flagConfig = { flags: { 'modified-flag': {} } }
         handlers.get('FFE_FLAGS')('modify', flagConfig)
 
-        expect(openfeatureProvider._setConfiguration).to.have.been.calledWith(flagConfig)
+        sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
       })
 
       it('should support applying remote config', () => {
@@ -401,22 +401,22 @@ describe('TracerProxy', () => {
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
         remoteConfigProxy.appsec // Eagerly trigger lazy loading.
-        expect(DatadogTracer).to.have.been.calledOnce
-        expect(AppsecSdk).to.have.been.calledOnce
-        expect(appsec.enable).to.not.have.been.called
-        expect(iast.enable).to.not.have.been.called
+        sinon.assert.calledOnce(DatadogTracer)
+        sinon.assert.calledOnce(AppsecSdk)
+        sinon.assert.notCalled(appsec.enable)
+        sinon.assert.notCalled(iast.enable)
 
         let conf = { tracing_enabled: false }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
-        expect(appsec.disable).to.not.have.been.called
-        expect(iast.disable).to.not.have.been.called
+        sinon.assert.notCalled(appsec.disable)
+        sinon.assert.notCalled(iast.disable)
 
         conf = { tracing_enabled: true }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
-        expect(DatadogTracer).to.have.been.calledOnce
-        expect(AppsecSdk).to.have.been.calledOnce
-        expect(appsec.enable).to.not.have.been.called
-        expect(iast.enable).to.not.have.been.called
+        sinon.assert.calledOnce(DatadogTracer)
+        sinon.assert.calledOnce(AppsecSdk)
+        sinon.assert.notCalled(appsec.enable)
+        sinon.assert.notCalled(iast.enable)
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
@@ -439,20 +439,20 @@ describe('TracerProxy', () => {
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
 
-        expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
-        expect(iast.enable).to.have.been.calledOnceWithExactly(config, tracer)
+        sinon.assert.calledOnceWithExactly(appsec.enable, config)
+        sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
         let conf = { tracing_enabled: false }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
-        expect(appsec.disable).to.have.been.called
-        expect(iast.disable).to.have.been.called
+        sinon.assert.called(appsec.disable)
+        sinon.assert.called(iast.disable)
 
         conf = { tracing_enabled: true }
         handlers.get('APM_TRACING')('apply', { lib_config: conf })
-        expect(appsec.enable).to.have.been.calledTwice
-        expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
-        expect(iast.enable).to.have.been.calledTwice
-        expect(iast.enable.secondCall).to.have.been.calledWithExactly(config, tracer)
+        sinon.assert.calledTwice(appsec.enable)
+        sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
+        sinon.assert.calledTwice(iast.enable)
+        sinon.assert.calledWithExactly(iast.enable.secondCall, config, tracer)
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
@@ -460,7 +460,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(runtimeMetrics.start).to.have.been.called
+        sinon.assert.called(runtimeMetrics.start)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {
@@ -491,11 +491,11 @@ describe('TracerProxy', () => {
 
         const incs = dogStatsD._increments()
 
-        expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
-        expect(incs.length).to.equal(1)
-        expect(incs[0][0]).to.equal('foo')
-        expect(incs[0][1]).to.equal(10)
-        expect(incs[0][2]).to.deep.equal({ alpha: 'bravo' })
+        assert.strictEqual(dogStatsD._config().dogstatsd.hostname, 'localhost')
+        assert.strictEqual(incs.length, 1)
+        assert.strictEqual(incs[0][0], 'foo')
+        assert.strictEqual(incs[0][1], 10)
+        assert.deepStrictEqual(incs[0][2], { alpha: 'bravo' })
       })
 
       it('should enable appsec when explicitly configured to true', () => {
@@ -503,7 +503,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(appsec.enable).to.have.been.called
+        sinon.assert.called(appsec.enable)
       })
 
       it('should not enable appsec when explicitly configured to false', () => {
@@ -511,7 +511,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(appsec.enable).to.not.have.been.called
+        sinon.assert.notCalled(appsec.enable)
       })
 
       it('should enable iast when configured', () => {
@@ -519,7 +519,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(iast.enable).to.have.been.calledOnce
+        sinon.assert.calledOnce(iast.enable)
       })
 
       it('should not enable iast when it is not configured', () => {
@@ -527,7 +527,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(iast.enable).not.to.have.been.called
+        sinon.assert.notCalled(iast.enable)
       })
 
       it('should not load the profiler when not configured', () => {
@@ -535,7 +535,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(profiler.start).to.not.have.been.called
+        sinon.assert.notCalled(profiler.start)
       })
 
       it('should not load the profiler when profiling config does not exist', () => {
@@ -543,7 +543,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(profiler.start).to.not.have.been.called
+        sinon.assert.notCalled(profiler.start)
       })
 
       it('should load profiler when configured', () => {
@@ -551,7 +551,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(profiler.start).to.have.been.called
+        sinon.assert.called(profiler.start)
       })
 
       it('should throw an error since profiler fails to be imported', () => {
@@ -580,7 +580,7 @@ describe('TracerProxy', () => {
       it('should start telemetry', () => {
         proxy.init()
 
-        expect(telemetry.start).to.have.been.called
+        sinon.assert.called(telemetry.start)
       })
 
       it('should configure standalone', () => {
@@ -605,7 +605,7 @@ describe('TracerProxy', () => {
         proxy.appsec // Eagerly trigger lazy loading.
 
         const config = AppsecSdk.firstCall.args[1]
-        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
+        sinon.assert.calledOnceWithExactly(standalone.configure, config)
       })
     })
 
@@ -614,22 +614,22 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        expect(noop.trace).to.have.been.calledWith('a', 'b', callback)
-        expect(returnValue).to.equal('test')
+        sinon.assert.calledWith(noop.trace, 'a', 'b', callback)
+        assert.strictEqual(returnValue, 'test')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        expect(noop.trace).to.have.been.calledWith('a', {}, callback)
-        expect(returnValue).to.equal('test')
+        sinon.assert.calledWith(noop.trace, 'a', {}, callback)
+        assert.strictEqual(returnValue, 'test')
       })
 
       it('should ignore calls without an invalid callback', () => {
         proxy.wrap('a', 'b')
 
-        expect(noop.trace).to.not.have.been.called
+        sinon.assert.notCalled(noop.trace)
       })
     })
 
@@ -638,23 +638,23 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        expect(noop.wrap).to.have.been.calledWith('a', 'b', callback)
-        expect(returnValue).to.equal('fn')
+        sinon.assert.calledWith(noop.wrap, 'a', 'b', callback)
+        assert.strictEqual(returnValue, 'fn')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        expect(noop.wrap).to.have.been.calledWith('a', {}, callback)
-        expect(returnValue).to.equal('fn')
+        sinon.assert.calledWith(noop.wrap, 'a', {}, callback)
+        assert.strictEqual(returnValue, 'fn')
       })
 
       it('should ignore calls without an invalid callback', () => {
         const returnValue = proxy.wrap('a', 'b')
 
-        expect(noop.wrap).to.not.have.been.called
-        expect(returnValue).to.equal('b')
+        sinon.assert.notCalled(noop.wrap)
+        assert.strictEqual(returnValue, 'b')
       })
     })
 
@@ -662,8 +662,8 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        expect(noop.startSpan).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('span')
+        sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'span')
       })
     })
 
@@ -671,8 +671,8 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
-        expect(noop.inject).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('noop')
+        sinon.assert.calledWith(noop.inject, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'noop')
       })
     })
 
@@ -680,8 +680,8 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopTracer', () => {
         const returnValue = proxy.extract('a', 'b', 'c')
 
-        expect(noop.extract).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('spanContext')
+        sinon.assert.calledWith(noop.extract, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'spanContext')
       })
     })
 
@@ -689,8 +689,8 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        expect(noop.setUrl).to.have.been.calledWith('http://example.com')
-        expect(returnValue).to.equal(proxy)
+        sinon.assert.calledWith(noop.setUrl, 'http://example.com')
+        assert.strictEqual(returnValue, proxy)
       })
     })
 
@@ -702,24 +702,24 @@ describe('TracerProxy', () => {
       describe('setBaggageItem', () => {
         it('should set a baggage item', () => {
           const baggage = proxy.setBaggageItem('key', 'value')
-          expect(baggage).to.deep.equal({ key: 'value' })
+          assert.deepStrictEqual(baggage, { key: 'value' })
         })
 
         it('should merge with existing baggage items', () => {
           proxy.setBaggageItem('key1', 'value1')
           const baggage = proxy.setBaggageItem('key2', 'value2')
-          expect(baggage).to.deep.equal({ key1: 'value1', key2: 'value2' })
+          assert.deepStrictEqual(baggage, { key1: 'value1', key2: 'value2' })
         })
       })
 
       describe('getBaggageItem', () => {
         it('should get a baggage item', () => {
           proxy.setBaggageItem('key', 'value')
-          expect(proxy.getBaggageItem('key')).to.equal('value')
+          assert.strictEqual(proxy.getBaggageItem('key'), 'value')
         })
 
         it('should return undefined for non-existent items', () => {
-          expect(proxy.getBaggageItem('missing')).to.be.undefined
+          assert.strictEqual(proxy.getBaggageItem('missing'), undefined)
         })
       })
 
@@ -727,11 +727,11 @@ describe('TracerProxy', () => {
         it('should get all baggage items', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
-          expect(proxy.getAllBaggageItems()).to.deep.equal({ key1: 'value1', key2: 'value2' })
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key1: 'value1', key2: 'value2' })
         })
 
         it('should return empty object when no items exist', () => {
-          expect(proxy.getAllBaggageItems()).to.deep.equal({})
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), {})
         })
       })
 
@@ -740,13 +740,13 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeBaggageItem('key1')
-          expect(baggage).to.deep.equal({ key2: 'value2' })
+          assert.deepStrictEqual(baggage, { key2: 'value2' })
         })
 
         it('should handle removing non-existent items', () => {
           proxy.setBaggageItem('key', 'value')
           const baggage = proxy.removeBaggageItem('missing')
-          expect(baggage).to.deep.equal({ key: 'value' })
+          assert.deepStrictEqual(baggage, { key: 'value' })
         })
       })
 
@@ -755,7 +755,7 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
-          expect(baggage).to.be.undefined
+          assert.strictEqual(baggage, undefined)
         })
       })
     })
@@ -766,7 +766,7 @@ describe('TracerProxy', () => {
           const user = { id: 'user_id' }
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
-          expect(noopAppsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+          sinon.assert.calledOnceWithExactly(noopAppsecSdk.trackUserLoginSuccessEvent, user, metadata)
         })
       })
 
@@ -776,7 +776,7 @@ describe('TracerProxy', () => {
           const exists = true
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
-          expect(noopAppsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+          sinon.assert.calledOnceWithExactly(noopAppsecSdk.trackUserLoginFailureEvent, userId, exists, metadata)
         })
       })
 
@@ -785,7 +785,7 @@ describe('TracerProxy', () => {
           const eventName = 'custom_event'
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
-          expect(noopAppsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+          sinon.assert.calledOnceWithExactly(noopAppsecSdk.trackCustomEvent, eventName, metadata)
         })
       })
     })
@@ -793,15 +793,15 @@ describe('TracerProxy', () => {
     describe('dogstatsd', () => {
       it('should not throw when calling noop methods', () => {
         proxy.dogstatsd.increment('inc')
-        expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        sinon.assert.calledWith(noopDogStatsDClient.increment, 'inc')
         proxy.dogstatsd.decrement('dec')
-        expect(noopDogStatsDClient.decrement).to.have.been.calledWith('dec')
+        sinon.assert.calledWith(noopDogStatsDClient.decrement, 'dec')
         proxy.dogstatsd.distribution('dist')
-        expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
+        sinon.assert.calledWith(noopDogStatsDClient.distribution, 'dist')
         proxy.dogstatsd.histogram('hist')
-        expect(noopDogStatsDClient.histogram).to.have.been.calledWith('hist')
+        sinon.assert.calledWith(noopDogStatsDClient.histogram, 'hist')
         proxy.dogstatsd.flush()
-        expect(noopDogStatsDClient.flush).to.have.been.called
+        sinon.assert.called(noopDogStatsDClient.flush)
       })
     })
   })
@@ -811,7 +811,7 @@ describe('TracerProxy', () => {
       it('should call the underlying NoopAIGuardSdk method', () => {
         const messages = [{ role: 'user', content: 'What day is today?' }]
         proxy.aiguard.evaluate(messages)
-        expect(noopAiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
+        sinon.assert.calledOnceWithExactly(noopAiguardSdk.evaluate, messages)
       })
     })
   })
@@ -826,16 +826,16 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        expect(tracer.trace).to.have.been.calledWith('a', 'b', callback)
-        expect(returnValue).to.equal('test')
+        sinon.assert.calledWith(tracer.trace, 'a', 'b', callback)
+        assert.strictEqual(returnValue, 'test')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        expect(tracer.trace).to.have.been.calledWith('a', {}, callback)
-        expect(returnValue).to.equal('test')
+        sinon.assert.calledWith(tracer.trace, 'a', {}, callback)
+        assert.strictEqual(returnValue, 'test')
       })
     })
 
@@ -844,16 +844,16 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        expect(tracer.wrap).to.have.been.calledWith('a', 'b', callback)
-        expect(returnValue).to.equal('fn')
+        sinon.assert.calledWith(tracer.wrap, 'a', 'b', callback)
+        assert.strictEqual(returnValue, 'fn')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        expect(tracer.wrap).to.have.been.calledWith('a', {}, callback)
-        expect(returnValue).to.equal('fn')
+        sinon.assert.calledWith(tracer.wrap, 'a', {}, callback)
+        assert.strictEqual(returnValue, 'fn')
       })
     })
 
@@ -861,8 +861,8 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
-        expect(tracer.startSpan).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('span')
+        sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'span')
       })
     })
 
@@ -870,8 +870,8 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
-        expect(tracer.inject).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('tracer')
+        sinon.assert.calledWith(tracer.inject, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'tracer')
       })
     })
 
@@ -879,8 +879,8 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.extract('a', 'b', 'c')
 
-        expect(tracer.extract).to.have.been.calledWith('a', 'b', 'c')
-        expect(returnValue).to.equal('spanContext')
+        sinon.assert.calledWith(tracer.extract, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'spanContext')
       })
     })
 
@@ -888,8 +888,8 @@ describe('TracerProxy', () => {
       it('should call the underlying DatadogTracer', () => {
         const returnValue = proxy.setUrl('http://example.com')
 
-        expect(tracer.setUrl).to.have.been.calledWith('http://example.com')
-        expect(returnValue).to.equal(proxy)
+        sinon.assert.calledWith(tracer.setUrl, 'http://example.com')
+        assert.strictEqual(returnValue, proxy)
       })
     })
 
@@ -899,7 +899,7 @@ describe('TracerProxy', () => {
           const user = { id: 'user_id' }
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginSuccessEvent(user, metadata)
-          expect(appsecSdk.trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(user, metadata)
+          sinon.assert.calledOnceWithExactly(appsecSdk.trackUserLoginSuccessEvent, user, metadata)
         })
       })
 
@@ -909,7 +909,7 @@ describe('TracerProxy', () => {
           const exists = true
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackUserLoginFailureEvent(userId, exists, metadata)
-          expect(appsecSdk.trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(userId, exists, metadata)
+          sinon.assert.calledOnceWithExactly(appsecSdk.trackUserLoginFailureEvent, userId, exists, metadata)
         })
       })
 
@@ -918,7 +918,7 @@ describe('TracerProxy', () => {
           const eventName = 'custom_event'
           const metadata = { metakey1: 'metavalue1' }
           proxy.appsec.trackCustomEvent(eventName, metadata)
-          expect(appsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
+          sinon.assert.calledOnceWithExactly(appsecSdk.trackCustomEvent, eventName, metadata)
         })
       })
     })
@@ -928,7 +928,7 @@ describe('TracerProxy', () => {
         it('should call the underlying NoopAIGuardSdk method', () => {
           const messages = [{ role: 'user', content: 'What day is today?' }]
           proxy.aiguard.evaluate(messages)
-          expect(aiguardSdk.evaluate).to.have.been.calledOnceWithExactly(messages)
+          sinon.assert.calledOnceWithExactly(aiguardSdk.evaluate, messages)
         })
       })
     })

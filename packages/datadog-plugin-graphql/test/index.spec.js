@@ -1,21 +1,22 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const http = require('node:http')
+const { performance } = require('perf_hooks')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const http = require('node:http')
-
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
-
-const { performance } = require('perf_hooks')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -283,16 +284,16 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-                expect(spans[0]).to.have.property('type', 'graphql')
-                expect(spans[0]).to.have.property('error', 0)
-                expect(spans[0].meta).to.not.have.property('graphql.source')
-                expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-                expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
-                expect(spans[0].meta).to.have.property('component', 'graphql')
-                expect(spans[0].meta).to.have.property('_dd.integration', 'graphql')
+                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+                assert.strictEqual(spans[0].type, 'graphql')
+                assert.strictEqual(spans[0].error, 0)
+                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
+                assert.strictEqual(spans[0].meta.component, 'graphql')
+                assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
               })
               .then(done)
 
@@ -346,13 +347,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('service', 'test')
-              expect(span).to.have.property('name', 'graphql.parse')
-              expect(span).to.have.property('resource', 'graphql.parse')
-              expect(span).to.have.property('type', 'graphql')
-              expect(span).to.have.property('error', 0)
-              expect(span.meta).to.not.have.property('graphql.source')
-              expect(span.meta).to.have.property('component', 'graphql')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.name, 'graphql.parse')
+              assert.strictEqual(span.resource, 'graphql.parse')
+              assert.strictEqual(span.type, 'graphql')
+              assert.strictEqual(span.error, 0)
+              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -368,13 +369,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('service', 'test')
-              expect(span).to.have.property('name', 'graphql.validate')
-              expect(span).to.have.property('resource', 'graphql.validate')
-              expect(span).to.have.property('type', 'graphql')
-              expect(span).to.have.property('error', 0)
-              expect(span.meta).to.not.have.property('graphql.source')
-              expect(span.meta).to.have.property('component', 'graphql')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.name, 'graphql.validate')
+              assert.strictEqual(span.resource, 'graphql.validate')
+              assert.strictEqual(span.type, 'graphql')
+              assert.strictEqual(span.error, 0)
+              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -390,15 +391,15 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-              expect(spans[0]).to.have.property('type', 'graphql')
-              expect(spans[0]).to.have.property('error', 0)
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+              assert.strictEqual(spans[0].type, 'graphql')
+              assert.strictEqual(spans[0].error, 0)
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
 
@@ -412,7 +413,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
-              expect(spans[0].meta).to.not.have.property('graphql.variables')
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables'))
             })
             .then(done)
             .catch(done)
@@ -427,18 +428,18 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[1]).to.have.property('service', 'test')
-              expect(spans[1]).to.have.property('name', 'graphql.resolve')
-              expect(spans[1]).to.have.property('resource', 'hello:String')
-              expect(spans[1]).to.have.property('type', 'graphql')
-              expect(spans[1]).to.have.property('error', 0)
-              expect(Number(spans[1].duration)).to.be.gt(0)
-              expect(spans[1].meta).to.have.property('graphql.field.name', 'hello')
-              expect(spans[1].meta).to.have.property('graphql.field.path', 'hello')
-              expect(spans[1].meta).to.have.property('graphql.field.type', 'String')
-              expect(spans[1].meta).to.not.have.property('graphql.source')
-              expect(spans[1].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[1].service, 'test')
+              assert.strictEqual(spans[1].name, 'graphql.resolve')
+              assert.strictEqual(spans[1].resource, 'hello:String')
+              assert.strictEqual(spans[1].type, 'graphql')
+              assert.strictEqual(spans[1].error, 0)
+              assert.ok(Number(spans[1].duration) > 0)
+              assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
+              assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
+              assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
+              assert.ok(!Object.hasOwn(spans[1].meta, 'graphql.source'))
+              assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -474,13 +475,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    expect(fastAsyncTime).to.be.lessThan(slowAsyncTime)
+                    assert.ok(fastAsyncTime < slowAsyncTime)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    expect(slowAsyncTime).to.be.lessThan(syncTime)
+                    assert.ok(slowAsyncTime < syncTime)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    expect(syncTime).to.be.greaterThan(slowAsyncTime)
+                    assert.ok(syncTime > slowAsyncTime)
                     foundSyncFieldSpan = true
                   }
 
@@ -529,7 +530,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
-              expect(spans).to.have.length(6)
+              assert.strictEqual(spans.length, 6)
 
               const execute = spans[0]
               const human = spans[1]
@@ -538,38 +539,38 @@ describe('Plugin', () => {
               const addressCivicNumber = spans[4]
               const addressStreet = spans[5]
 
-              expect(execute).to.have.property('name', expectedSchema.server.opName)
-              expect(execute).to.have.property('error', 0)
+              assert.strictEqual(execute.name, expectedSchema.server.opName)
+              assert.strictEqual(execute.error, 0)
 
-              expect(human).to.have.property('name', 'graphql.resolve')
-              expect(human).to.have.property('resource', 'human:Human')
-              expect(human).to.have.property('error', 0)
-              expect(human.meta).to.have.property('graphql.field.path', 'human')
-              expect(human.parent_id.toString()).to.equal(execute.span_id.toString())
+              assert.strictEqual(human.name, 'graphql.resolve')
+              assert.strictEqual(human.resource, 'human:Human')
+              assert.strictEqual(human.error, 0)
+              assert.strictEqual(human.meta['graphql.field.path'], 'human')
+              assert.strictEqual(human.parent_id.toString(), execute.span_id.toString())
 
-              expect(humanName).to.have.property('name', 'graphql.resolve')
-              expect(humanName).to.have.property('resource', 'name:String')
-              expect(humanName).to.have.property('error', 0)
-              expect(humanName.meta).to.have.property('graphql.field.path', 'human.name')
-              expect(humanName.parent_id.toString()).to.equal(human.span_id.toString())
+              assert.strictEqual(humanName.name, 'graphql.resolve')
+              assert.strictEqual(humanName.resource, 'name:String')
+              assert.strictEqual(humanName.error, 0)
+              assert.strictEqual(humanName.meta['graphql.field.path'], 'human.name')
+              assert.strictEqual(humanName.parent_id.toString(), human.span_id.toString())
 
-              expect(address).to.have.property('name', 'graphql.resolve')
-              expect(address).to.have.property('resource', 'address:Address')
-              expect(address).to.have.property('error', 0)
-              expect(address.meta).to.have.property('graphql.field.path', 'human.address')
-              expect(address.parent_id.toString()).to.equal(human.span_id.toString())
+              assert.strictEqual(address.name, 'graphql.resolve')
+              assert.strictEqual(address.resource, 'address:Address')
+              assert.strictEqual(address.error, 0)
+              assert.strictEqual(address.meta['graphql.field.path'], 'human.address')
+              assert.strictEqual(address.parent_id.toString(), human.span_id.toString())
 
-              expect(addressCivicNumber).to.have.property('name', 'graphql.resolve')
-              expect(addressCivicNumber).to.have.property('resource', 'civicNumber:String')
-              expect(addressCivicNumber).to.have.property('error', 0)
-              expect(addressCivicNumber.meta).to.have.property('graphql.field.path', 'human.address.civicNumber')
-              expect(addressCivicNumber.parent_id.toString()).to.equal(address.span_id.toString())
+              assert.strictEqual(addressCivicNumber.name, 'graphql.resolve')
+              assert.strictEqual(addressCivicNumber.resource, 'civicNumber:String')
+              assert.strictEqual(addressCivicNumber.error, 0)
+              assert.strictEqual(addressCivicNumber.meta['graphql.field.path'], 'human.address.civicNumber')
+              assert.strictEqual(addressCivicNumber.parent_id.toString(), address.span_id.toString())
 
-              expect(addressStreet).to.have.property('name', 'graphql.resolve')
-              expect(addressStreet).to.have.property('resource', 'street:String')
-              expect(addressStreet).to.have.property('error', 0)
-              expect(addressStreet.meta).to.have.property('graphql.field.path', 'human.address.street')
-              expect(addressStreet.parent_id.toString()).to.equal(address.span_id.toString())
+              assert.strictEqual(addressStreet.name, 'graphql.resolve')
+              assert.strictEqual(addressStreet.resource, 'street:String')
+              assert.strictEqual(addressStreet.error, 0)
+              assert.strictEqual(addressStreet.meta['graphql.field.path'], 'human.address.street')
+              assert.strictEqual(addressStreet.parent_id.toString(), address.span_id.toString())
             })
             .then(done)
             .catch(done)
@@ -591,7 +592,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(5)
+              assert.strictEqual(spans.length, 5)
 
               const execute = spans[0]
               const friends = spans[1]
@@ -599,27 +600,27 @@ describe('Plugin', () => {
               const pets = spans[3]
               const petsName = spans[4]
 
-              expect(execute).to.have.property('name', expectedSchema.server.opName)
+              assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              expect(friends).to.have.property('name', 'graphql.resolve')
-              expect(friends).to.have.property('resource', 'friends:[Human]')
-              expect(friends.meta).to.have.property('graphql.field.path', 'friends')
-              expect(friends.parent_id.toString()).to.equal(execute.span_id.toString())
+              assert.strictEqual(friends.name, 'graphql.resolve')
+              assert.strictEqual(friends.resource, 'friends:[Human]')
+              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              expect(friendsName).to.have.property('name', 'graphql.resolve')
-              expect(friendsName).to.have.property('resource', 'name:String')
-              expect(friendsName.meta).to.have.property('graphql.field.path', 'friends.*.name')
-              expect(friendsName.parent_id.toString()).to.equal(friends.span_id.toString())
+              assert.strictEqual(friendsName.name, 'graphql.resolve')
+              assert.strictEqual(friendsName.resource, 'name:String')
+              assert.strictEqual(friendsName.meta['graphql.field.path'], 'friends.*.name')
+              assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
 
-              expect(pets).to.have.property('name', 'graphql.resolve')
-              expect(pets).to.have.property('resource', 'pets:[Pet!]')
-              expect(pets.meta).to.have.property('graphql.field.path', 'friends.*.pets')
-              expect(pets.parent_id.toString()).to.equal(friends.span_id.toString())
+              assert.strictEqual(pets.name, 'graphql.resolve')
+              assert.strictEqual(pets.resource, 'pets:[Pet!]')
+              assert.strictEqual(pets.meta['graphql.field.path'], 'friends.*.pets')
+              assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
 
-              expect(petsName).to.have.property('name', 'graphql.resolve')
-              expect(petsName).to.have.property('resource', 'name:String')
-              expect(petsName.meta).to.have.property('graphql.field.path', 'friends.*.pets.*.name')
-              expect(petsName.parent_id.toString()).to.equal(pets.span_id.toString())
+              assert.strictEqual(petsName.name, 'graphql.resolve')
+              assert.strictEqual(petsName.resource, 'name:String')
+              assert.strictEqual(petsName.meta['graphql.field.path'], 'friends.*.pets.*.name')
+              assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
             })
             .then(done)
             .catch(done)
@@ -634,7 +635,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'mutation')
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'mutation')
             })
             .then(done)
             .catch(done)
@@ -649,7 +650,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'subscription')
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'subscription')
             })
             .then(done)
             .catch(done)
@@ -662,7 +663,7 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source })
             .then((result) => {
-              expect(result.data.human.pets[0].owner.name).to.equal('test')
+              assert.strictEqual(result.data.human.pets[0].owner.name, 'test')
             })
             .then(done)
             .catch(done)
@@ -682,9 +683,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[1]).to.have.property('name', 'graphql.resolve')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[1].name, 'graphql.resolve')
             })
             .then(done)
             .catch(done)
@@ -711,9 +712,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[1]).to.have.property('name', 'graphql.resolve')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[1].name, 'graphql.resolve')
             })
             .then(done)
             .catch(done)
@@ -729,7 +730,7 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans).to.have.length(2)
+                assert.strictEqual(spans.length, 2)
               })
               .then(done)
               .catch(done)
@@ -749,23 +750,23 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(5)
+              assert.strictEqual(spans.length, 5)
 
-              expect(spans[0]).to.have.property('name', 'test.request')
+              assert.strictEqual(spans[0].name, 'test.request')
 
-              expect(spans[1]).to.have.property('service', 'test')
-              expect(spans[1]).to.have.property('name', 'graphql.parse')
+              assert.strictEqual(spans[1].service, 'test')
+              assert.strictEqual(spans[1].name, 'graphql.parse')
 
-              expect(spans[2]).to.have.property('service', 'test')
-              expect(spans[2]).to.have.property('name', 'graphql.validate')
+              assert.strictEqual(spans[2].service, 'test')
+              assert.strictEqual(spans[2].name, 'graphql.validate')
 
-              expect(spans[3]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[3]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[3]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+              assert.strictEqual(spans[3].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[3].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[3].resource, 'query MyQuery{hello(name:"")}')
 
-              expect(spans[4]).to.have.property('service', 'test')
-              expect(spans[4]).to.have.property('name', 'graphql.resolve')
-              expect(spans[4]).to.have.property('resource', 'hello:String')
+              assert.strictEqual(spans[4].service, 'test')
+              assert.strictEqual(spans[4].name, 'graphql.resolve')
+              assert.strictEqual(spans[4].resource, 'hello:String')
             })
             .then(done)
             .catch(done)
@@ -789,7 +790,7 @@ describe('Plugin', () => {
           const rootValue = {
             hello () {
               try {
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 done()
               } catch (e) {
                 done(e)
@@ -821,7 +822,7 @@ describe('Plugin', () => {
             return graphql.graphql({ schema, source, rootValue })
               .then(value => {
                 expect(value).to.have.nested.property('data.hello', 'test')
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
               })
           })
         })
@@ -833,7 +834,7 @@ describe('Plugin', () => {
           return graphql.graphql({ schema, source })
             .then(() => graphql.graphql({ schema, source: subscription }))
             .then(result => {
-              expect(result).to.not.have.property('errors')
+              assert.ok(!Object.hasOwn(result, 'errors'))
             })
         })
 
@@ -844,16 +845,16 @@ describe('Plugin', () => {
             .all([
               agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('name', 'graphql.parse')
+                assert.strictEqual(spans[0].name, 'graphql.parse')
               }),
               agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('name', 'graphql.validate')
+                assert.strictEqual(spans[0].name, 'graphql.validate')
               }),
               agent.assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-                expect(spans[1]).to.have.property('name', 'graphql.resolve')
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[1].name, 'graphql.resolve')
               })
             ])
             .then(() => done())
@@ -869,8 +870,8 @@ describe('Plugin', () => {
           const source = '{ human { oneTime } }'
 
           const result = await graphql.graphql({ schema, source })
-          expect(result).to.not.have.property('errors')
-          expect(result.data.human.oneTime).to.equal('one-time result')
+          assert.ok(!Object.hasOwn(result, 'errors'))
+          assert.strictEqual(result.data.human.oneTime, 'one-time result')
         })
 
         it('should handle Source objects', done => {
@@ -881,12 +882,12 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -901,14 +902,14 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('name', 'graphql.parse')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].name, 'graphql.parse')
+              assert.strictEqual(spans[0].error, 1)
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -927,14 +928,14 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('name', 'graphql.validate')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].name, 'graphql.validate')
+              assert.strictEqual(spans[0].error, 1)
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -954,26 +955,26 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('name', 'graphql.validate')
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, errors[0].name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, errors[0].message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, errors[0].stack)
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].name, 'graphql.validate')
+              assert.strictEqual(spans[0].error, 1)
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], errors[0].name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], errors[0].message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], errors[0].stack)
+              assert.strictEqual(spans[0].meta.component, 'graphql')
 
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
-              expect(spanEvents).to.have.length(1)
-              expect(spanEvents[0]).to.have.property('startTime')
-              expect(spanEvents[0]).to.have.property('name', 'dd.graphql.query.error')
-              expect(spanEvents[0].attributes).to.have.property('type', 'GraphQLError')
-              expect(spanEvents[0].attributes).to.have.property('stacktrace')
-              expect(spanEvents[0].attributes).to.have.property('message', 'Field "address" of ' +
+              assert.strictEqual(spanEvents.length, 1)
+              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+              assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
+              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
-              expect(spanEvents[0].attributes.locations).to.have.length(1)
-              expect(spanEvents[0].attributes.locations[0]).to.equal('1:11')
+              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
+              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:11')
             })
             .then(done)
             .catch(done)
@@ -991,14 +992,14 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].error, 1)
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1032,27 +1033,27 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('error', 1)
-              expect(spans[0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].error, 1)
+              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[0].meta.component, 'graphql')
 
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
-              expect(spanEvents).to.have.length(1)
-              expect(spanEvents[0]).to.have.property('startTime')
-              expect(spanEvents[0]).to.have.property('name', 'dd.graphql.query.error')
-              expect(spanEvents[0].attributes).to.have.property('type', 'GraphQLError')
-              expect(spanEvents[0].attributes).to.have.property('stacktrace')
-              expect(spanEvents[0].attributes).to.have.property('message', 'test')
-              expect(spanEvents[0].attributes.locations).to.have.length(1)
-              expect(spanEvents[0].attributes.locations[0]).to.equal('1:3')
-              expect(spanEvents[0].attributes.path).to.have.length(1)
-              expect(spanEvents[0].attributes.path[0]).to.equal('hello')
+              assert.strictEqual(spanEvents.length, 1)
+              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+              assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
+              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.strictEqual(spanEvents[0].attributes.message, 'test')
+              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
+              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
+              assert.strictEqual(spanEvents[0].attributes.path.length, 1)
+              assert.strictEqual(spanEvents[0].attributes.path[0], 'hello')
             })
             .then(done)
             .catch(done)
@@ -1084,12 +1085,12 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[1]).to.have.property('error', 1)
-              expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[1].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[1].error, 1)
+              assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1118,12 +1119,12 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[1]).to.have.property('error', 1)
-              expect(spans[1].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(spans[1].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(spans[1].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(spans[1].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[1].error, 1)
+              assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1155,10 +1156,10 @@ describe('Plugin', () => {
         it('should support multiple executions on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
-          expect(() => {
+          assert.doesNotThrow(() => {
             graphql.execute({ schema, document })
             graphql.execute({ schema, document })
-          }).to.not.throw()
+          })
         })
 
         it('should not fail without directives in the document ' +
@@ -1172,9 +1173,9 @@ describe('Plugin', () => {
           dc.channel('datadog:graphql:resolver:start').subscribe(noop)
 
           try {
-            expect(() => {
+            assert.doesNotThrow(() => {
               graphql.execute({ schema, document })
-            }).to.not.throw()
+            })
           } finally {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
           }
@@ -1184,10 +1185,10 @@ describe('Plugin', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
 
-          expect(() => {
+          assert.doesNotThrow(() => {
             graphql.validate(schema, document)
             graphql.validate(schema, document)
-          }).to.not.throw()
+          })
         })
 
         it('should support multi-operations documents', done => {
@@ -1203,13 +1204,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query SecondQuery{hello(name:"")}')
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(spans[0].meta).to.have.property('graphql.operation.name', 'SecondQuery')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query SecondQuery{hello(name:"")}')
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'SecondQuery')
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(() => done())
             .catch(done)
@@ -1235,13 +1236,13 @@ describe('Plugin', () => {
 
               const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
 
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', resource)
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(spans[0].meta).to.have.property('graphql.operation.name', 'WithFragments')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, resource)
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1260,13 +1261,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('service', 'test')
-              expect(spans[0]).to.have.property('name', 'graphql.parse')
-              expect(spans[0]).to.have.property('resource', 'graphql.parse')
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.not.have.property('graphql.operation.type')
-              expect(spans[0].meta).to.not.have.property('graphql.operation.name')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].name, 'graphql.parse')
+              assert.strictEqual(spans[0].resource, 'graphql.parse')
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.type'))
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.name'))
+              assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1284,14 +1285,14 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-                expect(spans[0]).to.have.property('type', 'graphql')
-                expect(spans[0].meta).to.not.have.property('graphql.source')
-                expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-                expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
-                expect(spans[0].meta).to.have.property('component', 'graphql')
+                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+                assert.strictEqual(spans[0].type, 'graphql')
+                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
+                assert.strictEqual(spans[0].meta.component, 'graphql')
               })
               .then(done)
               .catch(done)
@@ -1316,12 +1317,12 @@ describe('Plugin', () => {
         //       console.log(spans.map(span => `${span.name} | ${span.resource}`))
         //       const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
 
-        //       expect(spans[0]).to.have.property('service', 'test')
-        //       expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-        //       expect(spans[0]).to.have.property('resource', resource)
-        //       expect(spans[0].meta).to.not.have.property('graphql.source')
-        //       expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-        //       expect(spans[0].meta).to.have.property('graphql.operation.name', 'WithFragments')
+        //       assert.strictEqual(spans[0].service, 'test')
+        //       assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+        //       assert.strictEqual(spans[0].resource, resource)
+        //       assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+        //       assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+        //       assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
         //     })
         //     .then(done)
         //     .catch(done)
@@ -1373,13 +1374,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(2)
-              expect(spans[0]).to.have.property('service', 'custom')
-              expect(spans[1]).to.have.property('service', 'custom')
-              expect(spans[0].meta).to.have.property('graphql.source', '{ hello(name: "world") }')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
-              expect(spans[1].meta).to.have.property('graphql.source', 'hello(name: "world")')
-              expect(spans[1].meta).to.have.property('component', 'graphql')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[0].service, 'custom')
+              assert.strictEqual(spans[1].service, 'custom')
+              assert.strictEqual(spans[0].meta['graphql.source'], '{ hello(name: "world") }')
+              assert.strictEqual(spans[0].meta.component, 'graphql')
+              assert.strictEqual(spans[1].meta['graphql.source'], 'hello(name: "world")')
+              assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -1399,10 +1400,10 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
-              expect(spans[0].meta).to.have.property('graphql.variables.who', 'REDACTED')
-              expect(spans[1].meta).to.have.property('graphql.variables.title', 'planet')
-              expect(spans[1].meta).to.have.property('graphql.variables.who', 'REDACTED')
+              assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
+              assert.strictEqual(spans[0].meta['graphql.variables.who'], 'REDACTED')
+              assert.strictEqual(spans[1].meta['graphql.variables.title'], 'planet')
+              assert.strictEqual(spans[1].meta['graphql.variables.who'], 'REDACTED')
             })
             .then(done)
             .catch(done)
@@ -1441,8 +1442,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0].meta).to.have.property('graphql.variables.title', 'planet')
-              expect(spans[0].meta).to.not.have.property('graphql.variables.who')
+              assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
+              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables.who'))
             })
             .then(done)
             .catch(done)
@@ -1484,8 +1485,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
             })
             .then(done)
             .catch(done)
@@ -1507,7 +1508,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               try {
-                expect(span).to.not.be.null
+                assert.notStrictEqual(span, null)
                 expect(span.context()).to.have.property('_name', expectedSchema.server.opName)
                 done()
               } catch (e) {
@@ -1562,8 +1563,8 @@ describe('Plugin', () => {
                 ].indexOf(span.resource) !== -1
               })
 
-              expect(spans).to.have.length(5)
-              expect(ignored).to.have.length(0)
+              assert.strictEqual(spans.length, 5)
+              assert.strictEqual(ignored.length, 0)
             })
             .then(done)
             .catch(done)
@@ -1595,29 +1596,29 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(4)
+              assert.strictEqual(spans.length, 4)
 
               const execute = spans[0]
               const friends = spans[1]
               const friend0Name = spans[2]
               const friend1Name = spans[3]
 
-              expect(execute).to.have.property('name', expectedSchema.server.opName)
+              assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              expect(friends).to.have.property('name', 'graphql.resolve')
-              expect(friends).to.have.property('resource', 'friends:[Human]')
-              expect(friends.meta).to.have.property('graphql.field.path', 'friends')
-              expect(friends.parent_id.toString()).to.equal(execute.span_id.toString())
+              assert.strictEqual(friends.name, 'graphql.resolve')
+              assert.strictEqual(friends.resource, 'friends:[Human]')
+              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              expect(friend0Name).to.have.property('name', 'graphql.resolve')
-              expect(friend0Name).to.have.property('resource', 'name:String')
-              expect(friend0Name.meta).to.have.property('graphql.field.path', 'friends.0.name')
-              expect(friend0Name.parent_id.toString()).to.equal(friends.span_id.toString())
+              assert.strictEqual(friend0Name.name, 'graphql.resolve')
+              assert.strictEqual(friend0Name.resource, 'name:String')
+              assert.strictEqual(friend0Name.meta['graphql.field.path'], 'friends.0.name')
+              assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
 
-              expect(friend1Name).to.have.property('name', 'graphql.resolve')
-              expect(friend1Name).to.have.property('resource', 'name:String')
-              expect(friend1Name.meta).to.have.property('graphql.field.path', 'friends.1.name')
-              expect(friend1Name.parent_id.toString()).to.equal(friends.span_id.toString())
+              assert.strictEqual(friend1Name.name, 'graphql.resolve')
+              assert.strictEqual(friend1Name.resource, 'name:String')
+              assert.strictEqual(friend1Name.meta['graphql.field.path'], 'friends.1.name')
+              assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
             })
             .then(done)
             .catch(done)
@@ -1649,8 +1650,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query WithoutSignature')
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query WithoutSignature')
             })
             .then(done)
             .catch(done)
@@ -1716,16 +1717,16 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(config.hooks.execute).to.have.been.calledOnce
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              sinon.assert.calledOnce(config.hooks.execute)
 
               const span = config.hooks.execute.firstCall.args[0]
               const args = config.hooks.execute.firstCall.args[1]
               const res = config.hooks.execute.firstCall.args[2]
 
-              expect(span.context()._name).to.equal(expectedSchema.server.opName)
-              expect(args).to.include({
+              assert.strictEqual(span.context()._name, expectedSchema.server.opName)
+              assertObjectContains(args, {
                 schema: params.schema,
                 document: params.document,
                 rootValue: params.rootValue,
@@ -1735,7 +1736,7 @@ describe('Plugin', () => {
                 fieldResolver: params.fieldResolver,
                 typeResolver: params.typeResolver
               })
-              expect(res).to.equal(result)
+              assert.strictEqual(res, result)
             })
             .then(done)
             .catch(done)
@@ -1753,18 +1754,18 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('name', 'graphql.validate')
-              expect(config.hooks.validate).to.have.been.calledOnce
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, 'graphql.validate')
+              sinon.assert.calledOnce(config.hooks.validate)
 
               const span = config.hooks.validate.firstCall.args[0]
               const hookDocument = config.hooks.validate.firstCall.args[1]
               const hookErrors = config.hooks.validate.firstCall.args[2]
 
-              expect(span.context()._name).to.equal('graphql.validate')
+              assert.strictEqual(span.context()._name, 'graphql.validate')
 
-              expect(hookDocument).to.equal(document)
-              expect(hookErrors).to.equal(errors)
+              assert.strictEqual(hookDocument, document)
+              assert.strictEqual(hookErrors, errors)
             })
             .then(done)
             .catch(done)
@@ -1778,18 +1779,18 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans).to.have.length(1)
-              expect(spans[0]).to.have.property('name', 'graphql.parse')
-              expect(config.hooks.parse).to.have.been.calledOnce
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, 'graphql.parse')
+              sinon.assert.calledOnce(config.hooks.parse)
 
               const span = config.hooks.parse.firstCall.args[0]
               const hookSource = config.hooks.parse.firstCall.args[1]
               const hookDocument = config.hooks.parse.firstCall.args[2]
 
-              expect(span.context()._name).to.equal('graphql.parse')
+              assert.strictEqual(span.context()._name, 'graphql.parse')
 
-              expect(hookSource).to.equal(source)
-              expect(hookDocument).to.equal(document)
+              assert.strictEqual(hookSource, source)
+              assert.strictEqual(hookDocument, document)
             })
             .then(done)
             .catch(done)
@@ -1838,17 +1839,17 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                expect(spans).to.have.length(3)
+                assert.strictEqual(spans.length, 3)
 
-                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
-                expect(spans[0].meta).to.not.have.property('graphql.source')
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].resource, 'query MyQuery{hello}')
+                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
 
-                expect(spans[1]).to.have.property('name', 'graphql.resolve')
-                expect(spans[1]).to.have.property('resource', 'hello:String')
+                assert.strictEqual(spans[1].name, 'graphql.resolve')
+                assert.strictEqual(spans[1].resource, 'hello:String')
 
-                expect(spans[2]).to.have.property('name', 'graphql.validate')
-                expect(spans[2].meta).to.not.have.property('graphql.source')
+                assert.strictEqual(spans[2].name, 'graphql.validate')
+                assert.ok(!Object.hasOwn(spans[2].meta, 'graphql.source'))
               })
               .then(done)
               .catch(done)

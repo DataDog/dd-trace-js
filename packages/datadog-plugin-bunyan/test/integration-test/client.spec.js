@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   FakeAgent,
   spawnPluginIntegrationTestProc,
@@ -8,8 +9,6 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { expect } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
@@ -39,7 +38,7 @@ describe('esm', () => {
           agent.port,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            expect(jsonObject).to.have.property('dd')
+            assert.ok(Object.hasOwn(jsonObject, 'dd'))
           }
         )
       }).timeout(20000)

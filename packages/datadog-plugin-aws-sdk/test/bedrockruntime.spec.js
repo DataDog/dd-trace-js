@@ -1,6 +1,4 @@
 'use strict'
-
-const { expect } = require('chai')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -8,6 +6,7 @@ const { setup } = require('./spec_helpers')
 const { models } = require('./fixtures/bedrockruntime')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const assert = require('node:assert')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const serviceName = 'bedrock-service-name-test'
 
@@ -61,7 +60,7 @@ describe('Plugin', () => {
 
             const tracesPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span.meta).to.include({
+              assertObjectContains(span.meta, {
                 'aws.operation': 'invokeModel',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),
@@ -84,7 +83,7 @@ describe('Plugin', () => {
 
             const tracesPromise = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              expect(span.meta).to.include({
+              assertObjectContains(span.meta, {
                 'aws.operation': 'invokeModelWithResponseStream',
                 'aws.bedrock.request.model': model.modelId.split('.')[1],
                 'aws.bedrock.request.model_provider': model.provider.toLowerCase(),

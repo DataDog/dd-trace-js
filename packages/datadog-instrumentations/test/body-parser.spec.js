@@ -1,15 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
-const { describe, it, beforeEach, before, after } = require('mocha')
+const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
     const bodyParserReadCh = dc.channel('datadog:body-parser:read:finish')
@@ -46,8 +47,8 @@ withVersions('body-parser', 'body-parser', version => {
     it('should not abort the request by default', async () => {
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(middlewareProcessBodyStub).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(middlewareProcessBodyStub)
+      assert.strictEqual(res.data, 'DONE')
     })
 
     it('should not abort the request with non blocker subscription', async () => {
@@ -56,8 +57,8 @@ withVersions('body-parser', 'body-parser', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(middlewareProcessBodyStub).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(middlewareProcessBodyStub)
+      assert.strictEqual(res.data, 'DONE')
 
       bodyParserReadCh.unsubscribe(noop)
     })
@@ -72,7 +73,7 @@ withVersions('body-parser', 'body-parser', version => {
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
       expect(middlewareProcessBodyStub).not.to.be.called
-      expect(res.data).to.be.equal('BLOCKED')
+      assert.strictEqual(res.data, 'BLOCKED')
 
       bodyParserReadCh.unsubscribe(blockRequest)
     })
@@ -89,12 +90,12 @@ withVersions('body-parser', 'body-parser', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(store).to.have.property('req', payload.req)
-      expect(store).to.have.property('res', payload.res)
-      expect(store).to.have.property('span')
+      assert.strictEqual(store.req, payload.req)
+      assert.strictEqual(store.res, payload.res)
+      assert.ok(Object.hasOwn(store, 'span'))
 
-      expect(middlewareProcessBodyStub).to.be.calledOnce
-      expect(res.data).to.be.equal('DONE')
+      sinon.assert.calledOnce(middlewareProcessBodyStub)
+      assert.strictEqual(res.data, 'DONE')
 
       bodyParserReadCh.unsubscribe(handler)
     })

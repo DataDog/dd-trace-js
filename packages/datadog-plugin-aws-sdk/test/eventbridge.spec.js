@@ -1,8 +1,7 @@
+const assert = require('node:assert/strict')
 /* eslint-disable @stylistic/max-len */
 'use strict'
-
-const { expect } = require('chai')
-const { describe, it, before } = require('mocha')
+const { before, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { randomBytes } = require('node:crypto')
@@ -59,7 +58,7 @@ describe('EventBridge', () => {
         source: 'my.event',
         Name: 'my-rule-name'
       }
-      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
+      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
         rulename: 'my-rule-name'
@@ -70,7 +69,7 @@ describe('EventBridge', () => {
       const params = {
         foo: 'bar'
       }
-      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
+      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
     })
 
     it('injects trace context to Eventbridge putEvents', () => {
@@ -95,7 +94,7 @@ describe('EventBridge', () => {
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request)
 
-      expect(request.params).to.deep.equal({ Entries: [{ Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
+      assert.deepStrictEqual(request.params, { Entries: [{ Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {
@@ -115,12 +114,12 @@ describe('EventBridge', () => {
       spanId = '456853219676779160'
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal(request.params)
+      assert.deepStrictEqual(request.params, request.params)
     })
 
     it('returns an empty object when params is null', () => {
       const eventbridge = new EventBridge(tracer)
-      expect(eventbridge.generateTags(null, 'putEvent', {})).to.deep.equal({})
+      assert.deepStrictEqual(eventbridge.generateTags(null, 'putEvent', {}), {})
     })
 
     it('returns an empty object when params.source is an empty string', () => {
@@ -128,7 +127,7 @@ describe('EventBridge', () => {
       const params = {
         source: ''
       }
-      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
+      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
     })
 
     it('sets rulename as an empty string when params.Name is null', () => {
@@ -137,7 +136,7 @@ describe('EventBridge', () => {
         source: 'my.event',
         Name: null
       }
-      expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({
+      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
         rulename: ''
@@ -150,7 +149,7 @@ describe('EventBridge', () => {
         source: 'my.event',
         Name: 'my-rule-name'
       }
-      expect(eventbridge.generateTags(params, null, {})).to.deep.equal({
+      assert.deepStrictEqual(eventbridge.generateTags(params, null, {}), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'my.event',
         rulename: 'my-rule-name'
@@ -162,7 +161,7 @@ describe('EventBridge', () => {
         source: 'my.event',
         Name: 'my-rule-name'
       }
-      expect(eventbridge.generateTags(params, 'putEvent', null)).to.deep.equal({
+      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', null), {
         'aws.eventbridge.source': 'my.event',
         'resource.name': 'putEvent my.event',
         rulename: 'my-rule-name'

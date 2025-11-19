@@ -1,6 +1,4 @@
 'use strict'
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -56,7 +54,7 @@ describe('CI Visibility Coverage Writer', () => {
       const input = { sessionId: id('1'), suiteId: id('2'), files: ['file.js'] }
       coverageWriter.append(input)
 
-      expect(encoder.encode).to.have.been.calledWith(input)
+      sinon.assert.calledWith(encoder.encode, input)
     })
   })
 
@@ -64,7 +62,7 @@ describe('CI Visibility Coverage Writer', () => {
     it('should skip flushing if empty', () => {
       coverageWriter.flush()
 
-      expect(encoder.makePayload).to.not.have.been.called
+      sinon.assert.notCalled(encoder.makePayload)
     })
 
     it('should empty the internal queue', () => {
@@ -72,7 +70,7 @@ describe('CI Visibility Coverage Writer', () => {
 
       coverageWriter.flush()
 
-      expect(encoder.makePayload).to.have.been.called
+      sinon.assert.called(encoder.makePayload)
     })
 
     it('should call callback when empty', (done) => {
@@ -89,7 +87,7 @@ describe('CI Visibility Coverage Writer', () => {
 
       encoder.makePayload.returns(payload)
       coverageWriter.flush(() => {
-        expect(request).to.have.been.calledWithMatch(payload, {
+        sinon.assert.calledWithMatch(request, payload, {
           url,
           path: '/api/v2/citestcov',
           method: 'POST'
@@ -113,7 +111,7 @@ describe('CI Visibility Coverage Writer', () => {
       encoder.makePayload.returns(payload)
 
       coverageWriter.flush(() => {
-        expect(log.error).to.have.been.calledWith('Error sending CI coverage payload', error)
+        sinon.assert.calledWith(log.error, 'Error sending CI coverage payload', error)
         done()
       })
     })

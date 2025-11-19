@@ -1,9 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before } = require('mocha')
+const assert = require('node:assert/strict')
 
-const assert = require('node:assert')
+const { expect } = require('chai')
+const { before, describe, it } = require('mocha')
 
 const LLMObsSDK = require('../../../dd-trace/src/llmobs/sdk')
 
@@ -85,7 +85,7 @@ describe('noop', () => {
         return 1
       })
 
-      expect(res).to.equal(1)
+      assert.strictEqual(res, 1)
     })
 
     it('should not throw with a span and a callback', async () => {
@@ -95,7 +95,7 @@ describe('noop', () => {
         return Promise.resolve(5)
       })
 
-      expect(await prom).to.equal(5)
+      assert.strictEqual(await prom, 5)
     })
   })
 
@@ -106,7 +106,7 @@ describe('noop', () => {
       }
 
       const wrapped = llmobs.wrap({}, fn)
-      expect(wrapped()).to.equal(1)
+      assert.strictEqual(wrapped(), 1)
     })
 
     it('should not throw with a span and a callback', async () => {
@@ -114,7 +114,7 @@ describe('noop', () => {
         return Promise.resolve(5)
       }
       const wrapped = llmobs.wrap({}, fn)
-      expect(await wrapped()).to.equal(5)
+      assert.strictEqual(await wrapped(), 5)
     })
   })
 })

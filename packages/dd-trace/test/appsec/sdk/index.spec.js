@@ -1,6 +1,4 @@
 'use strict'
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -41,7 +39,7 @@ describe('Appsec SDK', () => {
   })
 
   it('should call setTemplates when instanciated', () => {
-    expect(setTemplates).to.have.been.calledOnceWithExactly(config)
+    sinon.assert.calledOnceWithExactly(setTemplates, config)
   })
 
   it('trackUserLoginSuccessEvent should call internal function with proper params', () => {
@@ -49,7 +47,7 @@ describe('Appsec SDK', () => {
     const metadata = { key: 'value' }
     appsecSdk.trackUserLoginSuccessEvent(user, metadata)
 
-    expect(trackUserLoginSuccessEvent).to.have.been.calledOnceWithExactly(tracer, user, metadata)
+    sinon.assert.calledOnceWithExactly(trackUserLoginSuccessEvent, tracer, user, metadata)
   })
 
   it('trackUserLoginFailureEvent should call internal function with proper params', () => {
@@ -58,7 +56,7 @@ describe('Appsec SDK', () => {
     const metadata = { key: 'value' }
     appsecSdk.trackUserLoginFailureEvent(userId, exists, metadata)
 
-    expect(trackUserLoginFailureEvent).to.have.been.calledOnceWithExactly(tracer, userId, exists, metadata)
+    sinon.assert.calledOnceWithExactly(trackUserLoginFailureEvent, tracer, userId, exists, metadata)
   })
 
   it('trackCustomEvent should call internal function with proper params', () => {
@@ -66,14 +64,14 @@ describe('Appsec SDK', () => {
     const metadata = { key: 'value' }
     appsecSdk.trackCustomEvent(eventName, metadata)
 
-    expect(trackCustomEvent).to.have.been.calledOnceWithExactly(tracer, eventName, metadata)
+    sinon.assert.calledOnceWithExactly(trackCustomEvent, tracer, eventName, metadata)
   })
 
   it('isUserBlocked should call internal function with proper params', () => {
     const user = { id: 'user_id' }
     appsecSdk.isUserBlocked(user)
 
-    expect(checkUserAndSetUser).to.have.been.calledOnceWithExactly(tracer, user)
+    sinon.assert.calledOnceWithExactly(checkUserAndSetUser, tracer, user)
   })
 
   it('blockRequest should call internal function with proper params', () => {
@@ -81,14 +79,14 @@ describe('Appsec SDK', () => {
     const res = { headersSent: false }
     appsecSdk.blockRequest(req, res)
 
-    expect(blockRequest).to.have.been.calledOnceWithExactly(tracer, req, res)
+    sinon.assert.calledOnceWithExactly(blockRequest, tracer, req, res)
   })
 
   it('setUser should call internal function with proper params', () => {
     const user = { id: 'user_id' }
     appsecSdk.setUser(user)
 
-    expect(setUser).to.have.been.calledOnceWithExactly(tracer, user)
+    sinon.assert.calledOnceWithExactly(setUser, tracer, user)
   })
 
   describe('eventTrackingV2', () => {
@@ -100,7 +98,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user, metadata)
 
-      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, metadata)
+      sinon.assert.calledOnceWithExactly(trackUserLoginSuccessV2, tracer, login, user, metadata)
     })
 
     it('eventTrackingV2.trackUserLoginSuccess(login, user) should call internal function with proper params', () => {
@@ -109,7 +107,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginSuccess(login, user)
 
-      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, user, undefined)
+      sinon.assert.calledOnceWithExactly(trackUserLoginSuccessV2, tracer, login, user, undefined)
     })
 
     it('eventTrackingV2.trackUserLoginSuccess(login) should call internal function with proper params', () => {
@@ -117,7 +115,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginSuccess(login)
 
-      expect(trackUserLoginSuccessV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
+      sinon.assert.calledOnceWithExactly(trackUserLoginSuccessV2, tracer, login, undefined, undefined)
     })
 
     it('eventTrackingV2.trackUserLoginFailure(login, exists, meta) should ' +
@@ -128,7 +126,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists, metadata)
 
-      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, metadata)
+      sinon.assert.calledOnceWithExactly(trackUserLoginFailureV2, tracer, login, exists, metadata)
     })
 
     it('eventTrackingV2.trackUserLoginFailure(login) should call internal function with proper params', () => {
@@ -136,7 +134,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginFailure(login)
 
-      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, undefined, undefined)
+      sinon.assert.calledOnceWithExactly(trackUserLoginFailureV2, tracer, login, undefined, undefined)
     })
 
     it('eventTrackingV2.trackUserLoginFailure(login, exists) should call internal function with proper params', () => {
@@ -145,7 +143,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginFailure(login, exists)
 
-      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, exists, undefined)
+      sinon.assert.calledOnceWithExactly(trackUserLoginFailureV2, tracer, login, exists, undefined)
     })
 
     it('eventTrackingV2.trackUserLoginFailure(login, meta) should call internal function with proper params', () => {
@@ -154,7 +152,7 @@ describe('Appsec SDK', () => {
 
       appsecSdk.eventTrackingV2.trackUserLoginFailure(login, metadata)
 
-      expect(trackUserLoginFailureV2).to.have.been.calledOnceWithExactly(tracer, login, metadata, undefined)
+      sinon.assert.calledOnceWithExactly(trackUserLoginFailureV2, tracer, login, metadata, undefined)
     })
   })
 })

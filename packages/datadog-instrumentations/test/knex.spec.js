@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { storage } = require('../../datadog-core')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Instrumentation', () => {
   let knex
   let client
@@ -48,7 +48,7 @@ describe('Instrumentation', () => {
             }).catch(() => {})
           )
 
-          expect(isInstrumented).to.equal(true)
+          assert.strictEqual(isInstrumented, true)
         })
       })
     })

@@ -1,14 +1,12 @@
 'use strict'
-
-const { expect } = require('chai')
 const assert = require('node:assert')
-const os = require('node:os')
 const net = require('node:net')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const os = require('node:os')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 
 // The returned port could already be in use by another test that was running at
@@ -83,32 +81,32 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('type', 'web')
-              expect(spans[0]).to.have.property('resource', 'math.add')
-              expect(spans[0].meta).to.have.property('span.kind', 'server')
-              expect(spans[0].meta).to.have.property('moleculer.context.action', 'math.add')
-              expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
-              expect(spans[0].meta).to.have.property('moleculer.context.request_id')
-              expect(spans[0].meta).to.have.property('moleculer.context.service', 'math')
-              expect(spans[0].meta).to.have.property('moleculer.namespace', 'multi')
-              expect(spans[0].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[0].meta).to.have.property('component', 'moleculer')
-              expect(spans[0].meta).to.have.property('_dd.integration', 'moleculer')
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].type, 'web')
+              assert.strictEqual(spans[0].resource, 'math.add')
+              assert.strictEqual(spans[0].meta['span.kind'], 'server')
+              assert.strictEqual(spans[0].meta['moleculer.context.action'], 'math.add')
+              assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
+              assert.ok(Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'))
+              assert.strictEqual(spans[0].meta['moleculer.context.service'], 'math')
+              assert.strictEqual(spans[0].meta['moleculer.namespace'], 'multi')
+              assert.strictEqual(spans[0].meta['moleculer.node_id'], `server-${process.pid}`)
+              assert.strictEqual(spans[0].meta.component, 'moleculer')
+              assert.strictEqual(spans[0].meta['_dd.integration'], 'moleculer')
 
-              expect(spans[1]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[1]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[1]).to.have.property('type', 'web')
-              expect(spans[1]).to.have.property('resource', 'math.numerify')
-              expect(spans[1].meta).to.have.property('span.kind', 'server')
-              expect(spans[1].meta).to.have.property('moleculer.context.action', 'math.numerify')
-              expect(spans[1].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
-              expect(spans[1].meta).to.have.property('moleculer.context.request_id')
-              expect(spans[1].meta).to.have.property('moleculer.context.service', 'math')
-              expect(spans[1].meta).to.have.property('moleculer.namespace', 'multi')
-              expect(spans[1].meta).to.have.property('moleculer.node_id', `server-${process.pid}`)
-              expect(spans[1].meta).to.have.property('component', 'moleculer')
+              assert.strictEqual(spans[1].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[1].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[1].type, 'web')
+              assert.strictEqual(spans[1].resource, 'math.numerify')
+              assert.strictEqual(spans[1].meta['span.kind'], 'server')
+              assert.strictEqual(spans[1].meta['moleculer.context.action'], 'math.numerify')
+              assert.strictEqual(spans[1].meta['moleculer.context.node_id'], `server-${process.pid}`)
+              assert.ok(Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'))
+              assert.strictEqual(spans[1].meta['moleculer.context.service'], 'math')
+              assert.strictEqual(spans[1].meta['moleculer.namespace'], 'multi')
+              assert.strictEqual(spans[1].meta['moleculer.node_id'], `server-${process.pid}`)
+              assert.strictEqual(spans[1].meta.component, 'moleculer')
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -135,7 +133,7 @@ describe('Plugin', () => {
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].service, 'custom')
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -262,7 +260,7 @@ describe('Plugin', () => {
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].service, 'custom')
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -300,7 +298,7 @@ describe('Plugin', () => {
           const clientPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
+            assert.strictEqual(spans[0].name, expectedSchema.client.opName)
 
             spanId = spans[0].span_id
           })
@@ -308,8 +306,8 @@ describe('Plugin', () => {
           const serverPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-            expect(spans[1]).to.have.property('name', expectedSchema.server.opName)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[1].name, expectedSchema.server.opName)
 
             parentId = spans[0].parent_id
           })
@@ -320,7 +318,7 @@ describe('Plugin', () => {
           // inject/extract for both local and remote.
           await Promise.all([clientPromise, serverPromise])
 
-          expect(spanId.toString()).to.equal(parentId.toString())
+          assert.strictEqual(spanId.toString(), parentId.toString())
         })
       })
 
@@ -368,9 +366,9 @@ describe('Plugin', () => {
           const clientPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', expectedSchema.client.opName)
-            expect(spans[0].meta).to.have.property('moleculer.context.node_id', `server-${process.pid}`)
-            expect(spans[0].meta).to.have.property('moleculer.node_id', `client-${process.pid}`)
+            assert.strictEqual(spans[0].name, expectedSchema.client.opName)
+            assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
+            assert.strictEqual(spans[0].meta['moleculer.node_id'], `client-${process.pid}`)
 
             spanId = spans[0].span_id
           })
@@ -378,8 +376,8 @@ describe('Plugin', () => {
           const serverPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-            expect(spans[1]).to.have.property('name', expectedSchema.server.opName)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[1].name, expectedSchema.server.opName)
 
             parentId = spans[0].parent_id
           })
@@ -388,7 +386,7 @@ describe('Plugin', () => {
 
           await Promise.all([clientPromise, serverPromise])
 
-          expect(spanId.toString()).to.equal(parentId.toString())
+          assert.strictEqual(spanId.toString(), parentId.toString())
         })
       })
       describe('meta propagation', () => {

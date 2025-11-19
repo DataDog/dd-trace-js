@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { createHash } = require('crypto')
 const { EventEmitter, once } = require('events')
 const http = require('http')

@@ -1,16 +1,14 @@
 'use strict'
-
-const { expect } = require('chai')
 const assert = require('node:assert')
+const EventEmitter = require('node:events')
+const net = require('node:net')
+
 const semver = require('semver')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const net = require('node:net')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const EventEmitter = require('node:events')
-
 const ddpv = require('mocha/package.json').version
 
 const clients = {
@@ -68,20 +66,20 @@ describe('Plugin', () => {
 
           it('should do automatic instrumentation when using callbacks', done => {
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-              expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-              expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-              expect(traces[0][0].meta).to.have.property('component', 'pg')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'pg')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
+              assert.strictEqual(traces[0][0].type, 'sql')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
+              assert.strictEqual(traces[0][0].meta['db.user'], 'postgres')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+              assert.strictEqual(traces[0][0].meta.component, 'pg')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'pg')
+              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
 
               if (implementation !== 'pg.native') {
-                expect(traces[0][0].metrics).to.have.property('db.pid')
+                assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
               }
             })
               .then(done)
@@ -98,7 +96,7 @@ describe('Plugin', () => {
 
           it('should send long queries to agent', done => {
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', `SELECT '${'x'.repeat(5000)}'::text as message`)
+              assert.strictEqual(traces[0][0].resource, `SELECT '${'x'.repeat(5000)}'::text as message`)
 
               done()
             })
@@ -116,19 +114,19 @@ describe('Plugin', () => {
             // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
-                expect(traces[0][0]).to.have.property('type', 'sql')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-                expect(traces[0][0].meta).to.have.property('db.user', 'postgres')
-                expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-                expect(traces[0][0].meta).to.have.property('component', 'pg')
-                expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
+                assert.strictEqual(traces[0][0].type, 'sql')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
+                assert.strictEqual(traces[0][0].meta['db.user'], 'postgres')
+                assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+                assert.strictEqual(traces[0][0].meta.component, 'pg')
+                assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
 
                 if (implementation !== 'pg.native') {
-                  expect(traces[0][0].metrics).to.have.property('db.pid')
+                  assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
                 }
               })
                 .then(done)
@@ -144,11 +142,11 @@ describe('Plugin', () => {
             let error
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'pg')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta.component, 'pg')
+              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
             })
               .then(done)
               .catch(done)
@@ -166,16 +164,16 @@ describe('Plugin', () => {
             let error
 
             agent.assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
 
               // pg modifies stacktraces as of v8.11.1
               const actualErrorNoStack = traces[0][0].meta[ERROR_STACK].split('\n')[0]
               const expectedErrorNoStack = error.stack.split('\n')[0]
-              expect(actualErrorNoStack).to.eql(expectedErrorNoStack)
+              assert.deepStrictEqual(actualErrorNoStack, expectedErrorNoStack)
 
-              expect(traces[0][0].meta).to.have.property('component', 'pg')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+              assert.strictEqual(traces[0][0].meta.component, 'pg')
+              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
             })
               .then(done)
               .catch(done)
@@ -202,7 +200,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               client.query('SELECT $1::text as message', ['Hello World!'], () => {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               })
 
@@ -231,16 +229,16 @@ describe('Plugin', () => {
 
                 it('should instrument cursor-based streaming with pg-cursor', async () => {
                   const tracingPromise = agent.assertSomeTraces(traces => {
-                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
-                    expect(traces[0][0]).to.have.property('type', 'sql')
-                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('component', 'pg')
-                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
-                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                    assert.strictEqual(traces[0][0].type, 'sql')
+                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta.component, 'pg')
+                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
+                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
                   })
 
                   const cursor = client.query(new Cursor('SELECT * FROM generate_series(0, 1) num'))
@@ -261,27 +259,27 @@ describe('Plugin', () => {
 
                 it('should instrument stream-based queries with pg-query-stream', async () => {
                   const agentPromise = agent.assertSomeTraces(traces => {
-                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
-                    expect(traces[0][0]).to.have.property('type', 'sql')
-                    expect(traces[0][0]).to.have.property('error', 0)
-                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('component', 'pg')
-                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
-                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                    assert.strictEqual(traces[0][0].type, 'sql')
+                    assert.strictEqual(traces[0][0].error, 0)
+                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta.component, 'pg')
+                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
+                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
                   })
 
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
                   const stream = client.query(query)
 
-                  expect(stream.listenerCount('error')).to.equal(0)
+                  assert.strictEqual(stream.listenerCount('error'), 0)
 
                   const readPromise = (async () => {
                     for await (const row of stream) {
-                      expect(row).to.have.property('num')
+                      assert.ok(Object.hasOwn(row, 'num'))
                     }
                   })()
 
@@ -290,28 +288,28 @@ describe('Plugin', () => {
 
                 it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
                   const agentPromise = agent.assertSomeTraces(traces => {
-                    expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                    expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                    expect(traces[0][0]).to.have.property('resource', 'SELECT * FROM generate_series(0, 1) num')
-                    expect(traces[0][0]).to.have.property('type', 'sql')
-                    expect(traces[0][0]).to.have.property('error', 1)
-                    expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                    expect(traces[0][0].meta).to.have.property('db.name', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('db.type', 'postgres')
-                    expect(traces[0][0].meta).to.have.property('component', 'pg')
-                    expect(traces[0][0].metrics).to.have.property('db.stream', 1)
-                    expect(traces[0][0].metrics).to.have.property('network.destination.port', 5432)
+                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
+                    assert.strictEqual(traces[0][0].type, 'sql')
+                    assert.strictEqual(traces[0][0].error, 1)
+                    assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                    assert.strictEqual(traces[0][0].meta['db.name'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta['db.type'], 'postgres')
+                    assert.strictEqual(traces[0][0].meta.component, 'pg')
+                    assert.strictEqual(traces[0][0].metrics['db.stream'], 1)
+                    assert.strictEqual(traces[0][0].metrics['network.destination.port'], 5432)
                   })
 
                   const query = new QueryStream('SELECT * FROM generate_series(0, 1) num', [])
                   const stream = client.query(query)
 
-                  expect(stream.listenerCount('error')).to.equal(0)
+                  assert.strictEqual(stream.listenerCount('error'), 0)
 
                   const rejectedRead = assert.rejects(async () => {
                     // eslint-disable-next-line no-unreachable-loop
                     for await (const row of stream) {
-                      expect(row).to.have.property('num')
+                      assert.ok(Object.hasOwn(row, 'num'))
                       throw new Error('Test error')
                     }
                   }, {
@@ -350,9 +348,9 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', 'custom')
-            expect(traces[0][0]).to.have.property('resource', 'SELECT $1...')
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, 'custom')
+            assert.strictEqual(traces[0][0].resource, 'SELECT $1...')
           })
             .then(done)
             .catch(done)
@@ -407,8 +405,8 @@ describe('Plugin', () => {
 
         it('should be configured with the correct service', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', '127.0.0.1-postgres')
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, '127.0.0.1-postgres')
           })
             .then(done)
             .catch(done)
@@ -479,7 +477,7 @@ describe('Plugin', () => {
           })
           if (client.queryQueue[0] !== undefined) {
             try {
-              expect(client.queryQueue[0].text).to.equal(
+              assert.strictEqual(client.queryQueue[0].text,
                 '/*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
                 `ddpv='${ddpv}'*/ SELECT $1::text as message`)
             } catch (e) {
@@ -490,7 +488,7 @@ describe('Plugin', () => {
 
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'SELECT $1::text as message')
+            assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
             done()
           })
           client.query('SELECT $1::text as message', ['Hello world!'], (err, result) => {
@@ -537,7 +535,7 @@ describe('Plugin', () => {
 
           if (clientDBM.queryQueue[0] !== undefined) {
             try {
-              expect(clientDBM.queryQueue[0].text).to.equal(
+              assert.strictEqual(clientDBM.queryQueue[0].text,
                 '/*dddb=\'postgres\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
               done()
@@ -595,13 +593,13 @@ describe('Plugin', () => {
             const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
-            expect(seenTraceId).to.equal(traceId)
-            expect(seenSpanId).to.equal(spanId)
+            assert.strictEqual(seenTraceId, traceId)
+            assert.strictEqual(seenSpanId, spanId)
           }).then(done, done)
 
           client.query('SELECT $1::text as message', ['Hello World!'], (err, result) => {
             if (err) return done(err)
-            expect(seenTraceParent).to.be.true
+            assert.strictEqual(seenTraceParent, true)
             client.end((err) => {
               if (err) return done(err)
             })
@@ -610,7 +608,7 @@ describe('Plugin', () => {
 
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
+            assert.strictEqual(traces[0][0].meta['_dd.dbm_trace_injected'], 'true')
             done()
           })
 
@@ -625,7 +623,7 @@ describe('Plugin', () => {
 
         it('service should default to tracer service name', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
             done()
           })
 
@@ -685,7 +683,7 @@ describe('Plugin', () => {
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
-            expect(queryText).to.equal(
+            assert.strictEqual(queryText,
               `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-01'*/ SELECT $1::text as message`)
           })
@@ -717,7 +715,7 @@ describe('Plugin', () => {
             done(err)
           })
 
-          expect(query).to.have.property('name', 'pgSelectQuery')
+          assert.strictEqual(query.name, 'pgSelectQuery')
         })
 
         it('falls back to service with prepared statements', done => {
@@ -729,7 +727,7 @@ describe('Plugin', () => {
           client.query(query, ['Hello world!'], (err) => {
             done(err)
           })
-          expect(client.queryQueue[0].text).to.equal(
+          assert.strictEqual(client.queryQueue[0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message'
           )
@@ -744,7 +742,7 @@ describe('Plugin', () => {
           client.query(query, ['Hello world!'], async (err) => {
             done(err)
           })
-          expect(client.queryQueue[0].text).to.equal(
+          assert.strictEqual(client.queryQueue[0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message')
         })
@@ -758,7 +756,7 @@ describe('Plugin', () => {
             }
 
             get text () {
-              expect(typeof this.on).to.eql('function')
+              assert.deepStrictEqual(typeof this.on, 'function')
               return this._internalText
             }
           }
@@ -768,7 +766,7 @@ describe('Plugin', () => {
           client.query(query, ['Goodbye'], (err) => {
             done(err)
           })
-          expect(client.queryQueue[0].text).to.equal(
+          assert.strictEqual(client.queryQueue[0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as greeting')
         })
@@ -805,7 +803,7 @@ describe('Plugin', () => {
         it('should append comment in query text', async () => {
           const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
 
-          expect(client.queryQueue[0].text).to.equal(
+          assert.strictEqual(client.queryQueue[0].text,
             'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
               `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
           )
