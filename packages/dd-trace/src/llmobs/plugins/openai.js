@@ -433,33 +433,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    // Handle prompt tracking for reusable prompts
-    if (response && response.prompt && typeof response.prompt === 'object') {
-      const { id, version, variables } = response.prompt
-      if (id && version && variables) {
-        // Extract chat template from response instructions
-        const instructions = response.instructions
-        if (instructions && Array.isArray(instructions)) {
-          const chatTemplate = extractChatTemplateFromInstructions(instructions, variables)
-
-          // Normalize variables - OpenAI returns objects with 'text' field, we need simple key-value pairs
-          const normalizedVariables = {}
-          for (const [key, value] of Object.entries(variables)) {
-            normalizedVariables[key] = (value && typeof value === 'object' && value.text !== undefined)
-              ? value.text
-              : value
-          }
-
-          this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
-            id,
-            version,
-            variables: normalizedVariables,
-            chat_template: chatTemplate
-          })
-        }
-      }
-    }
-
     const outputMetadata = {}
 
     // Add fields from response object (convert numbers to floats)
