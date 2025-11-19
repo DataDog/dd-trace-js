@@ -82,11 +82,7 @@ const objectWithToPrimitiveSymbol = Object.create(Object.prototype, {
   [Symbol.toPrimitive]: { value: () => { throw new Error('This should never throw!') } }
 })
 class EvilRegex extends RegExp {
-  /**
-   * @override
-   * @param {string} string
-   * @returns {RegExpExecArray | null}
-   */
+  // @ts-expect-error: We want to throw an error here.
   exec (string) { throw new Error('This should never throw!') }
 }
 
@@ -793,32 +789,38 @@ function overloadMethod (obj, methodName) {
  * @param {StringConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {StringConstructor}
- *
+ */
+/**
  * @overload
  * @param {ArrayConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {ArrayConstructor}
- *
+ */
+/**
  * @overload
  * @param {Int16ArrayConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {Int16ArrayConstructor}
- *
+ */
+/**
  * @overload
  * @param {Int32ArrayConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {Int32ArrayConstructor}
- *
+ */
+/**
  * @overload
  * @param {SetConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {SetConstructor}
- *
+ */
+/**
  * @overload
  * @param {MapConstructor} Builtin
  * @param {PropertyKey} propName
  * @returns {MapConstructor}
- *
+ */
+/**
  * @param {new (...args: unknown[]) => object} Builtin
  * @param {PropertyKey} propName
  * @returns {new (...args: unknown[]) => object}
@@ -833,7 +835,8 @@ function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {
   return SubKlass
 }
 
-/** @type {{
+/**
+ * @type {{
  *  literals: TestCase[],
  *  references: TestCase[],
  *  propertyAccess: TestCase[],
@@ -845,7 +848,8 @@ function createClassWithOverloadedMethodInPrototypeChain (Builtin, propName) {
  *  collectionOperations: TestCase[],
  *  membershipAndMatching: TestCase[],
  *  typeAndDefinitionChecks: TestCase[]
- * }} */
+ * }}
+ */
 module.exports = {
   literals,
   references,

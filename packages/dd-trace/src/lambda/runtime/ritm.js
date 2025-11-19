@@ -53,8 +53,7 @@ function _extractModuleNameAndHandlerPath (handler) {
   const FUNCTION_EXPR = /^([^.]*)\.(.*)$/
   const match = handler.match(FUNCTION_EXPR)
   if (!match || match.length !== 3) {
-    // Malformed Handler Name
-    return // TODO: throw error
+    throw new Error(`Malformed handler name: ${handler}`)
   }
   return [match[1], match[2]] // [module, handler-path]
 }
