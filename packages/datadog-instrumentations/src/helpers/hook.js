@@ -24,7 +24,8 @@ function getVersion (moduleBaseDir) {
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options
  * @param {Function} onrequire callback to be executed upon encountering module
- *
+ */
+/**
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options

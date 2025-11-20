@@ -24,7 +24,8 @@ const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
  * @param {string[]} modules list of modules to hook into
  * @param {object} options hook options
  * @param {Function} onrequire callback to be executed upon encountering module
- *
+ */
+/**
  * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
