@@ -30,6 +30,7 @@ const disabledInstrumentations = new Set(
 )
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const HOOK_SYMBOL = Symbol('hookExportsSet')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -104,6 +105,7 @@ for (const name of names) {
       const canonicalName = requestedName.startsWith('node:') ? requestedName.slice(5) : requestedName
       const successKey = `${canonicalName}@${moduleVersion}`
 
+      // All loaded versions are first expected to fail instrumentation.
       if (!instrumentedIntegrationsSuccess.has(successKey)) {
         instrumentedIntegrationsSuccess.set(successKey, false)
       }
@@ -164,12 +166,35 @@ for (const name of names) {
         }
 
         if (matchesFile && matchVersion(moduleVersion, versions)) {
+          let instrumentedExports = hook[HOOK_SYMBOL]
+          if (
+            !instrumentedExports &&
+            moduleExports &&
+            (typeof moduleExports === 'object' || typeof moduleExports === 'function')
+          ) {
+            instrumentedExports = new WeakSet()
+            hook[HOOK_SYMBOL] = instrumentedExports
+          }
+
+          if (instrumentedExports?.has(moduleExports)) {
+            instrumentedIntegrationsSuccess.set(successKey, true)
+            continue
+          }
+
           // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
           instrumentedIntegrationsSuccess.set(successKey, true)
           try {
             loadChannel.publish({ name: canonicalName })
 
             moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
+
+            if (
+              instrumentedExports &&
+              moduleExports &&
+              (typeof moduleExports === 'object' || typeof moduleExports === 'function')
+            ) {
+              instrumentedExports.add(moduleExports)
+            }
           } catch (error) {
             log.info('Error during ddtrace instrumentation of application, aborting.', error)
             telemetry('error', [
