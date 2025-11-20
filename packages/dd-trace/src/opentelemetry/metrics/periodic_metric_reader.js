@@ -1,5 +1,8 @@
 'use strict'
 
+// Allow duplicate 'attributes' property name across different typedefs
+// eslint-disable jsdoc/check-property-names
+
 const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
 } = require('./constants')
