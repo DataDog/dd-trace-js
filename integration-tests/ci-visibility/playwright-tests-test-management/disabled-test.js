@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const { test, expect } = require('@playwright/test')
 
 test.beforeEach(async ({ page }) => {
