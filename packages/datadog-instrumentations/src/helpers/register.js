@@ -71,6 +71,8 @@ if (disabledInstrumentations.size) {
   builtinsSet.clear()
 }
 
+const builtinModuleSet = new Set(builtinModules)
+
 let timeout
 
 for (const name of names) {
@@ -79,8 +81,6 @@ for (const name of names) {
   const hookOptions = {}
 
   let hook = hooks[name]
-  const builtinsSet = new Set(builtinModules)
-
   if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && isInServerlessEnvironment()) continue
 
@@ -88,11 +88,10 @@ for (const name of names) {
     hook = hook.fn
   }
 
+  const targetNames = builtinModuleSet.has(name) ? [name, `node:${name}`] : [name]
 
-  const names = builtinsSet.has(name) ? [name, `node:${name}`] : [name]
-
-  names.forEach(name => {
-    Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir,
+  targetNames.forEach(requestedName => {
+    Hook([requestedName], hookOptions, (moduleExports, moduleName, moduleBaseDir,
       moduleVersion, isIitm) => {
       if (timeout === undefined) {
         // Delay the logging of aborted integrations to handle async loading graphs.
@@ -102,28 +101,50 @@ for (const name of names) {
       } else {
         timeout.refresh()
       }
-      // All loaded versions are first expected to fail instrumentation.
-      if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
-        instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
+      const canonicalName = requestedName.startsWith('node:') ? requestedName.slice(5) : requestedName
+      const successKey = `${canonicalName}@${moduleVersion}`
+
+      if (!instrumentedIntegrationsSuccess.has(successKey)) {
+        instrumentedIntegrationsSuccess.set(successKey, false)
       }
 
       // This executes the integration file thus adding its entries to `instrumentations`
       hook()
-      if (name.includes('node:')) {
-        instrumentations[name] = instrumentations[name.split('node:')[1]]
+
+      if (requestedName.includes('node:') && instrumentations[canonicalName]) {
+        instrumentations[requestedName] = instrumentations[canonicalName]
       }
-      if (!instrumentations[name] || moduleExports === instrumentedNodeModules.get(name)) {
+
+      const instrumentationsForModule = instrumentations[requestedName]
+
+      if (!instrumentationsForModule) {
         return moduleExports
       }
 
-      // Used for node: prefixed modules to prevent double instrumentation.
       if (moduleBaseDir) {
         moduleName = moduleName.replace(pathSepExpr, '/')
       } else {
-        instrumentedNodeModules.set(name, moduleExports)
+        const aliasNames = new Set([requestedName])
+
+        if (builtinModuleSet.has(canonicalName)) {
+          aliasNames.add(canonicalName)
+          aliasNames.add(`node:${canonicalName}`)
+        }
+
+        const alreadyInstrumented = [...aliasNames]
+          .map(alias => instrumentedNodeModules.get(alias))
+          .find(value => value !== undefined)
+
+        if (alreadyInstrumented && moduleExports === alreadyInstrumented) {
+          return moduleExports
+        }
+
+        for (const alias of aliasNames) {
+          instrumentedNodeModules.set(alias, moduleExports)
+        }
       }
 
-      for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
+      for (const { file, versions, hook, filePattern, patchDefault } of instrumentationsForModule) {
         if (isIitm && patchDefault === !!moduleExports.default) {
           if (patchDefault) {
             moduleExports = moduleExports.default
@@ -132,11 +153,10 @@ for (const name of names) {
           }
         }
 
-        const fullFilename = filename(name, file)
-
+        const fullFilename = filename(requestedName, file)
         let matchesFile = moduleName === fullFilename
 
-        const fullFilePattern = filePattern && filename(name, filePattern)
+        const fullFilePattern = filePattern && filename(requestedName, filePattern)
         if (fullFilePattern) {
           // Some libraries include a hash in their filenames when installed,
           // so our instrumentation has to include a '.*' to match them for more than a single version.
@@ -145,21 +165,21 @@ for (const name of names) {
 
         if (matchesFile && matchVersion(moduleVersion, versions)) {
           // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
-          instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
+          instrumentedIntegrationsSuccess.set(successKey, true)
           try {
-            loadChannel.publish({ name })
+            loadChannel.publish({ name: canonicalName })
 
             moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
           } catch (error) {
             log.info('Error during ddtrace instrumentation of application, aborting.', error)
             telemetry('error', [
               `error_type:${error.constructor.name}`,
-              `integration:${name}`,
+              `integration:${canonicalName}`,
               `integration_version:${moduleVersion}`
             ], {
               result: 'error',
               result_class: 'internal_error',
-              result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${error.message}`
+              result_reason: `Error during instrumentation of ${canonicalName}@${moduleVersion}: ${error.message}`
             })
           }
         }
