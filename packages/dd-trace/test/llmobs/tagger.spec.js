@@ -294,13 +294,13 @@ describe('tagger', () => {
         tagger.tagLLMIO(span, inputData, outputData)
         expect(Tagger.tagMap.get(span)).to.deep.equal({
           '_ml_obs.meta.input.messages': [
-            { content: 'you are an amazing assistant' },
-            { content: 'hello! my name is foobar' },
+            { content: 'you are an amazing assistant', role: '' },
+            { content: 'hello! my name is foobar', role: '' },
             { content: 'I am a robot', role: 'assistant' },
             { content: 'I am a human', role: 'user' },
-            { content: '' }
+            { content: '', role: '' }
           ],
-          '_ml_obs.meta.output.messages': [{ content: 'Nice to meet you, human!' }]
+          '_ml_obs.meta.output.messages': [{ content: 'Nice to meet you, human!', role: '' }]
         })
       })
 
@@ -344,12 +344,14 @@ describe('tagger', () => {
             '_ml_obs.meta.input.messages': [
               {
                 content: 'hello',
-                tool_calls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }]
+                tool_calls: [{ name: 'tool1' }, { name: 'tool2', arguments: { a: 1, b: 2 } }],
+                role: ''
               }, {
                 content: 'goodbye',
-                tool_calls: [{ name: 'tool3' }]
+                tool_calls: [{ name: 'tool3' }],
+                role: ''
               }],
-            '_ml_obs.meta.output.messages': [{ content: 'hi', tool_calls: [{ name: 'tool4' }] }]
+            '_ml_obs.meta.output.messages': [{ content: 'hi', tool_calls: [{ name: 'tool4' }], role: '' }]
           })
         })
 
@@ -405,14 +407,18 @@ describe('tagger', () => {
       describe('tagging tool results appropriately', () => {
         it('tags a span with tool results', () => {
           const inputData = [
-            { content: 'hello', toolResults: [{ result: 'foo', toolId: '123', type: 'tool_result' }] }
+            { content: 'hello', toolResults: [{ name: '', result: 'foo', toolId: '123', type: 'tool_result' }] }
           ]
 
           tagger._register(span)
           tagger.tagLLMIO(span, inputData)
           expect(Tagger.tagMap.get(span)).to.deep.equal({
             '_ml_obs.meta.input.messages': [
-              { content: 'hello', tool_results: [{ result: 'foo', tool_id: '123', type: 'tool_result' }] }
+              {
+                content: 'hello',
+                tool_results: [{ result: 'foo', tool_id: '123', name: '', type: 'tool_result' }],
+                role: ''
+              }
             ]
           })
         })

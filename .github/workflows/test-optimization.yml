@@ -95,11 +95,52 @@ jobs:
           NODE_OPTIONS: '-r ./ci/init'
           MOCHA_VERSION: ${{ matrix.mocha-version }}
 
-  integration-ci:
+  integration-jest:
     strategy:
       matrix:
         version: [oldest, latest]
-        framework: [cucumber, selenium, jest]
+        jest-version: [24.8.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:jest
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+          JEST_VERSION: ${{ matrix.jest-version }}
+
+  integration-cucumber:
+    strategy:
+      matrix:
+        version: [oldest, latest]
+        cucumber-version: [7.0.0, latest]
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:cucumber
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+          CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
+
+  integration-selenium:
+    strategy:
+      matrix:
+        version: [oldest, latest]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -119,7 +160,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
           if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
-        if: ${{ matrix.framework == 'selenium' }}
       - name: Install ChromeDriver
         run: |
           export CHROME_VERSION=$(google-chrome --version)
@@ -129,9 +169,8 @@ jobs:
           unzip chromedriver-linux64.zip
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
-        if: ${{ matrix.framework == 'selenium' }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:${{ matrix.framework }}
+      - run: yarn test:integration:selenium
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
@@ -183,57 +222,3 @@ jobs:
       - run: yarn test:integration:vitest
         env:
           NODE_OPTIONS: '-r ./ci/init'
-
-  plugin-cucumber:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: cucumber
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-
-  # TODO: fix performance issues and test more Node versions
-  plugin-cypress:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: cypress
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
-
-  # TODO: fix performance issues and test more Node versions
-  plugin-jest:
-    runs-on: ubuntu-latest
-    env:
-      PLUGINS: jest
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
-        with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests

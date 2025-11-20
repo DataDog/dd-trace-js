@@ -3,7 +3,7 @@
 const benchmark = require('./benchmark')
 const proxyquire = require('proxyquire')
 
-const Config = require('../packages/dd-trace/src/config')
+const getConfig = require('../packages/dd-trace/src/config')
 const DatadogTracer = require('../packages/dd-trace/src/tracer')
 const DatadogSpanContext = require('../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../packages/dd-trace/src/opentracing/propagation/text_map')
@@ -19,10 +19,10 @@ const Writer = proxyquire('../packages/dd-trace/src/exporters/agent/writer', {
   }
 })
 const Sampler = require('../packages/dd-trace/src/sampler')
-const format = require('../packages/dd-trace/src/format')
+const spanFormat = require('../packages/dd-trace/src/span_format')
 const { AgentEncoder: Agent04Encoder } = require('../packages/dd-trace/src/encode/0.4')
 const { AgentEncoder: Agent05Encoder } = require('../packages/dd-trace/src/encode/0.5')
-const config = new Config({ service: 'benchmark' })
+const config = getConfig({ service: 'benchmark' })
 const id = require('../packages/dd-trace/src/id')
 const Histogram = require('../packages/dd-trace/src/histogram')
 const histogram = new Histogram()
@@ -42,7 +42,7 @@ let writer
 let sampler
 
 const spanStub = require('./stubs/span')
-const span = format(spanStub)
+const span = spanFormat(spanStub)
 
 suite
   .add('DatadogTracer#startSpan', {
@@ -96,9 +96,9 @@ suite
       sampler.isSampled(span)
     }
   })
-  .add('format', {
+  .add('spanFormat', {
     fn () {
-      format(spanStub)
+      spanFormat(spanStub)
     }
   })
   .add('encode (0.4)', {

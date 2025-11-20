@@ -6,6 +6,7 @@ const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
 const { setCollectionMode } = require('../appsec/user_tracking')
 const log = require('../log')
+const { updateConfig } = require('../telemetry')
 
 let rc
 
@@ -62,7 +63,8 @@ function enable (config, appsec) {
 
 function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
-    const shouldEnable = action === 'apply' || action === 'modify'
+    const isRemoteConfigControlling = action === 'apply' || action === 'modify'
+    const shouldEnable = isRemoteConfigControlling
       ? rcConfig.asm.enabled // take control
       : config.appsec.enabled // give back control to local config
 
@@ -71,6 +73,14 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
     } else {
       appsec.disable()
     }
+
+    updateConfig([
+      {
+        name: 'appsec.enabled',
+        origin: isRemoteConfigControlling ? 'remote_config' : config.getOrigin('appsec.enabled'),
+        value: shouldEnable
+      }
+    ], config)
   }
 }
 
@@ -90,6 +100,8 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, true)
@@ -129,6 +141,8 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSION_DATA, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_ENDPOINT_FINGERPRINT, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_SESSION_FINGERPRINT, false)

@@ -12,7 +12,7 @@ const uuidSource =
 const containerSource = '[0-9a-f]{64}'
 const taskSource = String.raw`[0-9a-f]{32}-\d+`
 const lineReg = /^(\d+):([^:]*):(.+)$/m
-const entityReg = new RegExp(`.*(${uuidSource}|${containerSource}|${taskSource})(?:\\.scope)?$`, 'm')
+const entityReg = new RegExp(String.raw`.*(${uuidSource}|${containerSource}|${taskSource})(?:\.scope)?$`, 'm')
 
 let inode = 0
 let cgroup = ''

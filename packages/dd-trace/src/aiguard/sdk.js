@@ -9,9 +9,15 @@ const {
   AI_GUARD_ACTION_TAG_KEY,
   AI_GUARD_BLOCKED_TAG_KEY,
   AI_GUARD_META_STRUCT_KEY,
-  AI_GUARD_TOOL_NAME_TAG_KEY
+  AI_GUARD_TOOL_NAME_TAG_KEY,
+  AI_GUARD_TELEMETRY_REQUESTS,
+  AI_GUARD_TELEMETRY_TRUNCATED
 } = require('./tags')
 const log = require('../log')
+const telemetryMetrics = require('../telemetry/metrics')
+const tracerVersion = require('../../../../package.json').version
+
+const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const ALLOW = 'ALLOW'
 
@@ -58,6 +64,9 @@ class AIGuard extends NoopAIGuard {
     this.#headers = {
       'DD-API-KEY': config.apiKey,
       'DD-APPLICATION-KEY': config.appKey,
+      'DD-AI-GUARD-VERSION': tracerVersion,
+      'DD-AI-GUARD-SOURCE': 'SDK',
+      'DD-AI-GUARD-LANGUAGE': 'nodejs'
     }
     const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
@@ -70,13 +79,21 @@ class AIGuard extends NoopAIGuard {
 
   #truncate (messages) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
+    if (messages.length > size) {
+      appsecMetrics.count(AI_GUARD_TELEMETRY_TRUNCATED, { type: 'messages' }).inc(1)
+    }
     const result = messages.slice(-size)
 
+    let contentTruncated = false
     for (let i = 0; i < size; i++) {
       const message = result[i]
       if (message.content?.length > this.#maxContentSize) {
+        contentTruncated = true
         result[i] = { ...message, content: message.content.slice(0, this.#maxContentSize) }
       }
+    }
+    if (contentTruncated) {
+      appsecMetrics.count(AI_GUARD_TELEMETRY_TRUNCATED, { type: 'content' }).inc(1)
     }
     return result
   }
@@ -121,10 +138,11 @@ class AIGuard extends NoopAIGuard {
           span.setTag(AI_GUARD_TOOL_NAME_TAG_KEY, name)
         }
       }
+      const metaStruct = {
+        messages: this.#truncate(messages)
+      }
       span.meta_struct = {
-        [AI_GUARD_META_STRUCT_KEY]: {
-          messages: this.#truncate(messages)
-        }
+        [AI_GUARD_META_STRUCT_KEY]: metaStruct
       }
       let response
       try {
@@ -140,14 +158,16 @@ class AIGuard extends NoopAIGuard {
           payload,
           { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout })
       } catch (e) {
-        throw new AIGuardClientError('Unexpected error calling AI Guard service', { cause: e })
+        appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
+        throw new AIGuardClientError(`Unexpected error calling AI Guard service: ${e.message}`, { cause: e })
       }
       if (response.status !== 200) {
+        appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
         throw new AIGuardClientError(
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, blockingEnabled
+      let action, reason, tags, blockingEnabled
       try {
         const attr = response.body.data.attributes
         if (!attr.action) {
@@ -155,13 +175,22 @@ class AIGuard extends NoopAIGuard {
         }
         action = attr.action
         reason = attr.reason
+        tags = attr.tags
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
+        appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
         throw new AIGuardClientError(`AI Guard service returned unexpected response : ${response.body}`, { cause: e })
       }
+      const shouldBlock = block && blockingEnabled && action !== ALLOW
+      appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { action, error: false, block: shouldBlock }).inc(1)
       span.setTag(AI_GUARD_ACTION_TAG_KEY, action)
-      span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
-      if (block && blockingEnabled && action !== ALLOW) {
+      if (reason) {
+        span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
+      }
+      if (tags?.length > 0) {
+        metaStruct.attack_categories = tags
+      }
+      if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
         throw new AIGuardAbortError(reason)
       }

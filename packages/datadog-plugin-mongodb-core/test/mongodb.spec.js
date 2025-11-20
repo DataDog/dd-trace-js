@@ -602,7 +602,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-00'`
+                `traceparent='00-${traceId}-${spanId}-01'`
               )
             })
             .then(done)
@@ -612,6 +612,55 @@ describe('Plugin', () => {
             _id: Buffer.from('1234')
           }).toArray()
         })
+      })
+
+      describe('with dbmPropagationMode full but sampling disabled', () => {
+        before(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'full'
+          })
+        })
+
+        after(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it(
+          'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
+          done => {
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+                const spanId = span.span_id.toString(16).padStart(16, '0')
+
+                expect(startSpy.called).to.be.true
+                const { comment } = startSpy.getCall(0).args[0].ops
+                expect(comment).to.include(`traceparent='00-${traceId}-${spanId}-00'`)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.find({
+              _id: Buffer.from('1234')
+            }).toArray()
+          })
       })
 
       describe('with heartbeatEnabled configuration', () => {

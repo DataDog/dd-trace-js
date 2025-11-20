@@ -79,10 +79,13 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    *
    * We use the tool description as the next best identifier for a tool.
    *
+   * @param {string} toolName
    * @param {string} toolDescription
    * @returns {string | undefined}
    */
-  findToolName (toolDescription) {
+  findToolName (toolName, toolDescription) {
+    if (Number.isNaN(Number.parseInt(toolName))) return toolName
+
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
       if (description === toolDescription && availableTool.id) {
@@ -260,16 +263,17 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const formattedToolCalls = []
     for (const toolCall of outputMessageToolCalls) {
-      const toolCallArgs = getJsonStringValue(toolCall.args, {})
+      const toolArgs = toolCall.args ?? toolCall.input
+      const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
-      const name = this.findToolName(toolDescription)
+      const name = this.findToolName(toolCall.toolName, toolDescription)
       this.#toolCallIdsToName[toolCall.toolCallId] = name
 
       formattedToolCalls.push({
         arguments: toolCallArgs,
         name,
         toolId: toolCall.toolCallId,
-        type: 'function'
+        type: toolCall.toolCallType ?? 'function'
       })
     }
 
@@ -317,10 +321,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
           const toolDescription = toolsForModel?.find(tool => part.toolName === tool.name)?.description
-          const name = this.findToolName(toolDescription)
+          const name = this.findToolName(part.toolName, toolDescription)
 
           toolCalls.push({
-            arguments: part.args,
+            arguments: part.args ?? part.input,
             name,
             toolId: part.toolCallId,
             type: 'function'

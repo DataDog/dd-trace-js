@@ -9,7 +9,7 @@ function getWebSpan (traces) {
     }
   }
 
-  throw new Error('web span not found')
+  throw new Error('Sanity check failed: web span not found', { cause: traces })
 }
 
 function createDeepObject (sheetValue, currentLevel = 1, max = 20) {

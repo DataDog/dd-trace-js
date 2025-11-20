@@ -11,10 +11,11 @@ const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
+const proxyquire = require('proxyquire')
 
 const traceHandlers = new Set()
 const statsHandlers = new Set()
-const llmobsHandlers = new Set()
+let llmobsSpanEventsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -298,7 +299,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * - rejectFirst: false
  * - spanResourceMatch: undefined
  *
- * @typedef {Object} RunCallbackAgainstTracesOptions
+ * @typedef {object} RunCallbackAgainstTracesOptions
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
@@ -316,7 +317,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * Otherwise, it will reject.
  *
  * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
- * @param {RunCallbackAgainstTracesOptions} options={} - An options object
+ * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
  * @param {Set} handlers - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
@@ -340,7 +341,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   /**
    * @type {TracesCallback | AgentlessCallback}
-  */
+   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
@@ -370,6 +371,7 @@ module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
+   * @overload
    * @param {String|String[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
@@ -395,7 +397,17 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    tracer = require('../..')
+    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    const proxy = proxyquire('../../src/proxy', {
+      './config': getConfigFresh
+    })
+    const TracerProxy = proxyquire('../../src', {
+      './proxy': proxy
+    })
+    tracer = proxyquire('../../', {
+      './src': TracerProxy
+    })
+
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
@@ -437,9 +449,7 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
-      llmobsHandlers.forEach(({ handler }) => {
-        handler(JSON.parse(req.body))
-      })
+      llmobsSpanEventsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
@@ -514,15 +524,19 @@ module.exports = {
    * @param {Function} handler
    */
   subscribe (handler) {
-    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
+    traceHandlers.add({ handler })
   },
 
   /**
-   * Remove a handler (TODO: THIS DOES NOTHING)
+   * Remove a handler
    * @param {Function} handler
    */
   unsubscribe (handler) {
-    traceHandlers.delete(handler)
+    for (const traceHandler of traceHandlers) {
+      if (traceHandler.handler === handler) {
+        traceHandlers.delete(traceHandler)
+      }
+    }
   },
 
   /**
@@ -581,13 +595,17 @@ module.exports = {
   },
 
   /**
-   * Use a callback handler for LLM Observability traces.
-   * @param {RunCallbackAgainstTracesCallback} callback
-   * @param {RunCallbackAgainstTracesOptions} [options]
-   * @returns
+   * Get the LLM Observability span events requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<Object>} The LLM Observability span events requests.
    */
-  useLlmobsTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+  getLlmObsSpanEventsRequests (clear = false) {
+    const requests = llmobsSpanEventsRequests
+    if (clear) {
+      llmobsSpanEventsRequests = []
+    }
+
+    return requests
   },
 
   /**
@@ -596,7 +614,7 @@ module.exports = {
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
   },
 
   /**
@@ -625,7 +643,7 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
