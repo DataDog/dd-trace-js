@@ -51,7 +51,6 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 class PeriodicMetricReader {
   #measurements = []
-  #observableInstruments = new Set()
   #cumulativeState = new Map()
   #lastExportedState = new Map()
   #droppedCount = 0
@@ -66,10 +65,11 @@ class PeriodicMetricReader {
    * @param {OtlpHttpMetricExporter} exporter - Metric exporter for sending to Datadog Agent
    * @param {number} exportInterval - Export interval in milliseconds
    * @param {string} temporalityPreference - Temporality preference: DELTA, CUMULATIVE, or LOWMEMORY
-   * @param {number} maxQueueSize - Maximum number of measurements to queue before dropping
+   * @param {number} maxBatchedQueueSize - Maximum number of measurements to queue before dropping
    */
   constructor (exporter, exportInterval, temporalityPreference, maxBatchedQueueSize) {
     this.exporter = exporter
+    this.observableInstruments = new Set()
     this.#exportInterval = exportInterval
     this.#aggregator = new MetricAggregator(temporalityPreference, maxBatchedQueueSize)
     this.#startTimer()
@@ -86,15 +86,6 @@ class PeriodicMetricReader {
       return
     }
     this.#measurements.push(measurement)
-  }
-
-  /**
-   * Registers an observable instrument for periodic collection.
-   *
-   * @param {ObservableGauge} instrument - The observable instrument to register
-   */
-  registerObservableInstrument (instrument) {
-    this.#observableInstruments.add(instrument)
   }
 
   /**
@@ -156,7 +147,7 @@ class PeriodicMetricReader {
     // during export without interfering with this batch.
     const allMeasurements = this.#measurements.splice(0)
 
-    for (const instrument of this.#observableInstruments) {
+    for (const instrument of this.observableInstruments) {
       const observableMeasurements = instrument.collect()
 
       if (allMeasurements.length >= DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE) {

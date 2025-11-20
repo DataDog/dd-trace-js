@@ -21,7 +21,7 @@ const AGGREGATION_TEMPORALITY_CUMULATIVE = protoAggregationTemporality.values.AG
  * https://opentelemetry.io/docs/specs/otlp/#metrics-data-model
  *
  * @class OtlpTransformer
- * @extends OtlpTransformerBase
+ * @augments OtlpTransformerBase
  */
 class OtlpTransformer extends OtlpTransformerBase {
   /**

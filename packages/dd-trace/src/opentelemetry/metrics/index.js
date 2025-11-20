@@ -7,7 +7,7 @@ const os = require('os')
  */
 
 /**
- * @fileoverview OpenTelemetry Metrics Implementation for dd-trace-js
+ * @file OpenTelemetry Metrics Implementation for dd-trace-js
  *
  * This package provides a custom OpenTelemetry Metrics implementation that integrates
  * with the Datadog tracing library. It includes all necessary components for

@@ -136,7 +136,7 @@ class ObservableInstrument extends Instrument {
   addCallback (callback) {
     if (typeof callback !== 'function') return
     this.#callbacks.push(callback)
-    this.reader?.registerObservableInstrument(this)
+    this.reader?.observableInstruments.add(this)
   }
 
   /**
@@ -148,6 +148,10 @@ class ObservableInstrument extends Instrument {
     const index = this.#callbacks.indexOf(callback)
     if (index !== -1) {
       this.#callbacks.splice(index, 1)
+      if (this.#callbacks.length === 0) {
+        // Remove instrument from collection when no callbacks remain
+        this.reader?.observableInstruments.delete(this)
+      }
     }
   }
 
