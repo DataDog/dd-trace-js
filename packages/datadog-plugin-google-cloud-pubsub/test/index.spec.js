@@ -268,7 +268,14 @@ describe('Plugin', () => {
               sub.on('message', msg => msg.ack())
               await publish(topic, { data: Buffer.from('hello') })
             },
-            rawExpectedSchema.receive
+            rawExpectedSchema.receive,
+            {
+              selectSpan: (traces) => {
+                // Find the consumer span (not the client span for streamingPull)
+                const allSpans = traces.flat()
+                return allSpans.find(span => span.meta && span.meta['span.kind'] === 'consumer')
+              }
+            }
           )
         })
 
