@@ -470,7 +470,7 @@ describe('Plugin', () => {
         }
 
         // Determine the default operation name based on span kind
-        let defaultOpName = 'pubsub.request'
+        let defaultOpName = 'pubsub.requests'
         if (spanKind === 'consumer') {
           defaultOpName = expectedSchema.receive.opName
         } else if (spanKind === 'producer') {

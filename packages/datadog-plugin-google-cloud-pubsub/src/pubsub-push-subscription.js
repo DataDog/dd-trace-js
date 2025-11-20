@@ -52,7 +52,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const deliverySpan = this._createDeliverySpan(
       messageData,
       isSameTrace ? pubsubRequestContext : originalContext,
-      !isSameTrace ? pubsubRequestContext : null,
+      isSameTrace ? null : pubsubRequestContext,
       tracer
     )
 
