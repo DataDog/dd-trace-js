@@ -7,8 +7,7 @@ const {
   encodeUnicode,
   getFunctionArguments,
   validateKind,
-  spanHasError,
-  extractChatTemplateFromInstructions
+  spanHasError
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -176,104 +175,6 @@ describe('util', () => {
       span.setTag('error.stack', err.stack)
 
       expect(spanHasError(span)).to.equal(true)
-    })
-  })
-
-  describe('extractChatTemplateFromInstructions', () => {
-    it('should handle overlapping variable values (longest-first matching)', () => {
-      const instructions = [
-        {
-          role: 'user',
-          content: [
-            { text: 'I saw a cat in the hat and another cat' }
-          ]
-        }
-      ]
-      const variables = { phrase: 'cat in the hat', word: 'cat' }
-
-      const result = extractChatTemplateFromInstructions(instructions, variables)
-
-      expect(result).to.deep.equal([
-        { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
-      ])
-    })
-
-    it('should handle partial word matches', () => {
-      const instructions = [
-        {
-          role: 'developer',
-          content: [{ text: 'Reply with "OK".' }]
-        },
-        {
-          role: 'user',
-          content: [{ text: 'This is a test for testing the tester' }]
-        }
-      ]
-      const variables = { word: 'test' }
-
-      const result = extractChatTemplateFromInstructions(instructions, variables)
-
-      expect(result).to.deep.equal([
-        { role: 'developer', content: 'Reply with "OK".' },
-        { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
-      ])
-    })
-
-    it('should handle special characters in values', () => {
-      const instructions = [
-        {
-          role: 'user',
-          content: [{ text: 'The price of groceries is $99.99.' }]
-        }
-      ]
-      const variables = { price: '$99.99', item: 'groceries' }
-
-      const result = extractChatTemplateFromInstructions(instructions, variables)
-
-      expect(result).to.deep.equal([
-        { role: 'user', content: 'The price of {{item}} is {{price}}.' }
-      ])
-    })
-
-    it('should skip empty variable values', () => {
-      const instructions = [
-        {
-          role: 'user',
-          content: [{ text: 'I saw a cat in the hat and another ' }]
-        }
-      ]
-      const variables = { phrase: 'cat in the hat', word: '' }
-
-      const result = extractChatTemplateFromInstructions(instructions, variables)
-
-      expect(result).to.deep.equal([
-        { role: 'user', content: 'I saw a {{phrase}} and another ' }
-      ])
-    })
-
-    it('should return empty array for invalid inputs', () => {
-      expect(extractChatTemplateFromInstructions(null, {})).to.deep.equal([])
-      expect(extractChatTemplateFromInstructions([], null)).to.deep.equal([])
-      expect(extractChatTemplateFromInstructions(undefined, {})).to.deep.equal([])
-    })
-
-    it('should handle multiple content items in a single instruction', () => {
-      const instructions = [
-        {
-          role: 'user',
-          content: [
-            { text: 'Hello ' },
-            { text: 'world' }
-          ]
-        }
-      ]
-      const variables = { greeting: 'Hello', target: 'world' }
-
-      const result = extractChatTemplateFromInstructions(instructions, variables)
-
-      expect(result).to.deep.equal([
-        { role: 'user', content: '{{greeting}} {{target}}' }
-      ])
     })
   })
 })

@@ -757,6 +757,7 @@ describe('integrations', () => {
       })
 
       // Helper function to verify prompt tracking in span events
+      // Note: Prompt IDs (pmpt_*) are real reusable prompts created on "Datadog Staging" OpenAI's dashboard for testing
       function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages) {
         // Verify input messages are captured from instructions
         assert(spanEvent.meta.input.messages, 'Input messages should be present')

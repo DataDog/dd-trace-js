@@ -1,7 +1,7 @@
 'use strict'
 
-const LLMObsPlugin = require('./base')
-const { extractChatTemplateFromInstructions } = require('../util')
+const LLMObsPlugin = require('../base')
+const { extractChatTemplateFromInstructions } = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -257,7 +257,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             content = item.content
           }
 
-          if (content || role === 'developer') {
+          if (content) {
             inputMessages.push({ role, content })
           }
         } else if (item.type === 'function_call') {

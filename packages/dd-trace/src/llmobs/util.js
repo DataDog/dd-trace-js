@@ -174,63 +174,9 @@ function spanHasError (span) {
   return !!(tags.error || tags['error.type'])
 }
 
-// Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders
-function extractChatTemplateFromInstructions (instructions, variables) {
-  if (!instructions || !Array.isArray(instructions)) return []
-  if (!variables || typeof variables !== 'object') return []
-
-  const chatTemplate = []
-
-  // Build map of values to placeholders
-  const valueToPlaceholder = {}
-  for (const [varName, varValue] of Object.entries(variables)) {
-    const valueStr = (varValue && typeof varValue === 'object' && varValue.text)
-      ? String(varValue.text) // Handle ResponseInputText objects
-      : String(varValue)
-    if (!valueStr) continue
-    valueToPlaceholder[valueStr] = `{{${varName}}}`
-  }
-
-  // Sort values by length (longest first) to handle overlapping values correctly
-  const sortedValues = Object.keys(valueToPlaceholder).sort((a, b) => b.length - a.length)
-
-  // Process each instruction
-  for (const instruction of instructions) {
-    const role = instruction.role
-    if (!role) continue
-
-    const contentItems = instruction.content
-    if (!contentItems || !Array.isArray(contentItems)) continue
-
-    // Collect text parts from content items
-    const textParts = []
-    for (const contentItem of contentItems) {
-      const text = contentItem.text
-      if (text) {
-        textParts.push(String(text))
-      }
-    }
-    if (textParts.length === 0) continue
-
-    // Combine all text parts and replace variable values with placeholders (longest first)
-    let fullText = textParts.join('')
-    for (const valueStr of sortedValues) {
-      const placeholder = valueToPlaceholder[valueStr]
-      // Escape special regex characters and replace all occurrences
-      const escapedValue = valueStr.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
-      fullText = fullText.replaceAll(new RegExp(escapedValue, 'g'), placeholder)
-    }
-
-    chatTemplate.push({ role, content: fullText })
-  }
-
-  return chatTemplate
-}
-
 module.exports = {
   encodeUnicode,
   validateKind,
   getFunctionArguments,
-  spanHasError,
-  extractChatTemplateFromInstructions
+  spanHasError
 }
