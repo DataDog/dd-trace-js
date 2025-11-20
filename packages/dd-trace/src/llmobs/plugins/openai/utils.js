@@ -65,4 +65,3 @@ function extractChatTemplateFromInstructions (instructions, variables) {
 module.exports = {
   extractChatTemplateFromInstructions
 }
-
