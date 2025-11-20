@@ -7,6 +7,8 @@ include:
 .macrobenchmarks:
   stage: macrobenchmarks
   rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
     - when: always
     - when: manual
   tags: ["runner:apm-k8s-same-cpu"]
