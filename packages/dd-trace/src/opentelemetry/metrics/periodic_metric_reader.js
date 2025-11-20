@@ -12,14 +12,14 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @typedef {import('./instruments').Measurement} Measurement
  *
  * @typedef {Object} NumberDataPoint
- * @property {Attributes} attributes - Metric attributes
+ * @property {Attributes} attributes - Number data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
  * @property {number} startTimeUnixNano - Start timestamp for cumulative metrics
  * @property {number} value - Metric value
  *
  * @typedef {Object} HistogramDataPoint
- * @property {Attributes} attributes - Metric attributes
+ * @property {Attributes} attributes - Histogram data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
  * @property {number} startTimeUnixNano - Start timestamp
