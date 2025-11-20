@@ -57,7 +57,7 @@ describe('appsec downstream_requests', () => {
 
     it('returns stored decision from redirect', () => {
       const redirectUrl = 'http://example.com/redirect-target'
-      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl, true)
+      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
 
       expect(downstream.shouldSampleBody(req, redirectUrl)).to.be.true
     })

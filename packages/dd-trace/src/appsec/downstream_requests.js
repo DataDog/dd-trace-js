@@ -57,7 +57,6 @@ function getRedirectBodyCollectionDecision (req, outgoingUrl) {
  * Stores a redirect body collection decision for a follow-up request.
  * @param {import('http').IncomingMessage} req inbound request.
  * @param {string} redirectUrl the URL to redirect to.
- * @param {boolean} shouldCollectBody the body collection decision.
  */
 function storeRedirectBodyCollectionDecision (req, redirectUrl) {
   let decisions = redirectBodyCollectionDecisions.get(req)
