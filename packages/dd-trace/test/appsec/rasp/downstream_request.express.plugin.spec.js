@@ -13,7 +13,6 @@ describe('RASP - downstream request integration', () => {
     false,
     [path.join(__dirname, 'resources')])
 
-  
   before(async function () {
     cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'downstream-test-app.js')
