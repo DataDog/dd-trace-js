@@ -34,15 +34,17 @@ describe('appsec downstream_requests', () => {
   })
 
   describe('shouldSampleBody', () => {
+    const testUrl = 'http://example.com/api'
+
     it('returns true when enabled with sample rate 1', () => {
-      expect(downstream.shouldSampleBody(req)).to.be.true
+      expect(downstream.shouldSampleBody(req, testUrl)).to.be.true
     })
 
     it('returns false when per-request limit reached', () => {
-      expect(downstream.shouldSampleBody(req)).to.be.true
+      expect(downstream.shouldSampleBody(req, testUrl)).to.be.true
       downstream.incrementBodyAnalysisCount(req)
 
-      expect(downstream.shouldSampleBody(req)).to.be.false
+      expect(downstream.shouldSampleBody(req, 'http://example.com/api2')).to.be.false
     })
 
     it('returns false when sample rate is zero', () => {
@@ -50,7 +52,14 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
       downstream.enable(config)
 
-      expect(downstream.shouldSampleBody(req)).to.be.false
+      expect(downstream.shouldSampleBody(req, testUrl)).to.be.false
+    })
+
+    it('returns stored decision from redirect', () => {
+      const redirectUrl = 'http://example.com/redirect-target'
+      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl, true)
+
+      expect(downstream.shouldSampleBody(req, redirectUrl)).to.be.true
     })
 
     it('logs warning and clamps value when sample rate is above 1', () => {
@@ -58,7 +67,7 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.5
       downstream.enable(config)
 
-      downstream.shouldSampleBody(req)
+      downstream.shouldSampleBody(req, testUrl)
 
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
@@ -73,7 +82,7 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = -0.5
       downstream.enable(config)
 
-      downstream.shouldSampleBody(req)
+      downstream.shouldSampleBody(req, testUrl)
 
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
@@ -88,9 +97,87 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0.5
       downstream.enable(config)
 
-      downstream.shouldSampleBody(req)
+      downstream.shouldSampleBody(req, testUrl)
 
       sinon.assert.notCalled(logWarnStub)
+    })
+  })
+
+  describe('handleRedirectResponse', () => {
+    it('detects redirect with location header (lowercase)', () => {
+      const res = {
+        statusCode: 302,
+        headers: { location: 'http://example.com/redirect' }
+      }
+
+      const result = downstream.handleRedirectResponse(req, res, true)
+
+      expect(result.isRedirect).to.be.true
+      expect(result.redirectLocation).to.equal('http://example.com/redirect')
+    })
+
+    it('detects redirect with Location header (capitalized)', () => {
+      const res = {
+        statusCode: 301,
+        headers: { Location: 'http://example.com/redirect' }
+      }
+
+      const result = downstream.handleRedirectResponse(req, res, true)
+
+      expect(result.isRedirect).to.be.true
+      expect(result.redirectLocation).to.equal('http://example.com/redirect')
+    })
+
+    it('returns false for non redirect status codes', () => {
+      const res = {
+        statusCode: 200,
+        headers: {}
+      }
+
+      const result = downstream.handleRedirectResponse(req, res, true)
+
+      expect(result.isRedirect).to.be.false
+      expect(result.redirectLocation).to.be.empty
+    })
+
+    it('returns false for redirect without location header', () => {
+      const res = {
+        statusCode: 302,
+        headers: {}
+      }
+
+      const result = downstream.handleRedirectResponse(req, res, true)
+
+      expect(result.isRedirect).to.be.true
+      expect(result.redirectLocation).to.be.empty
+    })
+
+    it('stores body collection decision for redirect with location when shouldCollectBody is true', () => {
+      const res = {
+        statusCode: 302,
+        headers: { location: 'http://example.com/target' }
+      }
+
+      downstream.handleRedirectResponse(req, res, true)
+
+      const storedDecision = downstream.shouldSampleBody(req, 'http://example.com/target')
+      expect(storedDecision).to.be.true
+    })
+
+    it('does not store decision when shouldCollectBody is false', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
+      downstream.enable(config)
+
+      const res = {
+        statusCode: 302,
+        headers: { location: 'http://example.com/target2' }
+      }
+
+      downstream.handleRedirectResponse(req, res, false)
+
+      const result = downstream.shouldSampleBody(req, 'http://example.com/target2')
+      expect(result).to.be.false
     })
   })
 
@@ -416,17 +503,17 @@ describe('appsec downstream_requests', () => {
       const req1 = {}
       const req2 = {}
 
-      expect(downstream.shouldSampleBody(req1)).to.be.true
+      expect(downstream.shouldSampleBody(req1, 'http://example.com/1')).to.be.true
       downstream.incrementBodyAnalysisCount(req1)
 
-      expect(downstream.shouldSampleBody(req2)).to.be.true
+      expect(downstream.shouldSampleBody(req2, 'http://example.com/2')).to.be.true
       downstream.incrementBodyAnalysisCount(req2)
 
-      expect(downstream.shouldSampleBody(req1)).to.be.true
+      expect(downstream.shouldSampleBody(req1, 'http://example.com/3')).to.be.true
       downstream.incrementBodyAnalysisCount(req1)
 
-      expect(downstream.shouldSampleBody(req1)).to.be.false
-      expect(downstream.shouldSampleBody(req2)).to.be.true
+      expect(downstream.shouldSampleBody(req1, 'http://example.com/4')).to.be.false
+      expect(downstream.shouldSampleBody(req2, 'http://example.com/5')).to.be.true
     })
 
     it('increments counter correctly', () => {

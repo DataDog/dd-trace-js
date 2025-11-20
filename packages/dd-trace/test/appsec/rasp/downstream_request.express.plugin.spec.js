@@ -43,10 +43,10 @@ describe('RASP - downstream request integration', () => {
     await agent.stop()
   }
 
-  function assertMessage (agent, withRequestHeaders = true, withResponseBody = true) {
+  function assertMessage (agent, withRequestHeaders = true, withResponseBody = true, numberOfRequests = 1) {
     return agent.assertMessageReceived(({ payload }) => {
       const [span] = payload[0]
-      assert.strictEqual(span.metrics['_dd.appsec.downstream_request'], 1)
+      assert.strictEqual(span.metrics['_dd.appsec.downstream_request'], numberOfRequests)
 
       assert.exists(span.meta['_dd.appsec.trace.req_method'])
       assert.exists(span.meta['_dd.appsec.trace.res_status'])
@@ -157,6 +157,12 @@ describe('RASP - downstream request integration', () => {
         await axios.post('/with-body-text')
 
         await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
+      })
+
+      it('Handles redirection correctly', async () => {
+        await axios.post('/with-redirect')
+
+        await Promise.all([assertMessage(agent, true, true, 2), assertTelemetry(agent)])
       })
     })
 

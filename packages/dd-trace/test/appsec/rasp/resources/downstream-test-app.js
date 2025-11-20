@@ -28,6 +28,10 @@ downstreamApp.get('/api/text', (_, res) => {
   res.send('plain-text-body')
 })
 
+downstreamApp.get('/api/redirect', (_, res) => {
+  res.redirect(302, '/api/data')
+})
+
 let downstreamPort
 
 // Main app routes
@@ -147,6 +151,30 @@ app.post('/without-body-and-headers', (_, res) => {
     // Don't consume body
     res.json({ consumed: false })
   })
+})
+
+app.post('/with-redirect', (_, res) => {
+  http.get(`http://localhost:${downstreamPort}/api/redirect`,
+    { headers: { Witness: 'pwq3ojtropiw3hjtowir' } },
+    redirectRes => {
+      redirectRes.resume()
+      const location = redirectRes.headers.location
+
+      http.get(`http://localhost:${downstreamPort}${location}`,
+        { headers: { Witness: 'pwq3ojtropiw3hjtowir' } },
+        downstreamRes => {
+          downstreamRes.setEncoding('utf8')
+          let body = ''
+
+          downstreamRes.on('data', chunk => {
+            body += chunk
+          })
+
+          downstreamRes.on('end', () => {
+            res.json({ consumed: true, downstream: body })
+          })
+        })
+    })
 })
 
 const downstreamServer = downstreamApp.listen(0, () => {

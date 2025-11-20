@@ -151,7 +151,6 @@ function setupResponseInstrumentation (ctx, res) {
           : Buffer.concat(bodyChunks)
       }
 
-      // ctx is included for test assertions (see stubHasResponseForUrl in http.spec.js)
       responseFinishChannel.publish({ ctx, res, body })
       cleanup()
     }

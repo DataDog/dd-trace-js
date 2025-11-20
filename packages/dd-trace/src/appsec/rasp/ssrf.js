@@ -35,8 +35,8 @@ function analyzeSsrf (ctx) {
 
   if (!req || !outgoingUrl) return
 
-  // Determine if we should collect the response body based on sampling rate
-  ctx.shouldCollectBody = downstream.shouldSampleBody(req)
+  // Determine if we should collect the response body based on sampling rate and redirect URL
+  ctx.shouldCollectBody = downstream.shouldSampleBody(req, outgoingUrl)
 
   const requestAddresses = downstream.extractRequestData(ctx)
 
@@ -62,18 +62,26 @@ function analyzeSsrf (ctx) {
 /**
  * Finalizes body collection for the response and triggers RASP analysis.
  * @param {{
+ *   ctx: object,
  *   res: import('http').IncomingMessage,
  *   body: string|Buffer|null
  * }} payload event payload from the channel.
  */
-function handleResponseFinish ({ res, body }) {
+function handleResponseFinish ({ ctx, res, body }) {
   if (!res) return
 
   const store = storage('legacy').getStore()
   const req = store?.req
   if (!req) return
 
-  runResponseEvaluation(res, req, body)
+  const { isRedirect } = downstream.handleRedirectResponse(req, res, ctx.shouldCollectBody)
+
+  if (isRedirect) {
+    // Skip body analysis for redirect responses
+    runResponseEvaluation(res, req, null)
+  } else {
+    runResponseEvaluation(res, req, body)
+  }
 }
 
 /**

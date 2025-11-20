@@ -16,29 +16,71 @@ const UINT64_MAX = (1n << 64n) - 1n
 
 let config
 let globalRequestCounter
-let perRequestBodyAnalysisCount
-let perRequestDownstreamAnalysisCount
+let bodyAnalysisCount
+let downstreamAnalysisCount
+let redirectBodyCollectionDecisions
 
 function enable (_config) {
   config = _config
   globalRequestCounter = 0n
-  perRequestBodyAnalysisCount = new WeakMap()
-  perRequestDownstreamAnalysisCount = new WeakMap()
+  bodyAnalysisCount = new WeakMap()
+  downstreamAnalysisCount = new WeakMap()
+  redirectBodyCollectionDecisions = new WeakMap()
 }
 
 function disable () {
   config = null
   globalRequestCounter = 0n
-  perRequestBodyAnalysisCount = new WeakMap()
-  perRequestDownstreamAnalysisCount = new WeakMap()
+  bodyAnalysisCount = null
+  downstreamAnalysisCount = null
+  redirectBodyCollectionDecisions = null
+}
+
+/**
+ * Check we have a stored redirect body collection decision for a given URL.
+ * @param {import('http').IncomingMessage} req inbound request.
+ * @param {string} outgoingUrl the URL being requested.
+ * @returns {boolean} the stored decision
+ */
+function getRedirectBodyCollectionDecision (req, outgoingUrl) {
+  const decisions = redirectBodyCollectionDecisions.get(req)
+  if (!decisions) return false
+
+  const decision = decisions.has(outgoingUrl)
+  if (!decision) return false
+
+  decisions.delete(outgoingUrl)
+  return true
+}
+
+/**
+ * Stores a redirect body collection decision for a follow-up request.
+ * @param {import('http').IncomingMessage} req inbound request.
+ * @param {string} redirectUrl the URL to redirect to.
+ * @param {boolean} shouldCollectBody the body collection decision.
+ */
+function storeRedirectBodyCollectionDecision (req, redirectUrl) {
+  let decisions = redirectBodyCollectionDecisions.get(req)
+
+  if (!decisions) {
+    decisions = new Set()
+    redirectBodyCollectionDecisions.set(req, decisions)
+  }
+
+  decisions.add(redirectUrl)
 }
 
 /**
  * Determines whether the current downstream request/responses bodies should be sampled for analysis.
- * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @param {import('http').IncomingMessage} req inbound request.
+ * @param {string} outgoingUrl the URL being requested (to check for redirect decisions).
  * @returns {boolean} true when the downstream response body should be captured.
  */
-function shouldSampleBody (req) {
+function shouldSampleBody (req, outgoingUrl) {
+  // Check if there's a stored decision from a previous redirect
+  const storedDecision = getRedirectBodyCollectionDecision(req, outgoingUrl)
+  if (!storedDecision) false
+
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
   const {
@@ -46,7 +88,7 @@ function shouldSampleBody (req) {
     downstreamRequestBodyAnalysisSampleRate
   } = config.appsec.apiSecurity
 
-  const currentCount = perRequestBodyAnalysisCount.get(req) || 0
+  const currentCount = bodyAnalysisCount.get(req) || 0
   if (currentCount >= maxDownstreamRequestBodyAnalysis) {
     return false
   }
@@ -68,11 +110,11 @@ function shouldSampleBody (req) {
 
 /**
  * Increments the number of downstream body analyses performed for the given request.
- * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @param {import('http').IncomingMessage} req inbound request.
  */
 function incrementBodyAnalysisCount (req) {
-  const currentCount = perRequestBodyAnalysisCount.get(req) || 0
-  perRequestBodyAnalysisCount.set(req, currentCount + 1)
+  const currentCount = bodyAnalysisCount.get(req) || 0
+  bodyAnalysisCount.set(req, currentCount + 1)
 }
 
 /**
@@ -93,6 +135,27 @@ function extractRequestData (ctx) {
   }
 
   return addresses
+}
+
+/**
+ * Checks if a response is a redirect
+ * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} res downstream response object.
+ * @param {boolean} shouldCollectBody current body collection decision.
+ * @returns {{isRedirect: boolean, redirectLocation: string|null}} redirect information.
+ */
+function handleRedirectResponse (req, res, shouldCollectBody) {
+  if (!shouldCollectBody) return { isRedirect: false, redirectLocation: null }
+
+  const isRedirect = res.statusCode >= 300 && res.statusCode < 400
+  const redirectLocation = res.headers?.location || res.headers?.Location || ''
+
+  if (isRedirect && redirectLocation) {
+    // Store the body collection decision for the redirect target
+    storeRedirectBodyCollectionDecision(req, redirectLocation)
+  }
+
+  return { isRedirect, redirectLocation }
 }
 
 /**
@@ -128,11 +191,11 @@ function extractResponseData (res, responseBody) {
 
 /**
  * Tracks how many downstream analyses were executed for a given request and updates tracing tags.
- * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @param {import('http').IncomingMessage} req inbound request.
  */
 function incrementDownstreamAnalysisCount (req) {
-  const currentCount = perRequestDownstreamAnalysisCount.get(req) || 0
-  perRequestDownstreamAnalysisCount.set(req, currentCount + 1)
+  const currentCount = downstreamAnalysisCount.get(req) || 0
+  downstreamAnalysisCount.set(req, currentCount + 1)
 
   const span = web.root(req)
 
@@ -143,7 +206,7 @@ function incrementDownstreamAnalysisCount (req) {
 
 /**
  * Adds tracing telemetry for matches triggered by downstream responses.
- * @param {import('http').IncomingMessage} req inbound request associated with the downstream call.
+ * @param {import('http').IncomingMessage} req inbound reques.
  * @param {object} raspRule rule with type and variant
  */
 function handleResponseTracing (req, raspRule) {
@@ -247,6 +310,7 @@ module.exports = {
   enable,
   disable,
   shouldSampleBody,
+  handleRedirectResponse,
   incrementBodyAnalysisCount,
   incrementDownstreamAnalysisCount,
   extractRequestData,
@@ -255,5 +319,6 @@ module.exports = {
   // exports for tests
   parseBody,
   getResponseContentType,
-  determineMethod
+  determineMethod,
+  storeRedirectBodyCollectionDecision
 }

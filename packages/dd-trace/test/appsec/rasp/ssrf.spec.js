@@ -58,7 +58,8 @@ describe('RASP - ssrf.js', () => {
     downstream = {
       enable: sinon.stub(),
       disable: sinon.stub(),
-      shouldSampleBody: sinon.stub().returns(false),
+      shouldSampleBody: sinon.stub().returns(true),
+      handleRedirectResponse: sinon.stub().returns({ isRedirect: false, redirectLocation: null }),
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementBodyAnalysisCount: sinon.stub(),
@@ -236,6 +237,50 @@ describe('RASP - ssrf.js', () => {
 
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
       sinon.assert.calledOnce(waf.run) // only for request
+    })
+
+    it('handles redirect responses and skips body analysis', () => {
+      const ctx = makeCtx()
+      const { req } = stubStore({}, {})
+
+      downstream.handleRedirectResponse.returns({ isRedirect: true, redirectLocation: 'http://example.com/redirect' })
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '302',
+        [addresses.HTTP_OUTGOING_RESPONSE_HEADERS]: { location: 'http://example.com/redirect' }
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      const response = createResponse({ statusCode: 302, headers: { location: 'http://example.com/redirect' } })
+      const body = Buffer.from('redirect body')
+      httpClientResponseFinish.publish({ ctx, res: response, body })
+
+      sinon.assert.calledOnceWithExactly(downstream.handleRedirectResponse, req, response, true)
+
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+
+      sinon.assert.calledTwice(waf.run)
+    })
+
+    it('passes body for non-redirect responses', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      downstream.handleRedirectResponse.returns({ isRedirect: false, redirectLocation: null })
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200',
+        [addresses.HTTP_OUTGOING_RESPONSE_BODY]: { ok: true }
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: true })
+
+      const response = createResponse({ statusCode: 200 })
+      const body = Buffer.from('{"ok":true}')
+      httpClientResponseFinish.publish({ ctx, res: response, body })
+
+      sinon.assert.calledWith(downstream.extractResponseData, response, body)
     })
   })
 })
