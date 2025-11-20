@@ -210,13 +210,17 @@ describe('OuboundPlugin', () => {
         const tags = parseTags(args[0])
 
         expect(tags).to.nested.include({ '_dd.code_origin.type': 'exit' })
-        assert.ok(Object.hasOwn(tags._dd.code_origin, 'frames')).to.be.an('array').with.length.above(0)
+        assert.ok(Array.isArray(tags._dd.code_origin.frames))
+        assert.ok(tags._dd.code_origin.frames.length > 0)
 
         for (const frame of tags._dd.code_origin.frames) {
           assert.strictEqual(frame.file, __filename)
-          assert.ok(Object.hasOwn(frame, 'line')).to.match(/^\d+$/)
-          assert.ok(Object.hasOwn(frame, 'column')).to.match(/^\d+$/)
-          assert.ok(Object.hasOwn(frame, 'type')).to.a('string')
+          assert.ok(Object.hasOwn(frame, 'line'))
+          assert.match(frame.line, /^\d+$/)
+          assert.ok(Object.hasOwn(frame, 'column'))
+          assert.match(frame.column, /^\d+$/)
+          assert.ok(Object.hasOwn(frame, 'type'))
+          assert.ok(typeof frame.type === 'string')
         }
 
         const topFrame = tags._dd.code_origin.frames[0]

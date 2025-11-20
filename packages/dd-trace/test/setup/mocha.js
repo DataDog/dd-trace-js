@@ -176,6 +176,9 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
 }
 
 /**
+ * @typedef {typeof import('../../src/plugins/plugin')} Plugin
+ */
+/**
  * @callback withVersionsCallback
  * @param {string} versionKey - The version string used in the module path
  * @param {string} moduleName - The name of the module being tested
@@ -197,10 +200,6 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
  * @param {string} range - The specific version or range of versions to test, e.g. '>=3' or '3.1.2'
  * @param {withVersionsCallback} cb - The callback function to call with the test case data
  * @returns {void}
- *
- * @typedef {object} Plugin
- * @property {string} name
- * @property {string} version
  */
 function withVersions (plugin, modules, range, cb) {
   if (typeof range === 'function') {

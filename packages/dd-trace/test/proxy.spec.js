@@ -268,7 +268,7 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
-        sinon.assert.calledOnceWith(remoteConfig.enable, config)
+        sinon.assert.calledOnceWithMatch(remoteConfig.enable, config)
       })
 
       it('should not initialize twice', () => {

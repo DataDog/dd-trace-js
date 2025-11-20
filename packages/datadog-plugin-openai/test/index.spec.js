@@ -1185,7 +1185,7 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
 
             const result = await prom
 
@@ -1237,7 +1237,7 @@ describe('Plugin', () => {
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
             const prom = openai.chat.completions.create(params)
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
 
             const result = await prom
             assert.strictEqual(result.choices.length, 3)
@@ -1364,7 +1364,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
             const stream = await prom
 
             for await (const part of stream) {
@@ -1401,7 +1401,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
             const stream = await prom
 
             for await (const part of stream) {
@@ -1441,7 +1441,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
             const stream = await prom
 
             for await (const part of stream) {
@@ -1480,7 +1480,7 @@ describe('Plugin', () => {
             }
 
             const prom = openai.chat.completions.create(params, { /* request-specific options */ })
-            assert.ok(Object.hasOwn(prom, 'withResponse'))
+            assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
             const stream = await prom
 
             for await (const part of stream) {
@@ -1597,7 +1597,7 @@ describe('Plugin', () => {
           user: 'dd-trace-test',
         })
 
-        assert.ok(Object.hasOwn(prom, 'withResponse'))
+        assert.ok(!Object.hasOwn(prom, 'withResponse') && ('withResponse' in prom))
         const response = await prom
         assert.ok(response.choices[0].message.content != null)
 

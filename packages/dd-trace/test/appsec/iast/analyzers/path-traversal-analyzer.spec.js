@@ -78,7 +78,10 @@ describe('path-traversal-analyzer', () => {
   it('Analyzer should be subscribed to proper channel', () => {
     assert.strictEqual(pathTraversalAnalyzer._subscriptions.length, 2)
     assert.strictEqual(pathTraversalAnalyzer._subscriptions[0]._channel.name, 'apm:fs:operation:start')
-    assert.strictEqual(pathTraversalAnalyzer._subscriptions[1]._channel.name, 'tracing:datadog:express:response:render:start')
+    assert.strictEqual(
+      pathTraversalAnalyzer._subscriptions[1]._channel.name,
+      'tracing:datadog:express:response:render:start'
+    )
   })
 
   it('If no context it should not report vulnerability', () => {
@@ -290,23 +293,21 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     runFsMethodTestThreeWay('copyFile', 1, null, src, dest)
   })
 
-  if (fs.cp) {
-    describe('test cp', () => {
-      const src = path.join(os.tmpdir(), 'test-cp-src')
-      const dest = path.join(os.tmpdir(), 'test-cp-dst')
+  describe('test cp', () => {
+    const src = path.join(os.tmpdir(), 'test-cp-src')
+    const dest = path.join(os.tmpdir(), 'test-cp-dst')
 
-      beforeEach(() => {
-        fs.writeFileSync(src, '')
-      })
-
-      afterEach(() => {
-        fs.unlinkSync(src)
-        fs.unlinkSync(dest)
-      })
-      runFsMethodTestThreeWay('cp', 0, null, src, dest)
-      runFsMethodTestThreeWay('cp', 1, null, src, dest)
+    beforeEach(() => {
+      fs.writeFileSync(src, '')
     })
-  }
+
+    afterEach(() => {
+      fs.unlinkSync(src)
+      fs.unlinkSync(dest)
+    })
+    runFsMethodTestThreeWay('cp', 0, null, src, dest)
+    runFsMethodTestThreeWay('cp', 1, null, src, dest)
+  })
 
   describe('test createReadStream', () => {
     runFsMethodTest('test fs.createReadStream method', 0, (args) => {
@@ -467,17 +468,16 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
     runFsMethodTestThreeWay('rmdir', 0, null, dirname)
   })
-  if (fs.rm) {
-    describe('test rm', () => {
-      const filename = path.join(os.tmpdir(), 'test-rmdir')
 
-      beforeEach(() => {
-        fs.writeFileSync(filename, '')
-      })
+  describe('test rm', () => {
+    const filename = path.join(os.tmpdir(), 'test-rmdir')
 
-      runFsMethodTestThreeWay('rm', 0, null, filename)
+    beforeEach(() => {
+      fs.writeFileSync(filename, '')
     })
-  }
+
+    runFsMethodTestThreeWay('rm', 0, null, filename)
+  })
 
   describe('test stat', () => {
     runFsMethodTestThreeWay('stat', 0, null, __filename)

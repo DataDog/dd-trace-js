@@ -47,17 +47,17 @@ describe('path-line', function () {
     describe('does not fail', () => {
       it('with null parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames(null)
-        assert.ok(Array.isArray(result)).that.is.empty
+        assert.deepStrictEqual(result, [])
       })
 
       it('with empty list parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames([])
-        assert.ok(Array.isArray(result)).that.is.empty
+        assert.deepStrictEqual(result, [])
       })
 
       it('without parameter', () => {
         const result = pathLine.getNonDDCallSiteFrames()
-        assert.ok(Array.isArray(result)).that.is.empty
+        assert.deepStrictEqual(result, [])
       })
     })
 
@@ -112,7 +112,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'another', 'file', 'in', 'dd.js'), 5))
 
         const results = pathLine.getNonDDCallSiteFrames(callsites)
-        assert.ok(Array.isArray(results)).that.is.empty
+        assert.deepStrictEqual(results, [])
       })
 
       DIAGNOSTICS_CHANNEL_PATHS.forEach((dcPath) => {

@@ -345,7 +345,7 @@ describe('profiler', function () {
 
       const options = profilers[0].start.args[0][0]
       assert.ok(Object.hasOwn(options, 'mapper'))
-        .which.equals(mapper)
+      assert.strictEqual(mapper, options.mapper)
     })
 
     it('should work with a root working dir and source maps on', async () => {

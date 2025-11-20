@@ -650,9 +650,12 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                expect(startSpy.called).to.be.true
+                assert.strictEqual(startSpy.called, true)
                 const { comment } = startSpy.getCall(0).args[0].ops
-                expect(comment).to.include(`traceparent='00-${traceId}-${spanId}-00'`)
+                assert.match(
+                  comment,
+                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+                )
               })
               .then(done)
               .catch(done)

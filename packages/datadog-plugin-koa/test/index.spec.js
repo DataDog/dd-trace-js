@@ -168,7 +168,9 @@ describe('Plugin', () => {
             ctx.body = ''
 
             try {
-              assert.notStrictEqual(tracer.scope().active(), null).and.not.equal(span)
+              const activeSpan = tracer.scope().active()
+              assert.ok(activeSpan)
+              assert.notStrictEqual(activeSpan, span)
               done()
             } catch (e) {
               done(e)
@@ -844,7 +846,9 @@ describe('Plugin', () => {
               ctx.body = ''
 
               try {
-                assert.strictEqual(tracer.scope().active(), span).and.to.not.be.null
+                const activeSpan = tracer.scope().active()
+                assert.ok(activeSpan)
+                assert.strictEqual(activeSpan, span)
                 done()
               } catch (e) {
                 done(e)

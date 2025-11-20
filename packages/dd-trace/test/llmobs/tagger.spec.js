@@ -431,7 +431,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          assert.throws(() => tagger.tagLLMIO(span, messages, undefined), 'Tool result must be an object.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Tool result must be an object.' }
+          )
         })
 
         it('throws for a non-string tool result', () => {
@@ -441,7 +444,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          assert.throws(() => tagger.tagLLMIO(span, messages, undefined), '"Tool result" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool result" must be a string.' }
+          )
         })
 
         it('throws for a non-string tool id', () => {
@@ -451,7 +457,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          assert.throws(() => tagger.tagLLMIO(span, messages, undefined), '"Tool ID" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool ID" must be a string.' }
+          )
         })
 
         it('throws for a non-string tool type', () => {
@@ -461,7 +470,10 @@ describe('tagger', () => {
 
           tagger._register(span)
 
-          assert.throws(() => tagger.tagLLMIO(span, messages, undefined), '"Tool type" must be a string.')
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool type" must be a string.' }
+          )
         })
       })
 
@@ -485,7 +497,10 @@ describe('tagger', () => {
             { role: 'tool', content: 'The weather in San Francisco is sunny', toolId: 123 }
           ]
 
-          assert.throws(() => tagger.tagLLMIO(span, messages, undefined))
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: '"Tool ID" must be a string.' }
+          )
         })
 
         it('logs a warning if the tool id is not associated with a tool role', () => {

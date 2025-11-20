@@ -997,7 +997,7 @@ describe('AVM OSS', () => {
         }
       )
 
-      sinon.assert.calledOnceWith(logSpy.warn, 'DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+      sinon.assert.calledOnceWithExactly(logSpy.warn, 'DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
     })
   })
 })

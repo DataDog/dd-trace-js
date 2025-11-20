@@ -138,7 +138,7 @@ describe('Plugin', () => {
             const promise = sender.send({ key: 'value' })
 
             return promise.then(() => {
-              assert.ok(Object.hasOwn(promise, 'value'))
+              assert.ok(!Object.hasOwn(promise, 'value') && ('value' in promise))
             })
           })
 

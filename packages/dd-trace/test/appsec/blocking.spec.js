@@ -300,7 +300,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
@@ -316,7 +316,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
@@ -332,7 +332,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
@@ -346,7 +346,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
@@ -361,7 +361,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
@@ -376,7 +376,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWith(res.writeHead, 401)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 

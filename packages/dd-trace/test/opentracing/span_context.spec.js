@@ -40,7 +40,7 @@ describe('SpanContext', () => {
     }
     const spanContext = new SpanContext(props)
 
-    assert.deepStrictEqual(spanContext, {
+    const expected = {
       _traceId: '123',
       _spanId: '456',
       _parentId: '789',
@@ -61,7 +61,9 @@ describe('SpanContext', () => {
       _traceparent: '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01',
       _tracestate: TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'),
       _otelSpanContext: undefined
-    })
+    }
+    Object.setPrototypeOf(expected, SpanContext.prototype)
+    assert.deepStrictEqual(spanContext, expected)
   })
 
   it('should have the correct default values', () => {
@@ -70,7 +72,7 @@ describe('SpanContext', () => {
       spanId: '456'
     })
 
-    assert.deepStrictEqual(spanContext, {
+    const expected = {
       _traceId: '123',
       _spanId: '456',
       _parentId: null,
@@ -91,7 +93,9 @@ describe('SpanContext', () => {
       _traceparent: undefined,
       _tracestate: undefined,
       _otelSpanContext: undefined
-    })
+    }
+    Object.setPrototypeOf(expected, SpanContext.prototype)
+    assert.deepStrictEqual(spanContext, expected)
   })
 
   it('should share sampling object between contexts', () => {

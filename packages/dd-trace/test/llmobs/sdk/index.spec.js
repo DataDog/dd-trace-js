@@ -265,14 +265,19 @@ describe('sdk', () => {
         // TODO: need to implement custom trace IDs
         it.skip('starts a span with a distinct trace id', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
-            assert.ok(LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id'] != null).and.to.not.equal(span.context().toTraceId(true))
+            const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+            assert.ok(traceId != null)
+            assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
         })
 
         it('sets span parentage correctly', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, outerLLMSpan => {
             llmobs.trace({ kind: 'task', name: 'test' }, innerLLMSpan => {
-              assert.strictEqual(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'], outerLLMSpan.context().toSpanId())
+              assert.strictEqual(
+                LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                outerLLMSpan.context().toSpanId()
+              )
               // TODO: need to implement custom trace IDs
               // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
               //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
@@ -289,7 +294,10 @@ describe('sdk', () => {
                 assert.strictEqual(llmobs._active(), innerLLMSpan)
 
                 // llmobs span linkage
-                assert.strictEqual(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'], outerLLMSpan.context().toSpanId())
+                assert.strictEqual(
+                  LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                  outerLLMSpan.context().toSpanId()
+                )
 
                 // apm span linkage
                 assert.strictEqual(innerLLMSpan.context()._parentId.toString(10), apmSpan.context().toSpanId())
@@ -661,7 +669,10 @@ describe('sdk', () => {
         it.skip('starts a span with a distinct trace id', () => {
           const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
             const span = llmobs._active()
-            assert.ok(span.context()._tags['_ml_obs.trace_id'] != null).and.to.not.equal(span.context().toTraceId(true))
+
+            const traceId = span.context()._tags['_ml_obs.trace_id']
+            assert.ok(traceId != null)
+            assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
 
           fn()
@@ -677,7 +688,10 @@ describe('sdk', () => {
 
           function inner () {
             innerLLMSpan = llmobs._active()
-            assert.strictEqual(LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'], outerLLMSpan.context().toSpanId())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+              outerLLMSpan.context().toSpanId()
+            )
             // TODO: need to implement custom trace IDs
             // expect(innerLLMSpan.context()._tags['_ml_obs.trace_id'])
             //   .to.equal(outerLLMSpan.context()._tags['_ml_obs.trace_id'])
@@ -705,7 +719,10 @@ describe('sdk', () => {
           function innerLLMObs () {
             innerLLMObsSpan = llmobs._active()
             assert.strictEqual(innerLLMObsSpan, tracer.scope().active())
-            assert.strictEqual(LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'], outerLLMObsSpan.context().toSpanId())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'],
+              outerLLMObsSpan.context().toSpanId()
+            )
             // TODO: need to implement custom trace IDs
             // expect(innerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
             //   .to.equal(outerLLMObsSpan.context()._tags['_ml_obs.trace_id'])
@@ -756,14 +773,20 @@ describe('sdk', () => {
           function inner1 (cb) {
             const inner = tracer.scope().active()
             assert.strictEqual(llmobs._active(), inner)
-            assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outerSpan.context().toSpanId())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
+              outerSpan.context().toSpanId()
+            )
             cb()
           }
 
           function inner2 () {
             const inner = tracer.scope().active()
             assert.strictEqual(llmobs._active(), inner)
-            assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outerSpan.context().toSpanId())
+            assert.strictEqual(
+              LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
+              outerSpan.context().toSpanId()
+            )
           }
 
           const wrappedOuter = llmobs.wrap({ kind: 'workflow' }, outer)

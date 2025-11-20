@@ -380,7 +380,7 @@ describe('Plugin', () => {
         let connection
 
         before(async () => {
-          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          await agent.load('mysql2', { dbmPropagationMode: 'service', service: 'serviced' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
@@ -429,7 +429,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+          await agent.load('mysql2', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
@@ -465,7 +465,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql2', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql2', { dbmPropagationMode: 'full', service: 'post' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           connection = mysql2.createConnection({
@@ -501,7 +501,10 @@ describe('Plugin', () => {
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
-            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+            assert.match(
+              queryText,
+              new RegExp(`traceparent='00\\-${traceId}\\-${spanId}\\-00'\\*\\/ SELECT 1 \\+ 1 AS solution`)
+            )
           }).then(done, done)
 
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
@@ -528,7 +531,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql2', [{ dbmPropagationMode: 'service', service: 'post' }])
+          await agent.load('mysql2', { dbmPropagationMode: 'service', service: 'post' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           pool = mysql2.createPool({
@@ -564,7 +567,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql2', [{ dbmPropagationMode: 'full', service: 'post' }])
+          await agent.load('mysql2', { dbmPropagationMode: 'full', service: 'post' })
           mysql2 = proxyquire(`../../../versions/mysql2@${version}`, {}).get()
 
           pool = mysql2.createPool({
@@ -600,7 +603,10 @@ describe('Plugin', () => {
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
-            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+            assert.match(
+              queryText,
+              new RegExp(`traceparent='00\\-${traceId}\\-${spanId}\\-00'\\*\\/ SELECT 1 \\+ 1 AS solution`)
+            )
           }).then(done, done)
 
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {

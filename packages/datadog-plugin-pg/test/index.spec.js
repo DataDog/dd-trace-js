@@ -439,7 +439,7 @@ describe('Plugin', () => {
 
       describe('with DBM propagation enabled with service using plugin configurations', () => {
         before(() => {
-          return agent.load('pg', [{ dbmPropagationMode: 'service', service: () => 'serviced' }])
+          return agent.load('pg', { dbmPropagationMode: 'service', service: () => 'serviced' })
         })
 
         after(() => {
@@ -504,7 +504,7 @@ describe('Plugin', () => {
         let clientDBM
 
         before(() => {
-          return agent.load('pg', [{ dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' }])
+          return agent.load('pg', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
         })
 
         after(() => {
@@ -701,7 +701,7 @@ describe('Plugin', () => {
           await queryPromise
 
           await agent.assertSomeTraces(() => {
-            expect(queryText).to.include('-00\'*/ SELECT $1::text as message')
+            assert.match(queryText, /-00'\*\/ SELECT \$1::text as message/)
           })
         })
 
@@ -774,11 +774,11 @@ describe('Plugin', () => {
 
       describe('with DBM propagation enabled with append comment configurations', () => {
         before(async () => {
-          await agent.load('pg', [{
+          await agent.load('pg', {
             appendComment: true,
             dbmPropagationMode: 'service',
             service: () => 'serviced',
-          }])
+          })
           pg = require(`../../../versions/pg@${version}`).get()
         })
 

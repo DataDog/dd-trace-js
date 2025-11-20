@@ -485,14 +485,14 @@ describe('log', () => {
         it('should call logger error', () => {
           logWriter.error(error)
 
-          sinon.assert.calledOnceWith(console.error, error)
+          sinon.assert.calledOnceWithExactly(console.error, error)
         })
 
         it('should call console.error no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.error(error)
 
-          sinon.assert.calledOnceWith(console.error, error)
+          sinon.assert.calledOnceWithExactly(console.error, error)
         })
       })
 
@@ -500,21 +500,21 @@ describe('log', () => {
         it('should call logger warn', () => {
           logWriter.warn('warn')
 
-          sinon.assert.calledOnceWith(console.warn, 'warn')
+          sinon.assert.calledOnceWithExactly(console.warn, 'warn')
         })
 
         it('should call logger debug if warn is not provided', () => {
           logWriter.use(logger)
           logWriter.warn('warn')
 
-          sinon.assert.calledOnceWith(logger.debug, 'warn')
+          sinon.assert.calledOnceWithExactly(logger.debug, 'warn')
         })
 
         it('should call console.warn no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.warn('warn')
 
-          sinon.assert.calledOnceWith(console.warn, 'warn')
+          sinon.assert.calledOnceWithExactly(console.warn, 'warn')
         })
       })
 
@@ -522,21 +522,21 @@ describe('log', () => {
         it('should call logger info', () => {
           logWriter.info('info')
 
-          sinon.assert.calledOnceWith(console.info, 'info')
+          sinon.assert.calledOnceWithExactly(console.info, 'info')
         })
 
         it('should call logger debug if info is not provided', () => {
           logWriter.use(logger)
           logWriter.info('info')
 
-          sinon.assert.calledOnceWith(logger.debug, 'info')
+          sinon.assert.calledOnceWithExactly(logger.debug, 'info')
         })
 
         it('should call console.info no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.info('info')
 
-          sinon.assert.calledOnceWith(console.info, 'info')
+          sinon.assert.calledOnceWithExactly(console.info, 'info')
         })
       })
 
@@ -544,14 +544,14 @@ describe('log', () => {
         it('should call logger debug', () => {
           logWriter.debug('debug')
 
-          sinon.assert.calledOnceWith(console.debug, 'debug')
+          sinon.assert.calledOnceWithExactly(console.debug, 'debug')
         })
 
         it('should call console.debug no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.debug('debug')
 
-          sinon.assert.calledOnceWith(console.debug, 'debug')
+          sinon.assert.calledOnceWithExactly(console.debug, 'debug')
         })
       })
     })

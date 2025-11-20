@@ -70,7 +70,7 @@ describe('breakpoints', function () {
 
       await addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
 
-      sinon.assert.calledOnceWith(sessionMock.post, 'Debugger.setBreakpoint')
+      sinon.assert.calledOnceWithMatch(sessionMock.post, 'Debugger.setBreakpoint')
     })
 
     it('2nd probe should wait until the debugger has finished enabling before being applied', async function () {
@@ -236,7 +236,7 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      sinon.assert.calledOnceWith(sessionMock.post, 'Debugger.disable')
+      sinon.assert.calledOnceWithExactly(sessionMock.post, 'Debugger.disable')
       sinon.assert.calledOnce(stateMock.clearState)
     })
 
@@ -247,7 +247,7 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      sinon.assert.calledOnceWith(sessionMock.post,
+      sinon.assert.calledOnceWithExactly(sessionMock.post,
         'Debugger.removeBreakpoint',
         { breakpointId: 'bp-script-1:9:0' }
       )

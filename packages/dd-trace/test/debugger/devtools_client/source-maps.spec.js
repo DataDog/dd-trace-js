@@ -59,7 +59,7 @@ describe('source map utils', function () {
       it('should return parsed source map', async function () {
         const sourceMap = await loadSourceMap(dir, sourceMapURL)
         assert.deepStrictEqual(sourceMap, parsedSourceMap)
-        sinon.assert.calledOnceWith(readFile, '/foo/index.map.js', 'utf8')
+        sinon.assert.calledOnceWithExactly(readFile, '/foo/index.map.js', 'utf8')
       })
     })
 
@@ -79,7 +79,7 @@ describe('source map utils', function () {
       it('should return parsed source map', function () {
         const sourceMap = loadSourceMapSync(dir, sourceMapURL)
         assert.deepStrictEqual(sourceMap, parsedSourceMap)
-        sinon.assert.calledOnceWith(readFileSync, '/foo/index.map.js', 'utf8')
+        sinon.assert.calledOnceWithExactly(readFileSync, '/foo/index.map.js', 'utf8')
       })
     })
 

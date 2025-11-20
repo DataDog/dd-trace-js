@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -77,8 +76,7 @@ describe('Remote Config index', () => {
 
       sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       sinon.assert.calledWith(rc.setProductHandler, 'ASM_FEATURES')
       assert.strictEqual(typeof rc.setProductHandler.firstCall.args[1], 'function')
     })
@@ -90,9 +88,8 @@ describe('Remote Config index', () => {
 
       sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
       sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION)
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
-      sinon.assert.calledOnceWith(rc.setProductHandler, 'ASM_FEATURES')
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+      sinon.assert.calledOnceWithMatch(rc.setProductHandler, 'ASM_FEATURES')
       assert.strictEqual(typeof rc.setProductHandler.firstCall.args[1], 'function')
     })
 
@@ -103,16 +100,14 @@ describe('Remote Config index', () => {
 
       sinon.assert.calledOnceWithExactly(RemoteConfigManager, config)
       sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.updateCapabilities)
-        .to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
+      sinon.assert.neverCalledWith(rc.updateCapabilities, RemoteConfigCapabilities.ASM_AUTO_USER_INSTRUM_MODE, true)
       sinon.assert.notCalled(rc.setProductHandler)
     })
 
     it('should always enable FFE_FLAG_CONFIGURATION_RULES capability', () => {
       remoteConfig.enable(config)
 
-      expect(rc.updateCapabilities)
-        .to.have.been.calledWithExactly(RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.FFE_FLAG_CONFIGURATION_RULES, true)
     })
 
     describe('ASM_FEATURES remote config listener', () => {
@@ -241,15 +236,13 @@ describe('Remote Config index', () => {
   describe('enableWafUpdate', () => {
     const expectCapabilitiesCalledWith = (capabilityList, expectedValue) => {
       capabilityList.forEach(capability => {
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(capability, expectedValue)
+        sinon.assert.calledWithExactly(rc.updateCapabilities, capability, expectedValue)
       })
     }
 
     const expectCapabilitiesNotCalled = (capabilityList) => {
       capabilityList.forEach(capability => {
-        expect(rc.updateCapabilities)
-          .to.not.have.been.calledWith(capability)
+        sinon.assert.neverCalledWith(rc.updateCapabilities, capability)
       })
     }
 
@@ -333,8 +326,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+        sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
 
         expectCapabilitiesCalledWith(ALL_ASM_CAPABILITIES, true)
       })
@@ -344,8 +336,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities)
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+        sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.ASM_ACTIVATION, true)
 
         expectCapabilitiesCalledWith(CORE_ASM_CAPABILITIES, true)
         expectCapabilitiesNotCalled(RASP_CAPABILITIES)

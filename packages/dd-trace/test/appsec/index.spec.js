@@ -707,7 +707,7 @@ describe('AppSec Index', function () {
 
         responseBody.publish({ req, res, body: {} })
 
-        sinon.assert.calledOnceWith(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
         expect(waf.run).to.not.been.called
       })
 
@@ -719,8 +719,8 @@ describe('AppSec Index', function () {
 
         responseBody.publish({ req, res, body })
 
-        sinon.assert.calledOnceWith(apiSecuritySampler.sampleRequest, req, res)
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
           }
@@ -790,7 +790,7 @@ describe('AppSec Index', function () {
 
         bodyParser.publish({ req, res, body, abortController })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.body': { key: 'value' }
           }
@@ -806,7 +806,7 @@ describe('AppSec Index', function () {
 
         bodyParser.publish({ req, res, body, abortController })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.body': { key: 'value' }
           }
@@ -830,7 +830,7 @@ describe('AppSec Index', function () {
 
         cookieParser.publish({ req, res, abortController, cookies })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.cookies': { key: 'value' }
           }
@@ -845,7 +845,7 @@ describe('AppSec Index', function () {
 
         cookieParser.publish({ req, res, abortController, cookies })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.cookies': { key: 'value' }
           }
@@ -870,7 +870,7 @@ describe('AppSec Index', function () {
 
         queryParser.publish({ req, res, query, abortController })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.query': { key: 'value' }
           }
@@ -886,7 +886,7 @@ describe('AppSec Index', function () {
 
         queryParser.publish({ req, res, query, abortController })
 
-        sinon.assert.calledOnceWith(waf.run, {
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
             'server.request.query': { key: 'value' }
           }

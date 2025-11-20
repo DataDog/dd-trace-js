@@ -83,7 +83,7 @@ describe('FlaggingProvider', () => {
 
       provider._setConfiguration(ufc)
 
-      sinon.assert.calledOnceWith(setConfigSpy, ufc)
+      sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
       sinon.assert.calledWith(log.debug, 'FlaggingProvider provider configuration updated')
     })
 

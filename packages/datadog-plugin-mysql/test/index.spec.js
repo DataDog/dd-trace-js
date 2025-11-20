@@ -506,7 +506,7 @@ describe('Plugin', () => {
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
-            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
+            assert.match(queryText, /-00'\*\/ SELECT 1 \+ 1 AS solution/)
           }).then(done, done)
 
           connection.query('SELECT 1 + 1 AS solution', () => {
@@ -533,7 +533,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'post' }])
+          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'post' })
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
 
           pool = mysql.createPool({
@@ -601,7 +601,7 @@ describe('Plugin', () => {
           let queryText = ''
 
           agent.assertSomeTraces(() => {
-            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
+            assert.match(queryText, /-00'\*\/ SELECT 1 \+ 1 AS solution/)
           }).then(done, done)
 
           pool.query('SELECT 1 + 1 AS solution', () => {

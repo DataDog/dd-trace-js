@@ -441,9 +441,10 @@ describe('isModifiedTest', () => {
       const modifiedFiles = {
         'test/file.js': [2, 4, 6]
       }
-      assert.strictEqual(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework), true) // overlaps with line 2
-      assert.strictEqual(isModifiedTest('test/file.js', 3, 5, modifiedFiles, testFramework), true) // overlaps with line 4
-      assert.strictEqual(isModifiedTest('test/file.js', 5, 7, modifiedFiles, testFramework), true) // overlaps with line 6
+      // Overlaps with lines 2, 4, 6
+      assert.strictEqual(isModifiedTest('test/file.js', 1, 3, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/file.js', 3, 5, modifiedFiles, testFramework), true)
+      assert.strictEqual(isModifiedTest('test/file.js', 5, 7, modifiedFiles, testFramework), true)
     })
 
     it('should return false when test lines do not overlap with modified lines', () => {

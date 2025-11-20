@@ -1,14 +1,12 @@
-const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
-/* eslint-disable @stylistic/max-len */
 'use strict'
 
-const { expect } = require('chai')
-const { after, afterEach, before, describe, it } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { after, afterEach, before, describe, it } = require('mocha')
 const sinon = require('sinon')
 const semver = require('semver')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
@@ -333,7 +331,10 @@ describe('Sns', function () {
         parentId = '0'
         spanId = '0'
 
-        return agent.load('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
+        return agent.load(
+          'aws-sdk',
+          { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true }
+        )
       })
 
       before(done => {
@@ -458,7 +459,7 @@ describe('Sns', function () {
               if (err) return done(err)
 
               try {
-                expect(data.Messages[0].Body).to.not.include('datadog')
+                assert.ok(!data.Messages[0].Body.includes('datadog'))
                 done()
               } catch (e) {
                 done(e)
@@ -537,6 +538,7 @@ describe('Sns', function () {
         } catch {
           // pass
         }
+        // TODO: Fix this. The third argument is not used.
         agent.reload('aws-sdk', { sns: { dsmEnabled: true, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 

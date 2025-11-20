@@ -1,11 +1,11 @@
-const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
-/* eslint-disable @stylistic/max-len */
 'use strict'
+
+const assert = require('node:assert/strict')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
@@ -60,7 +60,11 @@ describe('Kinesis', function () {
       let streamName
 
       beforeEach(() => {
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', {
+          kinesis: { dsmEnabled: false, batchPropagationEnabled: true }
+        }, {
+          dsmEnabled: true
+        })
       })
 
       beforeEach(done => {
@@ -322,6 +326,7 @@ describe('Kinesis', function () {
         })
       })
 
+      // eslint-disable-next-line @stylistic/max-len
       it('emits DSM stats to the agent during Kinesis getRecord when the putRecord was done without DSM enabled', done => {
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
@@ -337,10 +342,12 @@ describe('Kinesis', function () {
           assert.strictEqual(agent.dsmStatsExistWithParentHash(agent, '0'), true)
         }, { timeoutMs: 10000 }).then(done, done)
 
+        // TODO: Fix this. The third argument is not used. Check all usages of agent.reload.
         agent.reload('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: false })
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
+          // TODO: Fix this. The third argument is not used. Check all usages of agent.reload.
           agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
           helpers.getTestData(kinesis, streamNameDSM, data, () => {})
         })

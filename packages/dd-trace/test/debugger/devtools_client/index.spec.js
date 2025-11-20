@@ -106,7 +106,7 @@ describe('onPause', function () {
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
-    sinon.assert.calledOnceWith(session.post, 'Debugger.resume')
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
     sinon.assert.notCalled(ackReceived)
     sinon.assert.notCalled(send)
   })

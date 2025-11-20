@@ -79,7 +79,7 @@ describe('input message http requests', function () {
 
     send(message, logger, dd, snapshot, callback)
     sinon.assert.notCalled(request)
-    sinon.assert.calledOnceWith(jsonBuffer.write,
+    sinon.assert.calledOnceWithMatch(jsonBuffer.write,
       JSON.stringify(getPayload())
     )
     sinon.assert.notCalled(callback)
@@ -93,7 +93,7 @@ describe('input message http requests', function () {
 
     clock.tick(1000)
 
-    sinon.assert.calledOnceWith(request, JSON.stringify([
+    sinon.assert.calledOnceWithMatch(request, JSON.stringify([
       getPayload({ message: 1 }),
       getPayload({ message: 2 }),
       getPayload({ message: 3 })

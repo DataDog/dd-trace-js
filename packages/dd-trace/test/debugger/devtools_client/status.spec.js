@@ -80,14 +80,14 @@ describe('diagnostic message http requests', function () {
       it('should buffer instead of calling request directly', function () {
         ackFn({ id: 'foo', version: 0 })
         sinon.assert.notCalled(request)
-        sinon.assert.calledOnceWith(jsonBuffer.write,
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
       })
 
       it('should only add to buffer once if no change', function () {
         ackFn({ id: 'foo', version: 0 })
-        sinon.assert.calledOnceWith(jsonBuffer.write,
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
@@ -97,7 +97,7 @@ describe('diagnostic message http requests', function () {
 
       it('should add to buffer again if version changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        sinon.assert.calledOnceWith(jsonBuffer.write,
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 
@@ -110,7 +110,7 @@ describe('diagnostic message http requests', function () {
 
       it('should add to buffer again if probeId changes', function () {
         ackFn({ id: 'foo', version: 0 })
-        sinon.assert.calledOnceWith(jsonBuffer.write,
+        sinon.assert.calledOnceWithExactly(jsonBuffer.write,
           JSON.stringify(formatAsDiagnosticsEvent({ probeId: 'foo', version: 0, status, exception }))
         )
 

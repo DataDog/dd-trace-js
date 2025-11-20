@@ -195,7 +195,10 @@ describe('child process', () => {
                     errStub.errno = -2
 
                     sinon.assert.calledOnce(asyncFinish)
-                    assertObjectContains(asyncFinish.firstCall.firstArg, { command: 'invalid_command_test', shell: false })
+                    assertObjectContains(asyncFinish.firstCall.firstArg, {
+                      command: 'invalid_command_test',
+                      shell: false
+                    })
                     assertObjectContains(asyncFinish.firstCall.firstArg, {
                       command: 'invalid_command_test',
                       shell: false,
@@ -215,7 +218,10 @@ describe('child process', () => {
                     await promisify(childProcess[methodName])('node -e "process.exit(1)"', { shell: true })
                   } catch (e) {
                     sinon.assert.calledOnce(start)
-                    assertObjectContains(start.firstCall.firstArg, { command: 'node -e "process.exit(1)"', shell: true })
+                    assertObjectContains(start.firstCall.firstArg, {
+                      command: 'node -e "process.exit(1)"',
+                      shell: true
+                    })
 
                     sinon.assert.calledOnce(asyncFinish)
                     assertObjectContains(asyncFinish.firstCall.firstArg, {

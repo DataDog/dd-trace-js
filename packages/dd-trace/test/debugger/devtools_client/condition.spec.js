@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { before, beforeEach, describe, it } = require('mocha')
+const { beforeEach, describe, it } = require('mocha')
 require('../../setup/mocha')
 
 const {

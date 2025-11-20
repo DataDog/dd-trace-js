@@ -215,10 +215,10 @@ describe('metrics', () => {
       ns.count('foo', { bar: 'baz' }).inc()
       ns.count('foo', { bar: 'baz' }).inc() // not unique
       ns.count('foo', { bux: 'bax' }).inc()
-      assert.strictEqual(ns.metrics.length, 2)
-      assert.strictEqual(ns.distributions.length, 0)
+      assert.strictEqual(ns.metrics.size, 2)
+      assert.strictEqual(ns.distributions.size, 0)
       ns.distribution('foo', { bux: 'bax' }).track()
-      assert.strictEqual(ns.distributions.length, 1)
+      assert.strictEqual(ns.distributions.size, 1)
     })
 
     it('should reset metrics', () => {
@@ -292,7 +292,7 @@ describe('metrics', () => {
       })
 
       assert.strictEqual(metric.type, 'count')
-      assert.deepStrictEqual(metric, {
+      const expected = {
         namespace: 'tracers',
         metric: 'name',
         tags: [
@@ -301,7 +301,9 @@ describe('metrics', () => {
         ],
         common: true,
         points: []
-      })
+      }
+      Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
+      assert.deepStrictEqual(metric, expected)
     })
 
     it('should increment', () => {
@@ -419,7 +421,7 @@ describe('metrics', () => {
       })
 
       assert.strictEqual(metric.type, 'distribution')
-      assert.deepStrictEqual(metric, {
+      const expected = {
         namespace: 'tracers',
         metric: 'name',
         tags: [
@@ -428,7 +430,9 @@ describe('metrics', () => {
         ],
         common: true,
         points: []
-      })
+      }
+      Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
+      assert.deepStrictEqual(metric, expected)
     })
 
     it('should track', () => {
@@ -488,7 +492,7 @@ describe('metrics', () => {
       })
 
       assert.strictEqual(metric.type, 'gauge')
-      assert.deepStrictEqual(metric, {
+      const expected = {
         namespace: 'tracers',
         metric: 'name',
         tags: [
@@ -497,7 +501,9 @@ describe('metrics', () => {
         ],
         common: true,
         points: []
-      })
+      }
+      Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
+      assert.deepStrictEqual(metric, expected)
     })
 
     it('should mark', () => {
@@ -577,7 +583,7 @@ describe('metrics', () => {
       })
 
       assert.strictEqual(metric.type, 'rate')
-      assert.deepStrictEqual(metric, {
+      const expected = {
         namespace: 'tracers',
         metric: 'name',
         tags: [
@@ -588,7 +594,9 @@ describe('metrics', () => {
         points: [],
         interval: 1000,
         rate: 0
-      })
+      }
+      Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
+      assert.deepStrictEqual(metric, expected)
     })
 
     it('should track', () => {

@@ -522,7 +522,7 @@ describe('Plugin', () => {
           const chain = model.pipe(parser)
 
           const response = await chain.invoke('Generate a JSON object with name and age.')
-          assert.ok(response != null).and.be.an('object')
+          assert.ok(response != null && typeof response === 'object')
 
           await checkTraces
         })

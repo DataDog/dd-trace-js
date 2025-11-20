@@ -289,7 +289,10 @@ describe('Overhead controller', () => {
             iastContext = { req }
             overheadController.initializeRequestContext(iastContext)
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
-            assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.CODE_INJECTION), true)
+            assert.strictEqual(
+              overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.CODE_INJECTION),
+              true
+            )
 
             // and ingoring the SSRF
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)

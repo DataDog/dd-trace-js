@@ -51,7 +51,7 @@ describe('OpenFeature Module', () => {
     it('should setup writer when enabled', () => {
       openfeatureModule.enable(config)
 
-      sinon.assert.calledOnceWith(ExposuresWriterStub, config)
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
       sinon.assert.calledOnce(setAgentStrategyStub)
     })
 
@@ -115,7 +115,7 @@ describe('OpenFeature Module', () => {
 
       exposureSubmitCh.publish(exposureEvents)
 
-      sinon.assert.calledOnceWith(mockWriter.append, exposureEvents)
+      sinon.assert.calledOnceWithExactly(mockWriter.append, exposureEvents)
     })
 
     it('flushes the exposures writer', () => {

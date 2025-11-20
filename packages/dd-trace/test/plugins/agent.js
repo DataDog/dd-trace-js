@@ -322,7 +322,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
 function runCallbackAgainstTraces (callback, options = {}, handlers) {
-  let error
+  const errors = []
   let resolve
   let reject
   const promise = new Promise((_resolve, _reject) => {
@@ -331,7 +331,16 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   })
 
   const rejectionTimeout = setTimeout(() => {
-    if (error) reject(error)
+    if (errors.length) {
+      const error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+      // Mark errors enumerable for older Node.js versions to be visible.
+      Object.defineProperty(error, 'errors', {
+        enumerable: true
+      })
+      // Hack for the information to be fully visible.
+      error.message = util.inspect(error)
+      reject(error)
+    }
   }, options.timeoutMs || 1000)
 
   const handlerPayload = {
@@ -347,16 +356,17 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     assertIntegrationName(args[0])
 
     try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
       const result = callback(...args)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
-    } catch (e) {
+    } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
-        reject(e)
+        reject(error)
       } else {
-        error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
+        errors.push(error)
       }
     }
   }

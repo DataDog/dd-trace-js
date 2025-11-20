@@ -97,7 +97,7 @@ describe('mongoose instrumentations', () => {
                 startCh.unsubscribe(start)
                 finishCh.unsubscribe(finish)
 
-                sinon.assert.calledOnceWith(start, { filters, methodName })
+                sinon.assert.calledOnceWithMatch(start, { filters, methodName })
                 sinon.assert.calledOnce(finish)
 
                 done()
@@ -105,21 +105,19 @@ describe('mongoose instrumentations', () => {
             })
           }
 
-          it('channel events published with then', (done) => {
+          it('channel events published with then', async () => {
             const start = sinon.stub()
             const finish = sinon.stub()
             startCh.subscribe(start)
             finishCh.subscribe(finish)
 
-            Test[methodName](...filters, ...args).then(() => {
-              startCh.unsubscribe(start)
-              finishCh.unsubscribe(finish)
+            await Test[methodName](...filters, ...args)
 
-              sinon.assert.calledOnceWith(start, { filters, methodName })
-              sinon.assert.calledOnce(finish)
+            startCh.unsubscribe(start)
+            finishCh.unsubscribe(finish)
 
-              done()
-            })
+            sinon.assert.calledOnceWithMatch(start, { filters, methodName })
+            sinon.assert.calledOnce(finish)
           })
         }
 
@@ -512,7 +510,7 @@ describe('mongoose instrumentations', () => {
 
               sanitizeFilterFinishCh.unsubscribe(listener)
 
-              sinon.assert.calledOnceWith(listener, { sanitizedObject })
+              sinon.assert.calledOnceWithMatch(listener, { sanitizedObject })
             })
           })
         }

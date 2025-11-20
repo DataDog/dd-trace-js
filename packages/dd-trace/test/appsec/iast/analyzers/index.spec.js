@@ -28,13 +28,13 @@ describe('Analyzers index', () => {
   it('should enable all analyzers', () => {
     const tracerConfig = {}
     analyzers.enableAllAnalyzers(tracerConfig)
-    sinon.assert.calledOnceWith(fakeAnalyzers.analyzerA.configure, { enabled: true, tracerConfig })
-    sinon.assert.calledOnceWith(fakeAnalyzers.analyzerB.configure, { enabled: true, tracerConfig })
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerA.configure, { enabled: true, tracerConfig })
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerB.configure, { enabled: true, tracerConfig })
   })
 
   it('should disable all analyzers', () => {
     analyzers.disableAllAnalyzers()
-    sinon.assert.calledOnceWith(fakeAnalyzers.analyzerA.configure, false)
-    sinon.assert.calledOnceWith(fakeAnalyzers.analyzerB.configure, false)
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerA.configure, false)
+    sinon.assert.calledOnceWithExactly(fakeAnalyzers.analyzerB.configure, false)
   })
 })

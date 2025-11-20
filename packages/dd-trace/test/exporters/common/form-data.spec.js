@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
 require('../../setup/core')
@@ -21,9 +20,8 @@ describe('exporters/form-data', () => {
   it('should have a valid boundary', () => {
     const form = new FormData()
 
-    expect(form._boundary)
-      .to.be.a('string')
-      .and.not.be.empty
+    assert.ok(typeof form._boundary === 'string')
+    assert.notStrictEqual(form._boundary, '')
   })
 
   it('should get expected headers', () => {

@@ -103,7 +103,10 @@ describe('unvalidated-redirect-analyzer', () => {
 
   it('should subscribe to set-header:finish channel', () => {
     assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions.length, 2)
-    assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name, 'datadog:http:server:response:set-header:finish')
+    assert.strictEqual(
+      unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name,
+      'datadog:http:server:response:set-header:finish'
+    )
     assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions[1]._channel.name, 'datadog:fastify:set-header:finish')
   })
 

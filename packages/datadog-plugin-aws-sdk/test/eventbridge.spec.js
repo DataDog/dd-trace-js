@@ -1,10 +1,10 @@
-const assert = require('node:assert/strict')
-/* eslint-disable @stylistic/max-len */
 'use strict'
+
+const assert = require('node:assert/strict')
+const { randomBytes } = require('node:crypto')
+
 const { before, describe, it } = require('mocha')
 const sinon = require('sinon')
-
-const { randomBytes } = require('node:crypto')
 
 const EventBridge = require('../src/services/eventbridge')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -94,7 +94,15 @@ describe('EventBridge', () => {
       parentId = '0000000000000000'
       eventbridge.requestInject(span.context(), request)
 
-      assert.deepStrictEqual(request.params, { Entries: [{ Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' }] })
+      assert.deepStrictEqual(request.params, {
+        Entries: [{
+          Detail: '{"custom":"data","for":"my users","from":"Aaron Stuyvenberg","_datadog":{' +
+            '"x-datadog-trace-id":"456853219676779160",' +
+            '"x-datadog-parent-id":"456853219676779160",' +
+            '"x-datadog-sampling-priority":"1"' +
+          '}}'
+        }]
+      })
     })
 
     it('skips injecting trace context to Eventbridge if message is full', () => {

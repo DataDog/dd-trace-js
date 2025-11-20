@@ -231,7 +231,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(rc.parseConfig)
         cb()
@@ -245,7 +245,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.notCalled(rc.parseConfig)
         cb()
       })
@@ -257,7 +257,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.notCalled(log.error)
         sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
         cb()
@@ -274,7 +274,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
         expect(log.error).to.have.been
           .calledOnceWithExactly('[RC] Could not parse remote config response', error)
@@ -301,7 +301,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         sinon.assert.notCalled(log.error)
         sinon.assert.notCalled(rc.parseConfig)
         cb()
@@ -318,7 +318,7 @@ describe('RemoteConfigManager', () => {
       assert.deepStrictEqual(JSON.parse(payload).client.client_tracer.extra_services, extraServices)
 
       rc.poll(() => {
-        sinon.assert.calledOnceWith(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         cb()
       })
     })
@@ -362,7 +362,7 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      assert.throws(func, 'Unable to find target for path datadog/42/PRODUCT/confId/config')
+      assert.throws(func, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -383,7 +383,7 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      assert.throws(func, 'Unable to find file for path datadog/42/PRODUCT/confId/config')
+      assert.throws(func, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -408,7 +408,7 @@ describe('RemoteConfigManager', () => {
         }]
       }
 
-      assert.throws(func, 'Unable to parse path datadog/42/confId/config')
+      assert.throws(func, { message: 'Unable to parse path datadog/42/confId/config' })
       sinon.assert.notCalled(rc.dispatch)
       assert.deepStrictEqual(rc.state, previousState)
     })
@@ -503,7 +503,8 @@ describe('RemoteConfigManager', () => {
         ]
       }
 
-      assert.doesNotThrow(func)
+      // Calling func should not throw.
+      func()
 
       assert.strictEqual(rc.state.client.state.targets_version, 12345)
       assert.strictEqual(rc.state.client.state.backend_client_state, 'opaquestateinbase64')
@@ -672,7 +673,7 @@ describe('RemoteConfigManager', () => {
       })
 
       function assertAsyncHandlerCallArguments (handler, ...expectedArgs) {
-        sinon.assert.calledOnceWith(handler, ...expectedArgs)
+        sinon.assert.calledOnceWithMatch(handler, ...expectedArgs)
         assert.strictEqual(handler.args[0].length, expectedArgs.length + 1)
         assert.strictEqual(typeof handler.args[0][handler.args[0].length - 1], 'function')
       }

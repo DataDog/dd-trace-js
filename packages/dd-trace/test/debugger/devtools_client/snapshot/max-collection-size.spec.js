@@ -97,7 +97,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             assert.strictEqual(entry[0].type, 'Object')
             assert.ok(Object.hasOwn(entry[0].fields, 'i'))
             assert.strictEqual(entry[0].fields.i.type, 'number')
-            assert.ok(Object.hasOwn(entry[0].fields.i, 'value')).to.match(/^\d+$/)
+            assert.ok(Object.hasOwn(entry[0].fields.i, 'value'))
+            assert.match(entry[0].fields.i.value, /^\d+$/)
             assert.strictEqual(entry[1].type, 'number')
             assert.strictEqual(entry[1].value, entry[0].fields.i.value)
           }
@@ -117,7 +118,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             assert.strictEqual(element.type, 'Object')
             assert.ok(Object.hasOwn(element.fields, 'i'))
             assert.strictEqual(element.fields.i.type, 'number')
-            assert.ok(Object.hasOwn(element.fields.i, 'value')).to.match(/^\d+$/)
+            assert.ok(Object.hasOwn(element.fields.i, 'value'))
+            assert.match(element.fields.i.value, /^\d+$/)
           }
         })
 

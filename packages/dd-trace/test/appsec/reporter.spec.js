@@ -83,7 +83,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      assert.ok(typeof result === 'object' && result !== null).that.is.empty
+      assert.ok(Object.keys(result).length === 0)
     })
 
     it('should filter and format headers from passlist', () => {
@@ -399,7 +399,7 @@ describe('reporter', () => {
         ]
       })
 
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -417,7 +417,7 @@ describe('reporter', () => {
         ]
       })
 
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -431,7 +431,7 @@ describe('reporter', () => {
 
       Reporter.reportAttack({ events: [] })
 
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
@@ -454,7 +454,7 @@ describe('reporter', () => {
         ]
       })
 
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -478,7 +478,7 @@ describe('reporter', () => {
         ]
       })
 
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
@@ -838,7 +838,7 @@ describe('reporter', () => {
       }
 
       Reporter.finishRequest(req)
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-amzn-trace-id': 'a',
         'http.request.headers.cloudfront-viewer-ja3-fingerprint': 'b',
@@ -876,7 +876,7 @@ describe('reporter', () => {
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
       sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
@@ -900,7 +900,7 @@ describe('reporter', () => {
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      sinon.assert.calledOnceWith(web.root, req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
       sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',

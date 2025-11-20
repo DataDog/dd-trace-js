@@ -60,7 +60,7 @@ describe('Appsec Rasp Telemetry metrics', () => {
           event_rules_version: '2.0.0'
         })
         sinon.assert.neverCalledWith(count, 'rasp.rule.match')
-        sinon.assert.calledOnceWith(inc, 1)
+        sinon.assert.calledOnceWithExactly(inc, 1)
       })
 
       it('should increment rasp.timeout metric if timeout', () => {

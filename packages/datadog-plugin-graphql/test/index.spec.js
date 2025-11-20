@@ -1726,9 +1726,13 @@ describe('Plugin', () => {
               const res = config.hooks.execute.firstCall.args[2]
 
               assert.strictEqual(span.context()._name, expectedSchema.server.opName)
+
+              // These two properties are circular structures.
+              assert.deepStrictEqual(args.document, params.document)
+              assert.deepStrictEqual(args.schema, params.schema)
+
+              // The helper can not handle circular structures properly.
               assertObjectContains(args, {
-                schema: params.schema,
-                document: params.document,
                 rootValue: params.rootValue,
                 contextValue: params.contextValue,
                 variableValues: params.variableValues,
