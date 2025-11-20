@@ -62,6 +62,31 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   return chatTemplate
 }
 
+/**
+ * Normalizes prompt variables by extracting meaningful values from OpenAI's response objects.
+ *
+ * @param {Object<string, string|Object>} variables - Map of variable names to values
+ * @returns {Object<string, string>} Normalized variables with simple string values
+ */
+function normalizePromptVariables (variables) {
+  const normalized = {}
+  for (const [key, value] of Object.entries(variables)) {
+    let normalizedValue = value
+    if (value && typeof value === 'object') {
+      if (value.text !== undefined) { // ResponseInputText
+        normalizedValue = value.text
+      } else if (value.type === 'input_image') { // ResponseInputImage
+        normalizedValue = value.image_url || value.file_id || '[image]'
+      } else if (value.type === 'input_file') { // ResponseInputFile
+        normalizedValue = value.file_url || value.file_id || value.filename || '[file]'
+      }
+    }
+    normalized[key] = normalizedValue
+  }
+  return normalized
+}
+
 module.exports = {
-  extractChatTemplateFromInstructions
+  extractChatTemplateFromInstructions,
+  normalizePromptVariables
 }

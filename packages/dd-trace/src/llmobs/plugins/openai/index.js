@@ -1,7 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { extractChatTemplateFromInstructions } = require('./utils')
+const { extractChatTemplateFromInstructions, normalizePromptVariables } = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -408,38 +408,21 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     // Handle prompt tracking for reusable prompts
     if (response && response.prompt && typeof response.prompt === 'object') {
-      const { id, version, variables } = response.prompt // ResponsePrompt
-      if (id && version && variables) {
-        // Extract chat template from response instructions
-        const instructions = response.instructions
-        if (Array.isArray(instructions)) {
-          const chatTemplate = extractChatTemplateFromInstructions(instructions, variables)
+        const { id, version, variables } = response.prompt // ResponsePrompt
+        if (id && version && variables) {
+          const instructions = response.instructions
+          if (Array.isArray(instructions)) {
+            const chatTemplate = extractChatTemplateFromInstructions(instructions, variables)
+            const normalizedVariables = normalizePromptVariables(variables)
 
-          // Normalize variables for LLMObs span metadata
-          // OpenAI SDK type: { [key: string]: string | ResponseInputText | ResponseInputImage | ResponseInputFile }
-          const normalizedVariables = {}
-          for (const [key, value] of Object.entries(variables)) {
-            if (!value || typeof value !== 'object') {
-              normalizedVariables[key] = value
-            } else if (value.text !== undefined) { // ResponseInputText
-              normalizedVariables[key] = value.text
-            } else if (value.type === 'input_image') { // ResponseInputImage
-              normalizedVariables[key] = value.image_url || value.file_id || '[image]'
-            } else if (value.type === 'input_file') { // ResponseInputFile
-              normalizedVariables[key] = value.file_url || value.file_id || value.filename || '[file]'
-            } else {
-              normalizedVariables[key] = value
-            }
+            this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+              id,
+              version,
+              variables: normalizedVariables,
+              chat_template: chatTemplate
+            })
           }
-
-          this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
-            id,
-            version,
-            variables: normalizedVariables,
-            chat_template: chatTemplate
-          })
         }
-      }
     }
 
     const outputMetadata = {}
