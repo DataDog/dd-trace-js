@@ -8,6 +8,8 @@ include:
   stage: macrobenchmarks
   when: always
   rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
     - interruptible: true
