@@ -1,24 +1,22 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
 describe('RASP - downstream request integration', () => {
-  let sandbox, cwd, appFile
+  let cwd, appFile
 
+  useSandbox(
+    ['express'],
+    false,
+    [path.join(__dirname, 'resources')])
+
+  
   before(async function () {
-    this.timeout(60000)
-
-    sandbox = await createSandbox(['express'], false, [path.join(__dirname, 'resources')])
-    cwd = sandbox.folder
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'downstream-test-app.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   async function setupTest (envOverrides = {}) {
