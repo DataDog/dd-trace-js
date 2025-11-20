@@ -195,7 +195,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscription.js' }, (obj) => {
   const Message = obj.Message
 
   if (Message && Message.prototype && Message.prototype.ack) {
@@ -218,7 +218,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
   return obj
 })
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
   const ctx = {}
 
