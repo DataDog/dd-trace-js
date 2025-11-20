@@ -69,6 +69,10 @@ function extractChatTemplateFromInstructions (instructions, variables) {
  * @returns {Object<string, string>} Normalized variables with simple string values
  */
 function normalizePromptVariables (variables) {
+  if (!variables || typeof variables !== 'object') {
+    return {}
+  }
+
   const normalized = {}
   for (const [key, value] of Object.entries(variables)) {
     let normalizedValue = value
