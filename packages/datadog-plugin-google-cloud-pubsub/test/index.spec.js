@@ -271,9 +271,10 @@ describe('Plugin', () => {
             rawExpectedSchema.receive,
             {
               selectSpan: (traces) => {
-                // Consumer span is the last span created (after createTopic, createSubscription, and publish)
+                // Consumer spans have type='worker', which distinguishes them from client spans
+                // Don't provide a fallback - let assertSomeTraces keep waiting if not found
                 const allSpans = traces.flat()
-                return allSpans[allSpans.length - 1]
+                return allSpans.find(span => span.type === 'worker')
               }
             }
           )
