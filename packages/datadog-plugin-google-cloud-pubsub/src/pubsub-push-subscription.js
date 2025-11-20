@@ -52,7 +52,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const deliverySpan = this._createDeliverySpan(
       messageData,
       isSameTrace ? pubsubRequestContext : originalContext,
-      !isSameTrace,
+      !isSameTrace ? pubsubRequestContext : null,
       tracer
     )
 
@@ -74,15 +74,15 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _parseMessage (req) {
-      const subscription = req.headers['x-goog-pubsub-subscription-name']
-      const message = {
-        messageId: req.headers['x-goog-pubsub-message-id'],
+    const subscription = req.headers['x-goog-pubsub-subscription-name']
+    const message = {
+      messageId: req.headers['x-goog-pubsub-message-id'],
       publishTime: req.headers['x-goog-pubsub-publish-time']
     }
 
     const { projectId, topicName } = this._extractProjectTopic(req.headers, subscription)
     return { message, subscription, attrs: req.headers, projectId, topicName }
-    }
+  }
 
   _extractContext (messageData, tracer) {
     return tracer._tracer.extract('text_map', messageData.attrs) || undefined
@@ -113,7 +113,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
   }
 
-  _createDeliverySpan (messageData, parentContext, addSpanLink, tracer) {
+  _createDeliverySpan (messageData, parentContext, linkContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription.split('/').pop() || subscription
 
@@ -140,12 +140,12 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
     this._addBatchMetadata(span, attrs)
 
-    if (addSpanLink && parentContext) {
+    if (linkContext) {
       if (typeof span.addLink === 'function') {
-        span.addLink(parentContext, {})
+        span.addLink(linkContext, {})
       } else {
         span._links = span._links || []
-        span._links.push({ context: parentContext, attributes: {} })
+        span._links.push({ context: linkContext, attributes: {} })
       }
     }
 

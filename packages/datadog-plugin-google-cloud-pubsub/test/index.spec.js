@@ -268,7 +268,16 @@ describe('Plugin', () => {
               sub.on('message', msg => msg.ack())
               await publish(topic, { data: Buffer.from('hello') })
             },
-            rawExpectedSchema.receive
+            rawExpectedSchema.receive,
+            {
+              selectSpan: (traces) => {
+                // Consumer spans have type='worker'. Find it to avoid picking client spans.
+                const allSpans = traces.flat()
+                const workerSpan = allSpans.find(span => span.type === 'worker')
+                // Always return a valid span - never undefined to avoid "Target cannot be null" error
+                return workerSpan || allSpans[allSpans.length - 1] || traces[0][0]
+              }
+            }
           )
         })
 

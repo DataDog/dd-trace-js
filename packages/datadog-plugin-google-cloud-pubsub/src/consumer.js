@@ -12,7 +12,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   _reconstructPubSubRequestContext (attrs) {
     const traceIdLower = attrs['_dd.pubsub_request.trace_id']
     const spanId = attrs['_dd.pubsub_request.span_id']
-    const traceIdUpper = attrs['_dd.p.tid']
+    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
 
     if (!traceIdLower || !spanId) return null
 
