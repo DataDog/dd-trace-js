@@ -685,7 +685,8 @@ class Config {
     this.#setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     this.#setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     this.#setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
-    target['dynamicInstrumentation.captureTimeoutMs'] = maybeFloat(DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS)
+    target['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS)
+    unprocessedTarget['dynamicInstrumentation.captureTimeoutMs'] = DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS
     this.#setBoolean(target, 'dynamicInstrumentation.enabled', DD_DYNAMIC_INSTRUMENTATION_ENABLED)
     this.#setString(target, 'dynamicInstrumentation.probeFile', DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE)
     this.#setArray(target, 'dynamicInstrumentation.redactedIdentifiers',
@@ -986,7 +987,7 @@ class Config {
       this.#setString(opts, 'dogstatsd.port', options.dogstatsd.port)
     }
     this.#setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
-    opts['dynamicInstrumentation.captureTimeoutMs'] = maybeFloat(options.dynamicInstrumentation?.captureTimeoutMs)
+    opts['dynamicInstrumentation.captureTimeoutMs'] = maybeInt(options.dynamicInstrumentation?.captureTimeoutMs)
     this.#optsUnprocessed['dynamicInstrumentation.captureTimeoutMs'] = options.dynamicInstrumentation?.captureTimeoutMs
     this.#setBoolean(opts, 'dynamicInstrumentation.enabled', options.dynamicInstrumentation?.enabled)
     this.#setString(opts, 'dynamicInstrumentation.probeFile', options.dynamicInstrumentation?.probeFile)

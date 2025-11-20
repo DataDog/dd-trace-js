@@ -8,21 +8,21 @@ describe('Dynamic Instrumentation', function () {
     describe('with snapshot under tight time budget', function () {
       context('1ms time budget', function () {
         // Force a very small time budget in ms to trigger partial snapshots
-        const target = 1
+        const budget = 1
         const t = setup({
           dependencies: ['fastify'],
-          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(target) }
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
         })
 
         it(
           'should include partial snapshot marked with notCapturedReason: timeout',
           // A tolerance of 15ms is used to avoid flakiness
-          test({ t, maxPausedTime: target + 15, breakpointIndex: 0, maxReferenceDepth: 5 })
+          test({ t, maxPausedTime: budget + 15, breakpointIndex: 0, maxReferenceDepth: 5 })
         )
       })
 
       context('default time budget', function () {
-        const target = 10 // default time budget in ms
+        const budget = 15 // default time budget in ms
         const t = setup({ dependencies: ['fastify'] })
 
         // TODO: Make this pass
@@ -30,7 +30,7 @@ describe('Dynamic Instrumentation', function () {
         it.skip(
           'should keep budget when state includes an object with 1 million properties',
           // A tolerance of 5ms is used to avoid flakiness
-          test({ t, maxPausedTime: target + 5, breakpointIndex: 1, maxReferenceDepth: 1 })
+          test({ t, maxPausedTime: budget + 5, breakpointIndex: 1, maxReferenceDepth: 1 })
         )
 
         // TODO: Make this pass
@@ -38,7 +38,7 @@ describe('Dynamic Instrumentation', function () {
         it.skip(
           'should keep budget when state includes an array of 1 million primitives',
           // A tolerance of 5ms is used to avoid flakiness
-          test({ t, maxPausedTime: target + 5, breakpointIndex: 2, maxReferenceDepth: 1 })
+          test({ t, maxPausedTime: budget + 5, breakpointIndex: 2, maxReferenceDepth: 1 })
         )
 
         // TODO: Make this pass
@@ -46,7 +46,7 @@ describe('Dynamic Instrumentation', function () {
         it.skip(
           'should keep budget when state includes an array of 1 million objects',
           // A tolerance of 5ms is used to avoid flakiness
-          test({ t, maxPausedTime: target + 5, breakpointIndex: 3, maxReferenceDepth: 1 })
+          test({ t, maxPausedTime: budget + 5, breakpointIndex: 3, maxReferenceDepth: 1 })
         )
       })
     })

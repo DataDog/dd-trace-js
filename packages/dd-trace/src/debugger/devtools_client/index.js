@@ -172,7 +172,7 @@ session.on('Debugger.paused', async ({ params }) => {
       maxCollectionSize,
       maxFieldCount,
       maxLength,
-      deadlineNs: start + BigInt(config.dynamicInstrumentation.captureTimeoutMs ?? 10) * 1_000_000n
+      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
     }
   )
 
