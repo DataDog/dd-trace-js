@@ -2,7 +2,6 @@
 
 const ProducerPlugin = require('./producer')
 const ConsumerPlugin = require('./consumer')
-const PushSubscriptionPlugin = require('./pubsub-push-subscription')
 const ClientPlugin = require('./client')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
@@ -12,7 +11,6 @@ class GoogleCloudPubsubPlugin extends CompositePlugin {
     return {
       producer: ProducerPlugin,
       consumer: ConsumerPlugin,
-      'pubsub-push-subscription': PushSubscriptionPlugin,
       client: ClientPlugin
     }
   }

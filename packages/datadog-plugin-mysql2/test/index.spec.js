@@ -459,6 +459,8 @@ describe('Plugin', () => {
           connection.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -482,8 +484,25 @@ describe('Plugin', () => {
 
             expect(queryText).to.equal(
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
-            `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+            `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          const connect = connection.query('SELECT 1 + 1 AS solution', () => {
+            queryText = connect.sql
+          })
+        })
+
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done)
+
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             queryText = connect.sql
           })
@@ -539,6 +558,8 @@ describe('Plugin', () => {
           pool.end(() => {
             agent.close({ ritmReset: false }).then(done)
           })
+
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -562,8 +583,25 @@ describe('Plugin', () => {
 
             expect(queryText).to.equal(
               `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
-            `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+            `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
+            queryText = queryPool.sql
+          })
+        })
+
+        it('query text should contain rejected sampling decision in the traceparent', done => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          let queryText = ''
+
+          agent.assertSomeTraces(traces => {
+            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
+            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
+
+            expect(queryText).to.include(`traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
+          }).then(done, done)
+
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             queryText = queryPool.sql
           })

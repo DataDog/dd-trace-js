@@ -9,9 +9,6 @@ const { getEnvironmentVariable } = require('./config-helper')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
-const { channel } = require('dc-polyfill')
-const spanProcessCh = channel('dd-trace:span:process')
-
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
@@ -29,6 +26,12 @@ class SpanProcessor {
     this._gitMetadataTagger = new GitMetadataTagger(config)
   }
 
+  sample (span) {
+    const spanContext = span.context()
+    this._prioritySampler.sample(spanContext)
+    this._spanSampler.sample(spanContext)
+  }
+
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -43,8 +46,7 @@ class SpanProcessor {
       return
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
-      this._prioritySampler.sample(spanContext)
-      this._spanSampler.sample(spanContext)
+      this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isChunkRoot = true
@@ -57,8 +59,6 @@ class SpanProcessor {
           isChunkRoot = false
           this._stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
-
-          spanProcessCh.publish({ span })
         }
       }
 
