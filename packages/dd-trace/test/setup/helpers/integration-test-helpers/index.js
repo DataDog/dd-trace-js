@@ -5,18 +5,17 @@ const { expect } = require('chai')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../mocha')
 
-function createIntegrationTestSuite (pluginName, packageName, TestSetupClass, options, testCallback) {
+function createIntegrationTestSuite (pluginName, packageName, testSetup, options, testCallback) {
     describe('Plugin', () => {
         describe(pluginName, () => {
             withVersions(pluginName, packageName, version => {
-                createVersionedTests(pluginName, packageName, TestSetupClass, options, version, testCallback)
+                createVersionedTests(pluginName, packageName, testSetup, options, version, testCallback)
             })
         })
     })
 }
 
-function createVersionedTests (pluginName, packageName, TestSetupClass, options = {}, version, testCallback) {
-    const testSetup = new TestSetupClass()
+function createVersionedTests (pluginName, packageName, testSetup, options = {}, version, testCallback) {
     let tracer = null
     let mod = null
 
