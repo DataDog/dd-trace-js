@@ -234,8 +234,10 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       const content = Array.isArray(candidate) ? candidate[0].content : candidate.content
       if (!content?.parts) continue
 
-      // Skip function calls in streaming (they're not accumulated)
-      if (content.parts.some(part => part.functionCall)) {
+      // Skip special cases in streaming (handle them as non-streaming)
+      if (content.parts.some(part => part.functionCall || 
+                                     part.executableCode || 
+                                     part.codeExecutionResult)) {
         messages.push(...this._formatNonStreamingCandidate(candidate))
         continue
       }
@@ -352,7 +354,6 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   // ============================================================================
 
   _formatFunctionCallMessage (parts, functionCalls, role) {
-    console.log('formatFunctionCallMessage called!!!!!!!!!!', functionCalls)
     const toolCalls = functionCalls.map(part => ({
       name: part.functionCall.name,
       arguments: part.functionCall.args,
