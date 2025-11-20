@@ -164,8 +164,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       span.setTag('pubsub.ack', 1)
     }
 
-    this.finish(ctx)
-    return ctx.parentStore
+    return super.bindFinish(ctx)
   }
 }
 
