@@ -58,7 +58,14 @@ const instrumentedNodeModules = new Set()
 /** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
+  doHook(payload)
+
   const name = payload.package
+  const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
+  if (!instrumentation) {
+    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
+    return
+  }
 
   const isPrefixedWithNode = name.startsWith('node:')
 
@@ -71,15 +78,6 @@ dc.subscribe(CHANNEL, (message) => {
       return
     }
     instrumentedNodeModules.add(nodeName)
-  }
-
-  doHook(name)
-
-  const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
-
-  if (!instrumentation) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
-    return
   }
 
   for (const { file, versions, hook } of instrumentation) {
