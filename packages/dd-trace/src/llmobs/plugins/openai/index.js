@@ -408,21 +408,21 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     // Handle prompt tracking for reusable prompts
     if (response && response.prompt && typeof response.prompt === 'object') {
-        const { id, version, variables } = response.prompt // ResponsePrompt
-        if (id && version && variables) {
-          const instructions = response.instructions
-          if (Array.isArray(instructions)) {
-            const chatTemplate = extractChatTemplateFromInstructions(instructions, variables)
-            const normalizedVariables = normalizePromptVariables(variables)
+      const { id, version, variables } = response.prompt // ResponsePrompt
+      if (id && version) {
+        const instructions = response.instructions
+        if (Array.isArray(instructions)) {
+          const chatTemplate = extractChatTemplateFromInstructions(instructions, variables || {})
+          const normalizedVariables = variables ? normalizePromptVariables(variables) : {}
 
-            this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
-              id,
-              version,
-              variables: normalizedVariables,
-              chat_template: chatTemplate
-            })
-          }
+          this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+            id,
+            version,
+            variables: normalizedVariables,
+            chat_template: chatTemplate
+          })
         }
+      }
     }
 
     const outputMetadata = {}
