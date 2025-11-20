@@ -2,6 +2,7 @@
 
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+// Can stay, because we're actually checking for the presence of the environment variable
 if (getEnvironmentVariable('MOCHA_WORKER_ID')) {
   require('./mocha/worker')
 } else {

@@ -517,6 +517,7 @@ class Config {
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      DD_TRACE_DISABLED_INSTRUMENTATIONS,
       DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
       DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
       DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS,
@@ -673,6 +674,7 @@ class Config {
     if (DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH) {
       target['cloudPayloadTagging.maxDepth'] = maybeInt(DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH)
     }
+    this.#setArray(target, 'disabledInstrumentations', DD_TRACE_DISABLED_INSTRUMENTATIONS)
     this.#setBoolean(target, 'crashtracking.enabled', DD_CRASHTRACKING_ENABLED)
     this.#setBoolean(target, 'codeOriginForSpans.enabled', DD_CODE_ORIGIN_FOR_SPANS_ENABLED)
     this.#setBoolean(

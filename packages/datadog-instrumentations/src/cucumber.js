@@ -252,6 +252,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testName: this.pickle.name,
       testFileAbsolutePath,
       testSourceLine,
+      // Can stay, because we're actually checking for the presence of the environment variable
       isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
     }
     const ctx = testStartPayload
@@ -544,6 +545,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
 
     const processArgv = process.argv.slice(2).join(' ')
+    // Can stay, because we're actually checking for the presence of the environment variable
     const command = getEnvironmentVariable('npm_lifecycle_script') || `cucumber-js ${processArgv}`
 
     if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {

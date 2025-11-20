@@ -26,6 +26,8 @@ function addInstrumentations (data) {
 }
 
 function addSecurityControls (data) {
+  // if this runs after config is initialized,
+  // we can migrate DD_IAST_SECURITY_CONTROLS_CONFIGURATION to be initialized in config.js
   const securityControls = (env('DD_IAST_SECURITY_CONTROLS_CONFIGURATION') || '')
     .split(';')
     .map(sc => sc.trim().split(':')[2])

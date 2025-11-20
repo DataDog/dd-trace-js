@@ -5,6 +5,7 @@ const shimmer = require('../../datadog-shimmer')
 const tracer = require('../../dd-trace')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
+// TODO
 const otelSdkEnabled = getEnvironmentVariable('DD_TRACE_OTEL_ENABLED') ||
 getEnvironmentVariable('OTEL_SDK_DISABLED')
   ? !getEnvironmentVariable('OTEL_SDK_DISABLED')
