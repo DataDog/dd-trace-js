@@ -8,6 +8,7 @@ const ritm = require('../../../dd-trace/src/ritm')
  * In practice, `modules` is always an array with a single entry.
  *
  * @param {string[]} modules list of modules to hook into
+ * @param {object} hookOptions hook options
  * @param {Function} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, hookOptions, onrequire) {

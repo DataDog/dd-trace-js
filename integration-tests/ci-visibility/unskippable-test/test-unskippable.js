@@ -1,6 +1,9 @@
+/** Some comment */
+/* eslint-disable jsdoc/valid-types */
 /**
  * @datadog {"unskippable": true}
  */
+/* Some other comment */
 'use strict'
 
 const { expect } = require('chai')

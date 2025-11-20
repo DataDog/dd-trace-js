@@ -654,6 +654,13 @@ declare namespace tracer {
          * @default false
          */
         enabled?: boolean
+        /**
+         * Timeout in milliseconds for OpenFeature provider initialization.
+         * If configuration is not received within this time, initialization fails.
+         *
+         * @default 30000
+         */
+        initializationTimeoutMs?: number
       }
     };
 
@@ -3011,15 +3018,15 @@ declare namespace tracer {
       label: string,
 
       /**
-       * The type of evaluation metric, one of 'categorical' or 'score'
+       * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score',
+      metricType: 'categorical' | 'score' | 'boolean',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics and number for 'score' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
        */
-      value: string | number,
+      value: string | number | boolean,
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.

@@ -16,7 +16,7 @@ describe('SpanProcessor', () => {
   let trace
   let exporter
   let tracer
-  let format
+  let spanFormat
   let config
   let SpanSampler
   let sample
@@ -52,7 +52,7 @@ describe('SpanProcessor', () => {
         enabled: false
       }
     }
-    format = sinon.stub().returns({ formatted: true })
+    spanFormat = sinon.stub().returns({ formatted: true })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -60,7 +60,7 @@ describe('SpanProcessor', () => {
     })
 
     SpanProcessor = proxyquire('../src/span_processor', {
-      './format': format,
+      './span_format': spanFormat,
       './span_sampler': SpanSampler
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -68,6 +68,12 @@ describe('SpanProcessor', () => {
 
   it('should generate sampling priority', () => {
     processor.process(finishedSpan)
+
+    expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
+  })
+
+  it('should generate sampling priority when sampling manually', () => {
+    processor.sample(finishedSpan)
 
     expect(prioritySampler.sample).to.have.been.calledWith(finishedSpan.context())
   })
@@ -157,7 +163,7 @@ describe('SpanProcessor', () => {
     expect(exporter.export).not.to.have.been.called
   })
 
-  it('should call format every time a partial flush is triggered', () => {
+  it('should call spanFormat every time a partial flush is triggered', () => {
     config.flushMinSpans = 1
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan]
@@ -166,7 +172,7 @@ describe('SpanProcessor', () => {
 
     expect(trace).to.have.deep.property('started', [activeSpan])
     expect(trace).to.have.deep.property('finished', [])
-    expect(format.callCount).to.equal(1)
-    expect(format).to.have.been.calledWith(finishedSpan, true)
+    expect(spanFormat.callCount).to.equal(1)
+    expect(spanFormat).to.have.been.calledWith(finishedSpan, true)
   })
 })

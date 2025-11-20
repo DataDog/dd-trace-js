@@ -662,6 +662,12 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     tags: {},
     timestampMs: Date.now()
   })
+
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'toxicity',
+    metricType: 'boolean',
+    value: 'true'
+  })
 })
 
 // annotate a span

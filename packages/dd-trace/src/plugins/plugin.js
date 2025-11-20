@@ -118,18 +118,16 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addSub (channelName, handler) {
-    const plugin = this
     /**
-     * @this {unknown}
-     * @returns {unknown}
+     * @type {typeof handler}
      */
-    const wrappedHandler = function () {
+    const wrappedHandler = (...args) => {
       try {
-        return handler.apply(this, arguments)
-      } catch (e) {
-        logger.error('Error in plugin handler:', e)
-        logger.info('Disabling plugin: %s', plugin.id)
-        plugin.configure(false)
+        return handler.apply(this, args)
+      } catch (error) {
+        logger.error('Error in plugin handler:', error)
+        logger.info('Disabling plugin: %s', this.constructor.name)
+        this.configure(false)
       }
     }
     this._subscriptions.push(new Subscription(channelName, wrappedHandler))

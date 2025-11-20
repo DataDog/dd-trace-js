@@ -1110,7 +1110,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
        * Child processes do not each request ITR configuration, so the jest's parent process
        * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
        * controls whether coverage is reported.
-      */
+       */
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
@@ -1345,9 +1345,6 @@ addHook({
         }
       }
       return returnedValue
-    } catch (error) {
-      testSuiteErrorCh.publish({ error, testSuiteAbsolutePath: this._testPath })
-      throw error
     } finally {
       // Restore original prepareStackTrace
       Error.prepareStackTrace = originalPrepareStackTrace
