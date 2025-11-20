@@ -271,9 +271,9 @@ describe('Plugin', () => {
             rawExpectedSchema.receive,
             {
               selectSpan: (traces) => {
-                // Find the consumer span (not the client span for streamingPull)
+                // Consumer span is the last span created (after createTopic, createSubscription, and publish)
                 const allSpans = traces.flat()
-                return allSpans.find(span => span.meta && span.meta['span.kind'] === 'consumer')
+                return allSpans[allSpans.length - 1]
               }
             }
           )
