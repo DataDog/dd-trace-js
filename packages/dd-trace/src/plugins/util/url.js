@@ -31,10 +31,7 @@ function extractURL (req) {
 }
 
 function getProtocol (req) {
-  if (req.socket && req.socket.encrypted) return 'https'
-  if (req.connection && req.connection.encrypted) return 'https'
-
-  return 'http'
+  return (req.socket?.encrypted || req.connection?.encrypted) ? 'https' : 'http'
 }
 
 /**
@@ -76,7 +73,7 @@ function extractPathFromUrl (url) {
   if (!url) return '/'
   const match = url.match(PATH_REGEX)
 
-  return match && match.groups && match.groups.path ? match.groups.path : '/'
+  return match?.groups?.path || '/'
 }
 
 /**
