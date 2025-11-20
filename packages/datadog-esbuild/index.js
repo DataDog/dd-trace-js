@@ -123,7 +123,6 @@ ${build.initialOptions.banner.js}`
   }
 
   try {
-    // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@opentelemetry/api')
   } catch (error) {
     build.initialOptions.external ??= []
@@ -132,7 +131,6 @@ ${build.initialOptions.banner.js}`
   }
 
   try {
-    // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@opentelemetry/api-logs')
   } catch (error) {
     build.initialOptions.external ??= []
