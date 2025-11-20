@@ -1,8 +1,5 @@
 'use strict'
 
-// Allow duplicate 'attributes' property name across different typedefs
-// eslint-disable jsdoc/check-property-names
-
 const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
 } = require('./constants')
@@ -13,14 +10,18 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  * @typedef {import('./instruments').Measurement} Measurement
- *
+ **/
+
+/**
  * @typedef {Object} NumberDataPoint
  * @property {Attributes} attributes - Number data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
  * @property {number} startTimeUnixNano - Start timestamp for cumulative metrics
  * @property {number} value - Metric value
- *
+ **/
+
+/**
  * @typedef {Object} HistogramDataPoint
  * @property {Attributes} attributes - Histogram data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
@@ -32,7 +33,23 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {number} max - Maximum value observed
  * @property {number[]} bucketCounts - Count per histogram bucket
  * @property {number[]} explicitBounds - Histogram bucket boundaries
- *
+ **/
+
+/**
+ * @typedef {Object} AggregatedMetricDataPoint
+ * @property {Attributes} attributes - Aggregated metric data point metric attributes
+ * @property {string} attrKey - Stable stringified key for attributes
+ * @property {number} timeUnixNano - Timestamp in nanoseconds
+ * @property {number} startTimeUnixNano - Start timestamp
+ * @property {number} count - Number of observations
+ * @property {number} sum - Sum of all observations
+ * @property {number} min - Minimum value observed
+ * @property {number} max - Maximum value observed
+ * @property {number[]} bucketCounts - Count per histogram bucket
+ * @property {number[]} explicitBounds - Histogram bucket boundaries
+ **/
+
+/**
  * @typedef {Object} AggregatedMetric
  * @property {string} name - Metric name
  * @property {string} description - Metric description
@@ -40,9 +57,8 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {string} type - Metric type from METRIC_TYPES
  * @property {InstrumentationScope} instrumentationScope - Instrumentation scope
  * @property {string} temporality - Temporality from TEMPORALITY constants
- * @property {Map<string, NumberDataPoint|HistogramDataPoint>} dataPointMap - Map of attribute keys to data points
- *
- */
+ * @property {Map<string, AggregatedMetricDataPoint>} dataPointMap - Map of attribute keys to data points
+ **/
 
 /**
  * PeriodicMetricReader collects and exports metrics at a regular interval.
