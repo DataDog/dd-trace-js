@@ -166,15 +166,8 @@ for (const name of names) {
         }
 
         if (matchesFile && matchVersion(moduleVersion, versions)) {
-          let instrumentedExports = hook[HOOK_SYMBOL]
-          if (
-            !instrumentedExports &&
-            moduleExports &&
-            (typeof moduleExports === 'object' || typeof moduleExports === 'function')
-          ) {
-            instrumentedExports = new WeakSet()
-            hook[HOOK_SYMBOL] = instrumentedExports
-          }
+          hook[HOOK_SYMBOL] ??= new WeakSet()
+          const instrumentedExports = hook[HOOK_SYMBOL]
 
           if (instrumentedExports?.has(moduleExports)) {
             instrumentedIntegrationsSuccess.set(successKey, true)

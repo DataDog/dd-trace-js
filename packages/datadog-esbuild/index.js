@@ -26,12 +26,12 @@ for (const hook of Object.values(hooks)) {
 
 const modulesOfInterest = new Set()
 
-for (const [name, instrumentation] of Object.entries(instrumentations)) {
+for (const instrumentation of Object.values(instrumentations)) {
   for (const entry of instrumentation) {
     if (!entry.file) {
-      modulesOfInterest.add(name) // e.g. "redis"
+      modulesOfInterest.add(entry.name) // e.g. "redis"
     } else {
-      modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
+      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
     }
   }
 }
