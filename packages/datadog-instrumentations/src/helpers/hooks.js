@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = {
+const hooks = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
@@ -144,3 +144,11 @@ module.exports = {
   workerpool: () => require('../mocha'),
   ws: () => require('../ws')
 }
+
+const prismaOutput = (process.env.DD_PRISMA_OUTPUT || '').trim()
+
+if (prismaOutput) {
+  hooks[prismaOutput] = () => require('../prisma')
+}
+
+module.exports = hooks

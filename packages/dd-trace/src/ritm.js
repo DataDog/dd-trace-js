@@ -117,12 +117,19 @@ function Hook (modules, options, onrequire) {
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
-      if (!stat) return exports // abort if filename could not be parsed
-      name = stat.name
-      basedir = stat.basedir
+      if (!stat) {
+        // Check if this is a direct file path that we want to hook
+        hooks = moduleHooks[filename]
+        if (!hooks) return exports // abort if filename isn't on whitelist
+        name = filename
+        basedir = path.dirname(filename)
+      } else {
+        name = stat.name
+        basedir = stat.basedir
 
-      hooks = moduleHooks[name]
-      if (!hooks) return exports // abort if module name isn't on whitelist
+        hooks = moduleHooks[name]
+        if (!hooks) return exports // abort if module name isn't on whitelist
+      }
 
       // figure out if this is the main module file, or a file inside the module
       const paths = Module._resolveLookupPaths(name, this, true)

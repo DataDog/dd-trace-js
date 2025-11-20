@@ -66,7 +66,20 @@ for (const packageName of names) {
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  // For file paths, resolve to absolute path and file URL so both ritm and iitm can match them properly
+  let hookModules = [packageName]
+  if (isFilePath(packageName)) {
+    try {
+      const absolutePath = path.resolve(packageName)
+      const fileUrl = `file://${absolutePath}`
+      hookModules = [absolutePath, fileUrl] // Register both for ritm and iitm
+    } catch (e) {
+      log.error('Error resolving file path "%s": %s', packageName, e.message)
+      return
+    }
+  }
+
+  Hook(hookModules, hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -99,12 +112,21 @@ for (const packageName of names) {
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
 
+      // For file paths, also check if the absolute paths match
+      if (!matchesFile && isFilePath(name)) {
+        try {
+          const absoluteName = path.resolve(name)
+          matchesFile = moduleName === absoluteName
+        } catch (e) {
+          // ignore
+        }
+      }
+
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
         // so our instrumentation has to include a '.*' to match them for more than a single version.
         matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
       }
-
       if (matchesFile) {
         let version = moduleVersion
         try {
@@ -148,6 +170,7 @@ for (const packageName of names) {
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {
+            console.log(`[REGISTER] Error during instrumentation of ${name}@${version}: ${e.message}`)
             log.info('Error during ddtrace instrumentation of application, aborting.', e)
             telemetry('error', [
               `error_type:${e.constructor.name}`,
@@ -160,6 +183,8 @@ for (const packageName of names) {
             })
           }
           namesAndSuccesses[`${name}@${version}`] = true
+        } else {
+          console.log(`[REGISTER] Version match failed for ${name}: version=${version}, ranges=${JSON.stringify(versions)}`)
         }
       }
     }
@@ -229,6 +254,21 @@ function parseHookInstrumentationFileName (packageName) {
   }
 
   return null
+}
+
+function isFilePath (moduleName) {
+  // Check if it's a relative or absolute file path
+  // Must start with ./, ../, or /, or be a path that doesn't look like a package name
+  if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
+    return true
+  }
+
+  // If it contains a slash and doesn't contain node_modules, and doesn't start with @, it's likely a file path
+  if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
+    return true
+  }
+
+  return false
 }
 
 module.exports = {

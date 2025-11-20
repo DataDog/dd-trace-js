@@ -15,6 +15,14 @@ const allowedClientSpanOperations = new Set([
   'transaction'
 ])
 
+const prismaModuleNames = ['@prisma/client']
+const customPrismaOutput = (process.env.DD_PRISMA_OUTPUT || '').trim()
+
+if (customPrismaOutput) {
+  process._rawDebug(`Adding custom Prisma output: ${customPrismaOutput}`)
+  prismaModuleNames.push(customPrismaOutput)
+}
+
 class TracingHelper {
   dbConfig = null
   isEnabled () {
@@ -63,7 +71,8 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
+addHook({ name: prismaModuleNames, versions: ['>=6.1.0'] }, (prisma, version) => {
+  process._rawDebug('Holaaa')
   const tracingHelper = new TracingHelper()
 
   // we need to patch the prototype to get db config since this works for ESM and CJS alike.
@@ -87,13 +96,20 @@ addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => 
     * to enable OpenTelemetry.
   */
   // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  const versions = version.split('.')
-  if (versions[0] === '6' && versions[1] < 4) {
-    global.PRISMA_INSTRUMENTATION = {
-      helper: tracingHelper
+  if (version) {
+    const versions = version.split('.')
+    if (versions[0] === '6' && versions[1] < 4) {
+      global.PRISMA_INSTRUMENTATION = {
+        helper: tracingHelper
+      }
+    } else {
+      global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
+        helper: tracingHelper
+      }
     }
   } else {
-    global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
+    // For file paths without version info, use the newer format
+    global.V6_PRISMA_INSTRUMENTATION = {
       helper: tracingHelper
     }
   }

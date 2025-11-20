@@ -158,6 +158,7 @@
     "semifies": "^1.0.0",
     "shell-quote": "^1.8.2",
     "source-map": "^0.7.4",
+    "sqlite3": "^5.1.7",
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
   },
