@@ -5,13 +5,37 @@ const { describe, it, before } = require('mocha')
 
 const assert = require('node:assert')
 
-describe.only('noop', () => {
+const LLMObsSDK = require('../../../dd-trace/src/llmobs/sdk')
+
+function getClassMethods (clsProto, { ignore = [] } = {}) {
+  const ignoreList = new Set(['constructor', ...[].concat(ignore)])
+  return Object.getOwnPropertyNames(clsProto)
+    .filter(member => {
+      if (member.startsWith('_') || ignoreList.has(member)) {
+        return false
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(clsProto, member)
+      return descriptor && typeof descriptor.value === 'function'
+    })
+}
+
+describe('noop', () => {
   let tracer
   let llmobs
 
   before(() => {
     tracer = new (require('../../../dd-trace/src/noop/proxy'))()
     llmobs = tracer.llmobs
+  })
+
+  it('has all of the methods that the actual LLMObs SDK does', () => {
+    assert.deepStrictEqual(
+      getClassMethods(LLMObsSDK.prototype).sort(),
+      // the actual LLMObs SDK inherits the "decorate" method from the NoopLLMObs SDK
+      // so we need to ignore it from the noop LLMObs SDK when comparing
+      getClassMethods(Object.getPrototypeOf(llmobs), { ignore: ['decorate'] }).sort()
+    )
   })
 
   it('using "enable" should not throw', () => {
