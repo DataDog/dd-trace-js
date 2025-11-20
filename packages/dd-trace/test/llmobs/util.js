@@ -39,8 +39,8 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 
 /**
  *
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  * @param {string} key name to associate with the assertion
  */
 function assertWithMockValues (actual, expected, key) {
@@ -74,7 +74,9 @@ function assertWithMockValues (actual, expected, key) {
     const expectedKeys = Object.keys(expected)
     if (actualKeys.length !== expectedKeys.length) {
       assert.fail(
-        `${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length})`
+        `
+        ${actualWithName} has different length than expected (${actualKeys.length} !== ${expectedKeys.length}).
+        Diff: ${util.inspect(actualKeys)} !== ${util.inspect(expectedKeys)}`
       )
     }
 
@@ -96,10 +98,10 @@ function assertWithMockValues (actual, expected, key) {
  *
  * Dynamic fields, like metrics, metadata, tags, traceId, and output can be asserted with mock values.
  * All other fields are asserted in a larger diff assertion.
+ * @param {object} actual
  * @param {ExpectedLLMObsSpanEvent} expected
- * @param {*} actual
  */
-function assertLlmObsSpanEvent (actual, expected = {}) {
+function assertLlmObsSpanEvent (actual, expected) {
   const {
     spanKind,
     name,
@@ -302,21 +304,11 @@ function useLlmObs ({
   /** @type {Promise<Array<Array<Object>>>} */
   let apmTracesPromise
 
-  /** @type {Promise<Array<Array<Object>>>} */
-  let llmobsTracesPromise
-
   const resetTracesPromises = () => {
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    })
-
-    llmobsTracesPromise = agent.useLlmobsTraces(llmobsTraces => {
-      return llmobsTraces
-        .flatMap(trace => trace)
-        .map(trace => trace.spans[0])
-        .sort((a, b) => a.start_ns - b.start_ns)
     })
   }
 
@@ -340,12 +332,31 @@ function useLlmObs ({
     return agent.close({ ritmReset: false, ...closeOptions })
   })
 
-  return async function () {
-    const [apmSpans, llmobsSpans] = await Promise.all([apmTracesPromise, llmobsTracesPromise])
+  return async function (numLlmObsSpans = 1) {
+    // get apm spans from the agent
+    const apmSpans = await apmTracesPromise
     resetTracesPromises()
 
-    return { apmSpans, llmobsSpans }
+    // get llmobs span events requests from the agent
+    // because llmobs process spans on span finish and submits periodically,
+    // we need to aggregate all of the span events
+    // tests should know how many spans they expect to see, otherwise tests will timeout
+    const llmobsSpans = []
+
+    while (llmobsSpans.length < numLlmObsSpans) {
+      await new Promise(resolve => setImmediate(resolve))
+      const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
+      llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+    }
+
+    return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
   }
+}
+
+function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
+  return llmobsSpanEventsRequests
+    .flatMap(request => request)
+    .map(request => request.spans[0])
 }
 
 module.exports = {

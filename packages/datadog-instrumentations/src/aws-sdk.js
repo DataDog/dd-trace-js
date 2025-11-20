@@ -34,10 +34,11 @@ function wrapRequest (send) {
   }
 }
 
-function wrapDeserialize (deserialize, channelSuffix) {
+function wrapDeserialize (deserialize, channelSuffix, responseIndex = 0) {
   const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
 
-  return function (response) {
+  return function () {
+    const response = arguments[responseIndex]
     if (headersCh.hasSubscribers) {
       headersCh.publish({ headers: response.headers })
     }
@@ -66,6 +67,12 @@ function wrapSmithySend (send) {
 
     if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
+    } else if (this.config?.protocol?.deserializeResponse) {
+      shimmer.wrap(
+        this.config.protocol,
+        'deserializeResponse',
+        deserializeResponse => wrapDeserialize(deserializeResponse, channelSuffix, 2)
+      )
     }
 
     const ctx = {
