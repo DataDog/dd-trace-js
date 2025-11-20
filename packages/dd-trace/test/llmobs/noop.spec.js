@@ -3,6 +3,23 @@
 const { expect } = require('chai')
 const { describe, it, before } = require('mocha')
 
+const assert = require('node:assert')
+
+const LLMObsSDK = require('../../../dd-trace/src/llmobs/sdk')
+
+function getClassMethods (clsProto, { ignore = [] } = {}) {
+  const ignoreList = new Set(['constructor', ...[].concat(ignore)])
+  return Object.getOwnPropertyNames(clsProto)
+    .filter(member => {
+      if (member.startsWith('_') || ignoreList.has(member)) {
+        return false
+      }
+
+      const descriptor = Object.getOwnPropertyDescriptor(clsProto, member)
+      return descriptor && typeof descriptor.value === 'function'
+    })
+}
+
 describe('noop', () => {
   let tracer
   let llmobs
@@ -12,12 +29,54 @@ describe('noop', () => {
     llmobs = tracer.llmobs
   })
 
-  const nonTracingOps = ['enable', 'disable', 'annotate', 'exportSpan', 'submitEvaluation', 'flush']
-  for (const op of nonTracingOps) {
-    it(`using "${op}" should not throw`, () => {
-      llmobs[op]()
+  it('has all of the methods that the actual LLMObs SDK does', () => {
+    assert.deepStrictEqual(
+      getClassMethods(LLMObsSDK.prototype).sort(),
+      // the actual LLMObs SDK inherits the "decorate" method from the NoopLLMObs SDK
+      // so we need to ignore it from the noop LLMObs SDK when comparing
+      getClassMethods(Object.getPrototypeOf(llmobs), { ignore: ['decorate'] }).sort()
+    )
+  })
+
+  it('using "enable" should not throw', () => {
+    llmobs.enable()
+  })
+
+  it('using "disable" should not throw', () => {
+    llmobs.disable()
+  })
+
+  it('using "annotate" should not throw', () => {
+    llmobs.annotate()
+  })
+
+  it('using "exportSpan" should not throw', () => {
+    llmobs.exportSpan()
+  })
+
+  it('using "submitEvaluation" should not throw', () => {
+    llmobs.submitEvaluation()
+  })
+
+  it('using "flush" should not throw', () => {
+    llmobs.flush()
+  })
+
+  it('using "registerProcessor" should not throw', () => {
+    llmobs.registerProcessor(() => {})
+  })
+
+  it('using "deregisterProcessor" should not throw', () => {
+    llmobs.deregisterProcessor()
+  })
+
+  it('using "annotationContext" should not throw', () => {
+    const result = llmobs.annotationContext({}, () => {
+      return 5
     })
-  }
+
+    assert.equal(result, 5)
+  })
 
   describe('trace', () => {
     it('should not throw with just a span', () => {
