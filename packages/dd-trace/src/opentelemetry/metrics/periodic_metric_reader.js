@@ -10,7 +10,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  * @typedef {import('./instruments').Measurement} Measurement
- **/
+ */
 
 /**
  * @typedef {Object} NumberDataPoint
@@ -19,7 +19,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {number} timeUnixNano - Timestamp in nanoseconds
  * @property {number} startTimeUnixNano - Start timestamp for cumulative metrics
  * @property {number} value - Metric value
- **/
+ */
 
 /**
  * @typedef {Object} HistogramDataPoint
@@ -33,7 +33,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {number} max - Maximum value observed
  * @property {number[]} bucketCounts - Count per histogram bucket
  * @property {number[]} explicitBounds - Histogram bucket boundaries
- **/
+ */
 
 /**
  * @typedef {Object} AggregatedMetricDataPoint
@@ -47,7 +47,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {number} max - Maximum value observed
  * @property {number[]} bucketCounts - Count per histogram bucket
  * @property {number[]} explicitBounds - Histogram bucket boundaries
- **/
+ */
 
 /**
  * @typedef {Object} AggregatedMetric
@@ -58,7 +58,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  * @property {InstrumentationScope} instrumentationScope - Instrumentation scope
  * @property {string} temporality - Temporality from TEMPORALITY constants
  * @property {Map<string, AggregatedMetricDataPoint>} dataPointMap - Map of attribute keys to data points
- **/
+ */
 
 /**
  * PeriodicMetricReader collects and exports metrics at a regular interval.
