@@ -1,6 +1,5 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 
 class AzureEventHubsProducerPlugin extends ProducerPlugin {
@@ -10,7 +9,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
 
   bindStart (ctx) {
     // we do not want to make these spans when batch linking is disabled.
-    if (!batchLinksAreEnabled() && ctx.functionName === 'tryAdd') {
+    if (!this.batchLinksAreEnabled() && ctx.functionName === 'tryAdd') {
       return ctx.currentStore
     }
 
@@ -35,7 +34,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
         span.setTag('message.id', ctx.eventData.messageID)
       }
 
-      if (batchLinksAreEnabled()) {
+      if (this.batchLinksAreEnabled()) {
         ctx.batch._spanContexts.push(span.context())
         injectTraceContext(this.tracer, span, ctx.eventData)
       }
@@ -52,7 +51,7 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
           injectTraceContext(this.tracer, span, event)
         })
       } else {
-        if (batchLinksAreEnabled()) {
+        if (this.batchLinksAreEnabled()) {
           eventData._spanContexts.forEach(spanContext => {
             span.addLink(spanContext)
           })
@@ -65,6 +64,10 @@ class AzureEventHubsProducerPlugin extends ProducerPlugin {
   asyncEnd (ctx) {
     super.finish()
   }
+
+  batchLinksAreEnabled () {
+    return this._tracerConfig?.trace?.azure?.eventHubs?.batchLinksEnabled !== false
+  }
 }
 
 function injectTraceContext (tracer, span, event) {
@@ -72,11 +75,6 @@ function injectTraceContext (tracer, span, event) {
     event.properties = {}
   }
   tracer.inject(span, 'text_map', event.properties)
-}
-
-function batchLinksAreEnabled () {
-  const eh = getEnvironmentVariable('DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED')
-  return eh !== 'false'
 }
 
 module.exports = AzureEventHubsProducerPlugin

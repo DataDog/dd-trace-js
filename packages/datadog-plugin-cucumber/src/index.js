@@ -53,6 +53,7 @@ const {
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
 
+// Can stay, because we're actually checking for the presence of the environment variable
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
 class CucumberPlugin extends CiPlugin {

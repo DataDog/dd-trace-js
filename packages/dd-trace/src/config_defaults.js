@@ -204,6 +204,8 @@ module.exports = {
   'vertexai.spanCharLimit': 128,
   'vertexai.spanPromptCompletionSampleRate': 1,
   'trace.aws.addSpanPointers': true,
+  'trace.azure.eventHubs.batchLinksEnabled': true,
+  'trace.azure.serviceBus.batchLinksEnabled': true,
   'trace.dynamoDb.tablePrimaryKeys': undefined,
   'trace.nativeSpanEvents': false
 }

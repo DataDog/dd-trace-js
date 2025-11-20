@@ -347,6 +347,7 @@ addHook({
 }, (Mocha, frameworkVersion) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
+    // Can stay, because we're actually checking for the presence of the environment variable
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }

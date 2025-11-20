@@ -511,6 +511,8 @@ class Config {
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
       DD_TRACE_AWS_ADD_SPAN_POINTERS,
+      DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED,
+      DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED,
       DD_TRACE_BAGGAGE_MAX_BYTES,
       DD_TRACE_BAGGAGE_MAX_ITEMS,
       DD_TRACE_BAGGAGE_TAG_KEYS,
@@ -895,6 +897,8 @@ class Config {
     this.#setString(target, 'version', DD_VERSION || tags.version)
     this.#setBoolean(target, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     this.#setBoolean(target, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
+    this.#setBoolean(target, 'trace.azure.eventHubs.batchLinksEnabled', DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED)
+    this.#setBoolean(target, 'trace.azure.serviceBus.batchLinksEnabled', DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED)
     this.#setString(target, 'trace.dynamoDb.tablePrimaryKeys', DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS)
     this.#setArray(target, 'graphqlErrorExtensions', DD_TRACE_GRAPHQL_ERROR_EXTENSIONS)
     this.#setBoolean(target, 'trace.nativeSpanEvents', DD_TRACE_NATIVE_SPAN_EVENTS)

@@ -190,6 +190,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
+    // I don't know about this one
     const envVarValue = getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
     return envVarValue ? isTrue(envVarValue) : true
   }
@@ -275,6 +276,7 @@ function normalizeConfig (config, serviceIdentifier) {
     specificConfig.batchPropagationEnabled ??
     getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
     config.batchPropagationEnabled ??
+    // Migrating this gave me trouble
     getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
