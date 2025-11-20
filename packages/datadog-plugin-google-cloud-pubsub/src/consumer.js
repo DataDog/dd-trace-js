@@ -158,9 +158,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
   bindFinish (ctx) {
     const { message } = ctx
-    const span = ctx.currentStore.span
+    const span = ctx.currentStore?.span
 
-    if (message?._handled) {
+    if (span && message?._handled) {
       span.setTag('pubsub.ack', 1)
     }
 

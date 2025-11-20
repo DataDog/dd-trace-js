@@ -268,15 +268,7 @@ describe('Plugin', () => {
               sub.on('message', msg => msg.ack())
               await publish(topic, { data: Buffer.from('hello') })
             },
-            rawExpectedSchema.receive,
-            {
-              selectSpan: (traces) => {
-                // Consumer spans have type='worker', which distinguishes them from client spans
-                // Don't provide a fallback - let assertSomeTraces keep waiting if not found
-                const allSpans = traces.flat()
-                return allSpans.find(span => span.type === 'worker')
-              }
-            }
+            rawExpectedSchema.receive
           )
         })
 

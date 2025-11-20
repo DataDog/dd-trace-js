@@ -74,15 +74,15 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _parseMessage (req) {
-    const subscription = req.headers['x-goog-pubsub-subscription-name']
-    const message = {
-      messageId: req.headers['x-goog-pubsub-message-id'],
+      const subscription = req.headers['x-goog-pubsub-subscription-name']
+      const message = {
+        messageId: req.headers['x-goog-pubsub-message-id'],
       publishTime: req.headers['x-goog-pubsub-publish-time']
     }
 
     const { projectId, topicName } = this._extractProjectTopic(req.headers, subscription)
     return { message, subscription, attrs: req.headers, projectId, topicName }
-  }
+    }
 
   _extractContext (messageData, tracer) {
     return tracer._tracer.extract('text_map', messageData.attrs) || undefined
