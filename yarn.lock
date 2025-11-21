@@ -257,11 +257,6 @@
     pprof-format "^2.2.1"
     source-map "^0.7.4"
 
-"@datadog/sketches-js@2.1.1":
-  version "2.1.1"
-  resolved "https://registry.yarnpkg.com/@datadog/sketches-js/-/sketches-js-2.1.1.tgz#9ec2251b3c932b4f43e1d164461fa6cb6f28b7d0"
-  integrity sha512-d5RjycE+MObE/hU+8OM5Zp4VjTwiPLRa8299fj7muOmR16fb942z8byoMbCErnGh0lBevvgkGrLclQDvINbIyg==
-
 "@datadog/wasm-js-rewriter@5.0.1":
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/@datadog/wasm-js-rewriter/-/wasm-js-rewriter-5.0.1.tgz#f227d2e3eb0f83b8a37f190a9ff8fdbde5955782"
