@@ -1,19 +1,29 @@
 'use strict'
 
+const { CopyRspackPlugin } = require('@rspack/core')
 const { join } = require('path')
 const pkg = require('./package.json')
 
 const names = Object.keys(pkg.dependencies).concat([
+  'mutexify/promise',
   'protobufjs/minimal',
   'retry/lib/retry_operation',
   'source-map/lib/util'
 ])
 
 module.exports = {
-  entry: Object.fromEntries(names.map(name => [name, `./node_modules/${name}`])),
+  entry: Object.fromEntries(names.map(name => [name, name])),
   target: 'node',
   mode: 'production',
   devtool: false,
+  context: join(__dirname, 'node_modules'),
+  plugins: [
+    new CopyRspackPlugin({
+      patterns: [
+        { from: 'source-map/lib/mappings.wasm', to: 'source-map' }
+      ],
+    }),
+  ],
   output: {
     filename: '[name]/index.js',
     libraryTarget: 'commonjs2',
