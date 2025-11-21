@@ -6,9 +6,8 @@ const readline = require('readline')
 const pkg = require(path.join(__dirname, '..', '/package.json'))
 
 const filePath = path.join(__dirname, '..', '/LICENSE-3rdparty.csv')
-const peerDeps = new Set(Object.keys(pkg.peerDependencies || {}))
-const deps = new Set(Object.keys(pkg.dependencies || {}).filter(dep => !peerDeps.has(dep)))
-const devDeps = new Set(Object.keys(pkg.devDependencies || {}).filter(dep => !peerDeps.has(dep)))
+const deps = new Set(Object.keys(pkg.dependencies || {}))
+const devDeps = new Set(Object.keys(pkg.devDependencies || {}))
 
 let index = 0
 
