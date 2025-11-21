@@ -166,14 +166,13 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const span = this.startSpan({
       childOf,
       resource: `Message from ${topicName}`,
+      type: 'worker',
       service: serviceName,
       meta,
       metrics
     }, ctx)
 
-    // Manually ensure the span is marked as a worker/consumer span.
-    // The base ConsumerPlugin.startSpan doesn't use the 'type' option correctly,
-    // so we must set the span type tag explicitly for the agent & tests to see type: 'worker'.
+    // Double-ensure the span type is set (both in options and via setTag)
     span.setTag('span.type', 'worker')
     span.setTag(COMPONENT, this.constructor.id)
 
@@ -181,7 +180,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     console.log(`${LOG_PREFIX} CONSUMER SPAN CREATED SUCCESSFULLY`)
     console.log(`${LOG_PREFIX}   spanId: ${span?.context()?.toSpanId()}`)
     console.log(`${LOG_PREFIX}   name: ${span?._name}`)
-    console.log(`${LOG_PREFIX}   type: ${span?._type}`)
+    console.log(`${LOG_PREFIX}   'span.type' tag: ${span?.context()?._tags?.['span.type']}`)
     console.log(`${LOG_PREFIX} ========================================`)
 
     if (message.id) {
