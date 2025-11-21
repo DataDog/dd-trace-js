@@ -1,0 +1,188 @@
+interactions:
+- request:
+    body: "{\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+      \   \"version\": \"1\",\n    \"variables\": {\n      \"user_message\": {\n        \"type\":
+      \"input_text\",\n        \"text\": \"Analyze this image and document\"\n      },\n
+      \     \"user_image\": {\n        \"type\": \"input_image\",\n        \"image_url\":
+      \"https://imgix.datadoghq.com/img/about/presskit/logo-v/dd_vertical_white.png\",\n
+      \       \"detail\": \"auto\"\n      },\n      \"user_file\": {\n        \"type\":
+      \"input_file\",\n        \"file_id\": \"file-LXG16g7US1sG6MQM7KQY1i\"\n      }\n
+      \   }\n  }\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '541'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600000'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_07b02340743084540169203508657481a1bb6d4cf842a3c680\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763718410,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"Analyze the following content from the user:\\n\\nText message: Analyze
+        this image and document\\nImage reference: \"\n        },\n        {\n          \"type\":
+        \"input_image\",\n          \"detail\": \"auto\",\n          \"file_id\":
+        null,\n          \"image_url\": null\n        },\n        {\n          \"type\":
+        \"input_text\",\n          \"text\": \"\\nDocument reference: \"\n        },\n
+        \       {\n          \"type\": \"input_file\",\n          \"file_id\": \"file-LXG16g7US1sG6MQM7KQY1i\"\n
+        \       },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\n\\nPlease provide a comprehensive analysis.\"\n        }\n      ],\n
+        \     \"role\": \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
+        \"rs_07b0234074308454016920350b326c81a1838777ac1684e59f\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_07b0234074308454016920351001b881a19368916bd29304db\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"Here\\u2019s a breakdown
+        of what you\\u2019ve provided and what can be said about each asset:\\n\\n1.
+        Image Analysis  \\n   \\u2022 Identification & Context  \\n     \\u2013 The
+        white-on-purple mark is the official logo of Datadog (\\u201cDATADOG\\u201d).
+        \ \\n     \\u2013 Datadog is a commercial SaaS monitoring and analytics platform
+        for large-scale applications and infrastructure.  \\n   \\u2022 Visual Elements
+        \ \\n     \\u2013 Stylized dog head silhouette holding a line-chart icon in
+        its mouth.  \\n     \\u2013 Purple background (Hex roughly #6633CC), white
+        graphic and text.  \\n     \\u2013 Typeface: a clean, all-caps, geometric
+        sans-serif (wide letterforms, moderate tracking).  \\n   \\u2022 Symbolism
+        & Brand Messaging  \\n     \\u2013 Dog: \\u201cwatchdog\\u201d metaphor for
+        vigilance and real-time monitoring.  \\n     \\u2013 Chart: represents metrics
+        collection, analytics, dashboards.  \\n     \\u2013 Purple: conveys creativity,
+        trustworthiness, a bit of \\u201chigh-tech\\u201d flair.  \\n   \\u2022 Composition
+        & Usability  \\n     \\u2013 Simple two-color treatment ensures high contrast
+        and easy reproduction in print or screen.  \\n     \\u2013 Scales well to
+        small sizes (app icon, favicon) and large formats (banners, trade-show booths).
+        \ \\n   \\u2022 Brand Consistency  \\n     \\u2013 This lockup (icon above,
+        wordmark below) is the core logo; alternative horizontal or icon-only versions
+        exist for different layouts.  \\n     \\u2013 Consistent use of purple and
+        white, with the dog+chart motif, reinforces the brand across all materials.\\n\\n2.
+        Document Analysis  \\n   \\u2022 \\u201cDummy PDF file\\u201d \\u2013 as described,
+        it appears to be a placeholder with no substantive content.  \\n   \\u2022
+        Without the actual text or pages of the PDF, no deeper inspection (OCR, structure,
+        metadata) is possible.  \\n   \\u2022 If you need:  \\n     \\u2013 Extracted
+        text or images\\u2014please attach or paste the PDF content.  \\n     \\u2013
+        An audit of PDF properties (file size, embedded fonts, security settings)\\u2014you
+        can rerun with a PDF inspector or share detailed metadata.\\n\\n3. Recommendations
+        & Next Steps  \\n   \\u2022 For the logo:  \\n     \\u2013 Ensure you\\u2019re
+        using the correct version for your medium (print vs. web; reversed vs. standard).
+        \ \\n     \\u2013 Check Datadog\\u2019s trademark guidelines if you plan co-branding
+        or redistribution.  \\n   \\u2022 For the PDF:  \\n     \\u2013 Supply the
+        full PDF or its exported text/images for a line-by-line or page-by-page review.
+        \ \\n     \\u2013 Confirm whether this \\u201cdummy\\u201d contains hidden
+        layers, comments or metadata you want audited.\\n\\nIf you can share the actual
+        document content (or clarify what you\\u2019d like to learn about it), I can
+        provide a more detailed analysis of that PDF.\"\n        }\n      ],\n      \"role\":
+        \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\":
+        null,\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+        \   \"variables\": {\n      \"user_message\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"Analyze this image and document\"\n      },\n      \"user_image\":
+        {\n        \"type\": \"input_image\",\n        \"detail\": \"auto\",\n        \"file_id\":
+        null,\n        \"image_url\": null\n      },\n      \"user_file\": {\n        \"type\":
+        \"input_file\",\n        \"file_id\": \"file-LXG16g7US1sG6MQM7KQY1i\"\n      }\n
+        \   },\n    \"version\": \"1\"\n  },\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\":
+        null,\n  \"reasoning\": {\n    \"effort\": \"medium\",\n    \"summary\": null\n
+        \ },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\":
+        false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\":
+        \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\":
+        \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
+        \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 342,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 1018,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 448\n    },\n    \"total_tokens\": 1360\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 9a1f4313eff5215b-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Fri, 21 Nov 2025 09:47:01 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=9QO1n7DxyyywS8BWKliK8Po0lQ7VGj8pkHKRTey9oa8-1763718421-1.0.1.1-LocG38uHSlSwivaSmIL_cVXx.Ib_XfaHkgSjzN4n9BtBfUaRtUzxVV9NMphYvPPjZc1Wbeld.5bc8TwYQu5XAzc6crJOBbHfyzEP.nwTgb4;
+        path=/; expires=Fri, 21-Nov-25 10:17:01 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=pShPioH7gUxvjLZx2wnvC_mxHwO3XOAkgTHlvgssdhE-1763718421420-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '12995'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '13000'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999235'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_e3806c1f17df4d0fab46502733ecc4ea
+    status:
+      code: 200
+      message: OK
+version: 1

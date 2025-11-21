@@ -21,12 +21,10 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   // Build map of values to placeholders
   const valueToPlaceholder = {}
   for (const [varName, varValue] of Object.entries(variables)) {
-    // Handle ResponseInputText objects (have .text property) or plain strings
-    const valueStr = (varValue && typeof varValue === 'object' && varValue.text)
-      ? varValue.text
-      : varValue
-    if (!valueStr) continue
-    valueToPlaceholder[String(valueStr)] = `{{${varName}}}`
+    const valueStr = varValue ? String(varValue) : ''
+    if (valueStr) {
+      valueToPlaceholder[valueStr] = `{{${varName}}}`
+    }
   }
 
   // Sort values by length (longest first) to handle overlapping values correctly
@@ -39,16 +37,14 @@ function extractChatTemplateFromInstructions (instructions, variables) {
     const contentItems = instruction.content
     if (!Array.isArray(contentItems)) continue
 
-    // Collect text parts from content items
-    const textParts = []
-    for (const contentItem of contentItems) {
-      if (contentItem.text) {
-        textParts.push(contentItem.text)
-      }
-    }
+    // Extract text from all content items
+    const textParts = contentItems
+      .map(extractTextFromContentItem)
+      .filter(Boolean)
+
     if (textParts.length === 0) continue
 
-    // Combine all text parts and replace variable values with placeholders (longest first)
+    // Combine text and replace variable values with placeholders (longest first)
     let fullText = textParts.join('')
     for (const valueStr of sortedValues) {
       const placeholder = valueToPlaceholder[valueStr]
@@ -60,6 +56,30 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   }
 
   return chatTemplate
+}
+
+/**
+ * Extracts text content from a content item (text, image, or file).
+ *
+ * @param {Object} contentItem - A content item from OpenAI response
+ * @returns {string|null} The extracted text or null if no content
+ */
+function extractTextFromContentItem (contentItem) {
+  // Extract text content
+  if (contentItem.text) {
+    return contentItem.text
+  }
+
+  // For image/file items, extract the reference value
+  if (contentItem.type === 'input_image') {
+    return contentItem.image_url || '[image]'
+  }
+
+  if (contentItem.type === 'input_file') {
+    return contentItem.file_id || contentItem.file_url || contentItem.filename || '[file]'
+  }
+
+  return null
 }
 
 /**
@@ -82,7 +102,7 @@ function normalizePromptVariables (variables) {
       } else if (value.type === 'input_image') { // ResponseInputImage
         normalizedValue = value.image_url || value.file_id || '[image]'
       } else if (value.type === 'input_file') { // ResponseInputFile
-        normalizedValue = value.file_url || value.file_id || value.filename || '[file]'
+        normalizedValue = value.file_url || value.file_id || value.filename || (value.file_data ? '[file_data]' : '[file]')
       }
     }
     normalized[key] = normalizedValue
@@ -92,5 +112,6 @@ function normalizePromptVariables (variables) {
 
 module.exports = {
   extractChatTemplateFromInstructions,
-  normalizePromptVariables
+  normalizePromptVariables,
+  extractTextFromContentItem
 }

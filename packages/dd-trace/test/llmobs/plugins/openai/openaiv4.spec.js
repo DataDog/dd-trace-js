@@ -887,6 +887,50 @@ describe('integrations', () => {
           { role: 'user', content: 'I saw a cat in the hat and another ' }
         ])
       })
+
+      it('submits a response span with prompt tracking - mixed input types', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '1',
+            variables: {
+              user_message: { type: 'input_text', text: 'Analyze this image and document' },
+              user_image: { type: 'input_image', image_url: 'https://imgix.datadoghq.com/img/about/presskit/logo-v/dd_vertical_white.png', detail: 'auto' },
+              user_file: { type: 'input_file', file_id: 'file-LXG16g7US1sG6MQM7KQY1i' }
+            }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+          version: '1',
+          variables: {
+            user_message: 'Analyze this image and document',
+            // OpenAI strips image_url from response.prompt.variables
+            user_image: '[image]',
+            user_file: 'file-LXG16g7US1sG6MQM7KQY1i'
+          },
+          chat_template: [
+            {
+              role: 'user',
+              // OpenAI strips image_url, but we still get the placeholder because normalized variables contain user_image: '[image]'
+              content: 'Analyze the following content from the user:\n\nText message: {{user_message}}\nImage reference: {{user_image}}\nDocument reference: {{user_file}}\n\nPlease provide a comprehensive analysis.'
+            }
+          ]
+        }, [
+          {
+            role: 'user',
+            // OpenAI strips image_url from response.instructions, so we get [image] marker
+            content: 'Analyze the following content from the user:\n\nText message: Analyze this image and document\nImage reference: [image]\nDocument reference: file-LXG16g7US1sG6MQM7KQY1i\n\nPlease provide a comprehensive analysis.'
+          }
+        ])
+      })
     })
   })
 })

@@ -1,7 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { extractChatTemplateFromInstructions, normalizePromptVariables } = require('./utils')
+const { extractChatTemplateFromInstructions, normalizePromptVariables, extractTextFromContentItem } = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
@@ -248,10 +248,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
           let content = ''
           if (Array.isArray(item.content)) {
-            // Extract text from content items (e.g., { type: 'input_text', text: '...' })
             const textParts = item.content
-              .filter(c => c.type === 'input_text' && c.text)
-              .map(c => c.text)
+              .map(extractTextFromContentItem)
+              .filter(Boolean)
             content = textParts.join('')
           } else if (typeof item.content === 'string') {
             content = item.content
@@ -412,8 +411,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (id && version) {
         const instructions = response.instructions
         if (Array.isArray(instructions)) {
-          const chatTemplate = extractChatTemplateFromInstructions(instructions, variables || {})
           const normalizedVariables = normalizePromptVariables(variables)
+          const chatTemplate = extractChatTemplateFromInstructions(instructions, normalizedVariables)
 
           this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
             id,
