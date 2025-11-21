@@ -83,9 +83,7 @@ class TracingPlugin extends Plugin {
       }
 
       if (this[bindName]) {
-        this.addTraceBind(event, message => {
-          this[bindName](message, channelName)
-        }, channelName)
+        this.addTraceBind(event, message => this[bindName](message, channelName), channelName)
       }
     }
   }

@@ -7,25 +7,25 @@
 function connectionQueryClient (ctx) {
   return {
     operation: 'query',
-    resource: ctx.args?.[0],
+    resource: ctx.arguments?.[0],
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config.database || ctx.this?.config.database,
-      'db.user': ctx.self?.config.user || ctx.this?.config.user,
-      'db.statement': ctx.args?.[0]
+      'db.name': ctx.self?.config.database,
+      'db.user': ctx.self?.config.user,
+      'db.statement': ctx.arguments?.[0]
     },
     metrics: {
-      'db.pid': ctx.self?.threadId || ctx.this?.threadId
+      'db.pid': ctx.self?.threadId
     }
   }
 }
 
 function poolQueryClient (ctx) {
-  const config = ctx.self?.config?.connectionConfig || ctx.this?.config?.connectionConfig
+  const config = ctx.self?.config?.connectionConfig
 
-  const pool = ctx.self || ctx.this
+  const pool = ctx.self
   let threadId = pool?.threadId
 
   if (!threadId && pool) {
@@ -55,12 +55,12 @@ function poolQueryClient (ctx) {
     'db.type': 'mysql',
     'db.name': config?.database,
     'db.user': config?.user,
-    'db.statement': ctx.args?.[0]
+    'db.statement': ctx.arguments?.[0]
   }
 
   return {
     operation: 'query',
-    resource: ctx.args?.[0],
+    resource: ctx.arguments?.[0],
     meta: tags,
     metrics: {
       'db.pid': threadId
@@ -71,17 +71,17 @@ function poolQueryClient (ctx) {
 function connectionBegintransactionClient (ctx) {
   return {
     operation: 'beginTransaction',
-    resource: ctx.args?.[0],
+    resource: ctx.arguments?.[0],
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config.database || ctx.this?.config.database,
-      'db.user': ctx.self?.config.user || ctx.this?.config.user,
-      'db.statement': ctx.args?.[0]
+      'db.name': ctx.self?.config.database,
+      'db.user': ctx.self?.config.user,
+      'db.statement': ctx.arguments?.[0]
     },
     metrics: {
-      'db.pid': ctx.self?.threadId || ctx.this?.threadId
+      'db.pid': ctx.self?.threadId
     }
   }
 }
@@ -89,41 +89,41 @@ function connectionBegintransactionClient (ctx) {
 function connectionCommitClient (ctx) {
   return {
     operation: 'commit',
-    resource: ctx.args?.[0],
+    resource: ctx.arguments?.[0],
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config?.database || ctx.this?.config?.database,
-      'db.user': ctx.self?.config?.user || ctx.this?.config?.user,
+      'db.name': ctx.self?.config?.database,
+      'db.user': ctx.self?.config?.user,
     },
     metrics: {
-      'db.pid': ctx.self?.threadId || ctx.this?.threadId
+      'db.pid': ctx.self?.threadId
     }
   }
 }
 
 function connectionRollbackClient (ctx) {
   return {
-    operation: 'beginTransaction',
-    resource: ctx.args?.[0],
+    operation: 'rollback',
+    resource: ctx.arguments?.[0],
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config?.database || ctx.this?.config?.database,
-      'db.user': ctx.self?.config?.user || ctx.this?.config?.user,
+      'db.name': ctx.self?.config?.database,
+      'db.user': ctx.self?.config?.user,
     },
     metrics: {
-      'db.pid': ctx.self?.threadId || ctx.this?.threadId
+      'db.pid': ctx.self?.threadId
     }
   }
 }
 
 module.exports = {
-  'apm:mysql:connection:query': connectionQueryClient,
-  'apm:mysql:pool:query': poolQueryClient,
-  'apm:mysql:connection:beginTransaction': connectionBegintransactionClient,
-  'apm:mysql:connection:commit': connectionCommitClient,
-  'apm:mysql:connection:rollback': connectionRollbackClient
+  'tracing:apm:mysql:connection:query': connectionQueryClient,
+  'tracing:apm:mysql:pool:query': poolQueryClient,
+  'tracing:apm:mysql:connection:beginTransaction': connectionBegintransactionClient,
+  'tracing:apm:mysql:connection:commit': connectionCommitClient,
+  'tracing:apm:mysql:connection:rollback': connectionRollbackClient
 }

@@ -18,24 +18,28 @@ class MysqlClientPlugin extends DatabasePlugin {
   }
 
   subscribe () {
-    this.registerOperation('apm:mysql:connection:query')
-    this.registerOperation('apm:mysql:pool:query')
-    this.registerOperation('apm:mysql:connection:beginTransaction')
-    this.registerOperation('apm:mysql:connection:commit')
-    this.registerOperation('apm:mysql:connection:rollback')
+    this.registerOperation('tracing:apm:mysql:connection:query')
+    this.registerOperation('tracing:apm:mysql:pool:query')
+    this.registerOperation('tracing:apm:mysql:connection:beginTransaction')
+    this.registerOperation('tracing:apm:mysql:connection:commit')
+    this.registerOperation('tracing:apm:mysql:connection:rollback')
   }
 
   bindStart (ctx, channel) {
     const options = Extractors[channel]?.(ctx)
-    this.startSpan(`${this.id}.${options.operation}`, options, ctx)
+    this.startSpan(`${this.constructor.id}.${options.operation}`, options, ctx)
 
     return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 
   finish (ctx) {
     if (!ctx.result) return
 
-    const span = ctx.currentStore.span
+    const span = ctx.currentStore?.span
     if (span) {
       super.finish(ctx)
     }

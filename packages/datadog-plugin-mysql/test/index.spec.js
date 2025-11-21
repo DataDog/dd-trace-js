@@ -13,20 +13,20 @@ createIntegrationTestSuite('mysql', 'mysql', testSetup, {
   describe('Connection.query() - query', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(
-      {
-              "name": "mysql.query",
-              "meta": {
-                      "span.kind": "client",
-                      "db.type": "mysql",
-                      "component": "mysql",
-                      "db.name": "db",
-                      "db.user": "root",
-                      "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
-              },
-              "metrics": {
-                      "db.pid": Symbol.for('test.ANY_NUMBER')
-              }
-      }
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
+          }
+        }
       )
 
       // Execute operation via test setup
@@ -37,24 +37,24 @@ createIntegrationTestSuite('mysql', 'mysql', testSetup, {
 
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(
-      {
-              "name": "mysql.query",
-              "meta": {
-                      "span.kind": "client",
-                      "error.type": Symbol.for('test.ANY_STRING'),
-                      "error.message": Symbol.for('test.ANY_STRING'),
-                      "error.stack": Symbol.for('test.ANY_STRING'),
-                      "db.type": "mysql",
-                      "component": "mysql",
-                      "db.name": "db",
-                      "db.user": "root",
-                      "db.statement": "SELECT * FROM nonexistent_table"
-              },
-              "metrics": {
-                      "db.pid": Symbol.for('test.ANY_NUMBER')
-              },
-              "error": 1
-      }
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "error.type": Symbol.for('test.ANY_STRING'),
+            "error.message": Symbol.for('test.ANY_STRING'),
+            "error.stack": Symbol.for('test.ANY_STRING'),
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "SELECT * FROM nonexistent_table"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
+          },
+          "error": 1
+        }
       )
 
       // Execute operation with expectError flag
@@ -71,17 +71,17 @@ createIntegrationTestSuite('mysql', 'mysql', testSetup, {
   describe('Pool.query() - query', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(
-      {
-              "name": "mysql.query",
-              "meta": {
-                      "span.kind": "client",
-                      "db.type": "mysql",
-                      "component": "mysql",
-                      "db.name": "db",
-                      "db.user": "root",
-                      "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
-              }
-      }
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
+          }
+        }
       )
 
       // Execute operation via test setup
@@ -92,24 +92,24 @@ createIntegrationTestSuite('mysql', 'mysql', testSetup, {
 
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(
-      {
-              "name": "mysql.query",
-              "meta": {
-                      "span.kind": "client",
-                      "error.type": Symbol.for('test.ANY_STRING'),
-                      "error.message": Symbol.for('test.ANY_STRING'),
-                      "error.stack": Symbol.for('test.ANY_STRING'),
-                      "db.type": "mysql",
-                      "component": "mysql",
-                      "db.name": "db",
-                      "db.user": "root",
-                      "db.statement": "SELECT * FROM nonexistent_table"
-              },
-              "metrics": {
-                      "db.pid": Symbol.for('test.ANY_NUMBER')
-              },
-              "error": 1
-      }
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "error.type": Symbol.for('test.ANY_STRING'),
+            "error.message": Symbol.for('test.ANY_STRING'),
+            "error.stack": Symbol.for('test.ANY_STRING'),
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "SELECT * FROM nonexistent_table"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
+          },
+          "error": 1
+        }
       )
 
       // Execute operation with expectError flag
