@@ -7,7 +7,7 @@ const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
-const { parentThreadId } = require('./config')
+const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
 const { version } = require('../../../../../package.json')
@@ -33,8 +33,8 @@ const getDDTagsExpression = `(() => {
 
 // There doesn't seem to be an official standard for the content of these fields, so we're just populating them with
 // something that should be useful to a Node.js developer.
-const threadId = parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${parentThreadId}`
-const threadName = parentThreadId === 0 ? 'MainThread' : `WorkerThread:${parentThreadId}`
+const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${config.parentThreadId}`
+const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
 
 const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
@@ -167,7 +167,13 @@ session.on('Debugger.paused', async ({ params }) => {
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
   const processLocalState = numberOfProbesWithSnapshots !== 0 && await getLocalStateForCallFrame(
     params.callFrames[0],
-    { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength }
+    {
+      maxReferenceDepth,
+      maxCollectionSize,
+      maxFieldCount,
+      maxLength,
+      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs
+    }
   )
 
   await session.post('Debugger.resume')
