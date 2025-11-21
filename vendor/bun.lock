@@ -4,6 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
+        "@datadog/sketches-js": "2.1.1",
         "@isaacs/ttlcache": "^2.0.1",
         "@opentelemetry/api": ">=1.0.0 <1.10.0",
         "@opentelemetry/api-logs": "<1.0.0",
@@ -38,6 +39,8 @@
     },
   },
   "packages": {
+    "@datadog/sketches-js": ["@datadog/sketches-js@2.1.1", "", {}, "sha512-d5RjycE+MObE/hU+8OM5Zp4VjTwiPLRa8299fj7muOmR16fb942z8byoMbCErnGh0lBevvgkGrLclQDvINbIyg=="],
+
     "@discoveryjs/json-ext": ["@discoveryjs/json-ext@0.5.7", "", {}, "sha512-dBVuXR082gk3jsFp7Rd/JI4kytwGHecnCoTtXFb7DB6CNHp4rg5k1bhg0nWdLGLnOV71lmDzGQaLMy8iPLY0pw=="],
 
     "@emnapi/core": ["@emnapi/core@1.7.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-o1uhUASyo921r2XtHYOHy7gdkGLge8ghBEQHMWmyJFoXlpU58kIrhhN3w26lpQb6dspetweapMn2CSNwQ8I4wg=="],
