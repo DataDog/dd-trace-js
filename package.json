@@ -132,6 +132,7 @@
     "@datadog/pprof": "5.12.0",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
+    "dc-polyfill": "^0.1.10",
     "escape-string-regexp": "^5.0.0",
     "import-in-the-middle": "^1.14.2"
   },
