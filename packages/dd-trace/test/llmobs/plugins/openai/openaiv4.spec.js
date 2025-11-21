@@ -896,11 +896,12 @@ describe('integrations', () => {
         await openai.responses.create({
           prompt: {
             id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
-            version: '1',
+            version: '2',
             variables: {
-              user_message: { type: 'input_text', text: 'Analyze this image and document' },
-              user_image: { type: 'input_image', image_url: 'https://imgix.datadoghq.com/img/about/presskit/logo-v/dd_vertical_white.png', detail: 'auto' },
-              user_file: { type: 'input_file', file_id: 'file-LXG16g7US1sG6MQM7KQY1i' }
+              user_message: { type: 'input_text', text: 'Analyze these images and document' },
+              user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+              user_file: { type: 'input_file', file_id: 'file-LXG16g7US1sG6MQM7KQY1i' },
+              user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
             }
           }
         })
@@ -909,33 +910,32 @@ describe('integrations', () => {
 
         assertPromptTracking(llmobsSpans[0], {
           id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
-          version: '1',
+          version: '2',
           variables: {
-            user_message: 'Analyze this image and document',
-            // OpenAI strips image_url from response.prompt.variables
-            user_image: '[image]',
-            user_file: 'file-LXG16g7US1sG6MQM7KQY1i'
+            user_message: 'Analyze these images and document',
+            user_image_1: '[image]',
+            user_file: 'file-LXG16g7US1sG6MQM7KQY1i',
+            user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
           },
           chat_template: [
             {
               role: 'user',
-              // OpenAI strips image_url, but we still get the placeholder because
-              // normalized variables contain user_image: '[image]'
               content: 'Analyze the following content from the user:\n\n' +
                 'Text message: {{user_message}}\n' +
-                'Image reference: {{user_image}}\n' +
-                'Document reference: {{user_file}}\n\n' +
+                'Image reference 1: [image]\n' +
+                'Document reference: {{user_file}}\n' +
+                'Image reference 2: {{user_image_2}}\n\n' +
                 'Please provide a comprehensive analysis.'
             }
           ]
         }, [
           {
             role: 'user',
-            // OpenAI strips image_url from response.instructions, so we get [image] marker
             content: 'Analyze the following content from the user:\n\n' +
-              'Text message: Analyze this image and document\n' +
-              'Image reference: [image]\n' +
-              'Document reference: file-LXG16g7US1sG6MQM7KQY1i\n\n' +
+              'Text message: Analyze these images and document\n' +
+              'Image reference 1: [image]\n' +
+              'Document reference: file-LXG16g7US1sG6MQM7KQY1i\n' +
+              'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
               'Please provide a comprehensive analysis.'
           }
         ])

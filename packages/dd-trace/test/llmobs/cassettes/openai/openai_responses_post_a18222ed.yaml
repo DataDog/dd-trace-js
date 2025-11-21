@@ -1,57 +1,56 @@
 interactions:
 - request:
-    body: '{"prompt":{"id":"pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191","version":"2","variables":{"price":"$99.99","item":"groceries"}}}'
+    body: "{\n  \"prompt\": {\n    \"id\": \"pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191\",\n
+      \   \"version\": \"2\",\n    \"variables\": {\n      \"price\": \"$99.99\",\n
+      \     \"item\": \"groceries\"\n    }\n  }\n}"
     headers:
       ? !!python/object/apply:multidict._multidict.istr
       - Accept
       : - application/json
       ? !!python/object/apply:multidict._multidict.istr
       - Accept-Encoding
-      : - gzip, deflate
-      ? !!python/object/apply:multidict._multidict.istr
-      - Accept-Language
-      : - '*'
+      : - gzip,deflate
       ? !!python/object/apply:multidict._multidict.istr
       - Connection
       : - keep-alive
       Content-Length:
-      - '137'
+      - '184'
       ? !!python/object/apply:multidict._multidict.istr
       - Content-Type
       : - application/json
       ? !!python/object/apply:multidict._multidict.istr
       - User-Agent
-      : - OpenAI/JS 6.8.1
+      : - OpenAI/JS 4.87.0
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Arch
+      - x-stainless-arch
       : - arm64
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Lang
+      - x-stainless-lang
       : - js
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-OS
+      - x-stainless-os
       : - MacOS
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Package-Version
-      : - 6.8.1
+      - x-stainless-package-version
+      : - 4.87.0
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Retry-Count
+      - x-stainless-retry-count
       : - '0'
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Runtime
+      - x-stainless-runtime
       : - node
       ? !!python/object/apply:multidict._multidict.istr
-      - X-Stainless-Runtime-Version
-      : - v24.11.1
+      - x-stainless-runtime-version
+      : - v22.17.0
       ? !!python/object/apply:multidict._multidict.istr
-      - sec-fetch-mode
-      : - cors
+      - x-stainless-timeout
+      : - '600000'
     method: POST
     uri: https://api.openai.com/v1/responses
   response:
     body:
-      string: "{\n  \"id\": \"resp_0ba1274ffd3e9adc01691ae895345081928fbc2391b802ed26\",\n
-        \ \"object\": \"response\",\n  \"created_at\": 1763371157,\n  \"status\":
+      string: "{\n  \"id\": \"resp_0b6033aa2196317601692080d6870c819e84d4004a0d45060f\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1763737814,\n  \"status\":
         \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
         \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
         \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
@@ -60,16 +59,15 @@ interactions:
         \"The price of groceries is $99.99.\"\n        }\n      ],\n      \"role\":
         \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
         null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
-        \"rs_0ba1274ffd3e9adc01691ae895e55081928a06589653131913\",\n      \"type\":
-        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_0ba1274ffd3e9adc01691ae899ed9481928f57de484b8b53c7\",\n
+        \"rs_0b6033aa2196317601692080d7e588819ea56f0b3c1a45cfe7\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_0b6033aa2196317601692080de523c819e942bacfe116af06b\",\n
         \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
         [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
-        [],\n          \"logprobs\": [],\n          \"text\": \"Sure\\u2014what would
-        you like to do with that $99.99 figure?\\n\\nFor example:\\n\\n\\u2022 Calculate
-        the total including sales tax (if you tell me your tax rate).  \\n\\u2022
-        Apply a discount or coupon.  \\n\\u2022 Split the bill among friends.  \\n\\u2022
-        Convert it into another currency.\\n\\nLet me know which you have in mind
-        (and any rates or details), and I\\u2019ll do the math!\"\n        }\n      ],\n
+        [],\n          \"logprobs\": [],\n          \"text\": \"You\\u2019ve got a
+        grocery total of \\\\$99.99. How can I help you with that? For example, would
+        you like to:\\n\\n\\u2022 Calculate sales tax or a tip?  \\n\\u2022 Apply
+        a discount or coupon?  \\n\\u2022 Convert it to another currency?  \\n\\u2022
+        Split it among people?  \\n\\nLet me know what you need!\"\n        }\n      ],\n
         \     \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n
         \ \"previous_response_id\": null,\n  \"prompt\": {\n    \"id\": \"pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191\",\n
         \   \"variables\": {\n      \"price\": {\n        \"type\": \"input_text\",\n
@@ -82,12 +80,12 @@ interactions:
         \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\":
         \"auto\",\n  \"tools\": [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\":
         \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 16,\n    \"input_tokens_details\":
-        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 471,\n    \"output_tokens_details\":
-        {\n      \"reasoning_tokens\": 384\n    },\n    \"total_tokens\": 487\n  },\n
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 329,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 256\n    },\n    \"total_tokens\": 345\n  },\n
         \ \"user\": null,\n  \"metadata\": {}\n}"
     headers:
       CF-RAY:
-      - 99fe2542281e02d1-CDG
+      - 9a211cdc3c799eb8-CDG
       Connection:
       - keep-alive
       Content-Encoding:
@@ -95,14 +93,14 @@ interactions:
       Content-Type:
       - application/json
       Date:
-      - Mon, 17 Nov 2025 09:19:22 GMT
+      - Fri, 21 Nov 2025 15:10:23 GMT
       Server:
       - cloudflare
       Set-Cookie:
-      - __cf_bm=m6zeI7Ds6HE9KKYAwyy_CUXtLb8lULW5kLr7YK_ddyM-1763371162-1.0.1.1-vmWdiJW7ZOHiXJnoTJMy5YcOHkfcEy7.jHq4kbVFGF3w.bHzEzZ9Mg70mVvXpC12U3dNeU8bRbWt1zBbQ_tpQljxXl8yehnhxmfaHpMdqwU;
-        path=/; expires=Mon, 17-Nov-25 09:49:22 GMT; domain=.api.openai.com; HttpOnly;
+      - __cf_bm=4ts2oycg3MPgakA4vZ11fJ7Jvo6.N40ui6gieCZ5hYE-1763737823-1.0.1.1-q1yVBXYjqpubGLJg.yL6D7vLeZd05_QL4QJR6pm7RpS6dUfhjuOXG_pw8JDphHnmFjn.sLLYq.RycsLeMSHAG8yqbo84olSx5IcZQkEyc5o;
+        path=/; expires=Fri, 21-Nov-25 15:40:23 GMT; domain=.api.openai.com; HttpOnly;
         Secure; SameSite=None
-      - _cfuvid=fuoIhqhob7arFP9I7SAl3jFcPNqPSAWtxy4M7NOJClg-1763371162398-0.0.1.1-604800000;
+      - _cfuvid=P0oA53lzG8soBZI7CiBvAjElFCEE5Qw2fkfPt4jK7V8-1763737823686-0.0.1.1-604800000;
         path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
       Strict-Transport-Security:
       - max-age=31536000; includeSubDomains; preload
@@ -117,13 +115,13 @@ interactions:
       openai-organization:
       - datadog-staging
       openai-processing-ms:
-      - '5160'
+      - '9130'
       openai-project:
       - proj_gt6TQZPRbZfoY2J9AQlEJMpd
       openai-version:
       - '2020-10-01'
       x-envoy-upstream-service-time:
-      - '5163'
+      - '9136'
       x-ratelimit-limit-requests:
       - '30000'
       x-ratelimit-limit-tokens:
@@ -137,7 +135,7 @@ interactions:
       x-ratelimit-reset-tokens:
       - 0s
       x-request-id:
-      - req_6300c936e2a8431fae0f10bebe0f946d
+      - req_782fac46319c4eeb933a1f8e5d50ed82
     status:
       code: 200
       message: OK

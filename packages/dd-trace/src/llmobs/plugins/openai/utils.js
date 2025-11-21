@@ -22,7 +22,8 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   const valueToPlaceholder = {}
   for (const [varName, varValue] of Object.entries(variables)) {
     const valueStr = varValue ? String(varValue) : ''
-    if (valueStr) {
+    // Exclude fallback markers ([image], [file]) as they represent missing data
+    if (valueStr && valueStr !== '[image]' && valueStr !== '[file]') {
       valueToPlaceholder[valueStr] = `{{${varName}}}`
     }
   }
@@ -72,7 +73,8 @@ function extractTextFromContentItem (contentItem) {
 
   // For image/file items, extract the reference value
   if (contentItem.type === 'input_image') {
-    return contentItem.image_url || '[image]'
+    // Images can be referenced via image_url or file_id
+    return contentItem.image_url || contentItem.file_id || '[image]'
   }
 
   if (contentItem.type === 'input_file') {
