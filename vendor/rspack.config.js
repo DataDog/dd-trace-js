@@ -4,6 +4,7 @@ const { join } = require('path')
 const pkg = require('./package.json')
 
 const names = Object.keys(pkg.dependencies).concat([
+  'protobufjs/minimal',
   'retry/lib/retry_operation',
   'source-map/lib/util'
 ])
