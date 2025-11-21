@@ -8,9 +8,12 @@ const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 
-const getExports = async () => {
-  const mod = await import('import-in-the-middle/lib/get-exports.mjs')
-  return mod.getExports
+const getExports = async (srcUrl, context, getSource) => {
+  if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
+    const mod = await import('import-in-the-middle/lib/get-exports.mjs')
+    return mod.getExports(srcUrl, context, getSource)
+  }
+  return getExportsImporting(srcUrl, context, getSource)
 }
 
 function isStarExportLine (line) {
@@ -81,12 +84,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
-      const resolvedGetExports = await getExports()
-      exportNames = await resolvedGetExports(srcUrl, context, getSource)
-    } else {
-      exportNames = getExportsImporting(srcUrl, context, getSource)
-    }
+    exportNames = getExports(srcUrl, context, getSource)
   }
 
   const starExports = new Set()
