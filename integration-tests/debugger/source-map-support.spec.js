@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation', function () {
         testAppSource: 'target-app/source-map-support/typescript.ts'
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
@@ -32,7 +32,7 @@ describe('Dynamic Instrumentation', function () {
         testAppSource: 'target-app/source-map-support/minify.js'
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
@@ -56,7 +56,7 @@ describe('Dynamic Instrumentation', function () {
         dependencies: []
       })
 
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should support relative source paths in source maps', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
