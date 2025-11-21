@@ -301,13 +301,9 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
     console.log(`${LOG_PREFIX} clear() called - clearing ${this._messages?.size || 0} messages`)
-    for (const message of this._messages) {
-      // Retrieve the context from _dispense
-      const ctx = messageContexts.get(message) || { message }
-      console.log(`${LOG_PREFIX} Publishing finish for message ${message?.id}, hasCurrentStore=${!!ctx.currentStore}`)
-      receiveFinishCh.publish(ctx)
-      messageContexts.delete(message)
-    }
+    // DON'T publish finish events here - remove() will be called for each message later
+    // and will handle finishing the spans properly with the preserved context
+    console.log(`${LOG_PREFIX} clear() will rely on subsequent remove() calls to finish spans`)
     return clear.apply(this, arguments)
   })
 
