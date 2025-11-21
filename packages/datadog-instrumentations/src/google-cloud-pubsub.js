@@ -1,5 +1,10 @@
 'use strict'
 
+const LOG_PREFIX = '[DD-PUBSUB-INST]'
+console.log(`${LOG_PREFIX} ========================================`)
+console.log(`${LOG_PREFIX} LOADING google-cloud-pubsub instrumentation at ${new Date().toISOString()}`)
+console.log(`${LOG_PREFIX} ========================================`)
+
 const {
   channel,
   addHook
@@ -7,13 +12,16 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
 
+console.log(`${LOG_PREFIX} Attempting to load PushSubscriptionPlugin`)
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
-} catch {
-  // Push subscription plugin is optional
+  console.log(`${LOG_PREFIX} PushSubscriptionPlugin loaded successfully`)
+} catch (e) {
+  console.log(`${LOG_PREFIX} PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
+console.log(`${LOG_PREFIX} Creating diagnostic channels`)
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
 const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
@@ -22,8 +30,9 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
-console.log('[google-cloud-pubsub instrumentation] Diagnostic channels created for receive operations')
-console.log('[google-cloud-pubsub instrumentation] receiveStartCh hasSubscribers:', receiveStartCh.hasSubscribers)
+console.log(`${LOG_PREFIX} Diagnostic channels created successfully`)
+console.log(`${LOG_PREFIX} receiveStartCh.hasSubscribers = ${receiveStartCh.hasSubscribers}`)
+console.log(`${LOG_PREFIX} receiveFinishCh.hasSubscribers = ${receiveFinishCh.hasSubscribers}`)
 
 const ackContextMap = new Map()
 
@@ -178,9 +187,10 @@ function massWrap (obj, methods, wrapper) {
   }
 }
 
+console.log(`${LOG_PREFIX} Registering hook #1: Subscription.emit wrapper`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
-  console.log('[google-cloud-pubsub instrumentation] Wrapping Subscription.emit')
+  console.log(`${LOG_PREFIX} Hook #1 FIRED: Wrapping Subscription.emit (Subscription found: ${!!Subscription})`)
 
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
@@ -202,9 +212,10 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
 })
 
 // Hook Message.ack to store span context for acknowledge operations
+console.log(`${LOG_PREFIX} Registering hook #2: Message.ack wrapper (file: build/src/subscriber.js)`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
-  console.log('[google-cloud-pubsub instrumentation] Hook for subscriber.js - Message found:', !!Message)
+  console.log(`${LOG_PREFIX} Hook #2 FIRED: build/src/subscriber.js loaded (Message found: ${!!Message})`)
 
   if (Message && Message.prototype && Message.prototype.ack) {
     console.log('[google-cloud-pubsub instrumentation] Wrapping Message.ack')
@@ -232,49 +243,81 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
 })
 
 // Hook LeaseManager to create consumer spans
+console.log(`${LOG_PREFIX} Registering hook #3: LeaseManager wrapper (file: build/src/lease-manager.js)`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
 
+  console.log(`${LOG_PREFIX} Hook #3 FIRED: build/src/lease-manager.js loaded (LeaseManager found: ${!!LeaseManager})`)
+  
   if (!LeaseManager) {
-    console.log('[google-cloud-pubsub instrumentation] LeaseManager not found in obj')
+    console.log(`${LOG_PREFIX} ERROR: LeaseManager not found in exports - consumer instrumentation will NOT work!`)
     return obj
   }
 
-  console.log('[google-cloud-pubsub instrumentation] Wrapping LeaseManager._dispense')
+  console.log(`${LOG_PREFIX} Wrapping LeaseManager._dispense, .remove, and .clear methods`)
+  console.log(`${LOG_PREFIX} Current subscriber count - receiveStartCh: ${receiveStartCh.hasSubscribers}, receiveFinishCh: ${receiveFinishCh.hasSubscribers}`)
+
+  // Store contexts by message ID so we can retrieve them in remove()
+  const messageContexts = new WeakMap()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
-    console.log(`[google-cloud-pubsub instrumentation] _dispense called for message ${message?.id}, hasSubscribers: ${receiveStartCh.hasSubscribers}`)
-    if (receiveStartCh.hasSubscribers) {
-      console.log('[google-cloud-pubsub instrumentation] Publishing to receiveStartCh via runStores')
+    const timestamp = new Date().toISOString()
+    const hasSubscribers = receiveStartCh.hasSubscribers
+    console.log(`${LOG_PREFIX} [${timestamp}] _dispense() called - messageId: ${message?.id}, hasSubscribers: ${hasSubscribers}`)
+    
+    if (hasSubscribers) {
+      console.log(`${LOG_PREFIX} Publishing to receiveStartCh and running dispense with context`)
       const ctx = { message }
+      // Store the context so we can retrieve it in remove()
+      messageContexts.set(message, ctx)
       return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
     } else {
-      console.log('[google-cloud-pubsub instrumentation] WARNING: receiveStartCh has no subscribers! Consumer plugin not loaded?')
+      console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
+      console.log(`${LOG_PREFIX} !!!!! CRITICAL: NO SUBSCRIBERS ON receiveStartCh !!!!!`)
+      console.log(`${LOG_PREFIX} !!!!! Consumer plugin was NOT instantiated or configured !!!!!`)
+      console.log(`${LOG_PREFIX} !!!!! Consumer spans will NOT be created !!!!!`)
+      console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
     }
     return dispense.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    console.log(`[google-cloud-pubsub instrumentation] remove called for message ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
-    const ctx = { message }
+    const timestamp = new Date().toISOString()
+    console.log(`${LOG_PREFIX} [${timestamp}] remove() called - messageId: ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
+    
+    // Retrieve the context from _dispense
+    const ctx = messageContexts.get(message) || { message }
+    console.log(`${LOG_PREFIX} Context retrieved: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    
     if (receiveFinishCh.hasSubscribers) {
+      // Clean up the stored context
+      messageContexts.delete(message)
       return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
     } else {
-      console.log('[google-cloud-pubsub instrumentation] WARNING: receiveFinishCh has no subscribers!')
+      console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)
     }
     return remove.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
+    console.log(`${LOG_PREFIX} clear() called - clearing ${this._messages?.size || 0} messages`)
     for (const message of this._messages) {
-      const ctx = { message }
+      // Retrieve the context from _dispense
+      const ctx = messageContexts.get(message) || { message }
+      console.log(`${LOG_PREFIX} Publishing finish for message ${message?.id}, hasCurrentStore=${!!ctx.currentStore}`)
       receiveFinishCh.publish(ctx)
+      messageContexts.delete(message)
     }
     return clear.apply(this, arguments)
   })
 
+  console.log(`${LOG_PREFIX} LeaseManager wrapper installation COMPLETE`)
   return obj
 })
+
+console.log(`${LOG_PREFIX} ========================================`)
+console.log(`${LOG_PREFIX} google-cloud-pubsub instrumentation LOADED`)
+console.log(`${LOG_PREFIX} ========================================`)
 
 function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return

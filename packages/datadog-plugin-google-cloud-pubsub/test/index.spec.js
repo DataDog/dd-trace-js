@@ -49,12 +49,17 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          console.log('[TEST] Loading google-cloud-pubsub plugin')
+          const msg = `[DD-PUBSUB-TEST] ======================================== Loading google-cloud-pubsub plugin at ${new Date().toISOString()} ========================================`
+          console.log(msg)
+          process.stdout.write(msg + '\n')
           return agent.load('google-cloud-pubsub', { dsmEnabled: false })
         })
 
         beforeEach(() => {
-          console.log('[TEST] Initializing test environment for version:', version)
+          const msg = `[DD-PUBSUB-TEST] Initializing test environment for version: ${version}`
+          console.log(msg)
+          process.stdout.write(msg + '\n')
+          
           tracer = require('../../dd-trace')
           gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -63,7 +68,10 @@ describe('Plugin', () => {
           resource = `projects/${project}/topics/${topicName}`
           v1 = lib.v1
           pubsub = new lib.PubSub({ projectId: project })
-          console.log('[TEST] Test environment ready - project:', project, 'topic:', topicName)
+          
+          const readyMsg = `[DD-PUBSUB-TEST] Test environment ready - project: ${project}, topic: ${topicName}`
+          console.log(readyMsg)
+          process.stdout.write(readyMsg + '\n')
         })
 
         describe('createTopic', () => {
@@ -179,7 +187,10 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
-            console.log('[TEST] Starting "should be instrumented" test')
+            const startMsg = '[DD-PUBSUB-TEST] ======================================== Starting "should be instrumented" test ========================================'
+            console.log(startMsg)
+            process.stdout.write(startMsg + '\n')
+            
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -193,17 +204,22 @@ describe('Plugin', () => {
                 'pubsub.ack': 1
               }
             })
-            console.log('[TEST] Creating topic and subscription')
+            console.log('[DD-PUBSUB-TEST] Creating topic and subscription')
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            console.log('[TEST] Setting up message handler')
+            
+            console.log('[DD-PUBSUB-TEST] Setting up message handler')
             sub.on('message', msg => {
-              console.log('[TEST] Message received in test handler:', msg.id)
+              const msgReceived = `[DD-PUBSUB-TEST] !!!!! Message received in test handler: ${msg.id} !!!!!`
+              console.log(msgReceived)
+              process.stdout.write(msgReceived + '\n')
               msg.ack()
             })
-            console.log('[TEST] Publishing message')
+            
+            console.log('[DD-PUBSUB-TEST] Publishing message to topic')
             await publish(topic, { data: Buffer.from('hello') })
-            console.log('[TEST] Waiting for span')
+            
+            console.log('[DD-PUBSUB-TEST] Waiting for consumer span to be created...')
             return expectedSpanPromise
           })
 
@@ -274,28 +290,38 @@ describe('Plugin', () => {
 
           withNamingSchema(
             async () => {
-              console.log('[TEST] withNamingSchema: Starting receive test')
+              console.log('[DD-PUBSUB-TEST] withNamingSchema: Starting receive test')
               const [topic] = await pubsub.createTopic(topicName)
               const [sub] = await topic.createSubscription('foo')
               sub.on('message', msg => {
-                console.log('[TEST] withNamingSchema: Message received:', msg.id)
+                const msgReceived = `[DD-PUBSUB-TEST] withNamingSchema: Message received: ${msg.id}`
+                console.log(msgReceived)
+                process.stdout.write(msgReceived + '\n')
                 msg.ack()
               })
               await publish(topic, { data: Buffer.from('hello') })
-              console.log('[TEST] withNamingSchema: Message published, waiting for processing')
+              console.log('[DD-PUBSUB-TEST] withNamingSchema: Message published, waiting for processing')
             },
             rawExpectedSchema.receive,
             {
               selectSpan: (traces) => {
-                console.log('[TEST] selectSpan called with traces:', traces.length, 'trace(s)')
-                // Consumer spans have type='worker'. Find it to avoid picking client spans.
+                console.log('[DD-PUBSUB-TEST] ======================================== selectSpan() CALLED ========================================')
+                console.log('[DD-PUBSUB-TEST] Number of traces:', traces.length)
+                
                 const allSpans = traces.flat()
-                console.log('[TEST] Total spans:', allSpans.length, 'span types:', allSpans.map(s => s.type).join(', '))
+                console.log('[DD-PUBSUB-TEST] Total spans across all traces:', allSpans.length)
+                console.log('[DD-PUBSUB-TEST] Span types:', allSpans.map(s => `${s.name}(${s.type})`).join(', '))
+                
                 const workerSpan = allSpans.find(span => span.type === 'worker')
-                console.log('[TEST] Worker span found:', !!workerSpan, 'name:', workerSpan?.name)
-                // Always return a valid span - never undefined to avoid "Target cannot be null" error
+                console.log('[DD-PUBSUB-TEST] Worker span found:', !!workerSpan)
+                if (workerSpan) {
+                  console.log('[DD-PUBSUB-TEST] Worker span details: name=' + workerSpan.name + ', type=' + workerSpan.type)
+                }
+                
                 const selectedSpan = workerSpan || allSpans[allSpans.length - 1] || traces[0][0]
-                console.log('[TEST] Selected span:', selectedSpan?.name, 'type:', selectedSpan?.type)
+                console.log('[DD-PUBSUB-TEST] Selected span:', selectedSpan?.name, '(type:', selectedSpan?.type + ')')
+                console.log('[DD-PUBSUB-TEST] ========================================')
+                
                 return selectedSpan
               }
             }

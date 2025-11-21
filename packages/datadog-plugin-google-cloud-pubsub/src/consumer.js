@@ -1,18 +1,29 @@
 'use strict'
 
+const LOG_PREFIX = '[DD-PUBSUB-CONSUMER]'
+
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
+
+console.log(`${LOG_PREFIX} ========================================`)
+console.log(`${LOG_PREFIX} LOADING GoogleCloudPubsubConsumerPlugin at ${new Date().toISOString()}`)
+console.log(`${LOG_PREFIX} ========================================`)
 
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'receive'
 
   constructor (...args) {
+    console.log(`${LOG_PREFIX} constructor() called with args:`, args.length)
     super(...args)
-    // DEBUG: Verify consumer plugin is instantiated and subscribing
-    console.log('[GoogleCloudPubsubConsumerPlugin] Instantiated, should be subscribing to apm:google-cloud-pubsub:receive:start')
+    console.log(`${LOG_PREFIX} ========================================`)
+    console.log(`${LOG_PREFIX} CONSUMER PLUGIN INSTANTIATED SUCCESSFULLY`)
+    console.log(`${LOG_PREFIX} This plugin should now be subscribed to:`)
+    console.log(`${LOG_PREFIX}   - apm:google-cloud-pubsub:receive:start`)
+    console.log(`${LOG_PREFIX}   - apm:google-cloud-pubsub:receive:finish`)
+    console.log(`${LOG_PREFIX} ========================================`)
   }
 
   _reconstructPubSubRequestContext (attrs) {
@@ -41,7 +52,11 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   }
 
   bindStart (ctx) {
-    console.log('[GoogleCloudPubsubConsumerPlugin] bindStart called with ctx:', { hasMessage: !!ctx.message, messageId: ctx.message?.id })
+    const timestamp = new Date().toISOString()
+    console.log(`${LOG_PREFIX} ========================================`)
+    console.log(`${LOG_PREFIX} [${timestamp}] bindStart() CALLED`)
+    console.log(`${LOG_PREFIX} Context: { hasMessage: ${!!ctx.message}, messageId: ${ctx.message?.id} }`)
+    console.log(`${LOG_PREFIX} ========================================`)
     const { message } = ctx
     
     // Get subscription and topic with fallbacks
@@ -54,9 +69,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
                 ? `projects/${message.attributes['gcloud.project_id']}/topics/unknown`
                 : null)
       topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
-      console.log('[GoogleCloudPubsubConsumerPlugin] Successfully extracted subscription and topic:', { topicName, topic })
+      console.log(`${LOG_PREFIX} Extracted: topicName="${topicName}", topic="${topic}"`)
     } catch (e) {
-      console.log('[GoogleCloudPubsubConsumerPlugin] Error extracting subscription, using fallback:', e.message)
+      console.log(`${LOG_PREFIX} Extraction failed (${e.message}), using fallback`)
       // Fallback if subscription structure is different
       topic = message.attributes?.['pubsub.topic'] || null
       topicName = topic ? topic.split('/').pop() : 'unknown'
@@ -141,12 +156,11 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta['pubsub.batch.description'] = `Message ${index + 1} of ${size}`
     }
 
-    console.log('[GoogleCloudPubsubConsumerPlugin] Creating consumer span with:', { 
-      resource: `Message from ${topicName}`,
-      type: 'worker',
-      service: serviceName,
-      hasChildOf: !!childOf
-    })
+    console.log(`${LOG_PREFIX} Creating consumer span:`)
+    console.log(`${LOG_PREFIX}   resource: "Message from ${topicName}"`)
+    console.log(`${LOG_PREFIX}   type: "worker"`)
+    console.log(`${LOG_PREFIX}   service: "${serviceName}"`)
+    console.log(`${LOG_PREFIX}   hasChildOf: ${!!childOf}`)
 
     const span = this.startSpan({
       childOf,
@@ -157,7 +171,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics
     }, ctx)
 
-    console.log('[GoogleCloudPubsubConsumerPlugin] Consumer span created:', { spanId: span?.context()?.toSpanId(), name: span?._name })
+    console.log(`${LOG_PREFIX} ========================================`)
+    console.log(`${LOG_PREFIX} CONSUMER SPAN CREATED SUCCESSFULLY`)
+    console.log(`${LOG_PREFIX}   spanId: ${span?.context()?.toSpanId()}`)
+    console.log(`${LOG_PREFIX}   name: ${span?._name}`)
+    console.log(`${LOG_PREFIX}   type: ${span?._type}`)
+    console.log(`${LOG_PREFIX} ========================================`)
 
     if (message.id) {
       span.setTag('pubsub.message_id', message.id)
@@ -203,21 +222,23 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   }
 
   bindFinish (ctx) {
-    console.log('[GoogleCloudPubsubConsumerPlugin] bindFinish called:', { 
-      hasMessage: !!ctx.message, 
-      hasCurrentStore: !!ctx.currentStore,
-      hasSpan: !!ctx.currentStore?.span,
-      messageHandled: ctx.message?._handled
-    })
+    const timestamp = new Date().toISOString()
+    console.log(`${LOG_PREFIX} ========================================`)
+    console.log(`${LOG_PREFIX} [${timestamp}] bindFinish() CALLED`)
+    console.log(`${LOG_PREFIX} Context: { hasMessage: ${!!ctx.message}, hasCurrentStore: ${!!ctx.currentStore}, hasSpan: ${!!ctx.currentStore?.span}, messageHandled: ${ctx.message?._handled} }`)
     const { message } = ctx
     const span = ctx.currentStore?.span
 
     if (span && message?._handled) {
-      console.log('[GoogleCloudPubsubConsumerPlugin] Setting pubsub.ack=1 on span')
+      console.log(`${LOG_PREFIX} Setting pubsub.ack=1 on span ${span?.context()?.toSpanId()}`)
       span.setTag('pubsub.ack', 1)
     }
 
-    return super.bindFinish(ctx)
+    console.log(`${LOG_PREFIX} Calling super.bindFinish()`)
+    const result = super.bindFinish(ctx)
+    console.log(`${LOG_PREFIX} bindFinish() COMPLETE`)
+    console.log(`${LOG_PREFIX} ========================================`)
+    return result
   }
 }
 
