@@ -23,6 +23,14 @@ variables:
     paths:
       - platform/artifacts/
     expire_in: 3 months
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - data_integrity_failure
+      - runner_system_failure
+      - scheduler_failure
+      - api_failure
 
 benchmarks-pr-comment:
   stage: benchmarks-pr-comment
