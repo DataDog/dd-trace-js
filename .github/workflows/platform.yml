@@ -31,7 +31,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: mkdir npm bun
-      - run: npm pack && tar -zxf *.tgz -C npm
+      - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
@@ -407,8 +407,6 @@ jobs:
       matrix:
         version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
     runs-on: ubuntu-latest
-    env:
-      NOVENDOR: 'true'
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/node
@@ -431,7 +429,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
-      NOVENDOR: 'true'
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/node
