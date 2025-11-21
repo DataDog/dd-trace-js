@@ -102,7 +102,8 @@ function normalizePromptVariables (variables) {
       } else if (value.type === 'input_image') { // ResponseInputImage
         normalizedValue = value.image_url || value.file_id || '[image]'
       } else if (value.type === 'input_file') { // ResponseInputFile
-        normalizedValue = value.file_url || value.file_id || value.filename || (value.file_data ? '[file_data]' : '[file]')
+        normalizedValue = value.file_url || value.file_id || value.filename ||
+          (value.file_data ? '[file_data]' : '[file]')
       }
     }
     normalized[key] = normalizedValue

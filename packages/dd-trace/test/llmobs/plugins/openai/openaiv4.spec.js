@@ -919,15 +919,21 @@ describe('integrations', () => {
           chat_template: [
             {
               role: 'user',
-              // OpenAI strips image_url, but we still get the placeholder because normalized variables contain user_image: '[image]'
-              content: 'Analyze the following content from the user:\n\nText message: {{user_message}}\nImage reference: {{user_image}}\nDocument reference: {{user_file}}\n\nPlease provide a comprehensive analysis.'
+              // OpenAI strips image_url, but we still get the placeholder because
+              // normalized variables contain user_image: '[image]'
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: {{user_message}}\nImage reference: {{user_image}}\n' +
+                'Document reference: {{user_file}}\n\nPlease provide a comprehensive analysis.'
             }
           ]
         }, [
           {
             role: 'user',
             // OpenAI strips image_url from response.instructions, so we get [image] marker
-            content: 'Analyze the following content from the user:\n\nText message: Analyze this image and document\nImage reference: [image]\nDocument reference: file-LXG16g7US1sG6MQM7KQY1i\n\nPlease provide a comprehensive analysis.'
+            content: 'Analyze the following content from the user:\n\n' +
+              'Text message: Analyze this image and document\nImage reference: [image]\n' +
+              'Document reference: file-LXG16g7US1sG6MQM7KQY1i\n\n' +
+              'Please provide a comprehensive analysis.'
           }
         ])
       })
