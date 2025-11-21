@@ -66,7 +66,11 @@ class TracingPlugin extends Plugin {
     this.addError(ctxOrError)
   }
 
-  addTraceSubs () {
+  registerOperation (channelName) {
+    this.addTraceSubs(channelName)
+  }
+
+  addTraceSubs (channelName) {
     const events = ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']
 
     for (const event of events) {
@@ -74,23 +78,25 @@ class TracingPlugin extends Plugin {
 
       if (this[event]) {
         this.addTraceSub(event, message => {
-          this[event](message)
-        })
+          this[event](message, channelName)
+        }, channelName)
       }
 
       if (this[bindName]) {
-        this.addTraceBind(event, message => this[bindName](message))
+        this.addTraceBind(event, message => {
+          this[bindName](message, channelName)
+        }, channelName)
       }
     }
   }
 
-  addTraceSub (eventName, handler) {
-    const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
+  addTraceSub (eventName, handler, channelName) {
+    const prefix = channelName || this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addSub(`${prefix}:${eventName}`, handler)
   }
 
-  addTraceBind (eventName, transform) {
-    const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
+  addTraceBind (eventName, transform, channelName) {
+    const prefix = channelName || this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
