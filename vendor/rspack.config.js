@@ -15,7 +15,7 @@ module.exports = {
   mode: 'production',
   devtool: false,
   output: {
-    filename: '[name].js',
+    filename: '[name]/index.js',
     libraryTarget: 'commonjs2',
     path: join(__dirname, '..', 'packages', 'node_modules'),
     clean: true
