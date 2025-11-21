@@ -1,12 +1,12 @@
 'use strict'
 
-const { hash } = require('crypto')
+const { createHash } = require('crypto')
 const { join } = require('path')
 const pkg = require('./package.json')
 const { readFileSync } = require('fs')
 
 const dependOn = Object.keys(pkg.dependencies)
-const version = hash('sha256', readFileSync(__filename))
+const version = createHash('sha256').update(readFileSync(__filename))
 
 module.exports = {
   entry: Object.fromEntries(dependOn.map((next) => [next, `./node_modules/${next}`])),
