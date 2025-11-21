@@ -123,15 +123,17 @@
     "version.js"
   ],
   "dependencies": {
+    "dc-polyfill": "^0.1.10",
+    "escape-string-regexp": "^5.0.0",
+    "import-in-the-middle": "^1.14.2"
+  },
+  "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
     "@datadog/native-appsec": "10.3.0",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/pprof": "5.12.0",
-    "@datadog/wasm-js-rewriter": "5.0.1",
-    "dc-polyfill": "^0.1.10",
-    "escape-string-regexp": "^5.0.0",
-    "import-in-the-middle": "^1.14.2"
+    "@datadog/wasm-js-rewriter": "5.0.1"
   },
   "devDependencies": {
     "@babel/helpers": "^7.28.4",
