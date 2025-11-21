@@ -270,10 +270,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
       const ctx = { message }
       // Store the context so we can retrieve it in remove()
       messageContexts.set(message, ctx)
-      console.log(`${LOG_PREFIX} Calling receiveStartCh.runStores...`)
-      const result = receiveStartCh.runStores(ctx, dispense, this, ...arguments)
-      console.log(`${LOG_PREFIX} receiveStartCh.runStores completed, ctx.currentStore=${!!ctx.currentStore}, ctx.parentStore=${!!ctx.parentStore}`)
-      return result
+      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
     } else {
       console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
       console.log(`${LOG_PREFIX} !!!!! CRITICAL: NO SUBSCRIBERS ON receiveStartCh !!!!!`)
@@ -295,9 +292,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     if (receiveFinishCh.hasSubscribers) {
       // Clean up the stored context
       messageContexts.delete(message)
-      console.log(`${LOG_PREFIX} Calling receiveFinishCh.publish with stored context...`)
       receiveFinishCh.publish(ctx)
-      console.log(`${LOG_PREFIX} receiveFinishCh.publish completed`)
     } else {
       console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)
     }
