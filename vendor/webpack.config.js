@@ -5,15 +5,18 @@ const { join } = require('path')
 const pkg = require('./package.json')
 const { readFileSync } = require('fs')
 
-const dependOn = Object.keys(pkg.dependencies)
 const hash = createHash('sha256')
 
 hash.update(readFileSync(__filename))
 
 const version = hash.digest('utf8')
+const names = Object.keys(pkg.dependencies).concat([
+  'retry/lib/retry_operation',
+  'source-map/lib/util'
+])
 
 module.exports = {
-  entry: Object.fromEntries(dependOn.map((next) => [next, `./node_modules/${next}`])),
+  entry: Object.fromEntries(names.map(name => [name, `./node_modules/${name}`])),
   target: 'node',
   mode: 'production',
   cache: {
