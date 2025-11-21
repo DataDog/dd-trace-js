@@ -20,7 +20,20 @@ module.exports = {
   plugins: [
     new CopyRspackPlugin({
       patterns: [
-        { from: 'source-map/lib/mappings.wasm', to: 'source-map' }
+        {
+          from: '**/*.d.ts',
+          context: join(__dirname, 'node_modules', '@opentelemetry', 'api', 'build', 'src'),
+          to: '@opentelemetry/api'
+        },
+        {
+          from: '**/*.d.ts',
+          context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
+          to: 'opentracing'
+        },
+        {
+          from: 'source-map/lib/mappings.wasm',
+          to: 'source-map'
+        },
       ],
     }),
   ],
