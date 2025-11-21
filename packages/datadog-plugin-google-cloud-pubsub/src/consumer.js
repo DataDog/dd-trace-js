@@ -6,6 +6,7 @@ const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
+const { COMPONENT } = require('../../dd-trace/src/constants')
 
 console.log(`${LOG_PREFIX} ========================================`)
 console.log(`${LOG_PREFIX} LOADING GoogleCloudPubsubConsumerPlugin at ${new Date().toISOString()}`)
@@ -165,11 +166,16 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const span = this.startSpan({
       childOf,
       resource: `Message from ${topicName}`,
-      type: 'worker',
       service: serviceName,
       meta,
       metrics
     }, ctx)
+
+    // Manually ensure the span is marked as a worker/consumer span.
+    // The base ConsumerPlugin.startSpan doesn't use the 'type' option correctly,
+    // so we must set _type explicitly for the agent & tests to see type: 'worker'.
+    span._type = 'worker'
+    span.setTag(COMPONENT, this.constructor.id)
 
     console.log(`${LOG_PREFIX} ========================================`)
     console.log(`${LOG_PREFIX} CONSUMER SPAN CREATED SUCCESSFULLY`)
