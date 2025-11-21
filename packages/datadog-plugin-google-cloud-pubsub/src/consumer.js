@@ -36,12 +36,28 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
   bindStart (ctx) {
     const { message } = ctx
-    const subscription = message._subscriber._subscription
-    const topic = (subscription.metadata && subscription.metadata.topic) ||
-                  (message.attributes && message.attributes['pubsub.topic']) ||
-                  (message.attributes && message.attributes['gcloud.project_id']
-                    ? `projects/${message.attributes['gcloud.project_id']}/topics/unknown`
-                    : null)
+    
+    // Get subscription and topic with fallbacks
+    let subscription, topic, topicName
+    try {
+      subscription = message._subscriber._subscription
+      topic = (subscription.metadata && subscription.metadata.topic) ||
+              (message.attributes && message.attributes['pubsub.topic']) ||
+              (message.attributes && message.attributes['gcloud.project_id']
+                ? `projects/${message.attributes['gcloud.project_id']}/topics/unknown`
+                : null)
+      topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
+    } catch (e) {
+      // Fallback if subscription structure is different
+      topic = message.attributes?.['pubsub.topic'] || null
+      topicName = topic ? topic.split('/').pop() : 'unknown'
+      // Create minimal subscription fallback to prevent crashes
+      subscription = {
+        name: 'unknown-subscription',
+        metadata: { topic },
+        pubsub: { projectId: message.attributes?.['gcloud.project_id'] || 'unknown' }
+      }
+    }
 
     const batchRequestTraceId = message.attributes?.['_dd.pubsub_request.trace_id']
     const batchRequestSpanId = message.attributes?.['_dd.pubsub_request.span_id']
@@ -50,20 +66,32 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     let childOf = this.tracer.extract('text_map', message.attributes) || null
 
+    // Try to use batch context for first message
     const isFirstMessage = batchIndex === '0' || batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = this._reconstructPubSubRequestContext(message.attributes)
-      if (pubsubRequestContext) {
-        childOf = pubsubRequestContext
+      try {
+        const pubsubRequestContext = this._reconstructPubSubRequestContext(message.attributes)
+        if (pubsubRequestContext) {
+          childOf = pubsubRequestContext
+        }
+      } catch (e) {
+        // Ignore batch context reconstruction errors
       }
     }
 
-    const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
     const baseService = this.tracer._service || 'unknown'
     const serviceName = this.config.service || `${baseService}-pubsub`
+    
+    // Get project ID safely
+    let projectId
+    try {
+      projectId = subscription?.pubsub?.projectId || message.attributes?.['gcloud.project_id'] || 'unknown'
+    } catch (e) {
+      projectId = message.attributes?.['gcloud.project_id'] || 'unknown'
+    }
 
     const meta = {
-      'gcloud.project_id': subscription.pubsub.projectId,
+      'gcloud.project_id': projectId,
       'pubsub.topic': topic,
       'span.kind': 'consumer',
       'pubsub.delivery_method': 'pull',
