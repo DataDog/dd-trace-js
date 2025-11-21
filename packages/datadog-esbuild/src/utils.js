@@ -84,7 +84,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
     exportNames = await getExportsImporting(path)
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = getExports(srcUrl, context, getSource)
+    exportNames = await getExports(srcUrl, context, getSource)
   }
 
   const starExports = new Set()
