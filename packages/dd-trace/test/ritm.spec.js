@@ -13,7 +13,7 @@ const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
-  let utilHook, aHook, bHook, httpHook
+  let utilHook, aHook, bHook, httpHook, httpOnRequire
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -43,10 +43,11 @@ describe('Ritm', () => {
     utilHook = Hook('util')
     aHook = Hook('module-a')
     bHook = Hook('module-b')
-    httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
+    httpOnRequire = sinon.spy(function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
+    httpHook = new Hook(['http'], httpOnRequire)
   })
 
   afterEach(() => {
@@ -100,5 +101,15 @@ describe('Ritm', () => {
       /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'
     )
+  })
+
+  it('should hook node: prefixed builtins via canonical registrations', () => {
+    const nodeHttp = require('node:http')
+    assert.equal(nodeHttp.foo, 1)
+    assert.equal(httpOnRequire.callCount, 1, 'onrequire should run only once')
+
+    const canonicalHttp = require('http')
+    assert.equal(httpOnRequire.callCount, 1, 'cache should be shared between node: and canonical names')
+    assert.strictEqual(nodeHttp, canonicalHttp)
   })
 })
