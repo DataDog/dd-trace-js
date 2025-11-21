@@ -270,7 +270,10 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
       const ctx = { message }
       // Store the context so we can retrieve it in remove()
       messageContexts.set(message, ctx)
-      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
+      console.log(`${LOG_PREFIX} Calling receiveStartCh.runStores...`)
+      const result = receiveStartCh.runStores(ctx, dispense, this, ...arguments)
+      console.log(`${LOG_PREFIX} receiveStartCh.runStores completed, ctx.currentStore=${!!ctx.currentStore}, ctx.parentStore=${!!ctx.parentStore}`)
+      return result
     } else {
       console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
       console.log(`${LOG_PREFIX} !!!!! CRITICAL: NO SUBSCRIBERS ON receiveStartCh !!!!!`)
@@ -287,12 +290,14 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     
     // Retrieve the context from _dispense
     const ctx = messageContexts.get(message) || { message }
-    console.log(`${LOG_PREFIX} Context retrieved: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    console.log(`${LOG_PREFIX} Context retrieved from WeakMap: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
     
     if (receiveFinishCh.hasSubscribers) {
       // Clean up the stored context
       messageContexts.delete(message)
-      return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
+      console.log(`${LOG_PREFIX} Calling receiveFinishCh.publish with stored context...`)
+      receiveFinishCh.publish(ctx)
+      console.log(`${LOG_PREFIX} receiveFinishCh.publish completed`)
     } else {
       console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)
     }
