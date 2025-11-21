@@ -195,7 +195,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscription.js' }, (obj) => {
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
 
   if (Message && Message.prototype && Message.prototype.ack) {
@@ -218,25 +218,25 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
   return obj
 })
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber/lease-manager.js' }, (obj) => {
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
-  const ctx = {}
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     if (receiveStartCh.hasSubscribers) {
-      ctx.message = message
+      const ctx = { message }
       return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
     }
     return dispense.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
+    const ctx = { message }
     return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
     for (const message of this._messages) {
-      ctx.message = message
+      const ctx = { message }
       receiveFinishCh.publish(ctx)
     }
     return clear.apply(this, arguments)
