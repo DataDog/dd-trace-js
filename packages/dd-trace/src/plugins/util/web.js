@@ -517,7 +517,7 @@ function addResourceTag (context) {
   const { req, span } = context
   const tags = span.context()._tags
 
-  if (tags['resource.name']) return
+  if (tags[RESOURCE_NAME]) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(Boolean)
