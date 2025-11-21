@@ -1,6 +1,7 @@
 'use strict'
 
 const { CopyRspackPlugin } = require('@rspack/core')
+const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
 const pkg = require('./package.json')
 
@@ -18,6 +19,13 @@ module.exports = {
   devtool: false,
   context: join(__dirname, 'node_modules'),
   plugins: [
+    new LicenseWebpackPlugin({
+      outputFilename: '[name]/LICENSE',
+      renderLicenses: modules => modules[0].licenseText,
+      stats: {
+        warnings: false
+      }
+    }),
     new CopyRspackPlugin({
       patterns: [
         {
