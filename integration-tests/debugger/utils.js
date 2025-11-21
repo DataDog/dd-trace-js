@@ -53,14 +53,16 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   }
 
   // Trigger the breakpoint once probe is successfully installed
-  function triggerBreakpoint (url) {
+  async function triggerBreakpoint (url) {
     let triggered = false
-    t.agent.on('debugger-diagnostics', ({ payload }) => {
-      payload.forEach((event) => {
-        if (!triggered && event.debugger.diagnostics.status === 'INSTALLED') {
-          triggered = true
-          t.axios.get(url)
-        }
+    return new Promise((resolve, reject) => {
+      t.agent.on('debugger-diagnostics', ({ payload }) => {
+        payload.forEach((event) => {
+          if (!triggered && event.debugger.diagnostics.status === 'INSTALLED') {
+            triggered = true
+            t.axios.get(url).then(resolve).catch(reject)
+          }
+        })
       })
     })
   }
