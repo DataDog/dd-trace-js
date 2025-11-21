@@ -75,7 +75,7 @@ describe('typescript', () => {
     // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
     context(`with version ${version}`, () => {
       useSandbox(
-        ['@types/node@18.19.130', `typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+        ['@types/node', `typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
       )
 
       beforeEach(async () => {
