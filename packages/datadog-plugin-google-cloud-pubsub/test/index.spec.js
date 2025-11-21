@@ -48,11 +48,20 @@ describe('Plugin', () => {
       let expectedConsumerHash
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', { dsmEnabled: false })
-        })
-
-        beforeEach(() => {
+        beforeEach(async () => {
+          const msg = `[DD-PUBSUB-TEST] ======================================== Loading google-cloud-pubsub plugin at ${new Date().toISOString()} ========================================`
+          console.log(msg)
+          process.stdout.write(msg + '\n')
+          
+          // CRITICAL: Load instrumentation BEFORE requiring @google-cloud/pubsub
+          // This ensures addHook() wrappers attach before the module is cached
+          await agent.load('google-cloud-pubsub', { dsmEnabled: false })
+          
+          const initMsg = `[DD-PUBSUB-TEST] Initializing test environment for version: ${version}`
+          console.log(initMsg)
+          process.stdout.write(initMsg + '\n')
+          
+          // NOW require the library - hooks will attach
           tracer = require('../../dd-trace')
           gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -61,6 +70,10 @@ describe('Plugin', () => {
           resource = `projects/${project}/topics/${topicName}`
           v1 = lib.v1
           pubsub = new lib.PubSub({ projectId: project })
+          
+          const readyMsg = `[DD-PUBSUB-TEST] Test environment ready - project: ${project}, topic: ${topicName}`
+          console.log(readyMsg)
+          process.stdout.write(readyMsg + '\n')
         })
 
         describe('createTopic', () => {
@@ -176,6 +189,10 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
+            const startMsg = '[DD-PUBSUB-TEST] ======================================== Starting "should be instrumented" test ========================================'
+            console.log(startMsg)
+            process.stdout.write(startMsg + '\n')
+            
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -189,10 +206,22 @@ describe('Plugin', () => {
                 'pubsub.ack': 1
               }
             })
+            console.log('[DD-PUBSUB-TEST] Creating topic and subscription')
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            sub.on('message', msg => msg.ack())
+            
+            console.log('[DD-PUBSUB-TEST] Setting up message handler')
+            sub.on('message', msg => {
+              const msgReceived = `[DD-PUBSUB-TEST] !!!!! Message received in test handler: ${msg.id} !!!!!`
+              console.log(msgReceived)
+              process.stdout.write(msgReceived + '\n')
+              msg.ack()
+            })
+            
+            console.log('[DD-PUBSUB-TEST] Publishing message to topic')
             await publish(topic, { data: Buffer.from('hello') })
+            
+            console.log('[DD-PUBSUB-TEST] Waiting for consumer span to be created...')
             return expectedSpanPromise
           })
 
@@ -263,12 +292,41 @@ describe('Plugin', () => {
 
           withNamingSchema(
             async () => {
+              console.log('[DD-PUBSUB-TEST] withNamingSchema: Starting receive test')
               const [topic] = await pubsub.createTopic(topicName)
               const [sub] = await topic.createSubscription('foo')
-              sub.on('message', msg => msg.ack())
+              sub.on('message', msg => {
+                const msgReceived = `[DD-PUBSUB-TEST] withNamingSchema: Message received: ${msg.id}`
+                console.log(msgReceived)
+                process.stdout.write(msgReceived + '\n')
+                msg.ack()
+              })
               await publish(topic, { data: Buffer.from('hello') })
+              console.log('[DD-PUBSUB-TEST] withNamingSchema: Message published, waiting for processing')
             },
-            rawExpectedSchema.receive
+            rawExpectedSchema.receive,
+            {
+              selectSpan: (traces) => {
+                console.log('[DD-PUBSUB-TEST] ======================================== selectSpan() CALLED ========================================')
+                console.log('[DD-PUBSUB-TEST] Number of traces:', traces.length)
+                
+                const allSpans = traces.flat()
+                console.log('[DD-PUBSUB-TEST] Total spans across all traces:', allSpans.length)
+                console.log('[DD-PUBSUB-TEST] Span types:', allSpans.map(s => `${s.name}(${s.type})`).join(', '))
+                
+                const workerSpan = allSpans.find(span => span.type === 'worker')
+                console.log('[DD-PUBSUB-TEST] Worker span found:', !!workerSpan)
+                if (workerSpan) {
+                  console.log('[DD-PUBSUB-TEST] Worker span details: name=' + workerSpan.name + ', type=' + workerSpan.type)
+                }
+                
+                const selectedSpan = workerSpan || allSpans[allSpans.length - 1] || traces[0][0]
+                console.log('[DD-PUBSUB-TEST] Selected span:', selectedSpan?.name, '(type:', selectedSpan?.type + ')')
+                console.log('[DD-PUBSUB-TEST] ========================================')
+                
+                return selectedSpan
+              }
+            }
           )
         })
 
@@ -306,14 +364,14 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+        beforeEach(async () => {
+          // Load instrumentation BEFORE requiring the library
+          await agent.load('google-cloud-pubsub', {
             service: 'a_test_service',
             dsmEnabled: false
           })
-        })
-
-        beforeEach(() => {
+          
+          // NOW require the library - hooks will attach
           tracer = require('../../dd-trace')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
@@ -340,13 +398,13 @@ describe('Plugin', () => {
         let sub
         let consume
 
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+        before(async () => {
+          // Load instrumentation BEFORE requiring the library
+          await agent.load('google-cloud-pubsub', {
             dsmEnabled: true
           })
-        })
-
-        before(async () => {
+          
+          // NOW require the library - hooks will attach
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           resource = `projects/${project}/topics/${dsmTopicName}`
@@ -379,6 +437,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
+            console.log('[TEST DSM] Testing produce checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
 
             agent.expectPipelineStats(dsmStats => {
@@ -397,8 +456,11 @@ describe('Plugin', () => {
           })
 
           it('on consume', async () => {
+            console.log('[TEST DSM] Testing consume checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
+            console.log('[TEST DSM] Message published, setting up consumer')
             await consume(async () => {
+              console.log('[TEST DSM] Message consumed')
               agent.expectPipelineStats(dsmStats => {
                 let statsPointsReceived = 0
                 // we should have 2 dsm stats points
@@ -429,14 +491,22 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            expect(recordCheckpointSpy.called).to.be.true
+            expect(recordCheckpointSpy.args).to.have.lengthOf.at.least(1)
+            expect(recordCheckpointSpy.args[0]).to.exist
+            expect(recordCheckpointSpy.args[0][0]).to.exist
+            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize')).to.be.true
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              expect(recordCheckpointSpy.called).to.be.true
+              expect(recordCheckpointSpy.args).to.have.lengthOf.at.least(1)
+              expect(recordCheckpointSpy.args[0]).to.exist
+              expect(recordCheckpointSpy.args[0][0]).to.exist
+              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize')).to.be.true
             })
           })
         })
@@ -445,10 +515,14 @@ describe('Plugin', () => {
       function expectSpanWithDefaults (expected) {
         let prefixedResource
         const method = expected.meta['pubsub.method']
+        const spanKind = expected.meta['span.kind']
 
         if (method === 'publish') {
           // For publish operations, use the new format: "publish to Topic <topic-name>"
           prefixedResource = `${method} to Topic ${topicName}`
+        } else if (spanKind === 'consumer') {
+          // For consumer operations, use the new format: "Message from <topic-name>"
+          prefixedResource = `Message from ${topicName}`
         } else if (method) {
           // For other operations, use the old format: "<method> <full-resource-path>"
           prefixedResource = `${method} ${resource}`
@@ -456,9 +530,19 @@ describe('Plugin', () => {
           prefixedResource = resource
         }
 
+        // Determine the default operation name based on span kind
+        let defaultOpName = 'pubsub.receive'
+        if (spanKind === 'consumer') {
+          defaultOpName = expectedSchema.receive.opName
+        } else if (spanKind === 'producer') {
+          defaultOpName = expectedSchema.send.opName
+        } else {
+          defaultOpName = expectedSchema.controlPlane.opName
+        }
+
         const service = method ? 'test-pubsub' : 'test'
         expected = withDefaults({
-          name: 'pubsub.request',
+          name: defaultOpName,
           resource: prefixedResource,
           service,
           error: 0,

@@ -54,7 +54,7 @@ class HttpServerPlugin extends ServerPlugin {
   finish ({ req }) {
     const context = web.getContext(req)
 
-    if (!context || !context.res) return // Not created by a http.Server instance.
+    if (!context || !context.res) return
 
     if (incomingHttpRequestEnd.hasSubscribers) {
       incomingHttpRequestEnd.publish({ req, res: context.res })

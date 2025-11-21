@@ -1,5 +1,10 @@
 'use strict'
 
+const LOG_PREFIX = '[DD-PUBSUB-INST]'
+console.log(`${LOG_PREFIX} ========================================`)
+console.log(`${LOG_PREFIX} LOADING google-cloud-pubsub instrumentation at ${new Date().toISOString()}`)
+console.log(`${LOG_PREFIX} ========================================`)
+
 const {
   channel,
   addHook
@@ -7,14 +12,16 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
 
-// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
+console.log(`${LOG_PREFIX} Attempting to load PushSubscriptionPlugin`)
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
-} catch {
-  // Push subscription plugin is optional
+  console.log(`${LOG_PREFIX} PushSubscriptionPlugin loaded successfully`)
+} catch (e) {
+  console.log(`${LOG_PREFIX} PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
+console.log(`${LOG_PREFIX} Creating diagnostic channels`)
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
 const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
@@ -22,6 +29,10 @@ const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
 const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
+
+console.log(`${LOG_PREFIX} Diagnostic channels created successfully`)
+console.log(`${LOG_PREFIX} receiveStartCh.hasSubscribers = ${receiveStartCh.hasSubscribers}`)
+console.log(`${LOG_PREFIX} receiveFinishCh.hasSubscribers = ${receiveFinishCh.hasSubscribers}`)
 
 const ackContextMap = new Map()
 
@@ -79,7 +90,6 @@ function wrapMethod (method) {
     let restoredStore = null
     const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
     if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
-      // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
         const storedContext = ackContextMap.get(ackId)
         if (storedContext) {
@@ -177,17 +187,21 @@ function massWrap (obj, methods, wrapper) {
   }
 }
 
+console.log(`${LOG_PREFIX} Registering hook #1: Subscription.emit wrapper`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
+  console.log(`${LOG_PREFIX} Hook #1 FIRED: Wrapping Subscription.emit (Subscription found: ${!!Subscription})`)
 
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
+    console.log('[google-cloud-pubsub instrumentation] Subscription.emit called with message:', message?.id)
     const store = storage('legacy').getStore()
     const ctx = { message, store }
     try {
       return emit.apply(this, arguments)
     } catch (err) {
+      console.log('[google-cloud-pubsub instrumentation] Error in Subscription.emit:', err.message)
       ctx.error = err
       receiveErrorCh.publish(ctx)
       throw err
@@ -197,11 +211,16 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
+// Hook Message.ack to store span context for acknowledge operations
+console.log(`${LOG_PREFIX} Registering hook #2: Message.ack wrapper (file: build/src/subscriber.js)`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
+  console.log(`${LOG_PREFIX} Hook #2 FIRED: build/src/subscriber.js loaded (Message found: ${!!Message})`)
 
   if (Message && Message.prototype && Message.prototype.ack) {
+    console.log('[google-cloud-pubsub instrumentation] Wrapping Message.ack')
     shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
+      console.log('[google-cloud-pubsub instrumentation] Message.ack called for message:', this.id)
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
 
@@ -209,8 +228,11 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
 
         if (this.ackId) {
+          console.log('[google-cloud-pubsub instrumentation] Storing span context for ackId:', this.ackId)
           ackContextMap.set(this.ackId, storeWithSpanContext)
         }
+      } else {
+        console.log('[google-cloud-pubsub instrumentation] No active span found during ack')
       }
 
       return originalAck.apply(this, arguments)
@@ -220,32 +242,81 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
   return obj
 })
 
+// Hook LeaseManager to create consumer spans
+console.log(`${LOG_PREFIX} Registering hook #3: LeaseManager wrapper (file: build/src/lease-manager.js)`)
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
-  const ctx = {}
+
+  console.log(`${LOG_PREFIX} Hook #3 FIRED: build/src/lease-manager.js loaded (LeaseManager found: ${!!LeaseManager})`)
+  
+  if (!LeaseManager) {
+    console.log(`${LOG_PREFIX} ERROR: LeaseManager not found in exports - consumer instrumentation will NOT work!`)
+    return obj
+  }
+
+  console.log(`${LOG_PREFIX} Wrapping LeaseManager._dispense, .remove, and .clear methods`)
+  console.log(`${LOG_PREFIX} Current subscriber count - receiveStartCh: ${receiveStartCh.hasSubscribers}, receiveFinishCh: ${receiveFinishCh.hasSubscribers}`)
+
+  // Use a strongly-held Map keyed by message.id instead of WeakMap
+  // This prevents context loss if message objects are recycled or GC'd
+  const messageContexts = new Map()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
-    if (receiveStartCh.hasSubscribers) {
-      ctx.message = message
-      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
+    const timestamp = new Date().toISOString()
+    const hasSubscribers = receiveStartCh.hasSubscribers
+    console.log(`${LOG_PREFIX} [${timestamp}] _dispense() called - messageId: ${message?.id}, hasSubscribers: ${hasSubscribers}`)
+    
+    // ALWAYS create context and publish events, even if no subscribers yet
+    // The consumer plugin might subscribe later, and we don't want to lose this message
+    console.log(`${LOG_PREFIX} Publishing to receiveStartCh and running dispense with context`)
+    const ctx = { message }
+    
+    // Store the context by message.id (strongly held) so we can retrieve it in remove()
+    if (message?.id) {
+      messageContexts.set(message.id, ctx)
+      console.log(`${LOG_PREFIX} Stored context in Map for message ${message.id}`)
     }
-    return dispense.apply(this, arguments)
+    
+    return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
+    const timestamp = new Date().toISOString()
+    console.log(`${LOG_PREFIX} [${timestamp}] remove() called - messageId: ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
+    
+    // Retrieve the context from _dispense using message.id
+    const ctx = (message?.id && messageContexts.get(message.id)) || { message }
+    console.log(`${LOG_PREFIX} Context retrieved from Map: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    
+    // Always publish finish event to ensure span cleanup
+    if (message?.id) {
+      messageContexts.delete(message.id)
+      console.log(`${LOG_PREFIX} Deleted context from Map for message ${message.id}`)
+    }
+    
+    if (receiveFinishCh.hasSubscribers) {
+      receiveFinishCh.publish(ctx)
+    } else {
+      console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)
+    }
+    return remove.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
-    for (const message of this._messages) {
-      ctx.message = message
-      receiveFinishCh.publish(ctx)
-    }
+    console.log(`${LOG_PREFIX} clear() called - clearing ${this._messages?.size || 0} messages`)
+    // DON'T publish finish events here - remove() will be called for each message later
+    // and will handle finishing the spans properly with the preserved context
+    console.log(`${LOG_PREFIX} clear() will rely on subsequent remove() calls to finish spans`)
     return clear.apply(this, arguments)
   })
 
+  console.log(`${LOG_PREFIX} LeaseManager wrapper installation COMPLETE`)
   return obj
 })
+
+console.log(`${LOG_PREFIX} ========================================`)
+console.log(`${LOG_PREFIX} google-cloud-pubsub instrumentation LOADED`)
+console.log(`${LOG_PREFIX} ========================================`)
 
 function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
@@ -270,19 +341,19 @@ function injectTraceContext (attributes, pubsub, topicName) {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
-  // Wrap Topic.publishMessage (modern API)
-  if (obj.Topic.prototype.publishMessage) {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
-      if (data && typeof data === 'object') {
-        if (!data.attributes) data.attributes = {}
-        injectTraceContext(data.attributes, this.pubsub, this.name)
+  if (typeof obj.Topic.prototype.publishMessage === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+      return function (data, attributesOrCallback, callback) {
+        if (data && typeof data === 'object') {
+          if (!data.attributes) data.attributes = {}
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        }
+        return publishMessage.apply(this, arguments)
       }
-      return publishMessage.apply(this, arguments)
     })
   }
 
-  // Wrap Topic.publish (legacy API)
-  if (obj.Topic.prototype.publish) {
+  if (typeof obj.Topic.prototype.publish === 'function') {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
       if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
         arguments[1] = {}
