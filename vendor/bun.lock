@@ -10,7 +10,6 @@
         "@opentelemetry/core": ">=1.14.0 <1.31.0",
         "@opentelemetry/resources": ">=1.0.0 <1.31.0",
         "crypto-randomuuid": "^1.0.0",
-        "dc-polyfill": "^0.1.10",
         "ignore": "^7.0.5",
         "istanbul-lib-coverage": "^3.2.2",
         "jest-docblock": "^29.7.0",
@@ -166,8 +165,6 @@
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
     "crypto-randomuuid": ["crypto-randomuuid@1.0.0", "", {}, "sha512-/RC5F4l1SCqD/jazwUF6+t34Cd8zTSAGZ7rvvZu1whZUhD2a5MOGKjSGowoGcpj/cbVZk1ZODIooJEQQq3nNAA=="],
-
-    "dc-polyfill": ["dc-polyfill@0.1.10", "", {}, "sha512-9iSbB8XZ7aIrhUtWI5ulEOJ+IyUN+axquodHK+bZO4r7HfY/xwmo6I4fYYf+aiDom+WMcN/wnzCz+pKvHDDCug=="],
 
     "detect-newline": ["detect-newline@3.1.0", "", {}, "sha512-TLz+x/vEXm/Y7P7wn1EJFNLxYpUD4TgMosxY6fAVJUnJMbupHBOncxyWUG9OpTaH9EBD7uFI5LfEgmMOc54DsA=="],
 
