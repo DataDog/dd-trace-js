@@ -22,6 +22,9 @@ const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 
+console.log('[google-cloud-pubsub instrumentation] Diagnostic channels created for receive operations')
+console.log('[google-cloud-pubsub instrumentation] receiveStartCh hasSubscribers:', receiveStartCh.hasSubscribers)
+
 const ackContextMap = new Map()
 
 const publisherMethods = [
@@ -177,15 +180,18 @@ function massWrap (obj, methods, wrapper) {
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   const Subscription = obj.Subscription
+  console.log('[google-cloud-pubsub instrumentation] Wrapping Subscription.emit')
 
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
+    console.log('[google-cloud-pubsub instrumentation] Subscription.emit called with message:', message?.id)
     const store = storage('legacy').getStore()
     const ctx = { message, store }
     try {
       return emit.apply(this, arguments)
     } catch (err) {
+      console.log('[google-cloud-pubsub instrumentation] Error in Subscription.emit:', err.message)
       ctx.error = err
       receiveErrorCh.publish(ctx)
       throw err
@@ -195,17 +201,15 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
-// Support both old and new file structures for different versions
-// Old versions: build/src/subscription.js
-// New versions: build/src/subscriber.js
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, wrapMessage)
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscription.js' }, wrapMessage)
-
-function wrapMessage (obj) {
+// Hook Message.ack to store span context for acknowledge operations
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
+  console.log('[google-cloud-pubsub instrumentation] Hook for subscriber.js - Message found:', !!Message)
 
   if (Message && Message.prototype && Message.prototype.ack) {
+    console.log('[google-cloud-pubsub instrumentation] Wrapping Message.ack')
     shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
+      console.log('[google-cloud-pubsub instrumentation] Message.ack called for message:', this.id)
       const currentStore = storage('legacy').getStore()
       const activeSpan = currentStore && currentStore.span
 
@@ -213,8 +217,11 @@ function wrapMessage (obj) {
         const storeWithSpanContext = { ...currentStore, span: activeSpan }
 
         if (this.ackId) {
+          console.log('[google-cloud-pubsub instrumentation] Storing span context for ackId:', this.ackId)
           ackContextMap.set(this.ackId, storeWithSpanContext)
         }
+      } else {
+        console.log('[google-cloud-pubsub instrumentation] No active span found during ack')
       }
 
       return originalAck.apply(this, arguments)
@@ -222,30 +229,40 @@ function wrapMessage (obj) {
   }
 
   return obj
-}
+})
 
-// Support both old and new file structures for different versions
-// Old versions: build/src/subscriber/lease-manager.js
-// New versions: build/src/lease-manager.js
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, wrapLeaseManager)
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber/lease-manager.js' }, wrapLeaseManager)
-
-function wrapLeaseManager (obj) {
+// Hook LeaseManager to create consumer spans
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
 
-  if (!LeaseManager) return obj
+  if (!LeaseManager) {
+    console.log('[google-cloud-pubsub instrumentation] LeaseManager not found in obj')
+    return obj
+  }
+
+  console.log('[google-cloud-pubsub instrumentation] Wrapping LeaseManager._dispense')
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
+    console.log(`[google-cloud-pubsub instrumentation] _dispense called for message ${message?.id}, hasSubscribers: ${receiveStartCh.hasSubscribers}`)
     if (receiveStartCh.hasSubscribers) {
+      console.log('[google-cloud-pubsub instrumentation] Publishing to receiveStartCh via runStores')
       const ctx = { message }
       return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
+    } else {
+      console.log('[google-cloud-pubsub instrumentation] WARNING: receiveStartCh has no subscribers! Consumer plugin not loaded?')
     }
     return dispense.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
+    console.log(`[google-cloud-pubsub instrumentation] remove called for message ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
     const ctx = { message }
-    return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
+    if (receiveFinishCh.hasSubscribers) {
+      return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
+    } else {
+      console.log('[google-cloud-pubsub instrumentation] WARNING: receiveFinishCh has no subscribers!')
+    }
+    return remove.apply(this, arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
@@ -257,7 +274,7 @@ function wrapLeaseManager (obj) {
   })
 
   return obj
-}
+})
 
 function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return

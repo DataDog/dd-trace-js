@@ -49,10 +49,12 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
+          console.log('[TEST] Loading google-cloud-pubsub plugin')
           return agent.load('google-cloud-pubsub', { dsmEnabled: false })
         })
 
         beforeEach(() => {
+          console.log('[TEST] Initializing test environment for version:', version)
           tracer = require('../../dd-trace')
           gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -61,6 +63,7 @@ describe('Plugin', () => {
           resource = `projects/${project}/topics/${topicName}`
           v1 = lib.v1
           pubsub = new lib.PubSub({ projectId: project })
+          console.log('[TEST] Test environment ready - project:', project, 'topic:', topicName)
         })
 
         describe('createTopic', () => {
@@ -176,6 +179,7 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
+            console.log('[TEST] Starting "should be instrumented" test')
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -189,10 +193,17 @@ describe('Plugin', () => {
                 'pubsub.ack': 1
               }
             })
+            console.log('[TEST] Creating topic and subscription')
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            sub.on('message', msg => msg.ack())
+            console.log('[TEST] Setting up message handler')
+            sub.on('message', msg => {
+              console.log('[TEST] Message received in test handler:', msg.id)
+              msg.ack()
+            })
+            console.log('[TEST] Publishing message')
             await publish(topic, { data: Buffer.from('hello') })
+            console.log('[TEST] Waiting for span')
             return expectedSpanPromise
           })
 
@@ -263,19 +274,29 @@ describe('Plugin', () => {
 
           withNamingSchema(
             async () => {
+              console.log('[TEST] withNamingSchema: Starting receive test')
               const [topic] = await pubsub.createTopic(topicName)
               const [sub] = await topic.createSubscription('foo')
-              sub.on('message', msg => msg.ack())
+              sub.on('message', msg => {
+                console.log('[TEST] withNamingSchema: Message received:', msg.id)
+                msg.ack()
+              })
               await publish(topic, { data: Buffer.from('hello') })
+              console.log('[TEST] withNamingSchema: Message published, waiting for processing')
             },
             rawExpectedSchema.receive,
             {
               selectSpan: (traces) => {
+                console.log('[TEST] selectSpan called with traces:', traces.length, 'trace(s)')
                 // Consumer spans have type='worker'. Find it to avoid picking client spans.
                 const allSpans = traces.flat()
+                console.log('[TEST] Total spans:', allSpans.length, 'span types:', allSpans.map(s => s.type).join(', '))
                 const workerSpan = allSpans.find(span => span.type === 'worker')
+                console.log('[TEST] Worker span found:', !!workerSpan, 'name:', workerSpan?.name)
                 // Always return a valid span - never undefined to avoid "Target cannot be null" error
-                return workerSpan || allSpans[allSpans.length - 1] || traces[0][0]
+                const selectedSpan = workerSpan || allSpans[allSpans.length - 1] || traces[0][0]
+                console.log('[TEST] Selected span:', selectedSpan?.name, 'type:', selectedSpan?.type)
+                return selectedSpan
               }
             }
           )
@@ -388,6 +409,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
+            console.log('[TEST DSM] Testing produce checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
 
             agent.expectPipelineStats(dsmStats => {
@@ -406,8 +428,11 @@ describe('Plugin', () => {
           })
 
           it('on consume', async () => {
+            console.log('[TEST DSM] Testing consume checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
+            console.log('[TEST DSM] Message published, setting up consumer')
             await consume(async () => {
+              console.log('[TEST DSM] Message consumed')
               agent.expectPipelineStats(dsmStats => {
                 let statsPointsReceived = 0
                 // we should have 2 dsm stats points

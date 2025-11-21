@@ -9,6 +9,12 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'receive'
 
+  constructor (...args) {
+    super(...args)
+    // DEBUG: Verify consumer plugin is instantiated and subscribing
+    console.log('[GoogleCloudPubsubConsumerPlugin] Instantiated, should be subscribing to apm:google-cloud-pubsub:receive:start')
+  }
+
   _reconstructPubSubRequestContext (attrs) {
     const traceIdLower = attrs['_dd.pubsub_request.trace_id']
     const spanId = attrs['_dd.pubsub_request.span_id']
@@ -35,6 +41,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   }
 
   bindStart (ctx) {
+    console.log('[GoogleCloudPubsubConsumerPlugin] bindStart called with ctx:', { hasMessage: !!ctx.message, messageId: ctx.message?.id })
     const { message } = ctx
     
     // Get subscription and topic with fallbacks
@@ -47,7 +54,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
                 ? `projects/${message.attributes['gcloud.project_id']}/topics/unknown`
                 : null)
       topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
+      console.log('[GoogleCloudPubsubConsumerPlugin] Successfully extracted subscription and topic:', { topicName, topic })
     } catch (e) {
+      console.log('[GoogleCloudPubsubConsumerPlugin] Error extracting subscription, using fallback:', e.message)
       // Fallback if subscription structure is different
       topic = message.attributes?.['pubsub.topic'] || null
       topicName = topic ? topic.split('/').pop() : 'unknown'
@@ -132,6 +141,13 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta['pubsub.batch.description'] = `Message ${index + 1} of ${size}`
     }
 
+    console.log('[GoogleCloudPubsubConsumerPlugin] Creating consumer span with:', { 
+      resource: `Message from ${topicName}`,
+      type: 'worker',
+      service: serviceName,
+      hasChildOf: !!childOf
+    })
+
     const span = this.startSpan({
       childOf,
       resource: `Message from ${topicName}`,
@@ -140,6 +156,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       meta,
       metrics
     }, ctx)
+
+    console.log('[GoogleCloudPubsubConsumerPlugin] Consumer span created:', { spanId: span?.context()?.toSpanId(), name: span?._name })
 
     if (message.id) {
       span.setTag('pubsub.message_id', message.id)
@@ -185,10 +203,17 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   }
 
   bindFinish (ctx) {
+    console.log('[GoogleCloudPubsubConsumerPlugin] bindFinish called:', { 
+      hasMessage: !!ctx.message, 
+      hasCurrentStore: !!ctx.currentStore,
+      hasSpan: !!ctx.currentStore?.span,
+      messageHandled: ctx.message?._handled
+    })
     const { message } = ctx
     const span = ctx.currentStore?.span
 
     if (span && message?._handled) {
+      console.log('[GoogleCloudPubsubConsumerPlugin] Setting pubsub.ack=1 on span')
       span.setTag('pubsub.ack', 1)
     }
 
