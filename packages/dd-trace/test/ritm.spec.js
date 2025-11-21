@@ -103,7 +103,7 @@ describe('Ritm', () => {
     )
   })
 
-  it('should hook node: prefixed builtins via canonical registrations', () => {
+  it('should hook node: prefixed builtins', () => {
     const nodeHttp = require('node:http')
     assert.equal(nodeHttp.foo, 1)
     assert.equal(httpOnRequire.callCount, 1, 'onrequire should run only once')

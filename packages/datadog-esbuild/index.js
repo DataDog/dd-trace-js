@@ -24,36 +24,19 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
-
-function stripNodePrefix (specifier) {
-  return typeof specifier === 'string' && specifier.startsWith('node:')
-    ? specifier.slice(5)
-    : specifier
-}
-
 function moduleOfInterestKey (name, file) {
   return file ? `${name}/${file}` : name
 }
 
-const builtinCanonicalNames = new Set(RAW_BUILTINS.map(stripNodePrefix))
+const builtinCanonicalNames = new Set(require('module').builtinModules)
 
 function addModuleOfInterest (name, file) {
   if (!name) return
 
-  const canonicalName = stripNodePrefix(name)
-  const keys = new Set([moduleOfInterestKey(name, file)])
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
 
-  if (canonicalName !== name) {
-    keys.add(moduleOfInterestKey(canonicalName, file))
-  }
-
-  if (builtinCanonicalNames.has(canonicalName)) {
-    keys.add(moduleOfInterestKey(`node:${canonicalName}`, file))
-  }
-
-  for (const key of keys) {
-    modulesOfInterest.add(key)
+  if (builtinCanonicalNames.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
   }
 }
 
