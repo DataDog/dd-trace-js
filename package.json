@@ -131,7 +131,9 @@
     "@datadog/openfeature-node-server": "^0.2.0",
     "@datadog/pprof": "5.12.0",
     "@datadog/sketches-js": "2.1.1",
-    "@datadog/wasm-js-rewriter": "5.0.1"
+    "@datadog/wasm-js-rewriter": "5.0.1",
+    "escape-string-regexp": "^5.0.0",
+    "import-in-the-middle": "^1.14.2"
   },
   "devDependencies": {
     "@babel/helpers": "^7.28.4",
