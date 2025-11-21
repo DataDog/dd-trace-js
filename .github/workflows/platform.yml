@@ -432,6 +432,8 @@ jobs:
       matrix:
         version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
     runs-on: ubuntu-latest
+    env:
+      NOVENDOR: 'true'
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node
@@ -454,6 +456,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
+      NOVENDOR: 'true'
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node
