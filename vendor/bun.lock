@@ -3,7 +3,6 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dd-trace",
       "dependencies": {
         "@isaacs/ttlcache": "^2.0.1",
         "@opentelemetry/api": ">=1.0.0 <1.10.0",
