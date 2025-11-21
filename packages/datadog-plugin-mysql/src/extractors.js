@@ -5,16 +5,19 @@
 'use strict'
 
 function connectionQueryClient (ctx) {
+  const config = ctx.self?.config
+  const statement = typeof ctx.args[0] === 'string' ? ctx.args[0] : 'query'
+
   return {
     operation: 'query',
-    resource: ctx.arguments?.[0],
+    resource: statement,
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config.database,
-      'db.user': ctx.self?.config.user,
-      'db.statement': ctx.arguments?.[0]
+      'db.name': config?.database,
+      'db.user': config?.user,
+      'db.statement': statement
     },
     metrics: {
       'db.pid': ctx.self?.threadId
@@ -24,7 +27,7 @@ function connectionQueryClient (ctx) {
 
 function poolQueryClient (ctx) {
   const config = ctx.self?.config?.connectionConfig
-
+  const statement = typeof ctx.args[0] === 'string' ? ctx.args[0] : 'query'
   const pool = ctx.self
   let threadId = pool?.threadId
 
@@ -49,36 +52,40 @@ function poolQueryClient (ctx) {
     }
   }
 
-  const tags = {
+  const meta = {
     'component': 'mysql',
     'span.kind': 'client',
     'db.type': 'mysql',
     'db.name': config?.database,
     'db.user': config?.user,
-    'db.statement': ctx.arguments?.[0]
+    'db.statement': statement
+  }
+
+  const metrics = {}
+  if (threadId != null) {
+    metrics['db.pid'] = threadId
   }
 
   return {
     operation: 'query',
-    resource: ctx.arguments?.[0],
-    meta: tags,
-    metrics: {
-      'db.pid': threadId
-    }
+    resource: statement,
+    meta,
+    metrics
   }
 }
 
 function connectionBegintransactionClient (ctx) {
+  const config = ctx.self?.config
+
   return {
     operation: 'beginTransaction',
-    resource: ctx.arguments?.[0],
+    resource: 'BEGIN TRANSACTION',
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config.database,
-      'db.user': ctx.self?.config.user,
-      'db.statement': ctx.arguments?.[0]
+      'db.name': config?.database,
+      'db.user': config?.user
     },
     metrics: {
       'db.pid': ctx.self?.threadId
@@ -87,15 +94,17 @@ function connectionBegintransactionClient (ctx) {
 }
 
 function connectionCommitClient (ctx) {
+  const config = ctx.self?.config
+
   return {
     operation: 'commit',
-    resource: ctx.arguments?.[0],
+    resource: 'COMMIT',
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config?.database,
-      'db.user': ctx.self?.config?.user,
+      'db.name': config?.database,
+      'db.user': config?.user
     },
     metrics: {
       'db.pid': ctx.self?.threadId
@@ -104,15 +113,17 @@ function connectionCommitClient (ctx) {
 }
 
 function connectionRollbackClient (ctx) {
+  const config = ctx.self?.config
+
   return {
     operation: 'rollback',
-    resource: ctx.arguments?.[0],
+    resource: 'ROLLBACK',
     meta: {
       'component': 'mysql',
       'span.kind': 'client',
       'db.type': 'mysql',
-      'db.name': ctx.self?.config?.database,
-      'db.user': ctx.self?.config?.user,
+      'db.name': config?.database,
+      'db.user': config?.user
     },
     metrics: {
       'db.pid': ctx.self?.threadId
@@ -123,7 +134,7 @@ function connectionRollbackClient (ctx) {
 module.exports = {
   'tracing:apm:mysql:connection:query': connectionQueryClient,
   'tracing:apm:mysql:pool:query': poolQueryClient,
-  'tracing:apm:mysql:connection:beginTransaction': connectionBegintransactionClient,
+  'tracing:apm:mysql:connection:begintransaction': connectionBegintransactionClient,
   'tracing:apm:mysql:connection:commit': connectionCommitClient,
   'tracing:apm:mysql:connection:rollback': connectionRollbackClient
 }
