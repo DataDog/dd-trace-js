@@ -195,7 +195,13 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
+// Support both old and new file structures for different versions
+// Old versions: build/src/subscription.js
+// New versions: build/src/subscriber.js
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, wrapMessage)
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscription.js' }, wrapMessage)
+
+function wrapMessage (obj) {
   const Message = obj.Message
 
   if (Message && Message.prototype && Message.prototype.ack) {
@@ -216,10 +222,18 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
   }
 
   return obj
-})
+}
 
-addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
+// Support both old and new file structures for different versions
+// Old versions: build/src/subscriber/lease-manager.js
+// New versions: build/src/lease-manager.js
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, wrapLeaseManager)
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber/lease-manager.js' }, wrapLeaseManager)
+
+function wrapLeaseManager (obj) {
   const LeaseManager = obj.LeaseManager
+
+  if (!LeaseManager) return obj
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     if (receiveStartCh.hasSubscribers) {
@@ -243,7 +257,7 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   })
 
   return obj
-})
+}
 
 function injectTraceContext (attributes, pubsub, topicName) {
   if (attributes['x-datadog-trace-id'] || attributes.traceparent) return
