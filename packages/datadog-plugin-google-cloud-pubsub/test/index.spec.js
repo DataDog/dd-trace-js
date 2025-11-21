@@ -48,18 +48,20 @@ describe('Plugin', () => {
       let expectedConsumerHash
 
       describe('without configuration', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
           const msg = `[DD-PUBSUB-TEST] ======================================== Loading google-cloud-pubsub plugin at ${new Date().toISOString()} ========================================`
           console.log(msg)
           process.stdout.write(msg + '\n')
-          return agent.load('google-cloud-pubsub', { dsmEnabled: false })
-        })
-
-        beforeEach(() => {
-          const msg = `[DD-PUBSUB-TEST] Initializing test environment for version: ${version}`
-          console.log(msg)
-          process.stdout.write(msg + '\n')
           
+          // CRITICAL: Load instrumentation BEFORE requiring @google-cloud/pubsub
+          // This ensures addHook() wrappers attach before the module is cached
+          await agent.load('google-cloud-pubsub', { dsmEnabled: false })
+          
+          const initMsg = `[DD-PUBSUB-TEST] Initializing test environment for version: ${version}`
+          console.log(initMsg)
+          process.stdout.write(initMsg + '\n')
+          
+          // NOW require the library - hooks will attach
           tracer = require('../../dd-trace')
           gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -362,14 +364,14 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+        beforeEach(async () => {
+          // Load instrumentation BEFORE requiring the library
+          await agent.load('google-cloud-pubsub', {
             service: 'a_test_service',
             dsmEnabled: false
           })
-        })
-
-        beforeEach(() => {
+          
+          // NOW require the library - hooks will attach
           tracer = require('../../dd-trace')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
@@ -396,13 +398,13 @@ describe('Plugin', () => {
         let sub
         let consume
 
-        beforeEach(() => {
-          return agent.load('google-cloud-pubsub', {
+        before(async () => {
+          // Load instrumentation BEFORE requiring the library
+          await agent.load('google-cloud-pubsub', {
             dsmEnabled: true
           })
-        })
-
-        before(async () => {
+          
+          // NOW require the library - hooks will attach
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           resource = `projects/${project}/topics/${dsmTopicName}`
