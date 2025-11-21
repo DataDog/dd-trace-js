@@ -16,16 +16,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static id = 'google-cloud-pubsub'
   static operation = 'receive'
 
-  constructor (...args) {
-    console.log(`${LOG_PREFIX} constructor() called with args:`, args.length)
-    super(...args)
-    console.log(`${LOG_PREFIX} ========================================`)
-    console.log(`${LOG_PREFIX} CONSUMER PLUGIN INSTANTIATED SUCCESSFULLY`)
-    console.log(`${LOG_PREFIX} This plugin should now be subscribed to:`)
-    console.log(`${LOG_PREFIX}   - apm:google-cloud-pubsub:receive:start`)
-    console.log(`${LOG_PREFIX}   - apm:google-cloud-pubsub:receive:finish`)
-    console.log(`${LOG_PREFIX} ========================================`)
-  }
 
   _reconstructPubSubRequestContext (attrs) {
     const traceIdLower = attrs['_dd.pubsub_request.trace_id']

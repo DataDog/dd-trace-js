@@ -257,41 +257,44 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   console.log(`${LOG_PREFIX} Wrapping LeaseManager._dispense, .remove, and .clear methods`)
   console.log(`${LOG_PREFIX} Current subscriber count - receiveStartCh: ${receiveStartCh.hasSubscribers}, receiveFinishCh: ${receiveFinishCh.hasSubscribers}`)
 
-  // Store contexts by message ID so we can retrieve them in remove()
-  const messageContexts = new WeakMap()
+  // Use a strongly-held Map keyed by message.id instead of WeakMap
+  // This prevents context loss if message objects are recycled or GC'd
+  const messageContexts = new Map()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     const timestamp = new Date().toISOString()
     const hasSubscribers = receiveStartCh.hasSubscribers
     console.log(`${LOG_PREFIX} [${timestamp}] _dispense() called - messageId: ${message?.id}, hasSubscribers: ${hasSubscribers}`)
     
-    if (hasSubscribers) {
-      console.log(`${LOG_PREFIX} Publishing to receiveStartCh and running dispense with context`)
-      const ctx = { message }
-      // Store the context so we can retrieve it in remove()
-      messageContexts.set(message, ctx)
-      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
-    } else {
-      console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
-      console.log(`${LOG_PREFIX} !!!!! CRITICAL: NO SUBSCRIBERS ON receiveStartCh !!!!!`)
-      console.log(`${LOG_PREFIX} !!!!! Consumer plugin was NOT instantiated or configured !!!!!`)
-      console.log(`${LOG_PREFIX} !!!!! Consumer spans will NOT be created !!!!!`)
-      console.log(`${LOG_PREFIX} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`)
+    // ALWAYS create context and publish events, even if no subscribers yet
+    // The consumer plugin might subscribe later, and we don't want to lose this message
+    console.log(`${LOG_PREFIX} Publishing to receiveStartCh and running dispense with context`)
+    const ctx = { message }
+    
+    // Store the context by message.id (strongly held) so we can retrieve it in remove()
+    if (message?.id) {
+      messageContexts.set(message.id, ctx)
+      console.log(`${LOG_PREFIX} Stored context in Map for message ${message.id}`)
     }
-    return dispense.apply(this, arguments)
+    
+    return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
     const timestamp = new Date().toISOString()
     console.log(`${LOG_PREFIX} [${timestamp}] remove() called - messageId: ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
     
-    // Retrieve the context from _dispense
-    const ctx = messageContexts.get(message) || { message }
-    console.log(`${LOG_PREFIX} Context retrieved from WeakMap: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    // Retrieve the context from _dispense using message.id
+    const ctx = (message?.id && messageContexts.get(message.id)) || { message }
+    console.log(`${LOG_PREFIX} Context retrieved from Map: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    
+    // Always publish finish event to ensure span cleanup
+    if (message?.id) {
+      messageContexts.delete(message.id)
+      console.log(`${LOG_PREFIX} Deleted context from Map for message ${message.id}`)
+    }
     
     if (receiveFinishCh.hasSubscribers) {
-      // Clean up the stored context
-      messageContexts.delete(message)
       receiveFinishCh.publish(ctx)
     } else {
       console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)

@@ -491,14 +491,22 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            expect(recordCheckpointSpy.called).to.be.true
+            expect(recordCheckpointSpy.args).to.have.lengthOf.at.least(1)
+            expect(recordCheckpointSpy.args[0]).to.exist
+            expect(recordCheckpointSpy.args[0][0]).to.exist
+            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize')).to.be.true
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              expect(recordCheckpointSpy.called).to.be.true
+              expect(recordCheckpointSpy.args).to.have.lengthOf.at.least(1)
+              expect(recordCheckpointSpy.args[0]).to.exist
+              expect(recordCheckpointSpy.args[0][0]).to.exist
+              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize')).to.be.true
             })
           })
         })
