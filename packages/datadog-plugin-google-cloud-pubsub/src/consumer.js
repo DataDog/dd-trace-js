@@ -173,8 +173,8 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     // Manually ensure the span is marked as a worker/consumer span.
     // The base ConsumerPlugin.startSpan doesn't use the 'type' option correctly,
-    // so we must set _type explicitly for the agent & tests to see type: 'worker'.
-    span._type = 'worker'
+    // so we must set the span type tag explicitly for the agent & tests to see type: 'worker'.
+    span.setTag('span.type', 'worker')
     span.setTag(COMPONENT, this.constructor.id)
 
     console.log(`${LOG_PREFIX} ========================================`)
