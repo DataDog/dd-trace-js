@@ -47,6 +47,8 @@ dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.open
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@openfeature/core,Apache-2.0,Copyright OpenFeature Authors
 dev,@openfeature/server-sdk,Apache-2.0,Copyright OpenFeature Authors
+dev,@rspack/cli,MIT,Copyright (c) 2022-present Bytedance Inc and its affiliates.
+dev,@rspack/core,MIT,Copyright (c) 2022-present Bytedance Inc and its affiliates.
 dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>
 dev,axios,MIT,Copyright 2014-present Matt Zabriskie
 dev,benchmark,MIT,Copyright 2010-2016 Mathias Bynens Robert Kieffer John-David Dalton
@@ -73,7 +75,9 @@ dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
 dev,octokit,MIT,Copyright 2023 Octokit contributors
+dev,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
+dev,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 dev,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen
 dev,sinon-chai,WTFPL and BSD-2-Clause,Copyright 2004 Sam Hocevar 2012–2017 Domenic Denicola

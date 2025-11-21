@@ -3,11 +3,12 @@
 const fs = require('fs')
 const path = require('path')
 const readline = require('readline')
-const pkg = require(path.join(__dirname, '..', '/package.json'))
+const pkg = require(path.join(__dirname, '..', 'package.json'))
+const vendorPkg = require(path.join(__dirname, '..', 'vendor', 'package.json'))
 
 const filePath = path.join(__dirname, '..', '/LICENSE-3rdparty.csv')
-const deps = new Set(Object.keys(pkg.dependencies || {}))
-const devDeps = new Set(Object.keys(pkg.devDependencies || {}))
+const deps = new Set(Object.keys(pkg.dependencies).concat(Object.keys(vendorPkg.dependencies)))
+const devDeps = new Set(Object.keys(pkg.devDependencies).concat(Object.keys(vendorPkg.devDependencies)))
 
 let index = 0
 
