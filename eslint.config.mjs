@@ -354,7 +354,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline'
       }],
-      'import/no-extraneous-dependencies': 'error',
+      'import/no-extraneous-dependencies': 'off',
       'n/no-restricted-require': ['error', ['diagnostics_channel']],
       'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
