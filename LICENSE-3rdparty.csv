@@ -68,6 +68,7 @@ dev,glob,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,globals,MIT,Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
 dev,graphql,MIT,Copyright 2015 Facebook Inc.
 dev,jszip,MIT,Copyright 2015-2016 Stuart Knightley and contributors
+dev,license-webpack-plugin,ISC,Copyright (c) 2016 S K (xz64)
 dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foundation
 dev,mocha-multi-reporters,MIT,Copyright 2015-2019 Yousaf Nabi and Stanley Ng
 dev,mocha-junit-reporter,MIT, Copyright 2015 Michael Allen
