@@ -37,13 +37,6 @@ class GenAiTracingPlugin extends TracingPlugin {
       ctx.currentStore.span.finish()
     }
   }
-
-  end (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    span.finish()
-  }
 }
 
 module.exports = GenAiTracingPlugin
