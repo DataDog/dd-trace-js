@@ -23,6 +23,12 @@ const pollInterval = 0.1
  */
 
 /**
+ * Bound version of generateProbeConfig that only requires optional overrides (breakpoint is already bound).
+ *
+ * @typedef {(overrides?: Partial<ProbeConfig>) => ProbeConfig} BoundGenerateProbeConfigFn
+ */
+
+/**
  * @typedef {Object} BreakpointInfo
  * @property {string} sourceFile
  * @property {string} deployedFile
@@ -37,7 +43,7 @@ const pollInterval = 0.1
  *   rcConfig: object|null,
  *   triggerBreakpoint: (url: string) => Promise<import('axios').AxiosResponse<unknown>>,
  *   generateRemoteConfig: (overrides?: object) => object,
- *   generateProbeConfig: GenerateProbeConfigFn
+ *   generateProbeConfig: BoundGenerateProbeConfigFn
  * }} EnrichedBreakpoint
  */
 
@@ -59,7 +65,7 @@ const pollInterval = 0.1
  * @property {() => Promise<import('axios').AxiosResponse<unknown>>} triggerBreakpoint - Triggers the primary breakpoint
  *   once installed.
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
- * @property {GenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
+ * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
  */
 
 module.exports = {

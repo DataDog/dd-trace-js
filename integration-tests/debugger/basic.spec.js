@@ -124,7 +124,11 @@ describe('Dynamic Instrumentation', function () {
             const expected = expectedPayloads.shift()
             assertObjectContains(event, expected)
             assertUUID(event.debugger.diagnostics.runtimeId)
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger()
+            }
             endIfDone()
           })
         })
@@ -195,12 +199,14 @@ describe('Dynamic Instrumentation', function () {
 
       it(
         'should send expected error diagnostics messages if probe type isn\'t supported',
+        // @ts-expect-error Expecting this probe type to be invalid
         unsupporedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
       )
 
       it(
         'should send expected error diagnostics messages if it isn\'t a line-probe',
         unsupporedOrInvalidProbesTest(
+          // @ts-expect-error Expecting this probe type to be invalid
           t.generateProbeConfig({ where: { typeName: 'index.js', methodName: 'handlerA' } })
         )
       )
@@ -513,7 +519,11 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger().catch(done)
+            }
           })
         })
 
@@ -587,6 +597,12 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should adhere to individual probes sample rate', function (done) {
+        /** @type {(() => void) & { calledOnce?: boolean }} */
+        const doneWhenCalledTwice = () => {
+          if (doneWhenCalledTwice.calledOnce) return done()
+          doneWhenCalledTwice.calledOnce = true
+        }
+
         const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const state = {
@@ -632,11 +648,6 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
-
-        function doneWhenCalledTwice () {
-          if (doneWhenCalledTwice.calledOnce) return done()
-          doneWhenCalledTwice.calledOnce = true
-        }
       })
     })
 

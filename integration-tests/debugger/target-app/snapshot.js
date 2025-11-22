@@ -1,6 +1,7 @@
 'use strict'
 
 require('dd-trace/init')
+// @ts-expect-error This code is running in a sandbox where fastify is available
 const Fastify = require('fastify')
 
 const fastify = Fastify({ logger: { level: 'error' } })
