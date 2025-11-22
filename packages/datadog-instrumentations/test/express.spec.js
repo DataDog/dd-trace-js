@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const semifies = require('semifies')
@@ -70,7 +69,7 @@ withVersions('express', 'express', version => {
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      expect(requestBody).not.to.be.called
+      sinon.assert.notCalled(requestBody)
       assert.strictEqual(res.data, 'BLOCKED')
 
       queryParserReadCh.unsubscribe(blockRequest)

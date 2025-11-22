@@ -165,7 +165,7 @@ describe('sql-injection-analyzer', () => {
     sqlInjectionAnalyzer.configure(true)
     dc.channel('datadog:sequelize:query:finish').publish()
     sqlInjectionAnalyzer.configure(false)
-    expect(log.error).not.to.be.called
+    sinon.assert.notCalled(log.error)
   })
 
   describe('analyze', () => {

@@ -1,6 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -42,8 +46,8 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        expect(err).not.to.exist
-        expect(scope.isDone()).to.be.true
+        assert.ok(err == null)
+        assert.strictEqual(scope.isDone(), true)
         done()
       })
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -59,8 +63,8 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        expect(err.message).to.include('Error fetching commits to exclude')
-        expect(scope.isDone()).to.be.true
+        assertObjectContains(err.message, 'Error fetching commits to exclude')
+        assert.strictEqual(scope.isDone(), true)
         done()
       })
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -72,7 +76,7 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/search_commits')
         .reply(200, function () {
           const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
-          expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
+          assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
           done()
         })
         .post('/api/v2/git/repository/packfile')
@@ -100,7 +104,7 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.getLibraryConfiguration({}, () => {})
       ciVisibilityExporter._gitUploadPromise.then(() => {
-        expect(scope.isDone()).to.be.true
+        assert.strictEqual(scope.isDone(), true)
         done()
       })
     })
@@ -112,9 +116,9 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          expect(libraryConfig).to.eql({})
-          expect(err).to.be.null
-          expect(scope.isDone()).not.to.be.true
+          assert.deepStrictEqual(libraryConfig, {})
+          assert.strictEqual(err, null)
+          assert.notStrictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -147,8 +151,8 @@ describe('CI Visibility Exporter', () => {
         })
 
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
-          expect(scope.isDone()).to.be.true
-          expect(customConfig).to.eql({
+          assert.strictEqual(scope.isDone(), true)
+          assert.deepStrictEqual(customConfig, {
             my_custom_config: 'my_custom_config_value'
           })
           done()
@@ -180,15 +184,15 @@ describe('CI Visibility Exporter', () => {
           tag: 'v1.0.0'
         }
         ciVisibilityExporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
-          expect(err).to.be.null
-          expect(libraryConfig).to.contain({
+          assert.strictEqual(err, null)
+          assertObjectContains(libraryConfig, {
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
             isSuitesSkippingEnabled: true
           })
-          expect(scope.isDone()).to.be.true
-          expect(requestBody.data.attributes.branch).to.equal('v1.0.0')
+          assert.strictEqual(scope.isDone(), true)
+          assert.strictEqual(requestBody.data.attributes.branch, 'v1.0.0')
           done()
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -211,15 +215,15 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
 
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          expect(libraryConfig).to.contain({
+          assertObjectContains(libraryConfig, {
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
             isSuitesSkippingEnabled: true,
             isEarlyFlakeDetectionEnabled: false
           })
-          expect(err).not.to.exist
-          expect(scope.isDone()).to.be.true
+          assert.ok(err == null)
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -239,10 +243,10 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
-        expect(ciVisibilityExporter.shouldRequestSkippableSuites()).to.be.false
+        assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), false)
 
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
-          expect(ciVisibilityExporter.shouldRequestSkippableSuites()).to.be.true
+          assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), true)
           done()
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -276,13 +280,13 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
+        assert.strictEqual(ciVisibilityExporter.shouldRequestLibraryConfiguration(), true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          expect(scope.isDone()).to.be.true
-          expect(err).to.be.null
+          assert.strictEqual(scope.isDone(), true)
+          assert.strictEqual(err, null)
           // the second request returns require_git: false
-          expect(libraryConfig.requireGit).to.be.false
-          expect(hasUploadedGit).to.be.true
+          assert.strictEqual(libraryConfig.requireGit, false)
+          assert.strictEqual(hasUploadedGit, true)
           done()
         })
         // Git upload finishes after a bit
@@ -318,12 +322,12 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
+        assert.strictEqual(ciVisibilityExporter.shouldRequestLibraryConfiguration(), true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          expect(scope.isDone()).to.be.true
-          expect(err).to.be.null
+          assert.strictEqual(scope.isDone(), true)
+          assert.strictEqual(err, null)
           // the second request returns require_git: false
-          expect(libraryConfig.requireGit).to.be.false
+          assert.strictEqual(libraryConfig.requireGit, false)
           done()
         })
         ciVisibilityExporter._resolveGit()
@@ -340,9 +344,9 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err).to.be.null
-          expect(skippableSuites).to.eql([])
-          expect(scope.isDone()).not.to.be.true
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(skippableSuites, [])
+          assert.notStrictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -359,9 +363,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveGit()
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err).to.be.null
-          expect(skippableSuites).to.eql([])
-          expect(scope.isDone()).not.to.be.true
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(skippableSuites, [])
+          assert.notStrictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -405,8 +409,8 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, () => {
-          expect(scope.isDone()).to.be.true
-          expect(customConfig).to.eql({
+          assert.strictEqual(scope.isDone(), true)
+          assert.deepStrictEqual(customConfig, {
             my_custom_config_2: 'my_custom_config_value_2'
           })
           done()
@@ -446,9 +450,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err).to.be.null
-          expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
-          expect(scope.isDone()).to.be.true
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(skippableSuites, ['ci-visibility/test/ci-visibility-test.js'])
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
         ciVisibilityExporter.sendGitMetadata()
@@ -466,9 +470,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err.message).to.include('could not upload git metadata')
-          expect(skippableSuites).to.eql([])
-          expect(scope.isDone()).not.to.be.true
+          assertObjectContains(err.message, 'could not upload git metadata')
+          assert.deepStrictEqual(skippableSuites, [])
+          assert.notStrictEqual(scope.isDone(), true)
           done()
         })
         ciVisibilityExporter._resolveGit(new Error('could not upload git metadata'))
@@ -516,10 +520,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isGzipCompatible = true
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err).to.be.null
-          expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
-          expect(scope.isDone()).to.be.true
-          expect(requestHeaders['accept-encoding']).to.equal('gzip')
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(skippableSuites, ['ci-visibility/test/ci-visibility-test.js'])
+          assert.strictEqual(scope.isDone(), true)
+          assert.strictEqual(requestHeaders['accept-encoding'], 'gzip')
           done()
         })
         ciVisibilityExporter.sendGitMetadata()
@@ -563,10 +567,10 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isGzipCompatible = false
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
-          expect(err).to.be.null
-          expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
-          expect(scope.isDone()).to.be.true
-          expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(skippableSuites, ['ci-visibility/test/ci-visibility-test.js'])
+          assert.strictEqual(scope.isDone(), true)
+          assert.notStrictEqual(requestHeaders['accept-encoding'], 'gzip')
           done()
         })
         ciVisibilityExporter.sendGitMetadata()
@@ -581,8 +585,8 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter.export(trace)
         ciVisibilityExporter._export = sinon.spy()
-        expect(ciVisibilityExporter._traceBuffer).to.include(trace)
-        expect(ciVisibilityExporter._export).not.to.be.called
+        assertObjectContains(ciVisibilityExporter._traceBuffer, trace)
+        sinon.assert.notCalled(ciVisibilityExporter._export)
       })
     })
     context('is initialized', () => {
@@ -598,7 +602,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
         expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
-        expect(ciVisibilityExporter._writer.append).to.be.called
+        sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
     context('is initialized and can not use CI Vis protocol', () => {
@@ -616,7 +620,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
         expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
-        expect(ciVisibilityExporter._writer.append).not.to.be.called
+        sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
     })
     context('is initialized and can use CI Vis protocol', () => {
@@ -635,7 +639,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._canUseCiVisProtocol = true
         ciVisibilityExporter.export(trace)
         expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
-        expect(ciVisibilityExporter._writer.append).to.be.called
+        sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
   })
@@ -647,8 +651,8 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter.exportCoverage(coverage)
         ciVisibilityExporter._export = sinon.spy()
-        expect(ciVisibilityExporter._coverageBuffer).to.include(coverage)
-        expect(ciVisibilityExporter._export).not.to.be.called
+        assertObjectContains(ciVisibilityExporter._coverageBuffer, coverage)
+        sinon.assert.notCalled(ciVisibilityExporter._export)
       })
     })
     context('is initialized but can not use CI Vis protocol', () => {
@@ -664,7 +668,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter.exportCoverage(coverage)
         expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)
-        expect(ciVisibilityExporter._coverageWriter.append).not.to.be.called
+        sinon.assert.notCalled(ciVisibilityExporter._coverageWriter.append)
       })
     })
     context('is initialized and can use CI Vis protocol', () => {
@@ -686,7 +690,7 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.exportCoverage(coverage)
         expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)
-        expect(ciVisibilityExporter._coverageWriter.append).to.be.called
+        sinon.assert.called(ciVisibilityExporter._coverageWriter.append)
       })
     })
   })
@@ -706,9 +710,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: false }
 
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
-          expect(err).to.be.null
-          expect(knownTests).to.eql(undefined)
-          expect(knownTestsScope.isDone()).not.to.be.true
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, undefined)
+          assert.notStrictEqual(knownTestsScope.isDone(), true)
           done()
         })
       })
@@ -726,8 +730,8 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
 
         ciVisibilityExporter.getKnownTests({}, (err) => {
-          expect(err).to.be.null
-          expect(scope.isDone()).not.to.be.true
+          assert.strictEqual(err, null)
+          assert.notStrictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -755,14 +759,14 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
-          expect(err).to.be.null
-          expect(knownTests).to.eql({
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
               suite2: ['test2']
             }
           })
-          expect(scope.isDone()).to.be.true
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -776,8 +780,8 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err) => {
-          expect(err).not.to.be.null
-          expect(scope.isDone()).to.be.true
+          assert.notStrictEqual(err, null)
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -811,15 +815,15 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
         ciVisibilityExporter._isGzipCompatible = true
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
-          expect(err).to.be.null
-          expect(knownTests).to.eql({
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
               suite2: ['test2']
             }
           })
-          expect(scope.isDone()).to.be.true
-          expect(requestHeaders['accept-encoding']).to.equal('gzip')
+          assert.strictEqual(scope.isDone(), true)
+          assert.strictEqual(requestHeaders['accept-encoding'], 'gzip')
           done()
         })
       })
@@ -852,15 +856,15 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isGzipCompatible = false
 
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
-          expect(err).to.be.null
-          expect(knownTests).to.eql({
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
             jest: {
               suite1: ['test1'],
               suite2: ['test2']
             }
           })
-          expect(scope.isDone()).to.be.true
-          expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
+          assert.strictEqual(scope.isDone(), true)
+          assert.notStrictEqual(requestHeaders['accept-encoding'], 'gzip')
           done()
         })
       })
@@ -874,7 +878,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isTestDynamicInstrumentationEnabled: true })
         ciVisibilityExporter.exportDiLogs(log)
         ciVisibilityExporter._export = sinon.spy()
-        expect(ciVisibilityExporter._export).not.to.be.called
+        sinon.assert.notCalled(ciVisibilityExporter._export)
       })
     })
 
@@ -891,7 +895,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._logsWriter = writer
         ciVisibilityExporter._canForwardLogs = false
         ciVisibilityExporter.exportDiLogs(log)
-        expect(ciVisibilityExporter._logsWriter.append).not.to.be.called
+        sinon.assert.notCalled(ciVisibilityExporter._logsWriter.append)
       })
     })
 

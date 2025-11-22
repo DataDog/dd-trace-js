@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 
 const { reportStackTrace, getCallsiteFrames } = require('../../src/appsec/stack_trace')
@@ -70,7 +70,7 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
   })
 
@@ -118,7 +118,7 @@ describe('Stack trace reporter', () => {
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
 
     it('should add stack trace to rootSpan when meta_struct is already present', () => {
@@ -147,8 +147,8 @@ describe('Stack trace reporter', () => {
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
-      assert.property(rootSpan.meta_struct, 'another_tag')
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
     })
 
     it('should add stack trace to rootSpan when meta_struct is already present and contains another stack', () => {
@@ -180,8 +180,8 @@ describe('Stack trace reporter', () => {
 
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].language, 'nodejs')
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].frames, expectedFrames)
-      assert.property(rootSpan.meta_struct, 'another_tag')
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].frames, expectedFrames)
+      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
     })
 
     it('should add stack trace when the max stack trace is 0', () => {
@@ -200,8 +200,8 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
-      assert.property(rootSpan.meta_struct, 'another_tag')
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
+      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
     })
 
     it('should add stack trace when the max stack trace is negative', () => {
@@ -220,8 +220,8 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
-      assert.property(rootSpan.meta_struct, 'another_tag')
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
+      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
     })
 
     it('should not report stackTraces if callSiteList is undefined', () => {
@@ -232,8 +232,8 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       reportStackTrace(rootSpan, stackId, undefined)
-      assert.property(rootSpan.meta_struct, 'another_tag')
-      assert.notProperty(rootSpan.meta_struct, '_dd.stack')
+      assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
+      assert.ok(!Object.hasOwn(rootSpan.meta_struct, '_dd.stack'))
     })
   })
 
@@ -269,7 +269,7 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
 
     it('limit frames to max depth with filtered frames', () => {
@@ -320,7 +320,7 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
 
     it('no limit if maxDepth is 0', () => {
@@ -343,7 +343,7 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
 
     it('no limit if maxDepth is negative', () => {
@@ -366,7 +366,7 @@ describe('Stack trace reporter', () => {
 
       reportStackTrace(rootSpan, stackId, frames)
 
-      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.deepStrictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
     })
   })
 })

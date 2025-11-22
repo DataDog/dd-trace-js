@@ -170,7 +170,7 @@ describe('shimmer', () => {
       const counter = new obj.Counter(1)
 
       assert.strictEqual(counter.value, 2)
-      expect(counter).to.be.an.instanceof(Counter)
+      assert.ok(counter instanceof Counter)
     })
 
     it('should wrap a class constructor', () => {
@@ -353,25 +353,25 @@ describe('shimmer', () => {
     })
 
     it('should validate that a method exists on the target object', () => {
-      expect(() => shimmer.wrap({}, 'invalid', () => () => {})).to.throw()
+      assert.throws(() => shimmer.wrap({}, 'invalid', () => () => {}))
     })
 
     it('should validate that the target method is a function', () => {
-      expect(() => shimmer.wrap({ a: 1234 }, 'a', () => () => {})).to.throw()
+      assert.throws(() => shimmer.wrap({ a: 1234 }, 'a', () => () => {}))
     })
 
     it('should validate that the method wrapper is passed', () => {
-      expect(() => shimmer.wrap({ a: () => {} }, 'a')).to.throw()
+      assert.throws(() => shimmer.wrap({ a: () => {} }, 'a'))
     })
 
     it('should validate that the method wrapper is a function', () => {
-      expect(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction')).to.throw()
+      assert.throws(() => shimmer.wrap({ a: () => {} }, 'a', 'notafunction'))
     })
   })
 
   describe('with a function', () => {
     it('should not work with a wrap()', () => {
-      expect(() => shimmer.wrap(() => {}, () => {})).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}, () => {}))
     })
 
     it('should not work with null instead of function', () => {
@@ -408,7 +408,7 @@ describe('shimmer', () => {
       const counter = new WrappedCounter(1)
 
       assert.strictEqual(counter.value, 2)
-      expect(counter).to.be.an.instanceof(Counter)
+      assert.ok(counter instanceof Counter)
     })
 
     it('should not wrap the class constructor', () => {
@@ -418,9 +418,7 @@ describe('shimmer', () => {
         }
       }
 
-      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
+      assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
     it('should not wrap the class constructor with invalid toString()', () => {
@@ -432,9 +430,7 @@ describe('shimmer', () => {
 
       Counter.toString = 'invalid'
 
-      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
-        'Target is a native class constructor and cannot be wrapped.'
-      )
+      assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
     it('should preserve property descriptors from the original', () => {
@@ -504,11 +500,11 @@ describe('shimmer', () => {
     })
 
     it('should validate that the function wrapper exists', () => {
-      expect(() => shimmer.wrap(() => {})).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}))
     })
 
     it('should validate that the function wrapper is a function', () => {
-      expect(() => shimmer.wrap(() => {}, 'a')).to.throw()
+      assert.throws(() => shimmer.wrap(() => {}, 'a'))
     })
   })
 })

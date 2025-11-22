@@ -115,7 +115,13 @@ function rebuildImportsSortedByType (code) {
   if (node.length) pieces.push(node.map(x => x.line).join('\n'))
   if (npm.length) pieces.push(npm.map(x => x.line).join('\n'))
   if (rel.length) pieces.push(rel.map(x => x.line).join('\n'))
-  const rebuilt = pieces.join('\n\n')
+  let rebuilt = pieces.join('\n\n')
+  // Preserve the original number of lines in the import block to avoid removing blank lines
+  const originalLineCount = lines.length
+  const rebuiltLineCount = rebuilt.length ? rebuilt.split('\n').length : 0
+  if (rebuiltLineCount < originalLineCount) {
+    rebuilt += '\n'.repeat(originalLineCount - rebuiltLineCount)
+  }
   return code.slice(0, start) + rebuilt + code.slice(end)
 }
 
@@ -229,14 +235,7 @@ function ensureAssertObjectContainsImport (code, file) {
   return importLine + code
 }
 
-/**
- * Escape a JS expression to a regex at runtime.
- * Produces: new RegExp((EXPR).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
- */
-function wrapAsEscapedRegex (expr) {
-  return 'new RegExp((' + expr + ')' +
-    ".replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'))"
-}
+// wrapAsEscapedRegex removed – literals now use .includes checks
 
 // -------- Helpers to format long assert lines (wrap args if >120 chars) --------
 function splitTopLevelArgs (s) {
@@ -305,6 +304,28 @@ function buildAccessor (objExpr, keyLiteral) {
     return isIdentifier ? `${objExpr}.${key}` : `${objExpr}[${k}]`
   }
   return `${objExpr}[${k}]`
+}
+
+// Build nested accessor for dot-separated string paths like 'a.b.c'.
+// Only supports simple string literals with identifier segments. Otherwise, returns null.
+function buildNestedAccessor (objExpr, pathLiteral) {
+  const p = (pathLiteral || '').trim()
+  const isQuoted = (p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))
+  if (!isQuoted) return null
+  const inner = p.slice(1, -1)
+  if (!inner) return null
+  const parts = inner.split('.')
+  let out = objExpr
+  for (const raw of parts) {
+    const part = raw.trim()
+    if (!part) return null
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(part)) {
+      out += '.' + part
+    } else {
+      out += "['" + part.replace(/'/g, "\\'") + "']"
+    }
+  }
+  return out
 }
 
 // Detect files using expect from Playwright and skip transforming them
@@ -427,7 +448,6 @@ function transform (code, file) {
   const hasNodeAssertImportBefore = /\bconst\s+assert\s*=\s*require\(['"](node:)?assert(?:\/strict)?['"]\)/.test(code) ||
     /^\s*import\s+(?:\*\s+as\s+)?assert\s+from\s*['"](node:)?assert(?:\/strict)?['"]/m.test(code) ||
     /^\s*import\s*\{\s*strict\s+as\s+assert\s*\}\s*from\s*['"](node:)?assert['"]/m.test(code)
-  const hasAssertVariableBefore = /\b(?:const|let|var)\s+assert\s*=/.test(code) || /\bconst\s*\{[^}]*\bassert\b[^}]*\}\s*=\s*require\(\s*['"]chai['"]\s*\)/.test(code) || /\bimport\s*\{[^}]*\bassert\b[^}]*\}\s*from\s*['"]chai['"]/.test(code)
 
   // 0) Do not alter chai/sinon-chai imports or chai.use lines here; we only add assert when used.
 
@@ -439,9 +459,14 @@ function transform (code, file) {
     'await assert.rejects($1, $2)')
   out = out.replace(/await\s+expect\(([^)]+)\)\.to\.be\.rejected(?!With)/g,
     'await assert.rejects($1)')
+  // return expect(p).to.be.rejected[With(...)]
+  out = out.replace(/return\s+expect\(([^)]+)\)\.to\.be\.rejectedWith\(([^)]+)\)/g,
+    'return assert.rejects($1, $2)')
+  out = out.replace(/return\s+expect\(([^)]+)\)\.to\.be\.rejected(?!With)/g,
+    'return assert.rejects($1)')
 
   // 3) NaN
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.NaN/g, 'assert.strictEqual($1, NaN)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.NaN/g, 'assert.ok(Number.isNaN($1))')
 
   // 6) Basic equality
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.deep\.(?:equal|eql)\(([^)]+)\)/g, 'assert.deepStrictEqual($1, $2)')
@@ -450,10 +475,19 @@ function transform (code, file) {
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.eq\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.eql\(([^)]+)\)/g, 'assert.deepStrictEqual($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:be\.)?(?:equal|equals)\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
+  // .to.be.eq(...)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.eq\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
   // function-call aware equal/equals (balanced one-level parentheses)
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.(?:be\.)?(?:equal|equals)\(([^)]+)\)/g, 'assert.notStrictEqual($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.(?:be\.)?(?:equal|equals)\(([^)]+)\)/g, 'assert.notStrictEqual($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.deep\.(?:equal|eql)\(([^)]+)\)/g, 'assert.notDeepStrictEqual($1, $2)')
+  // Direct method forms without 'to.' chain: equal/equals/eq/eql
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:equal|equals)\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.eq\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.eql\(([^)]+)\)/g, 'assert.deepStrictEqual($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.(?:equal|equals)\(([^)]+)\)/g, 'assert.notStrictEqual($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.eq\(([^)]+)\)/g, 'assert.notStrictEqual($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.eql\(([^)]+)\)/g, 'assert.notDeepStrictEqual($1, $2)')
   // toBe / not.toBe (used in some chai setups too)
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.toBe\(([^)]+)\)/g, 'assert.strictEqual($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.toBe\(([^)]+)\)/g, 'assert.notStrictEqual($1, $2)')
@@ -464,16 +498,40 @@ function transform (code, file) {
   // 4) Truthiness & types
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.true/g, 'assert.strictEqual($1, true)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.false/g, 'assert.strictEqual($1, false)')
+  // negative true/false
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.true\b/g, 'assert.notStrictEqual($1, true)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.false\b/g, 'assert.notStrictEqual($1, false)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.not\.true\b/g, 'assert.notStrictEqual($1, true)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.not\.false\b/g, 'assert.notStrictEqual($1, false)')
+  // with message argument: .to.be.true(msg) / .to.be.false(msg)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.true\([^)]*\)/g, 'assert.strictEqual($1, true)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.false\([^)]*\)/g, 'assert.strictEqual($1, false)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.ok/g, 'assert.ok($1)')
+  // negative ok
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.ok\b/g, 'assert.ok(!$1)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.not\.ok\b/g, 'assert.ok(!$1)')
   // .to.not.undefined (property form)
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.undefined\b/g, 'assert.notStrictEqual($1, undefined)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.undefined/g, 'assert.strictEqual($1, undefined)')
+  // with message: .to.be.undefined(msg)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.undefined\([^)]*\)/g, 'assert.strictEqual($1, undefined)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.null/g, 'assert.strictEqual($1, null)')
+  // with message: .to.be.null(msg)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.null\([^)]*\)/g, 'assert.strictEqual($1, null)')
   // negatives: to.not / not.to
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.undefined/g, 'assert.notStrictEqual($1, undefined)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.null/g, 'assert.notStrictEqual($1, null)')
+  // tolerant 'to.be.not.null/undefined'
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.not\.null\b/g, 'assert.notStrictEqual($1, null)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.not\.undefined\b/g, 'assert.notStrictEqual($1, undefined)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.exist/g, 'assert.ok($1 != null)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.exist/g, 'assert.ok($1 == null)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.to\.exist/g, 'assert.ok($1 == null)')
+  // with message: .to.exist(msg) / .to.not.exist(msg) / .not.to.exist(msg)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.exist\([^)]*\)/g, 'assert.ok($1 != null)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.exist\([^)]*\)/g, 'assert.ok($1 == null)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.to\.exist\([^)]*\)/g, 'assert.ok($1 == null)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.not\.to\.exist/g, 'assert.ok($1 == null)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]array['"]\)/g, 'assert.ok(Array.isArray($1))')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]object['"]\)/g, "assert.ok(typeof $1 === 'object' && $1 !== null)")
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]string['"]\)/g, "assert.strictEqual(typeof $1, 'string')")
@@ -481,6 +539,9 @@ function transform (code, file) {
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]boolean['"]\)/g, "assert.strictEqual(typeof $1, 'boolean')")
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]bigint['"]\)/g, "assert.strictEqual(typeof $1, 'bigint')")
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]function['"]\)/g, "assert.strictEqual(typeof $1, 'function')")
+  // 'promise' and 'error' types
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]promise['"]\)/g, "assert.ok($1 && typeof $1.then === 'function')")
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]error['"]\)/g, 'assert.ok($1 instanceof Error)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:an|a)\(['"]array['"]\)\.and\.have\.length\(([^)]+)\)/g,
     '(assert.ok(Array.isArray($1)), assert.strictEqual($1.length, $2))')
   // instanceOf (Array special case first)
@@ -488,23 +549,25 @@ function transform (code, file) {
   out = out.replace(/expect\(([^)]+)\)\.to\.not\.be\.(?:instanceOf|instanceof)\(\s*Array\s*\)/g, 'assert.ok(!Array.isArray($1))')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.(?:instanceOf|instanceof)\(([^)]+)\)/g, 'assert.ok($1 instanceof $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.not\.be\.(?:instanceOf|instanceof)\(([^)]+)\)/g, 'assert.ok(!($1 instanceof $2))')
+  // instanceOf with article: .to.be.an.instanceOf(...)
+  out = out.replace(/expect\(([^)]+)\)\.to\.be\.(?:an|a)\.(?:instanceOf|instanceof)\(([^)]+)\)/g, 'assert.ok($1 instanceof $2)')
 
   // 8) Regex
-  out = out.replace(/expect\(([^)]+)\)\.to\.match\(([^)]+)\)/g, 'assert.match($1, $2)')
-  out = out.replace(/expect\(([^)]+)\)\.to\.not\.match\(([^)]+)\)/g, 'assert.doesNotMatch($1, $2)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.match\(((?:[^()]|\([^()]*\))+?)\)/g, 'assert.match($1, $2)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.not\.match\(((?:[^()]|\([^()]*\))+?)\)/g, 'assert.doesNotMatch($1, $2)')
   // function-call aware regex
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.match\(([^)]+)\)/g, 'assert.match($1, $2)')
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.match\(([^)]+)\)/g, 'assert.doesNotMatch($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.match\(((?:[^()]|\([^()]*\))+?)\)/g, 'assert.match($1, $2)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.not\.match\(((?:[^()]|\([^()]*\))+?)\)/g, 'assert.doesNotMatch($1, $2)')
 
   // 8.1) contain/include string literal or .contain alias → assert.match(haystack, escaped(needle))
   out = out.replace(/expect\(([^)]+)\)\.to\.(?:contain|include)\(\s*(['"][^'"]+['"])\s*\)/g,
-    (m, haystack, lit) => `assert.match(${haystack}, ${wrapAsEscapedRegex(lit)})`)
+    (m, haystack, lit) => `assert.ok(${haystack}.includes(${lit}))`)
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:contain|include)\(\s*(['"][^'"]+['"])\s*\)/g,
-    (m, haystack, lit) => `assert.match(${haystack}, ${wrapAsEscapedRegex(lit)})`)
+    (m, haystack, lit) => `assert.ok(${haystack}.includes(${lit}))`)
   out = out.replace(/expect\(([^)]+)\)\.to\.contain\(\s*(['"][^'"]+['"])\s*\)/g,
-    (m, haystack, lit) => `assert.match(${haystack}, ${wrapAsEscapedRegex(lit)})`)
+    (m, haystack, lit) => `assert.ok(${haystack}.includes(${lit}))`)
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.contain\(\s*(['"][^'"]+['"])\s*\)/g,
-    (m, haystack, lit) => `assert.match(${haystack}, ${wrapAsEscapedRegex(lit)})`)
+    (m, haystack, lit) => `assert.ok(${haystack}.includes(${lit}))`)
 
   // 8.2) include/contain with object literal → assertObjectContains (allowed everywhere)
   out = out.replace(/expect\(([^)]+)\)\.to\.(?:contain|include)\(\s*(\{[^}]*\})\s*\)/g, 'assertObjectContains($1, $2)')
@@ -515,23 +578,41 @@ function transform (code, file) {
   // 8.3) deep.include with object literal → assertObjectContains
   out = out.replace(/expect\(([^)]+)\)\.to\.deep\.include\(\s*(\{[^}]*\})\s*\)/g, 'assertObjectContains($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.deep\.include\(\s*(\{[^}]*\})\s*\)/g, 'assertObjectContains($1, $2)')
+  // 8.4) include/contain with template literal needles
+  out = out.replace(/expect\(([^)]+)\)\.to\.(?:contain|include)\(\s*(`[^`]*`)\s*\)/g,
+    (m, haystack, tpl) => `assert.ok(${haystack}.includes(${tpl}))`)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:contain|include)\(\s*(`[^`]*`)\s*\)/g,
+    (m, haystack, tpl) => `assert.ok(${haystack}.includes(${tpl}))`)
+  // 8.5) generic include/contain with expression needles (strings/arrays) – conservative generic form
+  out = out.replace(/expect\(([^)]+)\)\.to\.(?:contain|include)\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g,
+    'assert.ok($1.includes($2))')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:contain|include)\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g,
+    'assert.ok($1.includes($2))')
   // Skip generic include/contain for safety otherwise
 
   // 10) property
   // expect(obj).to.have.property('k').that.deep.equal(v) → deepStrictEqual(accessor, v)
-  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.deep\.equal\(([^)]+)\)/g,
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.deep\.equal\(((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, val) => `assert.deepStrictEqual(${buildAccessor(obj, key)}, ${val})`)
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.deep\.equal\(([^)]+)\)/g,
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.deep\.equal\(((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, val) => `assert.deepStrictEqual(${buildAccessor(obj, key)}, ${val})`)
   // expect(obj).to.have.property('k').that.equal(v) → strictEqual(accessor, v)
-  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.equal\(([^)]+)\)/g,
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.equal\(((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}, ${val})`)
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.equal\(([^)]+)\)/g,
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.equal\(((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}, ${val})`)
   // expect(obj).to.have.property('k').that.match(/re/) → match(accessor, /re/)
-  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.match\(([^)]+)\)/g,
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.match\(((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, re) => `assert.match(${buildAccessor(obj, key)}, ${re})`)
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.match\(([^)]+)\)/g,
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.match\(((?:[^()]|\([^()]*\))+?)\)/g,
+    (m, obj, key, re) => `assert.match(${buildAccessor(obj, key)}, ${re})`)
+  // Multi-line tolerant and chain-filler tolerant variants for property('k') chains:
+  // allow (that|which|and|with|to|be|have) between links, and tolerate newlines/whitespace
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)(?:\s*\.\s*(?:that|which|and|with|to|be|have)\s*)*\.\s*deep\s*\.\s*(?:equal|eql)\(([^)]+)\)/gs,
+    (m, obj, key, val) => `assert.deepStrictEqual(${buildAccessor(obj, key)}, ${val})`)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)(?:\s*\.\s*(?:that|which|and|with|to|be|have)\s*)*\.\s*(?:equal|equals)\(([^)]+)\)/gs,
+    (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}, ${val})`)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)(?:\s*\.\s*(?:that|which|and|with|to|be|have)\s*)*\.\s*match\(([^)]+)\)/gs,
     (m, obj, key, re) => `assert.match(${buildAccessor(obj, key)}, ${re})`)
   // // Handle leftover chains after hasOwn conversion
   // out = out.replace(/assert\.ok\(Object\.hasOwn\(([^,]+),\s*(['"][^'"]+['"])\)\)\.that\.deep\.equal\(([^)]+)\)/g,
@@ -541,11 +622,25 @@ function transform (code, file) {
   // out = out.replace(/assert\.ok\(Object\.hasOwn\(([^,]+),\s*(['"][^'"]+['"])\)\)\.that\.match\(([^)]+)\)/g,
   //   (m, obj, key, re) => `assert.match(${buildAccessor(obj, key)}, ${re})`)
   // expect(obj).to.have.property('k', v) → assert.strictEqual(accessor, v)
-  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"]),\s*([^)]+)\)/g,
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"]),\s*((?:[^()]|\([^()]*\))+?)\)/g,
     (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}, ${val})`)
+  // expect(obj).to.not.have.property('k', v) → assert.notStrictEqual(accessor, v)
+  out = out.replace(/expect\(([^)]+)\)\.to\.not\.have\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, key, val) => `assert.notStrictEqual(${buildAccessor(obj, key)}, ${val})`)
+  out = out.replace(/expect\(([^)]+)\)\.not\.to\.have\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, key, val) => `assert.notStrictEqual(${buildAccessor(obj, key)}, ${val})`)
   // variable key: expect(obj).to.have.property(KEY, v)
-  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\(([^,'")]+),\s*([^)]+)\)/g, 'assert.strictEqual($1[$2], $3)')
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\(([^,'")]+),\s*([^)]+)\)/g, 'assert.strictEqual($1[$2], $3)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\(([^,'")]+),\s*((?:[^()]|\([^()]*\))+?)\)/g, 'assert.strictEqual($1[$2], $3)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.property\(([^,'")]+),\s*((?:[^()]|\([^()]*\))+?)\)/g, 'assert.strictEqual($1[$2], $3)')
+  // variable key negative: expect(obj).to.not.have.property(KEY, v)
+  out = out.replace(/expect\(([^)]+)\)\.to\.not\.have\.property\(([^,'")]+),\s*([^)]+)\)/g, 'assert.notStrictEqual($1[$2], $3)')
+  out = out.replace(/expect\(([^)]+)\)\.not\.to\.have\.property\(([^,'")]+),\s*([^)]+)\)/g, 'assert.notStrictEqual($1[$2], $3)')
+  // negative two-arg: expect(obj).to.not.have.property('k', v)
+  out = out.replace(/expect\(([^)]+)\)\.(?:to\.not|not\.to)\.have\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, key, val) => `assert.ok(!Object.hasOwn(${obj}, ${key}) || ${buildAccessor(obj, key)} !== ${val})`)
+  // negative two-arg with variable key
+  out = out.replace(/expect\(([^)]+)\)\.(?:to\.not|not\.to)\.have\.property\(\s*([^,'")]+)\s*,\s*([^)]+)\)/g,
+    'assert.ok(!Object.hasOwn($1, $2) || $1[$2] !== $3)')
   // expect(obj).to.have.property('k') → assert.ok(Object.hasOwn(obj, 'k')) (preserve key quoting rules)
   out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\(([^,)]+)\)/g,
     'assert.ok(Object.hasOwn($1, $2))')
@@ -570,6 +665,9 @@ function transform (code, file) {
     'assert.strictEqual($1.length, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:have\.)?lengthOf\(([^)]+)\)/g,
     'assert.strictEqual($1.length, $2)')
+  // bare .lengthOf(n)
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.lengthOf\(([^)]+)\)/g,
+    'assert.strictEqual($1.length, $2)')
   // length alias (chai): .length(n)
   out = out.replace(/expect\(([^)]+)\)\.to\.(?:have\.)?length\(([^)]+)\)/g,
     'assert.strictEqual($1.length, $2)')
@@ -588,9 +686,203 @@ function transform (code, file) {
   // property(...).that.length(Of)?(n)
   out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.that\.(?:have\.)?length(?:Of)?\(([^)]+)\)/g,
     (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}.length, ${val})`)
+  // property(...).with.length(Of)?(n)
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.property\((['"][^'"]+['"])\)\.with\.(?:have\.)?length(?:Of)?\(([^)]+)\)/g,
+    (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}.length, ${val})`)
+  // property(...).(that|which|and|with|to|be|have)*.with.length(Of)?(n) – tolerant
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)(?:\s*\.\s*(?:that|which|and|with|to|be|have)\s*)*\.\s*with\s*\.\s*(?:have\s*\.\s*)?length(?:Of)?\(([^)]+)\)/gs,
+    (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}.length, ${val})`)
+
+  // Nested property: presence/value/deep.equal (string literal path only)
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.strictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.strictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+
+  // 15.51) expect(...).to.have.nested.deep.property(...) – treat like nested.property for string literal paths
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.strictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.strictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.nested\.deep\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+
+  // deep.property(...) – string literal paths
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*\)/g,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*,\s*((?:[^()]|\([^()]*\))+?)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*,\s*((?:[^()]|\([^()]*\))+?)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.deep\.property\(\s*(['"][^'"]+['"])\s*\)\.that\.deep\.equal\(([^)]+)\)/g,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  // Keys / all.keys
+  out = out.replace(
+    /expect\(([^)]+)\)\.to\.have\.(?:all\.)?keys\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(' +
+      'Object.keys(' + obj + ').slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.(?:all\.)?keys\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(' +
+      'Object.keys(' + obj + ').slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+  // any.keys (at least one key present)
+  out = out.replace(
+    /expect\(([^)]+)\)\.to\.have\.any\.keys\(([^)]+)\)/g,
+    (m, obj, args) =>
+      'assert.ok(((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.some(k => Object.hasOwn(' + obj + ', k)))'
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.any\.keys\(([^)]+)\)/g,
+    (m, obj, args) =>
+      'assert.ok(((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.some(k => Object.hasOwn(' + obj + ', k)))'
+  )
+  // negative any.keys (none of keys present)
+  out = out.replace(
+    /expect\(([^)]+)\)\.(?:to\.not|not\.to)\.have\.any\.keys\(([^)]+)\)/g,
+    (m, obj, args) =>
+      'assert.ok(!((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.some(k => Object.hasOwn(' + obj + ', k)))'
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.have\.any\.keys\(([^)]+)\)/g,
+    (m, obj, args) =>
+      'assert.ok(!((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.some(k => Object.hasOwn(' + obj + ', k)))'
+  )
+
+  // include.members / have.members
+  out = out.replace(
+    /expect\(([^)]+)\)\.to\.(?:include|have)\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.ok(((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.every(v => ' + obj + '.includes(v)))'
+    )
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.(?:include|have)\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.ok(((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.every(v => ' + obj + '.includes(v)))'
+    )
+  )
+  out = out.replace(
+    /expect\(([^)]+)\)\.(?:to\.not|not\.to)\.include\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.ok(!((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.every(v => ' + obj + '.includes(v)))'
+    )
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.include\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.ok(!((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.every(v => ' + obj + '.includes(v)))'
+    )
+  )
+  out = out.replace(
+    /expect\(([^)]+)\)\.to\.have\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(([...' + obj + ']).slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.have\.members\(([^)]+)\)/g,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(([...' + obj + ']).slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+
+  // Empty / Not empty
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.empty\b/g, 'assert.strictEqual($1.length, 0)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.(?:to\.not|not\.to)\.be\.empty\b/g, 'assert.ok($1.length > 0)')
 
   // 12) Comparisons
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.above\(([^)]+)\)/g, 'assert.ok($1 > $2)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.above\(([^)]+)\)/g, 'assert.ok($1 > $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.at\.least\(([^)]+)\)/g, 'assert.ok($1 >= $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.below\(([^)]+)\)/g, 'assert.ok($1 < $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.at\.most\(([^)]+)\)/g, 'assert.ok($1 <= $2)')
@@ -602,8 +894,17 @@ function transform (code, file) {
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:gte)\(([^)]+)\)/g, 'assert.ok($1 >= $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.(?:lte)\(([^)]+)\)/g, 'assert.ok($1 <= $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\.to\.be\.(?:lte)\(([^)]+)\)/g, 'assert.ok($1 <= $2)')
+  // greaterThanOrEqual / lessThanOrEqual
+  out = out.replace(/expect\(([^)]+)\)\.to\.be\.greaterThanOrEqual\(([^)]+)\)/g, 'assert.ok($1 >= $2)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.be\.lessThanOrEqual\(([^)]+)\)/g, 'assert.ok($1 <= $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.closeTo\(([^,]+),\s*([^)]+)\)/g,
     'assert.ok(Math.abs(($1) - ($2)) <= ($3))')
+  // within
+  out = out.replace(/expect\(([^)]+)\)\.to\.be\.within\(([^,]+),\s*([^)]+)\)/g,
+    'assert.ok(($1) >= ($2) && ($1) <= ($3))')
+  // oneOf
+  out = out.replace(/expect\(([^)]+)\)\.to\.be\.oneOf\(\s*(\[[^\]]*\])\s*\)/g,
+    'assert.ok($2.includes($1))')
 
   // 12) Throws
   out = out.replace(/expect\(([^)]+)\)\.to\.throw\(\s*\)/g, 'assert.throws($1)')
@@ -629,6 +930,8 @@ function transform (code, file) {
   out = out.replace(/expect\(([^)]+)\)\.(?:to\.not|not\.to)\.have\.been\.called\b/g, 'sinon.assert.notCalled($1)')
   // also support: to.be.called
   out = out.replace(/expect\(([^)]+)\)\.to\.be\.called\b/g, 'sinon.assert.called($1)')
+  // negative to.be.called
+  out = out.replace(/expect\(([^)]+)\)\.(?:to\.not|not\.to)\.be\.called\b/g, 'sinon.assert.notCalled($1)')
   out = out.replace(/expect\(([^)]+)\)\.to\.have\.been\.calledWithExactly\(([^)]+)\)/g,
     'sinon.assert.calledWithExactly($1, $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.have\.been\.calledWithMatch\(([^)]+)\)/g,
@@ -645,12 +948,101 @@ function transform (code, file) {
   // negative calledWith variants
   out = out.replace(/expect\(([^)]+)\)\.to\.not\.have\.been\.calledWith\(([^)]+)\)/g, 'sinon.assert.neverCalledWith($1, $2)')
   out = out.replace(/expect\(([^)]+)\)\.not\.to\.have\.been\.calledWith\(([^)]+)\)/g, 'sinon.assert.neverCalledWith($1, $2)')
+  out = out.replace(/expect\(([^)]+)\)\.to\.have\.not\.been\.calledWith\(([^)]+)\)/g, 'sinon.assert.neverCalledWith($1, $2)')
   out = out.replace(/expect\(([^)]+)\)\.to\.not\.have\.been\.calledWithMatch\(([^)]+)\)/g, 'sinon.assert.neverCalledWithMatch($1, $2)')
   out = out.replace(/expect\(([^)]+)\)\.not\.to\.have\.been\.calledWithMatch\(([^)]+)\)/g, 'sinon.assert.neverCalledWithMatch($1, $2)')
 
-  // 15) chai.assert style minimal mapping
+  // 15) chai.assert and chai { assert } helper mappings
+  // chai.assert.* direct calls
   out = out.replace(/chai\.assert\.deepEqual\(([^)]+)\)/g, 'assert.deepStrictEqual($1)')
   out = out.replace(/chai\.assert\.equal\(([^)]+)\)/g, 'assert.strictEqual($1)')
+  // Equality
+  out = out.replace(/\bassert\.equal\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1, $2)')
+  out = out.replace(/\bassert\.notEqual\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notStrictEqual($1, $2)')
+  out = out.replace(/\bassert\.deepEqual\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.deepStrictEqual($1, $2)')
+  out = out.replace(/\bassert\.notDeepEqual\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notDeepStrictEqual($1, $2)')
+  // Truthiness and types
+  out = out.replace(/\bassert\.isTrue\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1, true)')
+  out = out.replace(/\bassert\.isFalse\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1, false)')
+  out = out.replace(/\bassert\.isOk\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok($1)')
+  out = out.replace(/\bassert\.isNotOk\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok(!$1)')
+  out = out.replace(/\bassert\.isUndefined\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1, undefined)')
+  out = out.replace(/\bassert\.isDefined\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notStrictEqual($1, undefined)')
+  out = out.replace(/\bassert\.isNull\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1, null)')
+  out = out.replace(/\bassert\.isNotNull\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notStrictEqual($1, null)')
+  out = out.replace(/\bassert\.isArray\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok(Array.isArray($1))')
+  out = out.replace(/\bassert\.isObject\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.ok(typeof $1 === 'object' && $1 !== null)")
+  out = out.replace(/\bassert\.isString\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.strictEqual(typeof $1, 'string')")
+  out = out.replace(/\bassert\.isNumber\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.strictEqual(typeof $1, 'number')")
+  out = out.replace(/\bassert\.isBoolean\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.strictEqual(typeof $1, 'boolean')")
+  out = out.replace(/\bassert\.isBigInt\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.strictEqual(typeof $1, 'bigint')")
+  out = out.replace(/\bassert\.isFunction\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, "assert.strictEqual(typeof $1, 'function')")
+  // exists / notExists
+  out = out.replace(/\bassert\.exists\(\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 != null)')
+  out = out.replace(/\bassert\.notExists\(\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 == null)')
+  // typeOf with special handling for 'array'
+  out = out.replace(/\bassert\.typeOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*(['"][^'"]+['"])\s*(?:,\s*[^)]*)?\)/g,
+    (m, value, typeLit) => {
+      return (typeLit === "'array'" || typeLit === '"array"')
+        ? 'assert.ok(Array.isArray(' + value + '))'
+        : 'assert.strictEqual(typeof ' + value + ', ' + typeLit + ')'
+    })
+  // hasAllKeys (exact key set equality)
+  out = out.replace(/\bassert\.hasAllKeys\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g,
+    (m, obj, keys) => (
+      'assert.deepStrictEqual(' +
+      'Object.keys(' + obj + ').slice().sort(), ' +
+      '((Array.isArray(' + keys + ') ? ' + keys + ' : [' + keys + ']).slice().sort()))'
+    ))
+  // numeric comparisons (below/above/atLeast/atMost)
+  out = out.replace(/\bassert\.isBelow\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 < $2)')
+  out = out.replace(/\bassert\.isAbove\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 > $2)')
+  out = out.replace(/\bassert\.isAtLeast\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 >= $2)')
+  out = out.replace(/\bassert\.isAtMost\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 <= $2)')
+  // synonyms without "is"
+  out = out.replace(/\bassert\.below\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 < $2)')
+  out = out.replace(/\bassert\.above\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 > $2)')
+  out = out.replace(/\bassert\.atLeast\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 >= $2)')
+  out = out.replace(/\bassert\.atMost\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 <= $2)')
+  // instanceOf (and common misspelling istanceOf)
+  out = out.replace(/\bassert\.instanceOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 instanceof $2)')
+  out = out.replace(/\bassert\.notInstanceOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok(!($1 instanceof $2))')
+  out = out.replace(/\bassert\.istanceOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 instanceof $2)')
+  // InstanceOf
+  out = out.replace(/\bassert\.instanceOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok($1 instanceof $2)')
+  out = out.replace(/\bassert\.notInstanceOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g, 'assert.ok(!($1 instanceof $2))')
+  // Length helpers
+  out = out.replace(/\bassert\.lengthOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1.length, $2)')
+  out = out.replace(/\bassert\.notLengthOf\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notStrictEqual($1.length, $2)')
+  // Property helpers
+  out = out.replace(/\bassert\.property\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,[^)]+)?\)/g, 'assert.ok(Object.hasOwn($1, $2))')
+  out = out.replace(/\bassert\.notProperty\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,[^)]+)?\)/g, 'assert.ok(!Object.hasOwn($1, $2))')
+  out = out.replace(/\bassert\.propertyVal\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1[$2], $3)')
+  out = out.replace(/\bassert\.notPropertyVal\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.notStrictEqual($1[$2], $3)')
+  // Include helpers (string/array)
+  out = out.replace(/\bassert\.include\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok($1.includes($2))')
+  out = out.replace(/\bassert\.notInclude\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok(!$1.includes($2))')
+  // sameMembers (order-insensitive shallow)
+  out = out.replace(/\bassert\.sameMembers\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g,
+    (m, arr, expected) => (
+      'assert.deepStrictEqual(([...' + arr + ']).slice().sort(), ' +
+      '((Array.isArray(' + expected + ') ? ' + expected + ' : [' + expected + ']).slice().sort()))'
+    ))
+  // sameDeepMembers (order-insensitive deep) via stable JSON string sort
+  out = out.replace(/\bassert\.sameDeepMembers\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*(?:,\s*[^)]*)?\)/g,
+    (m, arr, expected) => (
+      'assert.deepStrictEqual(' +
+      '([... ' + arr + ']).slice().sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))), ' +
+      '((Array.isArray(' + expected + ') ? ' + expected + ' : [' + expected + ']).slice().' +
+      'sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))))'
+    ))
+  // Deep include (object literal) → assertObjectContains
+  out = out.replace(/\bassert\.deepInclude\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*(\{[^}]*\})\s*\)/g, 'assertObjectContains($1, $2)')
+  // Match/NotMatch
+  out = out.replace(/\bassert\.notMatch\(\s*((?:[^()]|\([^()]*\))+?)\s*,\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.doesNotMatch($1, $2)')
+  // Empty / NotEmpty (arrays/strings usage in repo)
+  out = out.replace(/\bassert\.isEmpty\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.strictEqual($1.length, 0)')
+  out = out.replace(/\bassert\.isNotEmpty\(\s*((?:[^()]|\([^()]*\))+?)\s*\)/g, 'assert.ok($1.length > 0)')
 
   // 16) Insert Node assert only when safe. Otherwise, skip touching this file.
   const afterNonChaiAssertCount = (out.match(/(^|[^.\w$])assert\./g) || []).length
@@ -662,14 +1054,6 @@ function transform (code, file) {
 
   let insertedNodeAssert = false
   if (needsNodeAssertImport) {
-    if (hasAssertVariableBefore && !hasNodeAssertImportBefore) {
-      if (beforeNonChaiAssertCount > 0 && !didReplaceAssert) {
-        return code
-      }
-      if (beforeNonChaiAssertCount > 0) {
-        return code
-      }
-    }
     out = ensureAssertImport(out)
     insertedNodeAssert = true
   }
@@ -704,18 +1088,72 @@ function transform (code, file) {
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*exist\b/gs, 'assert.ok($1 != null)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*not\s*\.\s*exist\b/gs, 'assert.ok($1 == null)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*be\s*\.\s*(?:an|a)\(\s*['"]array['"]\s*\)/gs, 'assert.ok(Array.isArray($1))')
-  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*be\s*\.\s*(?:an|a)\(\s*['"]object['"]\s*\)/gs, "(assert.strictEqual(typeof $1, 'object'), assert.notStrictEqual($1, null))")
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*be\s*\.\s*(?:an|a)\(\s*['"]object['"]\s*\)/gs, "assert.ok(typeof $1 === 'object' && $1 !== null)")
   // Regex matching
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*match\(([^)]+)\)/gs, 'assert.match($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*not\s*\.\s*match\(([^)]+)\)/gs, 'assert.doesNotMatch($1, $2)')
   // Include/contain object literal
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*(?:contain|include)\(\s*(\{[^}]*\})\s*\)/gs, 'assertObjectContains($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*deep\s*\.\s*include\(\s*(\{[^}]*\})\s*\)/gs, 'assertObjectContains($1, $2)')
+  // Include/contain literal → .includes
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to(?:\s*\.\s*(?:be|have))*\s*\.\s*(?:contain|include)\(\s*(['"][^'"]+['"])\s*\)/gs,
+    'assert.ok($1.includes($2))')
   // Throws
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*throw\(\s*\)/gs, 'assert.throws($1)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*throw\(([^)]+)\)/gs, 'assert.throws($1, $2)')
   out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*not\s*\.\s*throw\(\s*\)/gs, 'assert.doesNotThrow($1)')
 
+  // property presence (tolerant) – literal/variable key, single-arg form
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*([^,)]+)\s*\)/gs,
+    'assert.ok(Object.hasOwn($1, $2))')
+
+  // Chained property(...).with.length
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)\s*\.\s*with\s*\.\s*(?:have\s*\.\s*)?length(?:Of)?\(([^)]+)\)/gs,
+    (m, obj, key, val) => `assert.strictEqual(${buildAccessor(obj, key)}.length, ${val})`)
+  // Nested property (presence/value/deep.equal) - string literal paths only
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*nested\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)/gs,
+    (m, obj, path) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.ok(${acc} !== undefined)` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*nested\s*\.\s*property\(\s*(['"][^'"]+['"])\s*,\s*([^)]+)\)/gs,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.strictEqual(${acc}, ${val})` : m
+    })
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*nested\s*\.\s*property\(\s*(['"][^'"]+['"])\s*\)\s*\.\s*that\s*\.\s*deep\s*\.\s*equal\(([^)]+)\)/gs,
+    (m, obj, path, val) => {
+      const acc = buildNestedAccessor(obj, path)
+      return acc ? `assert.deepStrictEqual(${acc}, ${val})` : m
+    })
+  // Keys / all.keys
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*(?:all\s*\.\s*)?keys\(([^)]+)\)/gs,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(Object.keys(' + obj + ').slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+  // include.members / have.members (+ negative)
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*(?:include|have)\s*\.\s*members\(([^)]+)\)/gs,
+    (m, obj, args) => (
+      'assert.ok(((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']))' +
+      '.every(v => ' + obj + '.includes(v)))'
+    )
+  )
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*(?:to\s*\.\s*not|not\s*\.\s*to)\s*\.\s*include\s*\.\s*members\(([^)]+)\)/gs,
+    (m, obj, args) => `assert.ok(!((Array.isArray(${args}) ? ${args} : [${args}])).every(v => ${obj}.includes(v)))`)
+  out = out.replace(
+    /expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*have\s*\.\s*members\(([^)]+)\)/gs,
+    (m, obj, args) => (
+      'assert.deepStrictEqual(([...' + obj + ']).slice().sort(), ' +
+      '((Array.isArray(' + args + ') ? ' + args + ' : [' + args + ']).slice().sort()))'
+    )
+  )
+  // Empty / Not empty
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*to\s*\.\s*be\s*\.\s*empty\b/gs, 'assert.strictEqual($1.length, 0)')
+  out = out.replace(/expect\(((?:[^()]|\([^()]*\))+?)\)\s*\.\s*(?:to\s*\.\s*not|not\s*\.\s*to)\s*\.\s*be\s*\.\s*empty\b/gs, 'assert.ok($1.length > 0)')
   // 20) On full replacement, remove chai assert import and chai expect if unused
   const expectStillUsed = /(?:^|[^\w$])expect\s*(\(|\.)/.test(out)
   const chaiAssertCallsRemain = /\bchai\.assert\./.test(out)
@@ -782,11 +1220,25 @@ function isBrowserCypress (file) {
 }
 
 function main () {
-  const patterns = [
-    'packages/**/test/**/*.js',
-    'integration-tests/**/*.js'
-  ]
-  const files = patterns.flatMap((pat) => glob.sync(path.join(ROOT, pat), { nodir: true }))
+  const targetArg = process.argv[2]
+  let files = []
+  if (targetArg) {
+    const targetPath = path.isAbsolute(targetArg) ? targetArg : path.join(ROOT, targetArg)
+    const stat = fs.existsSync(targetPath) ? fs.statSync(targetPath) : null
+    if (stat && stat.isFile()) {
+      files = [targetPath]
+    } else if (stat && stat.isDirectory()) {
+      files = glob.sync(path.join(targetPath, '**/*.js'), { nodir: true })
+    } else {
+      files = glob.sync(path.join(ROOT, targetArg), { nodir: true })
+    }
+  } else {
+    const patterns = [
+      'packages/**/test/**/*.js',
+      'integration-tests/**/*.js'
+    ]
+    files = patterns.flatMap((pat) => glob.sync(path.join(ROOT, pat), { nodir: true }))
+  }
   let changed = 0
   const reverted = []
   const ignored = []
@@ -812,9 +1264,10 @@ function main () {
       after = after.replace(/^(\s*import\s*\{[^}]*)(\s*from\s*["']chai["'][^\n]*\n)/mg,
         (m, head, tail) => head.trimEnd() + ' } ' + tail)
 
-      // Syntax validation: revert on failure; skip for ESM
+      // Syntax validation: revert on failure; skip for ESM or when explicitly disabled
       const isLikelyESM = /^\s*(?:import|export)\s/m.test(after)
-      if (!isLikelyESM) {
+      const skipSyntax = process.env.CHAI_TO_ASSERT_SKIP_SYNTAX === '1'
+      if (!isLikelyESM && !skipSyntax) {
         try {
           // eslint-disable-next-line no-new-func
           Function(after)

@@ -1,9 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { By, Builder } = require('selenium-webdriver')
 const chrome = require('selenium-webdriver/chrome')
-const { expect } = require('chai')
-
 const options = new chrome.Options()
 options.addArguments('--headless')
 
@@ -19,7 +19,7 @@ describe('selenium', function () {
     await driver.get(process.env.WEB_APP_URL)
 
     const title = await driver.getTitle()
-    expect(title).to.equal('Hello World')
+    assert.strictEqual(title, 'Hello World')
 
     await driver.manage().setTimeouts({ implicit: 500 })
 
@@ -27,7 +27,7 @@ describe('selenium', function () {
 
     const value = await helloWorld.getText()
 
-    expect(value).to.equal('Hello World')
+    assert.strictEqual(value, 'Hello World')
   })
 
   afterEach(async () => await driver.quit())

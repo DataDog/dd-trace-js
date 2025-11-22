@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 const constants = require('../src/constants')
@@ -71,11 +69,11 @@ describe('tagger', () => {
   })
 
   it('should handle missing key/value pairs', () => {
-    expect(() => tagger.add(carrier)).not.to.throw()
+    assert.doesNotThrow(() => tagger.add(carrier))
   })
 
   it('should handle missing carrier', () => {
-    expect(() => tagger.add()).not.to.throw()
+    assert.doesNotThrow(() => tagger.add())
   })
 
   it('should set trace error', () => {

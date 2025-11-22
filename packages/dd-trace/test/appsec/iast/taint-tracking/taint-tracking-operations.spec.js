@@ -75,9 +75,9 @@ describe('IAST TaintTracking Operations', () => {
 
   it('Addon should return a TaintedUtils instance', () => {
     let TaintedUtils = null
-    expect(() => {
+    assert.doesNotThrow(() => {
       TaintedUtils = require('@datadog/native-iast-taint-tracking')
-    }).to.not.throw(Error)
+    }, Error)
     assert.notStrictEqual(TaintedUtils, null)
   })
 
@@ -206,7 +206,7 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = {}
       const transactionId = null
       taintTrackingOperations.createTransaction(transactionId, iastContext)
-      expect(taintedUtils.createTransaction).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.createTransaction)
       assert.strictEqual(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], undefined)
     })
 
@@ -214,7 +214,7 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = null
       const transactionId = 'id'
       taintTrackingOperations.createTransaction(transactionId, iastContext)
-      expect(taintedUtils.createTransaction).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.createTransaction)
       assert.strictEqual(iastContext, null)
     })
   })
@@ -235,13 +235,13 @@ describe('IAST TaintTracking Operations', () => {
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not removeTransaction', () => {
       const iastContext = {}
       taintTrackingOperations.removeTransaction(iastContext)
-      expect(taintedUtils.removeTransaction).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.removeTransaction)
     })
 
     it('Given null iastContext should call not removeTransaction', () => {
       const iastContext = null
       taintTrackingOperations.removeTransaction(iastContext)
-      expect(taintedUtils.removeTransaction).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.removeTransaction)
     })
 
     it('Should increment REQUEST_TAINTED metric if INFORMATION or greater verbosity is enabled', () => {
@@ -308,7 +308,7 @@ describe('IAST TaintTracking Operations', () => {
 
       // taintedUtils methods are not called
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
-      expect(taintedUtils.concat).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.concat)
     })
 
     it('Should set debug global._ddiast object', () => {
@@ -345,13 +345,13 @@ describe('IAST TaintTracking Operations', () => {
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedString', () => {
       const iastContext = {}
       taintTrackingOperations.newTaintedString(iastContext)
-      expect(taintedUtils.newTaintedString).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.newTaintedString)
     })
 
     it('Given null iastContext should call not TaintedUtils.newTaintedString', () => {
       const iastContext = null
       taintTrackingOperations.newTaintedString(iastContext)
-      expect(taintedUtils.newTaintedString).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.newTaintedString)
     })
 
     it('Given null iastContext should return the string passed as parameter', () => {
@@ -379,13 +379,13 @@ describe('IAST TaintTracking Operations', () => {
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedObject', () => {
       const iastContext = {}
       taintTrackingOperations.newTaintedObject(iastContext)
-      expect(taintedUtils.newTaintedObject).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.newTaintedObject)
     })
 
     it('Given null iastContext should call not TaintedUtils.newTaintedObject', () => {
       const iastContext = null
       taintTrackingOperations.newTaintedObject(iastContext)
-      expect(taintedUtils.newTaintedObject).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.newTaintedObject)
     })
 
     it('Given null iastContext should return the string passed as parameter', () => {
@@ -413,13 +413,13 @@ describe('IAST TaintTracking Operations', () => {
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.isTainted', () => {
       const iastContext = {}
       taintTrackingOperations.isTainted(iastContext)
-      expect(taintedUtils.isTainted).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.isTainted)
     })
 
     it('Given null iastContext should call not TaintedUtils.isTainted', () => {
       const iastContext = null
       taintTrackingOperations.isTainted(iastContext)
-      expect(taintedUtils.isTainted).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.isTainted)
     })
   })
 
@@ -440,13 +440,13 @@ describe('IAST TaintTracking Operations', () => {
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.getRanges', () => {
       const iastContext = {}
       taintTrackingOperations.getRanges(iastContext)
-      expect(taintedUtils.getRanges).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.getRanges)
     })
 
     it('Given null iastContext should call not TaintedUtils.getRanges', () => {
       const iastContext = null
       taintTrackingOperations.getRanges(iastContext)
-      expect(taintedUtils.getRanges).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.getRanges)
     })
 
     it('Given null iastContext should return empty array', () => {
@@ -464,27 +464,27 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Should not call taintedUtils.concat method if result is not a string', () => {
       global._ddiast.plusOperator(1 + 2, 1, 2)
-      expect(taintedUtils.concat).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.concat)
     })
 
     it('Should not call taintedUtils.concat method if both operands are not string', () => {
       const a = { x: 'hello' }
       const b = { y: 'world' }
       global._ddiast.plusOperator(a + b, a, b)
-      expect(taintedUtils.concat).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.concat)
     })
 
     it('Should not call taintedUtils.concat method if there is not an active transaction', () => {
       iastContextFunctions.saveIastContext(store, {}, { [taintTrackingOperations.IAST_TRANSACTION_ID]: null })
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
-      expect(taintedUtils.concat).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.concat)
     })
 
     it('Should not fail if taintTracking is not enabled', () => {
       taintTrackingOperations.disableTaintOperations()
       const res = global._ddiast.plusOperator('helloworld', 'hello', 'world')
-      expect(taintedUtils.concat).not.to.be.called
-      expect(res).equal('helloworld')
+      sinon.assert.notCalled(taintedUtils.concat)
+      assert.strictEqual(res, 'helloworld')
     })
   })
 
@@ -519,8 +519,8 @@ describe('IAST TaintTracking Operations', () => {
       const a = { trim: function (a) { return a } }
       const fn = a.trim
       const result = global._ddiast.trim(fn.call(a, 'hello'), fn, a, 'hello')
-      expect(taintedUtils.trim).not.to.be.called
-      expect(result).eq('hello')
+      sinon.assert.notCalled(taintedUtils.trim)
+      assert.strictEqual(result, 'hello')
     })
 
     it('Should not call taintedUtils.trim method if there is not an active transaction', () => {
@@ -528,7 +528,7 @@ describe('IAST TaintTracking Operations', () => {
       const a = 'hello   '
       const fn = a.trim
       global._ddiast.trim(fn.call(a), fn, a)
-      expect(taintedUtils.trim).not.to.be.called
+      sinon.assert.notCalled(taintedUtils.trim)
     })
 
     it('Should not call taintedUtils.trim method if an Error happens', () => {
@@ -555,8 +555,8 @@ describe('IAST TaintTracking Operations', () => {
       const a = 'hello   '
       const fn = a.trim
       const result = global._ddiast.trim(fn.call(a), fn, a)
-      expect(taintedUtils.trim).not.to.be.called
-      expect(result).eq(a.trim())
+      sinon.assert.notCalled(taintedUtils.trim)
+      assert.strictEqual(result, a.trim())
     })
   })
 
@@ -565,14 +565,16 @@ describe('IAST TaintTracking Operations', () => {
       const tt = taintTrackingImpl.getTaintTrackingImpl()
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
-      expect(noop).to.have.all.keys(Object.keys(tt))
+      assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).length)
+assert.ok(((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).every(k => Object.hasOwn(noop, k)))
     })
 
     it('should have the same properties as TaintTrackingDebug', () => {
       const ttDebug = taintTrackingImpl.getTaintTrackingImpl(Verbosity.DEBUG)
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
-      expect(noop).to.have.all.keys(Object.keys(ttDebug))
+      assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).length)
+assert.ok(((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).every(k => Object.hasOwn(noop, k)))
     })
 
     it('should have the same properties as csiMethods', () => {
@@ -580,7 +582,8 @@ describe('IAST TaintTracking Operations', () => {
 
       const csiExpectedMethods = getExpectedMethods()
 
-      expect(tt).to.have.all.keys(csiExpectedMethods)
+      assert.strictEqual(Object.keys(tt).length, ((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).length)
+assert.ok(((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).every(k => Object.hasOwn(tt, k)))
     })
   })
 })

@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
@@ -72,7 +70,7 @@ describe('Tracer', () => {
 
       tracer.trace('name', options, span => {
         assert.ok(span instanceof Span)
-        expect(span.context()._tags).to.include(options.tags)
+        assertObjectContains(span.context()._tags, options.tags)
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',

@@ -1,13 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 it('no describe can do stuff', () => {
-  expect(1).to.equal(1)
+  assert.strictEqual(1, 1)
 })
 
 describe('describe ', () => {
   it('trailing space ', () => {
-    expect(1).to.equal(1)
+    assert.strictEqual(1, 1)
   })
 })

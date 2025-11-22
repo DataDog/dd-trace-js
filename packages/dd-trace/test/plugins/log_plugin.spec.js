@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const { channel } = require('dc-polyfill')
 
@@ -59,7 +59,7 @@ describe('LogPlugin', () => {
       testLogChannel.publish(data)
       const { message } = data
 
-      expect(message.dd).to.contain(config)
+      assertObjectContains(message.dd, config)
 
       // Should have trace/span data when none is active
       assert.strictEqual(message.dd.trace_id, span.context().toTraceId(true))

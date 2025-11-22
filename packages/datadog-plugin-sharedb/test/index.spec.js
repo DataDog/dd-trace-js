@@ -2,14 +2,12 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Plugin', () => {
   let ShareDB
 
@@ -97,11 +95,8 @@ describe('Plugin', () => {
 
             agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].service, 'test')
-              expect(traces[0][0])
-                .to
-                .have
-                .property('resource',
-                  'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
+              assert.ok('resource' in traces[0][0]);
+  assert.strictEqual(traces[0][0]['resource'], 'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
               assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
               assert.strictEqual(traces[0][0].meta.service, 'test')
               assert.strictEqual(traces[0][0].meta['sharedb.action'], 'query-fetch')

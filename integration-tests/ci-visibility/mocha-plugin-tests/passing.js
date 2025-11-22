@@ -1,23 +1,22 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('mocha-test-pass', () => {
   it('can pass', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 
   it('can pass two', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
 describe('mocha-test-pass-two', () => {
   it('can pass', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 
   it('can pass two', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })

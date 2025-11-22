@@ -2,10 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { channel } = require('../../src/helpers/instrument')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const {
   joinPath,
   normalizeRoutePath,
@@ -91,7 +92,7 @@ describe('helpers/router-helper', () => {
     })
 
     it('should avoid duplicate slashes when base ends with slash', () => {
-      expect(joinPath('/^\\/regex(?:\\/|$)/', '/mounted')).to.equal('/^\\/regex(?:\\/|$)/mounted')
+      assert.strictEqual(joinPath('/^\\/regex(?:\\/|$)/', '/mounted'), '/^\\/regex(?:\\/|$)/mounted')
     })
 
     it('should return null for path without leading slash (not accessible in Express)', () => {
@@ -122,7 +123,7 @@ describe('helpers/router-helper', () => {
       setRouterMountPath(router, '/foo')
       setRouterMountPath(router, '/bar')
 
-      expect(getRouterMountPaths(router)).to.have.members(['/foo', '/bar'])
+      assertObjectContains(getRouterMountPaths(router), ['/foo', '/bar'])
     })
 
     it('should avoid duplicate mount paths', () => {

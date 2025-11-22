@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -167,7 +165,8 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        expect(storage('legacy').getStore()).to.have.property('noop', true)
+        assert.ok('noop' in storage('legacy').getStore());
+  assert.strictEqual(storage('legacy').getStore()['noop'], true)
       }
 
       log.use(logger).debug('debug')
@@ -458,8 +457,8 @@ describe('log', () => {
 
         sinon.assert.calledOnce(console.error)
         const consoleErrorArg = console.error.getCall(0).args[0]
-        expect(typeof consoleErrorArg).to.be.eq('object')
-        expect(consoleErrorArg.message).to.be.eq('message')
+        assert.strictEqual(typeof consoleErrorArg, 'object')
+        assert.strictEqual(consoleErrorArg.message, 'message')
       })
 
       it('should only log once for a given code', () => {

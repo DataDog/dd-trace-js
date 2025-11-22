@@ -73,7 +73,7 @@ describe('Telemetry', () => {
 
         assert.strictEqual(iastTelemetry.enabled, false)
         assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
 
       it('should enable telemetry if telemetry.metrics is true', () => {
@@ -95,7 +95,7 @@ describe('Telemetry', () => {
 
         assert.strictEqual(iastTelemetry.enabled, false)
         assert.strictEqual(iastTelemetry.verbosity, Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.not.be.called
+        sinon.assert.notCalled(telemetryMetrics.manager.set)
       })
     })
 

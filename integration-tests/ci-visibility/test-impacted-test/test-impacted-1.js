@@ -1,13 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('impacted tests', () => {
   it('can pass normally', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 
   it('can fail', () => {
-    expect(1 + 2).to.equal(4)
+    assert.strictEqual(1 + 2, 4)
   })
 })

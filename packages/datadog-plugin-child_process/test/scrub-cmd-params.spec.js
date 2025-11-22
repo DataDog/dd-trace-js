@@ -2,11 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const scrubCmdParams = require('../src/scrub-cmd-params')
-
 describe('scrub cmds', () => {
   it('Should not scrub single command', () => {
     assert.deepStrictEqual(scrubCmdParams('ls -la'), ['ls', '-la'])
@@ -24,7 +22,7 @@ describe('scrub cmds', () => {
 
   it('Should split correctly texts', () => {
     assert.deepStrictEqual(scrubCmdParams('echo "Hello\\ text"'), ['echo', 'Hello\\ text'])
-    expect(scrubCmdParams('node -e "process.exit(1)"')).to.be.deep.equal(['node', '-e', 'process.exit(1)'])
+    assert.deepStrictEqual(scrubCmdParams('node -e "process.exit(1)"'), ['node', '-e', 'process.exit(1)'])
   })
 
   it('Should not scrub chained command', () => {
@@ -39,21 +37,17 @@ describe('scrub cmds', () => {
   it('Should scrub secret values', () => {
     assert.deepStrictEqual(scrubCmdParams('cmd --pass abc --token=def'), ['cmd', '--pass', '?', '--token=?'])
 
-    expect(scrubCmdParams('mysqladmin -u root password very_secret'))
-      .to.be.deep.equal(['mysqladmin', '-u', 'root', 'password', '?'])
+    assert.deepStrictEqual(scrubCmdParams('mysqladmin -u root password very_secret'), ['mysqladmin', '-u', 'root', 'password', '?'])
 
-    expect(scrubCmdParams('test -password very_secret -api_key 1234'))
-      .to.be.deep.equal(['test', '-password', '?', '-api_key', '?'])
+    assert.deepStrictEqual(scrubCmdParams('test -password very_secret -api_key 1234'), ['test', '-password', '?', '-api_key', '?'])
 
-    expect(scrubCmdParams('test --address https://some.address.com --email testing@to.es --api-key 1234'))
-      .to.be.deep.equal(['test', '--address', '?', '--email', '?', '--api-key', '?'])
+    assert.deepStrictEqual(scrubCmdParams('test --address https://some.address.com --email testing@to.es --api-key 1234'), ['test', '--address', '?', '--email', '?', '--api-key', '?'])
   })
 
   it('Should scrub md5 commands', () => {
     assert.deepStrictEqual(scrubCmdParams('md5 -s pony'), ['md5', '?', '?'])
 
-    expect(scrubCmdParams('cat passwords.txt | while read line; do; md5 -s $line; done')).to.be.deep
-      .equal([
+    assert.deepStrictEqual(scrubCmdParams('cat passwords.txt | while read line; do; md5 -s $line; done'), [
         'cat',
         'passwords.txt',
         '|',

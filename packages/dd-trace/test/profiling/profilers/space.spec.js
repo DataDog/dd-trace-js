@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -65,7 +63,7 @@ describe('profilers/native/space', () => {
     const profiler = new NativeSpaceProfiler()
 
     const info = profiler.getInfo()
-    expect(Object.keys(info)).to.be.empty
+    assert.strictEqual(Object.keys(info).length, 0)
   })
 
   it('should collect profiles from the pprof space profiler', () => {

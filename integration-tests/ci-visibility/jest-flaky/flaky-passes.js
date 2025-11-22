@@ -1,13 +1,15 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 let counter = 0
 
 describe('test-flaky-test-retries', () => {
   it('can retry flaky tests', () => {
-    expect(++counter).toEqual(3)
+    assert.deepStrictEqual(++counter, 3)
   })
 
   it('will not retry passed tests', () => {
-    expect(3).toEqual(3)
+    assert.deepStrictEqual(3, 3)
   })
 })

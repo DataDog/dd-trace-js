@@ -1,12 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('mocha-test-done-pass', () => {
   it('can do passed tests with done', (done) => {
     setTimeout(() => {
       try {
-        expect(true).to.equal(true)
+        assert.strictEqual(true, true)
         done()
       } catch (e) {
         done(e)

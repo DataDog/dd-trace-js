@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const { describe, it } = require('tap').mocha
@@ -99,14 +97,14 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
+        assertObjectContains(restOfTags, restOfExpectedTags)
         // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
         if (envVars && expectedEnvVars) {
           assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars))
         }
         // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
         if (nodeLabels && expectedNodeLabels) {
-          expect(JSON.parse(nodeLabels)).to.have.same.members(JSON.parse(expectedNodeLabels))
+          assertObjectContains(JSON.parse(nodeLabels), JSON.parse(expectedNodeLabels))
         }
       })
     })

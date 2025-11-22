@@ -5,7 +5,6 @@ const { execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -13,7 +12,6 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let prisma
   let prismaClient
@@ -248,7 +246,7 @@ describe('Plugin', () => {
           it('should disable prisma client', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
               const clientSpans = traces[0].find(span => span.meta['prisma.type'] === 'client')
-              expect(clientSpans).not.to.exist
+              assert.ok(clientSpans == null)
             })
 
             await Promise.all([
@@ -282,7 +280,7 @@ describe('Plugin', () => {
           it('should disable prisma engine', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
               const engineSpans = traces[0].find(span => span.meta['prisma.type'] === 'engine')
-              expect(engineSpans).not.to.exist
+              assert.ok(engineSpans == null)
             })
 
             await Promise.all([

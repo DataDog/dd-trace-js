@@ -1,13 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
 describe('esm', () => {
@@ -29,8 +29,8 @@ describe('esm', () => {
   context('fetch', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         const isFetch = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'fetch'))
         assert.strictEqual(isFetch, true)
       })

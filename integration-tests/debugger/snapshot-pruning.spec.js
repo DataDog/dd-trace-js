@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -13,7 +13,7 @@ describe('Dynamic Instrumentation', function () {
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {
           assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
-          assert.notProperty(payload.debugger.snapshot, 'captures')
+          assert.ok(!Object.hasOwn(payload.debugger.snapshot, 'captures'))
           assert.strictEqual(
             payload.debugger.snapshot.captureError,
             'Snapshot was too large (max allowed size is 1 MiB). ' +

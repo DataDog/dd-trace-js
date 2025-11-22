@@ -1,9 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const sum = require('../sum')
 
 describe('ci visibility', () => {
   it('can report tests', () => {
-    expect(sum(1, 2)).toEqual(3)
+    assert.deepStrictEqual(sum(1, 2), 3)
   })
 })

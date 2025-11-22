@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -163,7 +162,7 @@ describe('Plugin', () => {
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
 
           // check that response is a promise
-          expect(response).to.be.a('promise')
+          assert.ok(response && typeof response.then === 'function')
 
           const promState = await promiseState(response)
           assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
@@ -252,7 +251,7 @@ describe('Plugin', () => {
             const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
 
             // check that response is a promise
-            expect(response).to.be.a('promise')
+            assert.ok(response && typeof response.then === 'function')
 
             const promState = await promiseState(response)
             assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise

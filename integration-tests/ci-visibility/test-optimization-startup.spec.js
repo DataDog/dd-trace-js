@@ -1,10 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { exec } = require('child_process')
 const { once } = require('events')
-
-const { assert } = require('chai')
-
 const { sandboxCwd, useSandbox } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
@@ -56,7 +55,7 @@ describe('test optimization startup', () => {
         once(childProcess.stderr, 'end')
       ])
 
-      assert.include(processOutput, 'dd-trace is not initialized in a package manager')
+      assert.ok(processOutput.includes('dd-trace is not initialized in a package manager'))
     })
   })
 
@@ -86,8 +85,8 @@ describe('test optimization startup', () => {
       once(childProcess.stderr, 'end')
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.notInclude(processOutput, 'dd-trace is not initialized in a package manager')
+    assert.ok(processOutput.includes('hello!'))
+    assert.ok(!processOutput.includes('dd-trace is not initialized in a package manager'))
   })
 
   it('fails if DD_API_KEY is not set when in a non test worker', async () => {
@@ -117,8 +116,8 @@ describe('test optimization startup', () => {
       once(childProcess.stderr, 'end')
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.include(processOutput, 'dd-trace will not be initialized')
+    assert.ok(processOutput.includes('hello!'))
+    assert.ok(processOutput.includes('dd-trace will not be initialized'))
   })
 
   it('does not fail if DD_API_KEY is not set when in a test worker', async () => {
@@ -149,7 +148,7 @@ describe('test optimization startup', () => {
       once(childProcess.stderr, 'end')
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.notInclude(processOutput, 'dd-trace will not be initialized')
+    assert.ok(processOutput.includes('hello!'))
+    assert.ok(!processOutput.includes('dd-trace will not be initialized'))
   })
 })

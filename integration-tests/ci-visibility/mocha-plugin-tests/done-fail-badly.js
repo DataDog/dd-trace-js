@@ -1,11 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('mocha-test-done-fail', () => {
   it('can do badly setup failed tests with done', (done) => {
     setTimeout(() => {
-      expect(true).to.equal(false)
+      assert.strictEqual(true, false)
       done()
     }, 100)
   })

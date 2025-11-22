@@ -198,7 +198,7 @@ describe('SpanBuckets', () => {
 
   it('should add a new entry when no matching span agg key is found', () => {
     const bucket = buckets.forSpan(basicSpan)
-    expect(bucket).to.be.an.instanceOf(SpanAggStats)
+    assert.ok(bucket instanceof SpanAggStats)
     assert.strictEqual(buckets.size, 1)
     const [key, value] = Array.from(buckets.entries())[0]
     assert.strictEqual(key, (new SpanAggKey(basicSpan)).toString())
@@ -222,7 +222,7 @@ describe('TimeBuckets', () => {
     assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
     assert.strictEqual(buckets.size, 1)
-    expect(bucket).to.be.an.instanceOf(SpanBuckets)
+    assert.ok(bucket instanceof SpanBuckets)
   })
 })
 

@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
 describe('ESM', () => {
   let axios, cwd, appFile, agent, proc
 
@@ -64,8 +64,8 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(span.meta['_dd.iast.json'].includes('"COMMAND_INJECTION"'))
           })
         }, null, 1, true)
       })
@@ -75,8 +75,8 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.ok(span.meta['_dd.iast.json'].includes('"COMMAND_INJECTION"'))
           })
         }, null, 1, true)
       })

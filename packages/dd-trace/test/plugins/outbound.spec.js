@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -47,14 +47,14 @@ describe('OuboundPlugin', () => {
       instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
 
       sinon.assert.called(getPeerServiceStub)
-      expect(getRemapStub).to.not.be.called
+      sinon.assert.notCalled(getRemapStub)
     })
 
     it('should do nothing when disabled', () => {
       computePeerServiceStub.value({ spanComputePeerService: false })
       instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
-      expect(getPeerServiceStub).to.not.be.called
-      expect(getRemapStub).to.not.be.called
+      sinon.assert.notCalled(getPeerServiceStub)
+      sinon.assert.notCalled(getRemapStub)
     })
   })
 
@@ -209,7 +209,7 @@ describe('OuboundPlugin', () => {
         assert.strictEqual(args.length, 1)
         const tags = parseTags(args[0])
 
-        expect(tags).to.nested.include({ '_dd.code_origin.type': 'exit' })
+        assertObjectContains(tags, { '_dd.code_origin.type': 'exit' })
         assert.ok(Array.isArray(tags._dd.code_origin.frames))
         assert.ok(tags._dd.code_origin.frames.length > 0)
 

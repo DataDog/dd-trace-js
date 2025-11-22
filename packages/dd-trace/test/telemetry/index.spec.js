@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -860,7 +860,7 @@ describe('Telemetry retry', () => {
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
-    expect(extendedHeartbeatPayload.integrations).to.deep.include({
+    assertObjectContains(extendedHeartbeatPayload.integrations, {
       integrations: [
         { name: 'foo2', enabled: true, auto_enabled: true },
         { name: 'bar2', enabled: false, auto_enabled: true }
@@ -1036,7 +1036,7 @@ async function testSeq (seqId, reqType, validatePayload) {
       architecture: os.arch()
     }
   }
-  expect(req.body).to.deep.include({
+  assertObjectContains(req.body, {
     api_version: 'v2',
     naming_schema_version: '',
     request_type: reqType,
@@ -1052,7 +1052,7 @@ async function testSeq (seqId, reqType, validatePayload) {
     },
     host
   })
-  expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
+  assert.strictEqual([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time), true)
 
   validatePayload(req.body.payload)
 }

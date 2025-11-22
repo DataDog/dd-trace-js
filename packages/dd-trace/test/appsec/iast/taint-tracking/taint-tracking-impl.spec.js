@@ -4,8 +4,6 @@ const fs = require('fs')
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const { expect } = require('chai')
-
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted, getRanges } = require('../../../../src/appsec/iast/taint-tracking/operations')
@@ -78,7 +76,7 @@ describe('TaintTracking', () => {
               assert.strictEqual(isTainted(iastContext, commandResult), true)
 
               const commandResultOrig = propFnOriginal(commandTainted)
-              expect(commandResult).eq(commandResultOrig)
+              assert.strictEqual(commandResult, commandResultOrig)
 
               try {
                 const childProcess = require('child_process')
@@ -105,8 +103,7 @@ describe('TaintTracking', () => {
 
         const result = propFnInstrumented(jsonTainted)
         assert.strictEqual(isTainted(iastContext, result.command), true)
-        expect(getRanges(iastContext, result.command)).to.be.deep
-          .eq([{
+        assert.deepStrictEqual(getRanges(iastContext, result.command), [{
             start: 0,
             end: 6,
             iinfo: {
@@ -118,7 +115,7 @@ describe('TaintTracking', () => {
           }])
 
         const resultOrig = propFnOriginal(jsonTainted)
-        expect(result).deep.eq(resultOrig)
+        assert.deepStrictEqual(result, resultOrig)
 
         try {
           const childProcess = require('child_process')

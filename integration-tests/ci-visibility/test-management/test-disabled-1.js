@@ -1,11 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('disable tests', () => {
   it('can disable a test', () => {
     // eslint-disable-next-line no-console
     console.log('I am running') // to check if this is being run
-    expect(1 + 2).to.equal(4)
+    assert.strictEqual(1 + 2, 4)
   })
 })

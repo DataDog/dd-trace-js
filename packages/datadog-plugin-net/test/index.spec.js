@@ -3,15 +3,13 @@
 const assert = require('node:assert/strict')
 const dns = require('node:dns')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { withPeerService } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 describe('Plugin', () => {
   let net
   let tcp
@@ -195,7 +193,7 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.deep.include({
+            assertObjectContains(traces[0][0], {
               name: 'tcp.connect',
               service: 'test',
               resource: `localhost:${port}`
@@ -240,7 +238,7 @@ describe('Plugin', () => {
           socket.once('close', () => {
             setImmediate(() => {
               // Node.js 21.2 broke this function. We'll have to do the more manual way for now.
-              // expect(socket.eventNames()).to.not.include.members(events)
+              // assert.ok((socket.eventNames(), events)
               for (const event of events) {
                 assert.strictEqual(socket.listeners(event).length, 0)
               }

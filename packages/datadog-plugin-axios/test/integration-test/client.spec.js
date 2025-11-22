@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -7,8 +9,6 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
@@ -28,8 +28,8 @@ describe('esm', () => {
   context('axios', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'http.request'), true)
       })
 

@@ -9,10 +9,10 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
@@ -520,8 +520,8 @@ describe('Plugin', () => {
                   const spans = sort(traces[0])
 
                   assert.strictEqual(spans[0].resource, 'GET /forums/:fid/discussions/:did/posts/:pid')
-                  expect(spans[0].meta)
-                    .to.have.property('http.url', `http://localhost:${port}/forums/123/discussions/456/posts/789`)
+                  assert.ok('http.url' in spans[0].meta);
+  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/forums/123/discussions/456/posts/789`)
                 })
                 .then(done)
                 .catch(done)
@@ -557,8 +557,8 @@ describe('Plugin', () => {
                     const spans = sort(traces[0])
 
                     assert.strictEqual(spans[0].resource, 'GET /first/child')
-                    expect(spans[0].meta)
-                      .to.have.property('http.url', `http://localhost:${port}/first/child`)
+                    assert.ok('http.url' in spans[0].meta);
+  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/first/child`)
                   })
                   .then(done)
                   .catch(done)

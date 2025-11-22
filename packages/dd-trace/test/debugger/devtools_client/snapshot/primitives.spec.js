@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
@@ -19,13 +18,20 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     it('should return expected object for primitives', function (done) {
       assertOnBreakpoint(done, (state) => {
         assert.strictEqual(Object.keys(state).length, 7)
-        expect(state).to.have.deep.property('undef', { type: 'undefined' })
-        expect(state).to.have.deep.property('nil', { type: 'null', isNull: true })
-        expect(state).to.have.deep.property('bool', { type: 'boolean', value: 'true' })
-        expect(state).to.have.deep.property('num', { type: 'number', value: '42' })
-        expect(state).to.have.deep.property('bigint', { type: 'bigint', value: '18014398509481982' })
-        expect(state).to.have.deep.property('str', { type: 'string', value: 'foo' })
-        expect(state).to.have.deep.property('sym', { type: 'symbol', value: 'Symbol(foo)' })
+        assert.ok('undef' in state);
+assert.deepStrictEqual(state['undef'], { type: 'undefined' })
+        assert.ok('nil' in state);
+assert.deepStrictEqual(state['nil'], { type: 'null', isNull: true })
+        assert.ok('bool' in state);
+assert.deepStrictEqual(state['bool'], { type: 'boolean', value: 'true' })
+        assert.ok('num' in state);
+assert.deepStrictEqual(state['num'], { type: 'number', value: '42' })
+        assert.ok('bigint' in state);
+assert.deepStrictEqual(state['bigint'], { type: 'bigint', value: '18014398509481982' })
+        assert.ok('str' in state);
+assert.deepStrictEqual(state['str'], { type: 'string', value: 'foo' })
+        assert.ok('sym' in state);
+assert.deepStrictEqual(state['sym'], { type: 'symbol', value: 'Symbol(foo)' })
       })
 
       setAndTriggerBreakpoint(target, 13)

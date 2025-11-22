@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   hookFile,
@@ -9,7 +11,6 @@ const {
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
-const { expect, assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
@@ -302,7 +303,7 @@ describe('esm', () => {
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
-        expect(payload[1][0].meta).to.have.property('_dd.span_links')
+        assert.ok('_dd.span_links' in payload[1][0].meta)
       })
     }).timeout(60000)
 
@@ -315,7 +316,7 @@ describe('esm', () => {
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
         const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
         assert.strictEqual(hasCreateSpan, false)
-        expect(payload[1][0].meta).to.not.have.property('_dd.span_links')
+        assert.ok(!('_dd.span_links' in payload[1][0].meta))
       })
     }).timeout(60000)
   })

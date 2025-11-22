@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 require('../../setup/mocha')
-
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -95,16 +93,14 @@ describe('input message http requests', function () {
 
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.method, 'POST')
-    expect(opts).to.have.property(
-      'path',
-      '/debugger/v1/input?ddtags=' +
+    assert.ok('path' in opts);
+  assert.strictEqual(opts['path'], '/debugger/v1/input?ddtags=' +
         `env%3A${process.env.DD_ENV}%2C` +
         `version%3A${process.env.DD_VERSION}%2C` +
         `debugger_version%3A${version}%2C` +
         `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}%2C` +
-        `git.repository_url%3A${repositoryUrl}`
-    )
+        `git.repository_url%3A${repositoryUrl}`)
 
     done()
   })

@@ -1,6 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -27,11 +31,11 @@ describe('AgentInfoExporter', () => {
       }))
 
     const agentInfoExporter = new AgentInfoExporter({ port })
-    expect(scope.isDone()).not.to.be.true
+    assert.notStrictEqual(scope.isDone(), true)
     agentInfoExporter.getAgentInfo((err, { endpoints }) => {
-      expect(err).to.be.null
-      expect(endpoints).to.include('/evp_proxy/v2')
-      expect(scope.isDone()).to.be.true
+      assert.strictEqual(err, null)
+      assertObjectContains(endpoints, '/evp_proxy/v2')
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -47,10 +51,10 @@ describe('AgentInfoExporter', () => {
 
     agentInfoExporter.export(trace)
 
-    expect(agentInfoExporter.getUncodedTraces()).to.include(trace)
+    assertObjectContains(agentInfoExporter.getUncodedTraces(), trace)
 
     agentInfoExporter.getAgentInfo(() => {
-      expect(agentInfoExporter.getUncodedTraces()).to.include(trace)
+      assertObjectContains(agentInfoExporter.getUncodedTraces(), trace)
       done()
     })
   })
@@ -69,11 +73,11 @@ describe('AgentInfoExporter', () => {
       agentInfoExporter._writer = writer
       agentInfoExporter._isInitialized = true
       agentInfoExporter.export(trace)
-      expect(writer.append).to.have.been.calledWith(trace)
-      expect(writer.flush).not.to.have.been.called
+      sinon.assert.calledWith(writer.append, trace)
+      sinon.assert.notCalled(writer.flush)
       expect(agentInfoExporter.getUncodedTraces()).not.to.include(trace)
       setTimeout(() => {
-        expect(writer.flush).to.have.been.called
+        sinon.assert.called(writer.flush)
         done()
       }, flushInterval)
     })

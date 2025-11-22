@@ -1,11 +1,12 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
+const assert = require('node:assert/strict')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { assertCodeOriginFromTraces } = require('../../datadog-code-origin/test/helpers')
+const agent = require('../../dd-trace/test/plugins/agent')
 const { getNextLineNumber } = require('../../dd-trace/test/plugins/helpers')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -41,7 +42,7 @@ describe('Plugin', () => {
                 agent.assertSomeTraces(traces => {
                   const spans = traces[0]
                   const tagNames = Object.keys(spans[0].meta)
-                  expect(tagNames).to.all.not.match(/code_origin/)
+                  assert.doesNotMatch(tagNames, /code_origin/)
                 }),
                 axios.get(`http://localhost:${listener.address().port}/user`)
               ]).then(() => done(), done)

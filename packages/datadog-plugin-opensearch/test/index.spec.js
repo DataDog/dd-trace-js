@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -10,7 +9,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let opensearch
   let tracer
@@ -99,10 +97,8 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
               assert.strictEqual(traces[0][0].meta['opensearch.method'], 'POST')
               assert.strictEqual(traces[0][0].meta['opensearch.url'], '/_msearch')
-              expect(traces[0][0].meta).to.have.property(
-                'opensearch.body',
-                '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
-              )
+              assert.ok('opensearch.body' in traces[0][0].meta);
+  assert.strictEqual(traces[0][0].meta['opensearch.body'], '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]')
               assert.strictEqual(traces[0][0].meta['opensearch.params'], '{"size":100}')
               assert.strictEqual(traces[0][0].meta.component, 'opensearch')
               assert.strictEqual(traces[0][0].meta['_dd.integration'], 'opensearch')
@@ -192,13 +188,13 @@ describe('Plugin', () => {
         })
 
         it('should support aborting the query', () => {
-          expect(() => {
+          assert.doesNotThrow(() => {
             const promise = client.ping()
 
             if (promise.abort) {
               promise.abort()
             }
-          }).not.to.throw()
+          })
         })
 
         it('should work with userland promises', done => {
