@@ -42,7 +42,7 @@ describe('Plugin', () => {
           server = require('node:http').createServer(app)
         }
         server.listen(0, 'localhost', () => {
-          listener(server.address().port)
+          listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
       }
