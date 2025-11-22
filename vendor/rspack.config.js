@@ -3,14 +3,21 @@
 const { CopyRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
-const pkg = require('./package.json')
+const { dependencies } = require('./package.json')
 
-const names = Object.keys(pkg.dependencies).concat([
+const include = [
   'mutexify/promise',
-  'protobufjs/minimal',
-  'retry/lib/retry_operation',
+  'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
   'source-map/lib/util'
-])
+]
+
+const exclude = [
+  'mutexify' // we only ever use `mutexify/promise`
+]
+
+const names = Object.keys(dependencies)
+  .concat(include)
+  .filter(name => !exclude.includes(name))
 
 module.exports = {
   entry: Object.fromEntries(names.map(name => [name, name])),
