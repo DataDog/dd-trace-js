@@ -1,20 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('mocha-test-skip', () => {
   it.skip('can skip', () => {
-    expect(true).to.equal(false)
+    assert.strictEqual(true, false)
   })
 })
 
 describe('mocha-test-skip-different', () => {
   it.skip('can skip too', () => {
-    expect(true).to.equal(false)
+    assert.strictEqual(true, false)
   })
 
   it.skip('can skip twice', () => {
-    expect(true).to.equal(false)
+    assert.strictEqual(true, false)
   })
 })
 

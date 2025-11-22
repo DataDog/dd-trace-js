@@ -1,9 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('parameterized', () => {
   test.each(['parameter 1', 'parameter 2'])('test %s', (value) => {
-    expect(value.startsWith('parameter')).toEqual(true)
+    assert.deepStrictEqual(value.startsWith('parameter'), true)
   })
 })

@@ -2,9 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -135,7 +133,8 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: 'a*'
         })
 
-        expect(config).to.have.deep.property('queryStringObfuscation', /a*/gi)
+        assert.ok('queryStringObfuscation' in config);
+assert.deepStrictEqual(config['queryStringObfuscation'], /a*/gi)
       })
 
       it('should default to true when passed a bad regex', () => {
@@ -304,7 +303,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          expect(tags).to.include({
+          assertObjectContains(tags, {
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
             'http.req': 'incoming',
             [`${HTTP_RESPONSE_HEADERS}.server`]: 'test',
@@ -334,7 +333,8 @@ describe('plugins/util/web', () => {
           config.service = 'test2'
           web.instrument(tracer, config, req, res, 'test.request')
 
-          expect(span.context()._tags).to.have.property('service.name', 'test2')
+          assert.ok('service.name' in span.context()._tags);
+  assert.strictEqual(span.context()._tags['service.name'], 'test2')
         })
       })
 
@@ -359,7 +359,7 @@ describe('plugins/util/web', () => {
 
             res.end()
 
-            expect(tags).to.include({
+            assertObjectContains(tags, {
               [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
             })
           })

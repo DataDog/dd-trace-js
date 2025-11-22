@@ -1,10 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('ci visibility', () => {
   it('can report tests', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
   // only run for jest tests
   if (typeof jest !== 'undefined') {
@@ -12,6 +11,6 @@ describe('ci visibility', () => {
   }
 
   it.skip('skip will not be retried', () => {
-    expect(1 + 2).to.equal(4)
+    assert.strictEqual(1 + 2, 4)
   })
 })

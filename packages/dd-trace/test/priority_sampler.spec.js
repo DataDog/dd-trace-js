@@ -511,9 +511,9 @@ describe('PrioritySampler', () => {
 
       prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
 
-      expect(context._sampling.priority).to.undefined
-      expect(context._sampling.mechanism).to.undefined
-      expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
+      assert.strictEqual(context._sampling.priority, undefined)
+      assert.strictEqual(context._sampling.mechanism, undefined)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], undefined)
     })
   })
 

@@ -1,7 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const Axios = require('axios')
-const { assert } = require('chai')
 const childProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
@@ -34,7 +35,7 @@ describe('esbuild support for IAST', () => {
     return agent.assertMessageReceived(({ payload }) => {
       const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
       spans.forEach(span => {
-        assert.property(span.meta, '_dd.iast.json')
+        assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
         const spanIastData = JSON.parse(span.meta['_dd.iast.json'])
         assert.strictEqual(spanIastData.vulnerabilities[0].type, 'COMMAND_INJECTION')
         assert.strictEqual(spanIastData.vulnerabilities[0].location.path, expectedPath)
@@ -43,8 +44,8 @@ describe('esbuild support for IAST', () => {
         }
 
         const ddStack = msgpack.decode(span.meta_struct['_dd.stack'])
-        assert.property(ddStack.vulnerability[0], 'frames')
-        assert.isNotEmpty(ddStack.vulnerability[0].frames)
+        assert.ok(Object.hasOwn(ddStack.vulnerability[0], 'frames'))
+        assert.ok(ddStack.vulnerability[0].frames.length > 0)
       })
     }, null, 1, true)
   }
@@ -53,7 +54,7 @@ describe('esbuild support for IAST', () => {
     return agent.assertMessageReceived(({ payload }) => {
       const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
       spans.forEach(span => {
-        assert.notProperty(span.meta, '_dd.iast.json')
+        assert.ok(!Object.hasOwn(span.meta, '_dd.iast.json'))
       })
     }, null, 1, true)
   }

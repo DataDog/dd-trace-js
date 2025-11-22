@@ -136,7 +136,7 @@ describe('reporter', () => {
       assert.strictEqual(Reporter.formatHeaderName(' Content-Type '), 'content-type')
       assert.strictEqual(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e'), 'c___ont_____ent----typ_/_e')
       assert.strictEqual(Reporter.formatHeaderName('Some.Header'), 'some_header')
-      expect(Reporter.formatHeaderName(''.padEnd(300, 'a'))).to.have.lengthOf(200)
+      assert.strictEqual(Reporter.formatHeaderName(''.padEnd(300, 'a')).length, 200)
     })
   })
 
@@ -152,7 +152,7 @@ describe('reporter', () => {
     it('should add some entries to metricsQueue', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
+      assert.strictEqual(Reporter.metricsQueue.get('_dd.appsec.waf.version'), wafVersion)
     })
 
     it('should not add entries to metricsQueue with success false', () => {
@@ -713,7 +713,7 @@ describe('reporter', () => {
   describe('reportAttributes', () => {
     it('should not call addTags if parameter is undefined', () => {
       Reporter.reportAttributes(undefined)
-      expect(span.addTags).not.to.be.called
+      sinon.assert.notCalled(span.addTags)
     })
 
     it('should call addTags with an empty array', () => {
@@ -816,7 +816,7 @@ describe('reporter', () => {
 
       sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
-      expect(Reporter.metricsQueue).to.be.empty
+      assert.strictEqual(Reporter.metricsQueue.length, 0)
     })
 
     it('should only add mandatory headers when no attack or event was previously found', () => {

@@ -1,9 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('dynamic-instrumentation 2', () => {
   it('is not retried', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 })

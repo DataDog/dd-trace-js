@@ -2,9 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
@@ -217,8 +215,9 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
-      expect(span.context()._baggageItems).to.have.property('foo', 'bar')
-      expect(parent._baggageItems).to.not.have.property('foo', 'bar')
+      assert.ok('foo' in span.context()._baggageItems);
+  assert.strictEqual(span.context()._baggageItems['foo'], 'bar')
+      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems['foo'] !== 'bar')
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -236,7 +235,8 @@ describe('Span', () => {
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
-      expect(span.context()._baggageItems).to.have.property('foo', 'bar')
+      assert.ok('foo' in span.context()._baggageItems);
+  assert.strictEqual(span.context()._baggageItems['foo'], 'bar')
     })
   })
 

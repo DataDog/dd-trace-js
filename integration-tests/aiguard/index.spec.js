@@ -3,12 +3,12 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
+const { assertObjectContains } = require('../helpers')
 
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, url
@@ -63,11 +63,11 @@ describe('AIGuard SDK integration tests', () => {
       const response = await executeRequest(`${url}${endpoint}`, 'GET', headers)
       if (blocking && action !== 'ALLOW') {
         assert.strictEqual(response.status, 403)
-        expect(response.body).to.contain(reason)
+        assertObjectContains(response.body, reason)
       } else {
         assert.strictEqual(response.status, 200)
-        expect(response.body).to.have.nested.property('action', action)
-        expect(response.body).to.have.nested.property('reason', reason)
+        assert.strictEqual(response.body?.action, action)
+        assert.strictEqual(response.body?.reason, reason)
       }
       await agent.assertMessageReceived(({ headers, payload }) => {
         const span = payload[0].find(span => span.name === 'ai_guard')

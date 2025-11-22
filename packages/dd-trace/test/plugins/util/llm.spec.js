@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -37,7 +35,7 @@ describe('llm utils', () => {
     })
 
     it('should always sample prompt completion', () => {
-      expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() }))).to.be.true
+      assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() })), true)
     })
   })
 
@@ -58,11 +56,11 @@ describe('llm utils', () => {
 
     describe('with sampling rate 0.6', () => {
       it('should not sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) }))).to.be.false
+        assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) })), false)
       })
 
       it('should sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) }))).to.be.true
+        assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) })), true)
       })
     })
   })

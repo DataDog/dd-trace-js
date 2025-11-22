@@ -118,7 +118,7 @@ withVersions('passport-http', 'passport-http', version => {
       })
 
       assert.strictEqual(res.status, 500)
-      expect(subscriberStub).to.not.be.called
+      sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {

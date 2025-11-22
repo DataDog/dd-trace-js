@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
@@ -294,7 +293,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(2)
+              assert.strictEqual(traces[0].length, 2)
               assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
               assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
               assert.strictEqual(traces[0][0].error, 1)
@@ -329,7 +328,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(3)
+              assert.strictEqual(traces[0].length, 3)
               assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
               assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
               assert.strictEqual(traces[0][0].error, 1)

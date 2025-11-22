@@ -1,10 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 afterAll(() => {
   process.nextTick(() => {
     require('./off-timing-import.js')
   })
 })
 it('will fail', () => {
-  expect(true).toBe(true)
+  assert.strictEqual(true, true)
 })

@@ -1,3 +1,5 @@
+const assert = require('node:assert/strict')
+
 /** Some comment */
 /* eslint-disable jsdoc/valid-types */
 /**
@@ -5,11 +7,8 @@
  */
 /* Some other comment */
 'use strict'
-
-const { expect } = require('chai')
-
 describe('test-unskippable', () => {
   it('can report tests', () => {
-    expect(1 + 2).to.equal(3)
+    assert.strictEqual(1 + 2, 3)
   })
 })

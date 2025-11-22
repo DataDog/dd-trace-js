@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { expect } = require('chai')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -206,11 +206,7 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SAMPLING_AGENT_DECISION,
-        SAMPLING_LIMIT_DECISION,
-        SAMPLING_RULE_DECISION
-      )
+      assert.ok(!(([SAMPLING_AGENT_DECISION, SAMPLING_LIMIT_DECISION, SAMPLING_RULE_DECISION]).some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should always add single span ingestion tags from options if present', () => {
@@ -230,11 +226,7 @@ describe('spanFormat', () => {
     it('should not add single span ingestion tags if options not present', () => {
       trace = spanFormat(span)
 
-      expect(trace.metrics).to.not.have.keys(
-        SPAN_SAMPLING_MECHANISM,
-        SPAN_SAMPLING_MAX_PER_SECOND,
-        SPAN_SAMPLING_RULE_RATE
-      )
+      assert.ok(!(([SPAN_SAMPLING_MECHANISM, SPAN_SAMPLING_MAX_PER_SECOND, SPAN_SAMPLING_RULE_RATE]).some(k => Object.hasOwn(trace.metrics, k))))
     })
 
     it('should format span links', () => {

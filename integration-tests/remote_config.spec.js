@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
 describe('Remote config client id', () => {
   let axios, cwd, appFile
 
@@ -42,7 +42,7 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.exists(payload[0][0].meta['_dd.rc.client_id'])
+        assert.ok(payload[0][0].meta['_dd.rc.client_id'] != null)
       })
     })
   })
@@ -71,7 +71,7 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.notExists(payload[0][0].meta['_dd.rc.client_id'])
+        assert.ok(payload[0][0].meta['_dd.rc.client_id'] == null)
       })
     })
   })

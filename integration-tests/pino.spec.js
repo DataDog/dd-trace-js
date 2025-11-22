@@ -1,8 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
 const path = require('path')
-const { assert } = require('chai')
 const { once } = require('events')
 
 describe('pino test', () => {

@@ -103,8 +103,7 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+          assert.deepStrictEqual(subscription.firstCall.args[0].sanitizedProperties, ['body', 'params', 'headers', 'query'])
           assert.strictEqual(subscription.firstCall.args[0].req.query.param, 'paramvalue')
         })
 
@@ -114,8 +113,7 @@ describe('express-mongo-sanitize', () => {
           await axios.get(`http://localhost:${port}/?param[$eq]=paramvalue`)
 
           sinon.assert.calledOnce(subscription)
-          expect(subscription.firstCall.args[0].sanitizedProperties)
-            .to.be.deep.equal(['body', 'params', 'headers', 'query'])
+          assert.deepStrictEqual(subscription.firstCall.args[0].sanitizedProperties, ['body', 'params', 'headers', 'query'])
           assert.strictEqual(subscription.firstCall.args[0].req.query.param.$eq, undefined)
         })
       })

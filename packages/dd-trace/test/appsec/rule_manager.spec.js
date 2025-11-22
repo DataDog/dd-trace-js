@@ -1,19 +1,19 @@
 'use strict'
 
-const { expect, assert } = require('chai')
-const proxyquire = require('proxyquire')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
-const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
-const rules = require('../../src/appsec/recommended.json')
-const waf = require('../../src/appsec/waf')
 const blocking = require('../../src/appsec/blocking')
+const rules = require('../../src/appsec/recommended.json')
+const { loadRules, clearAllRules } = require('../../src/appsec/rule_manager')
+const waf = require('../../src/appsec/waf')
+const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 const { getConfigFresh } = require('../helpers/config')
+
 
 describe('AppSec Rule Manager', () => {
   let config
@@ -37,16 +37,16 @@ describe('AppSec Rule Manager', () => {
     it('should call waf init with proper params', () => {
       loadRules(config.appsec)
 
-      expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
+      sinon.assert.calledOnceWithExactly(waf.init, rules, config.appsec)
     })
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
       config.appsec.rules = './not/existing/file.json'
-      expect(() => { loadRules(config.appsec) }).to.throw()
+      assert.throws(() => { loadRules(config.appsec) })
 
       config.appsec.rules = './bad-formatted-rules.json'
-      expect(() => { loadRules(config.appsec) }).to.throw()
+      assert.throws(() => { loadRules(config.appsec) })
     })
 
     it('should call updateBlockingConfiguration with proper params', () => {
@@ -57,21 +57,21 @@ describe('AppSec Rule Manager', () => {
 
       loadRules(config.appsec)
 
-      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(testRules.actions)
+      sinon.assert.calledOnceWithExactly(waf.init, testRules, config.appsec)
+      sinon.assert.calledOnceWithExactly(blocking.setDefaultBlockingActionParameters, testRules.actions)
     })
   })
 
   describe('clearAllRules', () => {
     it('should call clear method on all applied rules', () => {
       loadRules(config.appsec)
-      expect(waf.init).to.have.been.calledOnce
+      sinon.assert.calledOnce(waf.init)
 
       blocking.setDefaultBlockingActionParameters.resetHistory()
 
       clearAllRules()
-      expect(waf.destroy).to.have.been.calledOnce
-      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(undefined)
+      sinon.assert.calledOnce(waf.destroy)
+      sinon.assert.calledOnceWithExactly(blocking.setDefaultBlockingActionParameters, undefined)
     })
   })
 
@@ -198,16 +198,16 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
 
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error'))
       assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toModify[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toModify[0], 'apply_error'))
       assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
-      assert.notProperty(rcConfigsForNonAsmProducts.toApply[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toApply[0], 'apply_error'))
 
       sinon.assert.notCalled(waf.updateConfig)
       sinon.assert.notCalled(waf.removeConfig)
 
-      assert.deepEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
+      assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
     })
 
     it('should apply configs from ASM products', () => {
@@ -236,9 +236,9 @@ describe('AppSec Rule Manager', () => {
       )
 
       assert.strictEqual(waf.wafManager.ddwaf.configPaths.length, 3)
-      assert.include(waf.wafManager.ddwaf.configPaths, waf.wafManager.constructor.defaultWafConfigPath)
-      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toApply[0].path)
-      assert.include(waf.wafManager.ddwaf.configPaths, rcConfigs.toModify[0].path)
+      assert.ok(waf.wafManager.ddwaf.configPaths.includes(waf.wafManager.constructor.defaultWafConfigPath))
+      assert.ok(waf.wafManager.ddwaf.configPaths.includes(rcConfigs.toApply[0].path))
+      assert.ok(waf.wafManager.ddwaf.configPaths.includes(rcConfigs.toModify[0].path))
     })
 
     it('should update apply_state and apply_error on successful apply', () => {
@@ -250,11 +250,11 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(rcConfigs)
 
       assert.strictEqual(rcConfigs.toUnapply[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toUnapply[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigs.toUnapply[0], 'apply_error'))
       assert.strictEqual(rcConfigs.toModify[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toModify[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigs.toModify[0], 'apply_error'))
       assert.strictEqual(rcConfigs.toApply[0].apply_state, ACKNOWLEDGED)
-      assert.notProperty(rcConfigs.toApply[0], 'apply_error')
+      assert.ok(!Object.hasOwn(rcConfigs.toApply[0], 'apply_error'))
     })
 
     it('should update apply_state and apply_error on failed config remove', () => {
@@ -380,10 +380,7 @@ describe('AppSec Rule Manager', () => {
 
         assert.strictEqual(rcConfigs.toApply[0].apply_state, ERROR)
 
-        assert.deepEqual(
-          waf.wafManager.ddwaf.configPaths,
-          [waf.wafManager.constructor.defaultWafConfigPath]
-        )
+        assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths, [waf.wafManager.constructor.defaultWafConfigPath])
       })
     })
 

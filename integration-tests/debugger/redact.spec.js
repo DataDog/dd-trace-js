@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 const { once } = require('node:events')
 

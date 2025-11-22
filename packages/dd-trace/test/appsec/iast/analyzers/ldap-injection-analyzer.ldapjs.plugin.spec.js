@@ -5,7 +5,6 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe } = require('mocha')
 
 const { storage } = require('../../../../../datadog-core')
@@ -126,7 +125,7 @@ describe('ldap-injection-analyzer with ldapjs', () => {
                   .emit('end')
 
                 // if .off method wouldn't work the test will never reach this lines because it will loop forever :S
-                expect(searchResOnEndInvocations).to.be.eq(1)
+                assert.strictEqual(searchResOnEndInvocations, 1)
                 resolve()
               }
 

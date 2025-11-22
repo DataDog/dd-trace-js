@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -109,7 +108,7 @@ describe('Plugin', () => {
             assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
-            expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
+            assert.ok(((Number(traces[0][0].meta['http.status_code'])) >= (200) && (Number(traces[0][0].meta['http.status_code'])) <= (299)))
           })
           .then(done)
           .catch(done)

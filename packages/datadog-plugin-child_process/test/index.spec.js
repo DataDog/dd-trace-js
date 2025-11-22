@@ -1,13 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const ChildProcessPlugin = require('../src')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function noop () {}
 
@@ -53,7 +55,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command: 'ls -l' })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -77,7 +79,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command: 'ls -l', shell: true })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -103,7 +105,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -130,7 +132,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command, shell: true })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -158,7 +160,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -186,7 +188,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command, shell: true })
 
-        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
           'command_execution',
           {
             startTime: undefined,
@@ -211,7 +213,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command: undefined })
 
-        expect(tracerStub.startSpan).not.to.have.been.called
+        sinon.assert.notCalled(tracerStub.startSpan)
       })
 
       it('should not crash if command does not exist', () => {
@@ -219,7 +221,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({})
 
-        expect(tracerStub.startSpan).not.to.have.been.called
+        sinon.assert.notCalled(tracerStub.startSpan)
       })
     })
 
@@ -230,8 +232,8 @@ describe('Child process plugin', () => {
 
         shellPlugin.end({})
 
-        expect(spanStub.setTag).not.to.have.been.called
-        expect(spanStub.finish).not.to.have.been.called
+        sinon.assert.notCalled(spanStub.setTag)
+        sinon.assert.notCalled(spanStub.finish)
       })
 
       it('should call setTag with proper code when result is a buffer', () => {
@@ -240,8 +242,8 @@ describe('Child process plugin', () => {
 
         shellPlugin.end({ result: Buffer.from('test') })
 
-        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
-        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
 
       it('should call setTag with proper code when result is a string', () => {
@@ -250,8 +252,8 @@ describe('Child process plugin', () => {
 
         shellPlugin.end({ result: 'test' })
 
-        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
-        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
 
       it('should call setTag with proper code when an error is thrown', () => {
@@ -260,8 +262,8 @@ describe('Child process plugin', () => {
 
         shellPlugin.end({ error: { status: -1 } })
 
-        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '-1')
-        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '-1')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
     })
 
@@ -272,8 +274,8 @@ describe('Child process plugin', () => {
 
         shellPlugin.asyncEnd({})
 
-        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', 'undefined')
-        expect(spanStub.finish).to.have.been.calledOnce
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', 'undefined')
+        sinon.assert.calledOnce(spanStub.finish)
       })
 
       it('should call setTag with proper code when a proper code is returned', () => {
@@ -282,18 +284,18 @@ describe('Child process plugin', () => {
 
         shellPlugin.asyncEnd({ result: 0 })
 
-        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
-        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
     })
 
     describe('channel', () => {
       it('should return proper prefix', () => {
-        expect(ChildProcessPlugin.prefix).to.be.equal('tracing:datadog:child_process:execution')
+        assert.strictEqual(ChildProcessPlugin.prefix, 'tracing:datadog:child_process:execution')
       })
 
       it('should return proper id', () => {
-        expect(ChildProcessPlugin.id).to.be.equal('child_process')
+        assert.strictEqual(ChildProcessPlugin.id, 'child_process')
       })
     })
   })
@@ -322,17 +324,17 @@ describe('Child process plugin', () => {
 
     it('should preserve context around execSync calls', () => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.execSync('ls')
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
       })
     })
 
     it('should preserve context around exec calls', (done) => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.exec('ls', () => {
-          expect(tracer.scope().active()).to.equal(parent)
+          assert.strictEqual(tracer.scope().active(), parent)
           done()
         })
       })
@@ -340,17 +342,17 @@ describe('Child process plugin', () => {
 
     it('should preserve context around execFileSync calls', () => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.execFileSync('ls')
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
       })
     })
 
     it('should preserve context around execFile calls', (done) => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.execFile('ls', () => {
-          expect(tracer.scope().active()).to.equal(parent)
+          assert.strictEqual(tracer.scope().active(), parent)
           done()
         })
       })
@@ -358,17 +360,17 @@ describe('Child process plugin', () => {
 
     it('should preserve context around spawnSync calls', () => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.spawnSync('ls')
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
       })
     })
 
     it('should preserve context around spawn calls', (done) => {
       tracer.scope().activate(parent, () => {
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         childProcess.spawn('ls')
-        expect(tracer.scope().active()).to.equal(parent)
+        assert.strictEqual(tracer.scope().active(), parent)
         done()
       })
     })
@@ -402,8 +404,8 @@ describe('Child process plugin', () => {
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
       const execFileAsync = util.promisify(childProcess.execFile)
 
-      expect(global.Promise).to.equal(Bluebird)
-      expect(global.Promise.version).to.exist
+      assert.strictEqual(global.Promise, Bluebird)
+      assert.ok(global.Promise.version != null)
 
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
@@ -416,8 +418,8 @@ describe('Child process plugin', () => {
       })
 
       const result = await execFileAsync('echo', ['bluebird-test'])
-      expect(result).to.exist
-      expect(result.stdout).to.contain('bluebird-test')
+      assert.ok(result != null)
+      assertObjectContains(result.stdout, 'bluebird-test')
 
       return expectedPromise
     })
@@ -430,14 +432,14 @@ describe('Child process plugin', () => {
         promises.push(
           execFileAsync('echo', [`concurrent-test-${i}`])
             .then(result => {
-              expect(result.stdout).to.contain(`concurrent-test-${i}`)
+              assertObjectContains(result.stdout, `concurrent-test-${i}`)
               return result
             })
         )
       }
 
       const results = await Promise.all(promises)
-      expect(results).to.have.length(5)
+      assert.strictEqual(results.length, 5)
     })
 
     it('should handle Bluebird promise rejection properly', async () => {
@@ -459,8 +461,8 @@ describe('Child process plugin', () => {
         await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
         throw new Error('Expected command to fail')
       } catch (error) {
-        expect(error).to.exist
-        expect(error.code).to.exist
+        assert.ok(error != null)
+        assert.ok(error.code != null)
       }
 
       return expectedPromise
@@ -474,11 +476,11 @@ describe('Child process plugin', () => {
       const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
 
       const promise = execFileAsync('echo', ['util-promisify-test'])
-      expect(promise.constructor).to.equal(Bluebird)
-      expect(promise.constructor.version).to.exist
+      assert.strictEqual(promise.constructor, Bluebird)
+      assert.ok(promise.constructor.version != null)
 
       const result = await promise
-      expect(result.stdout).to.contain('util-promisify-test')
+      assertObjectContains(result.stdout, 'util-promisify-test')
     })
   })
 
@@ -543,10 +545,10 @@ describe('Child process plugin', () => {
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
                 const span = storage('legacy').getStore()?.span
-                expect(span).to.be.equals(parentSpan)
+                assert.strictEqual(span, parentSpan)
                 if (async) {
                   res.on('close', () => {
-                    expect(span).to.be.equals(parentSpan)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 } else {
@@ -558,7 +560,7 @@ describe('Child process plugin', () => {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
                     const span = storage('legacy').getStore()?.span
-                    expect(span).to.be.equals(parentSpan)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 })

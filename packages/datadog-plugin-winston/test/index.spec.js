@@ -1,7 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
@@ -136,7 +140,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             winston.info('message')
 
-            expect(spy).to.have.been.calledWithMatch(meta.dd)
+            sinon.assert.calledWithMatch(spy, meta.dd)
           })
         })
       })
@@ -164,9 +168,9 @@ describe('Plugin', () => {
             tracer.scope().activate(span, async () => {
               winston.info('message')
 
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              sinon.assert.calledWithMatch(spy, meta.dd)
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            assertObjectContains(await logServer.logPromise, meta.dd)
           })
 
           it('should add the trace identifiers to logger instances', async () => {
@@ -188,9 +192,9 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               logger.info('message')
 
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              sinon.assert.calledWithMatch(spy, meta.dd)
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            assertObjectContains(await logServer.logPromise, meta.dd)
           })
 
           it('should support errors', async () => {
@@ -208,11 +212,11 @@ describe('Plugin', () => {
               const index = semver.intersects(version, '>=3') ? 0 : 2
               const record = log.firstCall.args[index]
 
-              expect(record).to.be.an.instanceof(Error)
-              expect(error).to.not.have.property('dd')
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              assert.ok(record instanceof Error)
+              assert.ok(!('dd' in error))
+              sinon.assert.calledWithMatch(spy, meta.dd)
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            assertObjectContains(await logServer.logPromise, meta.dd)
           })
 
           if (semver.intersects(version, '>=3')) {
@@ -236,12 +240,12 @@ describe('Plugin', () => {
 
                 const record = log.firstCall.args[0]
 
-                expect(record).to.be.an.instanceof(Set)
-                expect(inspect(record)).to.match(/"getter":1,/)
-                expect(set).to.not.have.property('dd')
-                expect(spy).to.have.been.calledWithMatch(meta.dd)
+                assert.ok(record instanceof Set)
+                assert.match(inspect(record), /"getter":1,/)
+                assert.ok(!('dd' in set))
+                sinon.assert.calledWithMatch(spy, meta.dd)
               })
-              expect(await logServer.logPromise).to.include(meta.dd)
+              assertObjectContains(await logServer.logPromise, meta.dd)
             })
 
             it('should add the trace identifiers when streaming', async () => {
@@ -259,9 +263,9 @@ describe('Plugin', () => {
                   message: 'message'
                 })
 
-                expect(spy).to.have.been.calledWithMatch(dd)
+                sinon.assert.calledWithMatch(spy, dd)
               })
-              expect(await logServer.logPromise).to.include(dd)
+              assertObjectContains(await logServer.logPromise, dd)
             })
           }
 
@@ -271,11 +275,11 @@ describe('Plugin', () => {
                 dd: 'something else'
               }
               winston.log('info', 'test', meta)
-              expect(meta.dd).to.equal('something else')
+              assert.strictEqual(meta.dd, 'something else')
 
-              expect(spy).to.have.been.calledWithMatch('something else')
+              sinon.assert.calledWithMatch(spy, 'something else')
             })
-            expect(await logServer.logPromise).to.include('something else')
+            assertObjectContains(await logServer.logPromise, 'something else')
           })
 
           // New versions clone the meta object so it's always extensible.
@@ -285,16 +289,16 @@ describe('Plugin', () => {
                 const meta = {}
                 Object.preventExtensions(meta)
                 winston.log('info', 'test', meta)
-                expect(meta.dd).to.be.undefined
+                assert.strictEqual(meta.dd, undefined)
 
                 expect(spy).to.have.been.calledWith()
               })
-              expect(await logServer.logPromise).to.be.undefined
+              assert.strictEqual(await logServer.logPromise, undefined)
             })
           }
 
           it('should skip injection without a store', async () => {
-            expect(() => winston.info('message')).to.not.throw()
+            assert.doesNotThrow(() => winston.info('message'))
           })
         })
 
@@ -329,16 +333,16 @@ describe('Plugin', () => {
               winston.info(splatFormmatedLog, extra)
 
               if (semver.intersects(version, '>=3')) {
-                expect(log).to.have.been.calledWithMatch({
+                sinon.assert.calledWithMatch(log, {
                   message: interpolatedLog
                 })
               } else {
-                expect(log).to.have.been.calledWithMatch('info', interpolatedLog)
+                sinon.assert.calledWithMatch(log, 'info', interpolatedLog)
               }
 
-              expect(spy).to.have.been.calledWithMatch(meta.dd)
+              sinon.assert.calledWithMatch(spy, meta.dd)
             })
-            expect(await logServer.logPromise).to.include(meta.dd)
+            assertObjectContains(await logServer.logPromise, meta.dd)
           })
         })
 
@@ -375,21 +379,23 @@ describe('Plugin', () => {
               tracer.scope().activate(span, () => {
                 logger.error(error)
 
-                expect(spy).to.have.been.called
+                sinon.assert.called(spy)
 
                 const loggedInfo = spy.firstCall.args[0]
-                expect(loggedInfo).to.have.property('message')
+                assert.ok('message' in loggedInfo)
 
-                expect(loggedInfo).to.have.property('stack')
-                expect(loggedInfo.stack).to.be.a('string')
-                expect(loggedInfo.stack).to.include('test error with stack')
-                expect(loggedInfo.stack).to.include('Error:')
+                assert.ok('stack' in loggedInfo)
+                assert.strictEqual(typeof loggedInfo.stack, 'string')
+                assertObjectContains(loggedInfo.stack, 'test error with stack')
+                assertObjectContains(loggedInfo.stack, 'Error:')
 
-                expect(loggedInfo.message).to.equal('test error with stack')
+                assert.strictEqual(loggedInfo.message, 'test error with stack')
 
-                expect(loggedInfo).to.have.property('dd')
-                expect(loggedInfo.dd).to.have.property('trace_id', span.context().toTraceId(true))
-                expect(loggedInfo.dd).to.have.property('span_id', span.context().toSpanId())
+                assert.ok('dd' in loggedInfo)
+                assert.ok('trace_id' in loggedInfo.dd);
+  assert.strictEqual(loggedInfo.dd['trace_id'], span.context().toTraceId(true))
+                assert.ok('span_id' in loggedInfo.dd);
+  assert.strictEqual(loggedInfo.dd['span_id'], span.context().toSpanId())
               })
             })
           })

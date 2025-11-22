@@ -5,18 +5,17 @@ const http = require('node:http')
 const { performance } = require('perf_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -821,7 +820,7 @@ describe('Plugin', () => {
           return tracer.scope().activate(span, () => {
             return graphql.graphql({ schema, source, rootValue })
               .then(value => {
-                expect(value).to.have.nested.property('data.hello', 'test')
+                assert.strictEqual(value?.data?.hello, 'test')
                 assert.strictEqual(tracer.scope().active(), span)
               })
           })
@@ -1509,7 +1508,8 @@ describe('Plugin', () => {
 
               try {
                 assert.notStrictEqual(span, null)
-                expect(span.context()).to.have.property('_name', expectedSchema.server.opName)
+                assert.ok('_name' in span.context());
+  assert.strictEqual(span.context()['_name'], expectedSchema.server.opName)
                 done()
               } catch (e) {
                 done(e)

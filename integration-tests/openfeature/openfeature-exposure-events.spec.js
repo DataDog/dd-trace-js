@@ -1,28 +1,29 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
-const { assert } = require('chai')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
 const RC_PRODUCT = 'FFE_FLAGS'
 
 // Helper function to check exposure event structure
 function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttributes = {}) {
-  assert.property(event, 'timestamp')
-  assert.property(event, 'flag')
-  assert.property(event, 'variant')
-  assert.property(event, 'subject')
+  assert.ok(Object.hasOwn(event, 'timestamp'))
+  assert.ok(Object.hasOwn(event, 'flag'))
+  assert.ok(Object.hasOwn(event, 'variant'))
+  assert.ok(Object.hasOwn(event, 'subject'))
 
-  assert.equal(event.flag.key, expectedFlag)
-  assert.equal(event.subject.id, expectedUser)
+  assert.strictEqual(event.flag.key, expectedFlag)
+  assert.strictEqual(event.subject.id, expectedUser)
 
   if (Object.keys(expectedAttributes).length > 0) {
-    assert.deepEqual(event.subject.attributes, expectedAttributes)
+    assert.deepStrictEqual(event.subject.attributes, expectedAttributes)
   }
 
-  assert.isNumber(event.timestamp)
-  assert.isTrue(Date.now() - event.timestamp < 10000) // Within last 10 seconds
+  assert.strictEqual(typeof event.timestamp, 'number')
+  assert.strictEqual(Date.now() - event.timestamp < 10000, true) // Within last 10 seconds
 }
 
 describe('OpenFeature Remote Config and Exposure Events Integration', () => {
@@ -74,21 +75,21 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
-          assert.property(payload, 'context')
-          assert.property(payload, 'exposures')
-          assert.equal(payload.context.service, 'ffe-test-service')
-          assert.equal(payload.context.version, '1.2.3')
-          assert.equal(payload.context.env, 'test')
+          assert.ok(Object.hasOwn(payload, 'context'))
+          assert.ok(Object.hasOwn(payload, 'exposures'))
+          assert.strictEqual(payload.context.service, 'ffe-test-service')
+          assert.strictEqual(payload.context.version, '1.2.3')
+          assert.strictEqual(payload.context.env, 'test')
 
           exposureEvents.push(...payload.exposures)
 
           if (exposureEvents.length === 2) {
             try {
-              assert.equal(headers['content-type'], 'application/json')
-              assert.equal(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
+              assert.strictEqual(headers['content-type'], 'application/json')
+              assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
 
               // Verify we got exposure events from flag evaluations
-              assert.equal(exposureEvents.length, 2)
+              assert.strictEqual(exposureEvents.length, 2)
 
               const booleanEvent = exposureEvents.find(e => e.flag.key === 'test-boolean-flag')
               const stringEvent = exposureEvents.find(e => e.flag.key === 'test-string-flag')
@@ -119,9 +120,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             receivedAckUpdate = true
 
             const response = await fetch(`${proc.url}/evaluate-flags`)
-            assert.equal(response.status, 200)
+            assert.strictEqual(response.status, 200)
             const data = await response.json()
-            assert.equal(data.evaluationsCompleted, 2)
+            assert.strictEqual(data.evaluationsCompleted, 2)
 
             // Trigger manual flush to send exposure events
             await fetch(`${proc.url}/flush`)
@@ -168,30 +169,30 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         const exposureEvents = []
 
         agent.on('exposures', ({ payload }) => {
-          assert.property(payload, 'context')
-          assert.property(payload, 'exposures')
-          assert.equal(payload.context.service, 'ffe-test-service')
-          assert.equal(payload.context.version, '1.2.3')
-          assert.equal(payload.context.env, 'test')
+          assert.ok(Object.hasOwn(payload, 'context'))
+          assert.ok(Object.hasOwn(payload, 'exposures'))
+          assert.strictEqual(payload.context.service, 'ffe-test-service')
+          assert.strictEqual(payload.context.version, '1.2.3')
+          assert.strictEqual(payload.context.env, 'test')
 
           exposureEvents.push(...payload.exposures)
 
           if (exposureEvents.length >= 6) {
             try {
-              assert.equal(exposureEvents.length, 6)
+              assert.strictEqual(exposureEvents.length, 6)
 
               const booleanEvents = exposureEvents.filter(e => e.flag.key === 'test-boolean-flag')
               const stringEvents = exposureEvents.filter(e => e.flag.key === 'test-string-flag')
 
-              assert.equal(booleanEvents.length, 3)
-              assert.equal(stringEvents.length, 3)
+              assert.strictEqual(booleanEvents.length, 3)
+              assert.strictEqual(stringEvents.length, 3)
 
               // Verify different users
               const userIds = [...new Set(exposureEvents.map(e => e.subject.id))]
-              assert.equal(userIds.length, 3)
-              assert.include(userIds, 'user-1')
-              assert.include(userIds, 'user-2')
-              assert.include(userIds, 'user-3')
+              assert.strictEqual(userIds.length, 3)
+              assert.ok(userIds.includes('user-1'))
+              assert.ok(userIds.includes('user-2'))
+              assert.ok(userIds.includes('user-3'))
 
               done()
             } catch (error) {
@@ -207,9 +208,9 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             assert.strictEqual(state, ACKNOWLEDGED)
 
             const response = await fetch(`${proc.url}/evaluate-multiple-flags`)
-            assert.equal(response.status, 200)
+            assert.strictEqual(response.status, 200)
             const data = await response.json()
-            assert.equal(data.evaluationsCompleted, 6)
+            assert.strictEqual(data.evaluationsCompleted, 6)
 
             // No manual flush - let automatic flush handle it (default 1s interval)
           } catch (error) {
@@ -309,12 +310,12 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
     it('should handle disabled flagging provider gracefully', async () => {
       const response = await fetch(`${proc.url}/evaluate-flags`)
-      assert.equal(response.status, 200)
+      assert.strictEqual(response.status, 200)
       const data = await response.json()
       // When provider is disabled, it uses noop provider which returns default values
-      assert.equal(data.results.boolean, false)
-      assert.equal(data.results.string, 'default')
-      assert.equal(data.evaluationsCompleted, 2)
+      assert.strictEqual(data.results.boolean, false)
+      assert.strictEqual(data.results.string, 'default')
+      assert.strictEqual(data.evaluationsCompleted, 2)
     })
   })
 })

@@ -1,9 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { exec } = require('child_process')
-
-const { assert } = require('chai')
-
 const {
   sandboxCwd,
   useSandbox,
@@ -54,10 +53,10 @@ describe('test-api-manual', () => {
       const passedTest = testEvents.find(
         test => test.content.resource === 'ci-visibility/test-api-manual/test.fake.js.first test will pass'
       )
-      assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
+      assert.strictEqual(passedTest.content.meta['test.custom.tag'], 'custom.value')
 
       const customSpan = events.find(event => event.type === 'span')
-      assert.propertyVal(customSpan.content, 'resource', 'custom.span')
+      assert.strictEqual(customSpan.content['resource'], 'custom.span')
     }).catch(done)
 
     childProcess = exec(

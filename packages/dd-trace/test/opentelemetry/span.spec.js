@@ -248,7 +248,7 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const spanContext = span.spanContext()
-    expect(spanContext).to.be.an.instanceOf(SpanContext)
+    assert.ok(spanContext instanceof SpanContext)
     assert.strictEqual(spanContext._ddContext, span._ddSpan.context())
   })
 
@@ -468,7 +468,7 @@ describe('OTel Span', () => {
     const { _tags } = span._ddSpan.context()
 
     span.setStatus({ code: 2, message: 'error' })
-    expect(_tags).to.not.have.property(ERROR_MESSAGE, 'error')
+    assert.ok(!(ERROR_MESSAGE in _tags) || _tags[ERROR_MESSAGE] !== 'error')
   })
 
   it('should mark ended and expose recording state', () => {

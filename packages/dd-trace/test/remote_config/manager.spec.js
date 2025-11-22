@@ -125,7 +125,7 @@ describe('RemoteConfigManager', () => {
       cached_target_files: []
     })
 
-    expect(rc.appliedConfigs).to.be.an.instanceOf(Map)
+    assert.ok(rc.appliedConfigs instanceof Map)
   })
 
   it('should add git metadata to tags if present', () => {
@@ -208,7 +208,7 @@ describe('RemoteConfigManager', () => {
       rc.removeProductHandler('ASM_DD')
 
       sinon.assert.called(rc.scheduler.stop)
-      expect(rc.state.client.products).to.be.empty
+      assert.strictEqual(rc.state.client.products.length, 0)
     })
   })
 
@@ -289,7 +289,7 @@ describe('RemoteConfigManager', () => {
           sinon.assert.calledOnce(rc.parseConfig)
           sinon.assert.calledOnce(log.error)
           assert.strictEqual(rc.state.client.state.has_error, false)
-          expect(rc.state.client.state.error).to.be.empty
+          assert.strictEqual(rc.state.client.state.error.length, 0)
           cb()
         })
       })
@@ -695,7 +695,7 @@ describe('RemoteConfigManager', () => {
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
-      expect(rc.appliedConfigs).to.be.empty
+      assert.strictEqual(rc.appliedConfigs.length, 0)
     })
   })
 })

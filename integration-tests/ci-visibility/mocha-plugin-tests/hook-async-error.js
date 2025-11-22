@@ -1,14 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('node:assert/strict')
 describe('mocha-fail-before-all', function () {
   before((done) => {
     done(new Error('this should not stop execution'))
   })
 
   it('will not be reported because it will not run', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -20,7 +19,7 @@ describe('mocha-fail-hook-async', function () {
   })
 
   it('will run but be reported as failed', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -30,7 +29,7 @@ describe('mocha-fail-hook-async-other', function () {
   })
 
   it('will run and be reported as passed', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -42,7 +41,7 @@ describe('mocha-fail-hook-async-other-before', function () {
   })
 
   it('will not run and be reported as failed', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -59,7 +58,7 @@ describe('mocha-fail-hook-async-other-second-after', function () {
   })
 
   it('will run and be reported as failed', () => {
-    expect(true).to.equal(true)
+    assert.strictEqual(true, true)
   })
 })
 
@@ -69,6 +68,6 @@ describe('mocha-fail-test-after-each-passes', function () {
   })
 
   it('will fail and be reported as failed', () => {
-    expect(true).to.equal(false)
+    assert.strictEqual(true, false)
   })
 })

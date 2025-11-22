@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, afterEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -183,7 +181,7 @@ describe('telemetry log collector', () => {
 
       const logs = logCollector.drain()
       assert.strictEqual(logs.length, 4)
-      expect(logs[3]).to.deep.eq({ message: 'Omitted 2 entries due to overflowing', level: 'ERROR' })
+      assert.deepStrictEqual(logs[3], { message: 'Omitted 2 entries due to overflowing', level: 'ERROR' })
     })
 
     it('duplicated errors should send incremented count values', () => {

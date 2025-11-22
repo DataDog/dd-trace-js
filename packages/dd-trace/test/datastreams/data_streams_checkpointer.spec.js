@@ -1,6 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -39,15 +43,15 @@ describe('data streams checkpointer manual api', () => {
         }
       }
 
-      expect(statsPointsReceived).to.equal(1)
-      expect(agent.dsmStatsExist(agent, expectedProducerHash, expectedEdgeTags)).to.equal(true)
+      assert.strictEqual(statsPointsReceived, 1)
+      assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash, expectedEdgeTags), true)
     }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {}
 
     tracer.dataStreamsCheckpointer.setProduceCheckpoint('testProduce', 'test-queue', headers)
 
-    expect(DSM_CONTEXT_HEADER in headers).to.equal(true)
+    assert.strictEqual(DSM_CONTEXT_HEADER in headers, true)
   })
 
   it('should set a checkpoint when calling setConsumeCheckpoint', function (done) {
@@ -63,8 +67,8 @@ describe('data streams checkpointer manual api', () => {
           }
         }
       }
-      expect(statsPointsReceived).to.equal(2)
-      expect(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags)).to.equal(true)
+      assert.strictEqual(statsPointsReceived, 2)
+      assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags), true)
     }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {
@@ -73,7 +77,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)
 
-    expect(DSM_CONTEXT_HEADER in headers).to.equal(true)
+    assert.strictEqual(DSM_CONTEXT_HEADER in headers, true)
   })
 
   it('should set manual checkpoint when setConsumeCheckpoint is called without additional parameters', function () {
@@ -84,7 +88,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    expect(calledTags).to.include('manual_checkpoint:true')
+    assertObjectContains(calledTags, 'manual_checkpoint:true')
   })
 
   it('should set an automatic checkpoint when setConsumeCheckpoint is called with manualCheckpoint:false', function () {
