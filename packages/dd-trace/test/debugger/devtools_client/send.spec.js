@@ -27,7 +27,14 @@ const dd = { dd: true }
 const snapshot = { snapshot: true }
 
 describe('input message http requests', function () {
-  let clock, send, request, jsonBuffer
+  /** @type {sinon.SinonFakeTimers} */
+  let clock
+  /** @type {Function} */
+  let send
+  /** @type {sinon.SinonSpy} */
+  let request
+  /** @type {import('../../../src/debugger/devtools_client/json-buffer')} */
+  let jsonBuffer
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
@@ -108,6 +115,10 @@ describe('input message http requests', function () {
   })
 })
 
+/**
+ * @param {object} [_message] - The message to get the payload for. Defaults to the {@link message} object.
+ * @returns {object} - The payload.
+ */
 function getPayload (_message = message) {
   return {
     ddsource,

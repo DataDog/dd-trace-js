@@ -114,9 +114,10 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
               DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
               DD_TRACE_AGENT_PORT: agent.port,
               DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1
+              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1'
             }
           }).then(_proc => {
+            assert(_proc, 'proc must be spawned successfully')
             proc = _proc
             // Possible race condition, in case axios.get() is called in the test before it's created here. But we have
             // to start the test quickly in order to test the re-evaluation of the probe.

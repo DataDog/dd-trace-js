@@ -17,6 +17,7 @@ const runtimeId = 'my-runtime-id'
 describe('diagnostic message http requests', function () {
   let clock, statusproxy, request, jsonBuffer
 
+  /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
     ['ackReceived', 'RECEIVED'],
     ['ackInstalled', 'INSTALLED'],
@@ -66,12 +67,10 @@ describe('diagnostic message http requests', function () {
       beforeEach(function () {
         if (err) {
           ackFn = statusproxy[ackFnName].bind(null, err)
-          // Use `JSON.stringify` to remove any fields that are `undefined`
-          exception = JSON.parse(JSON.stringify({
-            type: err.code,
+          exception = {
             message: err.message,
             stacktrace: err.stack
-          }))
+          }
         } else {
           ackFn = statusproxy[ackFnName]
           exception = undefined

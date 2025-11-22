@@ -63,6 +63,7 @@ module.exports = {
   'dogstatsd.hostname': '127.0.0.1',
   'dogstatsd.port': '8125',
   dsmEnabled: false,
+  'dynamicInstrumentation.captureTimeoutMs': 15,
   'dynamicInstrumentation.enabled': false,
   'dynamicInstrumentation.probeFile': undefined,
   'dynamicInstrumentation.redactedIdentifiers': [],

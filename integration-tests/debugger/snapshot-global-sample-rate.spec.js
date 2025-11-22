@@ -11,7 +11,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('input messages', function () {
     describe('with snapshot', function () {
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should respect global max snapshot sampling rate', function (_done) {
         const MAX_SNAPSHOTS_PER_SECOND_GLOBALLY = 25
