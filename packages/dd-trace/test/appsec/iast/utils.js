@@ -358,7 +358,7 @@ function prepareTestServerForIastInExpress (
       expressApp.all('/', listener)
 
       server = expressApp.listen(0, () => {
-        config.port = server.address().port
+        config.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -468,7 +468,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
       await fastifyApp.listen({ port: 0 })
 
       server = fastifyApp.server
-      config.port = server.address().port
+      config.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
     })
 
     beforeEachIastTest(iastConfig)

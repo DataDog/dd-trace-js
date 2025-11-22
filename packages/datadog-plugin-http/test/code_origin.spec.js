@@ -65,6 +65,6 @@ function server (callback) {
   })
 
   server.listen(() => {
-    callback(server.address().port)
+    callback((/** @type {import('net').AddressInfo} */ (server.address())).port)
   })
 }

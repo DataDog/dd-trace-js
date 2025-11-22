@@ -43,7 +43,7 @@ describe('Plugin', () => {
         })
 
         gateway.start((err, server) => {
-          gatewayPort = server.address().port
+          gatewayPort = (/** @type {import('net').AddressInfo} */ (server.address())).port
           cb(err)
         })
       })

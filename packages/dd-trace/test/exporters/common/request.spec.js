@@ -31,7 +31,7 @@ const initHTTPServer = () => {
         sockets.forEach(socket => socket.end())
         server.close()
       }
-      shutdown.port = server.address().port
+      shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
       resolve(shutdown)
     })
   })
