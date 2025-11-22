@@ -657,6 +657,8 @@ declare namespace tracer {
         /**
          * Timeout in milliseconds for OpenFeature provider initialization.
          * If configuration is not received within this time, initialization fails.
+         * Can be configured via DD_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS or
+         * DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variables.
          *
          * @default 30000
          */
