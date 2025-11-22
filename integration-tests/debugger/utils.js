@@ -134,16 +134,19 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
    *   request after the breakpoint is triggered.
    */
   async function triggerBreakpoint (url) {
-    let triggered = false
     return new Promise((resolve, reject) => {
-      t.agent.on('debugger-diagnostics', ({ payload }) => {
-        payload.forEach((event) => {
-          if (!triggered && event.debugger.diagnostics.status === 'INSTALLED') {
-            triggered = true
+      t.agent.on('debugger-diagnostics', diagnosticsReceived)
+
+      function diagnosticsReceived ({ payload }) {
+        payload.some((event) => {
+          if (event.debugger.diagnostics.status === 'INSTALLED') {
+            t.agent.removeListener('debugger-diagnostics', diagnosticsReceived)
             t.axios.get(url).then(resolve).catch(reject)
+            return true
           }
+          return false
         })
-      })
+      }
     })
   }
 
