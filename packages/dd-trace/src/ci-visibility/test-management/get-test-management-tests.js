@@ -4,8 +4,9 @@ const request = require('../../exporters/common/request')
 const id = require('../../id')
 const { getEnvironmentVariable } = require('../../config-helper')
 const log = require('../../log')
+const { withCache } = require('../cache/request-cache')
 
-function getTestManagementTests ({
+function getTestManagementTestsUncached ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -72,5 +73,16 @@ function getTestManagementTests ({
     }
   })
 }
+
+// Wrap with cache - cache key based on repository URL and commit SHA
+const getTestManagementTests = withCache(
+  'test-management',
+  getTestManagementTestsUncached,
+  (params) => ({
+    repositoryUrl: params.repositoryUrl,
+    sha: params.commitHeadSha || params.sha,
+    commitMessage: params.commitHeadMessage || params.commitMessage
+  })
+)
 
 module.exports = { getTestManagementTests }
