@@ -25,7 +25,7 @@ describe('Plugin', function () {
   describe('fetch', () => {
     function server (app, listener) {
       const server = require('http').createServer(app)
-      server.listen(0, 'localhost', () => listener(server.address().port))
+      server.listen(0, 'localhost', () => listener((/** @type {import('net').AddressInfo} */ (server.address())).port))
       return server
     }
 

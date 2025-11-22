@@ -22,5 +22,5 @@ app.get('/', (req, res) => {
 })
 
 const server = app.listen(process.env.APP_PORT || 0, () => {
-  process.send?.({ port: server.address().port })
+  process.send?.({ port: (/** @type {import('net').AddressInfo} */ (server.address())).port })
 })
