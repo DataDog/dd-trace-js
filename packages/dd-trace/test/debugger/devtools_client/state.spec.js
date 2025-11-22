@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert')
+
 const { expect } = require('chai')
 const { describe, it, before } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -65,6 +67,7 @@ describe('findScriptFromPartialPath', function () {
 
   for (const [url, scriptId] of cases) {
     const filename = url.includes('\\') ? url.split('\\').pop() : url.split('/').pop()
+    assert(filename, 'filename must be defined')
 
     describe(`targeting ${url}`, function () {
       describe('POSIX paths', function () {
