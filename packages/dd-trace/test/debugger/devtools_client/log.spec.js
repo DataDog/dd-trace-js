@@ -23,6 +23,7 @@ describe('worker thread logger', function () {
       { level: 'debug', args: ['test4'] }
     ]
 
+    // @ts-expect-error - MessagePort has 'on' method at runtime but @types/node doesn't include it
     logChannel.port2.on('message', (message) => {
       assert.deepStrictEqual(message, expected.shift())
       if (expected.length === 0) done()
@@ -42,6 +43,7 @@ describe('worker thread logger', function () {
       }
     })
 
+    // @ts-expect-error - MessagePort has 'on' method at runtime but @types/node doesn't include it
     logChannel.port2.on('message', () => {
       throw new Error('should not have logged')
     })
@@ -62,6 +64,7 @@ describe('worker thread logger', function () {
       }
     })
 
+    // @ts-expect-error - MessagePort has 'on' method at runtime but @types/node doesn't include it
     logChannel.port2.on('message', (message) => {
       assert.deepStrictEqual(message, { level: 'debug', args: ['logged'] })
       done()
@@ -93,6 +96,7 @@ function checkLogLevel (level, expectedLevels) {
 
     const expected = expectedLevels.map((level) => ({ level, args: ['logged'] }))
 
+    // @ts-expect-error - MessagePort has 'on' method at runtime but @types/node doesn't include it
     logChannel.port2.on('message', (message) => {
       assert.deepStrictEqual(message, expected.shift())
       if (expected.length === 0) done()
