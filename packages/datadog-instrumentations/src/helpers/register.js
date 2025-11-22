@@ -9,23 +9,16 @@ const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const getConfig = require('../../../dd-trace/src/config')
 
-const envs = getEnvironmentVariables()
-
-const {
-  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = ''
-} = envs
+const config = getConfig()
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
-const disabledInstrumentations = new Set(
-  DD_TRACE_DISABLED_INSTRUMENTATIONS?.split(',')
-)
+const disabledInstrumentations = new Set(config.disabledInstrumentations || [])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -40,7 +33,7 @@ if (!disabledInstrumentations.has('process')) {
 
 const HOOK_SYMBOL = Symbol('hookExportsSet')
 
-if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
+if (config.debug) {
   checkRequireCache.checkForRequiredModules()
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }

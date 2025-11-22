@@ -24,6 +24,8 @@ function isPackageManager () {
 }
 
 function detectTestWorkerType () {
+  // [I think] these calls to getEnvironmentVariable should stay as-is, because they are specifically looking for
+  // presence of environment variables to detect the test worker type.
   if (getEnvironmentVariable('JEST_WORKER_ID')) return 'jest'
   if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) return 'cucumber'
   if (getEnvironmentVariable('MOCHA_WORKER_ID')) return 'mocha'

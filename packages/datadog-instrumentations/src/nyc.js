@@ -14,6 +14,7 @@ addHook({
   shimmer.wrap(nycPackage.prototype, 'wrap', wrap => function () {
     // Only relevant if the config `all` is set to true
     try {
+      // Can stay, because we're actually checking for the presence of the environment variable
       if (JSON.parse(getEnvironmentVariable('NYC_CONFIG')).all) {
         codeCoverageWrapCh.publish(this)
       }
