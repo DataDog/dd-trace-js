@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 
@@ -41,33 +43,33 @@ const NONMATCH_CASES = [
 describe('util', () => {
   it('isTrue works', () => {
     TRUES.forEach((v) => {
-      expect(isTrue(v)).to.equal(true)
+      assert.strictEqual(isTrue(v), true)
       expect(isTrue(String(v))).to.equal(true)
     })
     FALSES.forEach((v) => {
-      expect(isTrue(v)).to.equal(false)
+      assert.strictEqual(isTrue(v), false)
       expect(isTrue(String(v))).to.equal(false)
     })
   })
 
   it('isFalse works', () => {
     FALSES.forEach((v) => {
-      expect(isFalse(v)).to.equal(true)
+      assert.strictEqual(isFalse(v), true)
       expect(isFalse(String(v))).to.equal(true)
     })
     TRUES.forEach((v) => {
-      expect(isFalse(v)).to.equal(false)
+      assert.strictEqual(isFalse(v), false)
       expect(isFalse(String(v))).to.equal(false)
     })
   })
 
   it('globMatch works', () => {
     MATCH_CASES.forEach(({ subject, pattern }) => {
-      expect(globMatch(pattern, subject)).to.equal(true)
+      assert.strictEqual(globMatch(pattern, subject), true)
     })
 
     NONMATCH_CASES.forEach(({ subject, pattern }) => {
-      expect(globMatch(pattern, subject)).to.equal(false)
+      assert.strictEqual(globMatch(pattern, subject), false)
     })
   })
 })

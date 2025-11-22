@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 
 require('../setup/core')
@@ -11,13 +11,13 @@ describe('OTel Sampler', () => {
   it('should sample', () => {
     const sampler = new Sampler()
 
-    expect(sampler.shouldSample()).to.eql({
+    assert.deepStrictEqual(sampler.shouldSample(), {
       decision: 2
     })
   })
 
   it('should stringify', () => {
     const sampler = new Sampler()
-    expect(sampler.toString()).to.eq('DatadogSampler')
+    assert.strictEqual(sampler.toString(), 'DatadogSampler')
   })
 })

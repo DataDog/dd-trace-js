@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -84,7 +84,7 @@ describe('request', function () {
         }
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         done(err)
       })
   })
@@ -99,8 +99,8 @@ describe('request', function () {
       method: 'PUT',
       port: 8080
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from http://localhost:8080/path: 400 Bad Request.')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
       done()
     })
   })
@@ -115,8 +115,8 @@ describe('request', function () {
       method: 'PUT',
       url: new URL('http://api.datadog.com/')
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('Error from http://api.datadog.com/path: 400 Bad Request.')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
       done()
     })
   })
@@ -133,8 +133,8 @@ describe('request', function () {
       path: '/path',
       method: 'PUT'
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('socket hang up')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'socket hang up')
       done()
     })
   })
@@ -151,8 +151,8 @@ describe('request', function () {
       method: 'PUT',
       timeout: 100
     }, err => {
-      expect(err).to.be.instanceof(Error)
-      expect(err.message).to.equal('socket hang up')
+      assert.ok(err instanceof Error)
+      assert.strictEqual(err.message, 'socket hang up')
       done()
     })
   })
@@ -171,7 +171,7 @@ describe('request', function () {
       port: 123,
       path: '/'
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
     })
   })
 
@@ -186,7 +186,7 @@ describe('request', function () {
       path: '/path',
       method: 'PUT'
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
       done()
     })
   })
@@ -204,7 +204,7 @@ describe('request', function () {
       path: '/path',
       method: 'PUT'
     }, (err, res) => {
-      expect(err).to.equal(error)
+      assert.strictEqual(err, error)
       done()
     })
   })
@@ -222,7 +222,7 @@ describe('request', function () {
       path: '/path',
       method: 'PUT'
     }, (err, res) => {
-      expect(res).to.equal('OK')
+      assert.strictEqual(res, 'OK')
       done()
     })
   })
@@ -248,7 +248,7 @@ describe('request', function () {
           protocol: 'http:',
           port: shutdownSecond.port
         }, (err, res) => {
-          expect(res).to.equal('OK')
+          assert.strictEqual(res, 'OK')
           shutdownFirst()
           shutdownSecond()
           clearInterval(intervalId)
@@ -277,7 +277,7 @@ describe('request', function () {
         }
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         done(err)
       })
   })
@@ -291,7 +291,7 @@ describe('request', function () {
         method: 'PUT'
       },
       (err, _) => {
-        expect(err.address).to.equal(sock)
+        assert.strictEqual(err.address, sock)
         done()
       })
   })
@@ -305,7 +305,7 @@ describe('request', function () {
         method: 'PUT'
       },
       (err, _) => {
-        expect(err.address).to.equal(pipe)
+        assert.strictEqual(err.address, pipe)
         done()
       })
   })
@@ -318,7 +318,7 @@ describe('request', function () {
     const charLength = body.length
     const byteLength = Buffer.byteLength(body, 'utf-8')
 
-    expect(charLength).to.be.below(byteLength)
+    assert.ok(charLength < byteLength)
 
     nock('http://test:123').post('/').reply(200, 'OK')
 
@@ -331,10 +331,10 @@ describe('request', function () {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' }
       },
       (err, res) => {
-        expect(res).to.equal('OK')
+        assert.strictEqual(res, 'OK')
         const { headers } = http.request.getCall(0).args[0]
         sandbox.restore()
-        expect(headers['Content-Length']).to.equal(byteLength)
+        assert.strictEqual(headers['Content-Length'], byteLength)
         done(err)
       }
     )
@@ -371,8 +371,8 @@ describe('request', function () {
         },
         (err, res) => {
           const options = http.request.getCall(0).args[0]
-          expect(options.hostname).to.equal('1337::cafe') // no brackets
-          expect(res).to.equal('OK')
+          assert.strictEqual(options.hostname, '1337::cafe') // no brackets
+          assert.strictEqual(res, 'OK')
           done(err)
         })
     })
@@ -401,7 +401,7 @@ describe('request', function () {
           'accept-encoding': 'gzip'
         }
       }, (err, res) => {
-        expect(res).to.equal(JSON.stringify({ foo: 'bar' }))
+        assert.strictEqual(res, JSON.stringify({ foo: 'bar' }))
         done(err)
       })
     })
@@ -428,8 +428,8 @@ describe('request', function () {
           'accept-encoding': 'gzip'
         }
       }, (err, res) => {
-        expect(log.error).to.have.been.calledWith('Could not gunzip response: %s', 'unexpected end of file')
-        expect(res).to.equal('')
+        sinon.assert.calledWith(log.error, 'Could not gunzip response: %s', 'unexpected end of file')
+        assert.strictEqual(res, '')
         done(err)
       })
     })

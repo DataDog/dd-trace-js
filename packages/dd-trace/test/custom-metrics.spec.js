@@ -1,8 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 /* eslint-disable no-console */
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 const http = require('node:http')
@@ -56,7 +55,7 @@ describe('Custom Metrics', () => {
       if (stdout) console.log(stdout)
       if (stderr) console.error(stderr)
 
-      expect(metricsData.split('#')[0]).to.equal('page.views.data:1|c|')
+      assert.strictEqual(metricsData.split('#')[0], 'page.views.data:1|c|')
 
       done()
     })

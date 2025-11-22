@@ -1,15 +1,16 @@
 'use strict'
 
 const fs = require('fs')
+const assert = require('node:assert/strict')
 const path = require('path')
 
-const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
+const { expect } = require('chai')
+
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted, getRanges } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
-const { expect } = require('chai')
-
+const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const propagationFns = [
   'appendStr',
   'arrayInVariableJoin',
@@ -74,7 +75,7 @@ describe('TaintTracking', () => {
               const propFnOriginal = propagationFunctions[propFn]
 
               const commandResult = propFnInstrumented(commandTainted)
-              expect(isTainted(iastContext, commandResult)).to.be.true
+              assert.strictEqual(isTainted(iastContext, commandResult), true)
 
               const commandResultOrig = propFnOriginal(commandTainted)
               expect(commandResult).eq(commandResultOrig)
@@ -103,7 +104,7 @@ describe('TaintTracking', () => {
         const propFnOriginal = propagationFunctions.jsonParseStr
 
         const result = propFnInstrumented(jsonTainted)
-        expect(isTainted(iastContext, result.command)).to.be.true
+        assert.strictEqual(isTainted(iastContext, result.command), true)
         expect(getRanges(iastContext, result.command)).to.be.deep
           .eq([{
             start: 0,
@@ -146,7 +147,7 @@ describe('TaintTracking', () => {
 
       it(`invoking ${propFn} with null argument`, () => {
         const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
-        expect(() => propFnInstrumented(null)).to.throw()
+        assert.throws(() => propFnInstrumented(null))
       })
     })
   })

@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -31,7 +33,7 @@ describe('dependencies', () => {
       })
 
       dependencies.start()
-      expect(subscribe).to.have.been.calledOnce
+      sinon.assert.calledOnce(subscribe)
     })
   })
 
@@ -85,31 +87,31 @@ describe('dependencies', () => {
 
     it('should not call to sendData with core library', () => {
       moduleLoadStartChannel.publish({ request: 'crypto', filename: 'crypto' })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
 
     it('should not call to sendData without node_modules in path', () => {
       const filename = path.join(basepathWithoutNodeModules, 'custom.js')
       moduleLoadStartChannel.publish({ request: 'custom-module', filename })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
 
     it('should not call to sendData without node_modules in file URI', () => {
       const filename = [fileURIWithoutNodeModules, 'custom.js'].join('/')
       moduleLoadStartChannel.publish({ request: 'custom-module', filename })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
 
     it('should not call to sendData without node_modules in path when request does not come in message', () => {
       const filename = path.join(basepathWithoutNodeModules, 'custom.js')
       moduleLoadStartChannel.publish({ filename })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
 
     it('should not call to sendData without node_modules in path when request does not come in message', () => {
       const filename = [fileURIWithoutNodeModules, 'custom.js'].join('/')
       moduleLoadStartChannel.publish({ filename })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
 
     it('should not call to sendData without package.json', () => {
@@ -117,7 +119,7 @@ describe('dependencies', () => {
       requirePackageJson.callsFake(function () { throw new Error() })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       moduleLoadStartChannel.publish({ request, filename })
-      expect(sendData).not.to.have.been.called
+      sinon.assert.notCalled(sendData)
     })
     const requests = [
       '../index.js',
@@ -130,7 +132,7 @@ describe('dependencies', () => {
         requirePackageJson.returns({ version: '1.0.0' })
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', 'custom-module', 'index.js')
         moduleLoadStartChannel.publish({ request, filename })
-        expect(sendData).not.to.have.been.called
+        sinon.assert.notCalled(sendData)
       })
     })
 
@@ -139,7 +141,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       moduleLoadStartChannel.publish({ request, filename })
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
     })
 
     it('should call sendData with file URI', () => {
@@ -147,7 +149,7 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = [fileURIWithoutNodeModules, 'node_modules', request, 'index.js'].join('/')
       moduleLoadStartChannel.publish({ request, filename })
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
     })
 
     it('should call sendData with computed request from file URI when it does not come in message', () => {
@@ -242,7 +244,7 @@ describe('dependencies', () => {
           { name: moduleName, version: nestedPackageVersion }
         ]
       }
-      expect(sendData).to.have.been.calledTwice
+      sinon.assert.calledTwice(sendData)
 
       expect(sendData.firstCall)
         .to.have.been.calledWith(config, application, host, 'app-dependencies-loaded', expectedDependencies1)
@@ -285,7 +287,7 @@ describe('dependencies', () => {
       moduleLoadStartChannel.publish({ request, filename })
       moduleLoadStartChannel.publish({ request, filename })
       moduleLoadStartChannel.publish({ request, filename })
-      expect(sendData).to.have.been.calledOnce
+      sinon.assert.calledOnce(sendData)
     })
 
     it('should call sendData twice with more than 2000 dependencies', (done) => {
@@ -311,7 +313,7 @@ describe('dependencies', () => {
       const interval = setInterval(() => {
         if (atLeastOneTimeout && timeouts.length === 0) {
           clearInterval(interval)
-          expect(sendData).to.have.been.calledTwice
+          sinon.assert.calledTwice(sendData)
           done()
         }
       })
@@ -373,7 +375,7 @@ describe('dependencies', () => {
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
         moduleLoadStartChannel.publish({ request, filename }) // should not be called here
 
-        expect(sendData.getCalls().length).to.equal(timesCalledBeforeLazyLoad)
+        assert.strictEqual(sendData.getCalls().length, timesCalledBeforeLazyLoad)
         done()
       }, 5) // simulate lazy-loaded dependency, small ms delay to be safe
     })
@@ -427,10 +429,10 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       moduleLoadStartChannel.publish({ request, filename })
-      // expect(getRetryData).to.have.been.calledOnce
-      expect(capturedRequestType).to.equals('app-dependencies-loaded')
-      // expect(sendData).to.have.been.calledOnce
-      // expect(updateRetryData).to.have.been.calledOnce
+      // sinon.assert.calledOnce(getRetryData)
+      assert.strictEqual(capturedRequestType, 'app-dependencies-loaded')
+      // sinon.assert.calledOnce(sendData)
+      // sinon.assert.calledOnce(updateRetryData)
     })
 
     it('should create batch request', () => {
@@ -438,9 +440,9 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       let filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       moduleLoadStartChannel.publish({ request, filename })
-      expect(getRetryData).to.have.been.calledOnce
-      expect(capturedRequestType).to.equals('app-dependencies-loaded')
-      expect(updateRetryData).to.have.been.calledOnce
+      sinon.assert.calledOnce(getRetryData)
+      assert.strictEqual(capturedRequestType, 'app-dependencies-loaded')
+      sinon.assert.calledOnce(updateRetryData)
 
       getRetryData.returns({
         request_type: 'app-integrations-change',
@@ -458,9 +460,9 @@ describe('dependencies', () => {
       requirePackageJson.returns({ version: '1.0.0' })
       filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
       moduleLoadStartChannel.publish({ request, filename })
-      expect(getRetryData).to.have.been.calledTwice
-      expect(capturedRequestType).to.equals('message-batch')
-      expect(updateRetryData).to.have.been.calledTwice
+      sinon.assert.calledTwice(getRetryData)
+      assert.strictEqual(capturedRequestType, 'message-batch')
+      sinon.assert.calledTwice(updateRetryData)
     })
   })
 })

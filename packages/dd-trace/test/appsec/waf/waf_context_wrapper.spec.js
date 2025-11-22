@@ -1,13 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
+const sinon = require('sinon')
+
 const addresses = require('../../../src/appsec/addresses')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const Reporter = require('../../../src/appsec/reporter')
+const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('WAFContextWrapper', () => {
   const knownAddresses = new Set([
@@ -42,8 +46,8 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledOnceWithExactly(payload, 1000)
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnceWithExactly(ddwafContext.run, payload, 1000)
+    sinon.assert.calledOnce(Reporter.reportMetrics)
   })
 
   it('Should send HTTP_INCOMING_QUERY twice if waf run fails', () => {
@@ -61,14 +65,14 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledTwice
+    sinon.assert.calledTwice(ddwafContext.run)
     expect(ddwafContext.run).to.always.have.been.calledWithExactly(payload, 1000)
 
     const firstCall = Reporter.reportMetrics.getCall(0).args[0]
-    expect(firstCall).to.have.property('errorCode', -127)
+    assert.strictEqual(firstCall.errorCode, -127)
 
     const secondCall = Reporter.reportMetrics.getCall(1).args[0]
-    expect(secondCall).to.have.property('errorCode', -127)
+    assert.strictEqual(secondCall.errorCode, -127)
   })
 
   it('Should send ephemeral addresses every time', () => {
@@ -92,16 +96,16 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.have.been.calledTwice
-    expect(ddwafContext.run.firstCall).to.have.been.calledWithExactly(payload, 1000)
-    expect(ddwafContext.run.secondCall).to.have.been.calledWithExactly({
+    sinon.assert.calledTwice(ddwafContext.run)
+    sinon.assert.calledWithExactly(ddwafContext.run.firstCall, payload, 1000)
+    sinon.assert.calledWithExactly(ddwafContext.run.secondCall, {
       ephemeral: {
         [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: {
           anotherKey: 'anotherValue'
         }
       }
     }, 1000)
-    expect(Reporter.reportMetrics).to.have.been.calledTwice
+    sinon.assert.calledTwice(Reporter.reportMetrics)
   })
 
   it('Should ignore run without known addresses', () => {
@@ -121,7 +125,7 @@ describe('WAFContextWrapper', () => {
 
     wafContextWrapper.run(payload)
 
-    expect(ddwafContext.run).to.not.have.been.called
+    sinon.assert.notCalled(ddwafContext.run)
   })
 
   it('should publish the payload in the dc channel', () => {
@@ -161,10 +165,10 @@ describe('WAFContextWrapper', () => {
 
     wafContextWrapper.run(payload)
 
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnce(Reporter.reportMetrics)
     const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
 
-    expect(reportedMetrics).to.include({
+    assertObjectContains(reportedMetrics, {
       rulesVersion: '1.8.0',
       wafVersion: '1.14.0',
       wafTimeout: false,
@@ -207,10 +211,10 @@ describe('WAFContextWrapper', () => {
 
     wafContextWrapper.run(payload)
 
-    expect(Reporter.reportMetrics).to.have.been.calledOnce
+    sinon.assert.calledOnce(Reporter.reportMetrics)
     const reportedMetrics = Reporter.reportMetrics.getCall(0).args[0]
 
-    expect(reportedMetrics).to.include({
+    assertObjectContains(reportedMetrics, {
       rulesVersion: '1.8.0',
       wafVersion: '1.14.0',
       wafTimeout: false,
@@ -260,7 +264,7 @@ describe('WAFContextWrapper', () => {
       wafContextWrapper.run(payload)
 
       sinon.assert.calledOnce(ddwafContext.run)
-      expect(Reporter.reportMetrics).to.have.been.calledOnce
+      sinon.assert.calledOnce(Reporter.reportMetrics)
     })
 
     it('Should not call run and log a warn if context is disposed', () => {
@@ -276,8 +280,8 @@ describe('WAFContextWrapper', () => {
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
-      expect(Reporter.reportRaspRuleSkipped).to.not.have.been.called
-      expect(Reporter.reportMetrics).to.not.have.been.called
+      sinon.assert.notCalled(Reporter.reportRaspRuleSkipped)
+      sinon.assert.notCalled(Reporter.reportMetrics)
     })
 
     it('Should call run with raspRule and call reportRaspRuleSkipped if context is disposed', () => {
@@ -294,8 +298,8 @@ describe('WAFContextWrapper', () => {
 
       sinon.assert.notCalled(ddwafContext.run)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Calling run on a disposed context')
-      expect(Reporter.reportRaspRuleSkipped).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
-      expect(Reporter.reportMetrics).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(Reporter.reportRaspRuleSkipped, raspRule, 'after-request')
+      sinon.assert.notCalled(Reporter.reportMetrics)
     })
   })
 })

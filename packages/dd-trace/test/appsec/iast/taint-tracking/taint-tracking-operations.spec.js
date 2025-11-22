@@ -1,8 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
@@ -10,7 +12,6 @@ const { csiMethods } = require('../../../../src/appsec/iast/taint-tracking/csi-m
 const iastTelemetry = require('../../../../src/appsec/iast/telemetry')
 const { EXECUTED_PROPAGATION, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
-
 function getExpectedMethods () {
   const set = new Set()
   for (const definition of csiMethods) {
@@ -77,7 +78,7 @@ describe('IAST TaintTracking Operations', () => {
     expect(() => {
       TaintedUtils = require('@datadog/native-iast-taint-tracking')
     }).to.not.throw(Error)
-    expect(TaintedUtils).to.not.be.null
+    assert.notStrictEqual(TaintedUtils, null)
   })
 
   describe('taintObject', () => {
@@ -85,32 +86,32 @@ describe('IAST TaintTracking Operations', () => {
       const obj = null
 
       const result = taintTrackingOperations.taintObject(null, obj, null)
-      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
-      expect(result).to.equal(obj)
+      sinon.assert.notCalled(taintedUtilsMock.newTaintedString)
+      assert.strictEqual(result, obj)
     })
 
     it('Given a null iastContext should return the object', () => {
       const obj = {}
 
       const result = taintTrackingOperations.taintObject(null, obj, null)
-      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
-      expect(result).to.equal(obj)
+      sinon.assert.notCalled(taintedUtilsMock.newTaintedString)
+      assert.strictEqual(result, obj)
     })
 
     it('Given an undefined iastContext should return the object', () => {
       const obj = {}
 
       const result = taintTrackingOperations.taintObject(undefined, obj, null)
-      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
-      expect(result).to.equal(obj)
+      sinon.assert.notCalled(taintedUtilsMock.newTaintedString)
+      assert.strictEqual(result, obj)
     })
 
     it('Given an undefined iastContext and undefined object should return the object', () => {
       const obj = undefined
 
       const result = taintTrackingOperations.taintObject(undefined, obj, null)
-      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
-      expect(result).to.equal(obj)
+      sinon.assert.notCalled(taintedUtilsMock.newTaintedString)
+      assert.strictEqual(result, obj)
     })
 
     it('Given a valid iastContext and empty object should return the object', () => {
@@ -120,8 +121,8 @@ describe('IAST TaintTracking Operations', () => {
       const obj = {}
 
       const result = taintTrackingOperations.taintObject(null, obj, null)
-      expect(taintedUtilsMock.newTaintedString).not.to.have.been.called
-      expect(result).to.equal(obj)
+      sinon.assert.notCalled(taintedUtilsMock.newTaintedString)
+      assert.strictEqual(result, obj)
     })
 
     it('Given a valid iastContext and a string should return the string and call newTaintedString', () => {
@@ -131,8 +132,8 @@ describe('IAST TaintTracking Operations', () => {
       const obj = 'string'
 
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
-      expect(taintedUtilsMock.newTaintedString).to.have.been.calledOnceWithExactly(transactionId, obj, null, null)
-      expect(result).to.equal(obj)
+      sinon.assert.calledOnceWithExactly(taintedUtilsMock.newTaintedString, transactionId, obj, null, null)
+      assert.strictEqual(result, obj)
     })
 
     it('Given a valid iastContext and a complex object should return the obj and call newTaintedString', () => {
@@ -153,12 +154,12 @@ describe('IAST TaintTracking Operations', () => {
       }
 
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
-      expect(taintedUtilsMock.newTaintedString).to.have.been.calledTwice
+      sinon.assert.calledTwice(taintedUtilsMock.newTaintedString)
       expect(taintedUtilsMock.newTaintedString.firstCall).to.have.been
         .calledWithExactly(transactionId, 'child', 'child.value', null)
       expect(taintedUtilsMock.newTaintedString.secondCall).to.have.been
         .calledWithExactly(transactionId, 'parent', 'value', null)
-      expect(result).to.be.deep.equal(expected)
+      assert.deepStrictEqual(result, expected)
     })
 
     it('Should handle the exception', () => {
@@ -187,8 +188,8 @@ describe('IAST TaintTracking Operations', () => {
 
       taintTrackingOperations.createTransaction(transactionId, iastContext)
       const result = taintTrackingOperations.taintObject(iastContext, obj, null)
-      expect(logSpy.error).to.have.been.calledOnce
-      expect(result).to.equal(obj)
+      sinon.assert.calledOnce(logSpy.error)
+      assert.strictEqual(result, obj)
     })
   })
 
@@ -197,8 +198,8 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = {}
       const transactionId = 'id'
       taintTrackingOperations.createTransaction(transactionId, iastContext)
-      expect(taintedUtils.createTransaction).to.be.calledOnce
-      expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.equal(transactionId)
+      sinon.assert.calledOnce(taintedUtils.createTransaction)
+      assert.strictEqual(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], transactionId)
     })
 
     it('Given null id and not null iastContext should not createTransaction', () => {
@@ -206,7 +207,7 @@ describe('IAST TaintTracking Operations', () => {
       const transactionId = null
       taintTrackingOperations.createTransaction(transactionId, iastContext)
       expect(taintedUtils.createTransaction).not.to.be.called
-      expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.undefined
+      assert.strictEqual(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], undefined)
     })
 
     it('Given not null id and null iastContext should not createTransaction', () => {
@@ -214,7 +215,7 @@ describe('IAST TaintTracking Operations', () => {
       const transactionId = 'id'
       taintTrackingOperations.createTransaction(transactionId, iastContext)
       expect(taintedUtils.createTransaction).not.to.be.called
-      expect(iastContext).to.be.null
+      assert.strictEqual(iastContext, null)
     })
   })
 
@@ -228,7 +229,7 @@ describe('IAST TaintTracking Operations', () => {
       expect(taintedUtils.removeTransaction).to.be.calledWithExactly(
         transactionId
       )
-      expect(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID]).to.be.undefined
+      assert.strictEqual(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], undefined)
     })
 
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not removeTransaction', () => {
@@ -265,12 +266,12 @@ describe('IAST TaintTracking Operations', () => {
       const transactions = 3
 
       taintTrackingOperations.setMaxTransactions(transactions)
-      expect(taintedUtils.setMaxTransactions).to.have.been.calledOnceWithExactly(transactions)
+      sinon.assert.calledOnceWithExactly(taintedUtils.setMaxTransactions, transactions)
     })
 
     it('Given undefined as a number of concurrent transactions should not call setMaxTransactions', () => {
       taintTrackingOperations.setMaxTransactions()
-      expect(taintedUtils.setMaxTransactions).not.to.have.been.called
+      sinon.assert.notCalled(taintedUtils.setMaxTransactions)
     })
   })
 
@@ -290,20 +291,20 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.enableTaintOperations()
 
       // taintedUtils is declared in global scope
-      expect(global._ddiast).not.to.be.undefined
-      expect(global._ddiast.plusOperator).not.to.be.undefined
+      assert.notStrictEqual(global._ddiast, undefined)
+      assert.notStrictEqual(global._ddiast.plusOperator, undefined)
 
       // taintedUtils methods are called
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
-      expect(taintedUtils.concat).to.be.called
+      sinon.assert.called(taintedUtils.concat)
     })
 
     it('Should set dummy global._ddiast object', () => {
       taintTrackingOperations.disableTaintOperations()
 
       // dummy taintedUtils is declared in global scope
-      expect(global._ddiast).not.to.be.undefined
-      expect(global._ddiast.plusOperator).not.to.be.undefined
+      assert.notStrictEqual(global._ddiast, undefined)
+      assert.notStrictEqual(global._ddiast.plusOperator, undefined)
 
       // taintedUtils methods are not called
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
@@ -314,14 +315,14 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.enableTaintOperations(Verbosity.DEBUG)
 
       // dummy taintedUtils is declared in global scope
-      expect(global._ddiast).not.to.be.undefined
-      expect(global._ddiast.plusOperator).not.to.be.undefined
+      assert.notStrictEqual(global._ddiast, undefined)
+      assert.notStrictEqual(global._ddiast.plusOperator, undefined)
 
       const executedPropagationIncrease = sinon.stub(EXECUTED_PROPAGATION, 'inc')
 
       // taintedUtils methods are not called
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
-      expect(taintedUtils.concat).to.be.called
+      sinon.assert.called(taintedUtils.concat)
 
       expect(executedPropagationIncrease).to.be.calledOnceWith(context)
     })
@@ -336,7 +337,7 @@ describe('IAST TaintTracking Operations', () => {
       const param = 'param'
       const type = 'REQUEST'
       taintTrackingOperations.newTaintedString(iastContext, value, param, type)
-      expect(taintedUtils.newTaintedString).to.be.called
+      sinon.assert.called(taintedUtils.newTaintedString)
       expect(taintedUtils.newTaintedString).to.be
         .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
     })
@@ -357,7 +358,7 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = null
       const value = 'test'
       const result = taintTrackingOperations.newTaintedString(iastContext, value)
-      expect(result).to.be.equal('test')
+      assert.strictEqual(result, 'test')
     })
   })
 
@@ -370,7 +371,7 @@ describe('IAST TaintTracking Operations', () => {
       const param = 'param'
       const type = 'REQUEST'
       taintTrackingOperations.newTaintedObject(iastContext, value, param, type)
-      expect(taintedUtils.newTaintedObject).to.be.called
+      sinon.assert.called(taintedUtils.newTaintedObject)
       expect(taintedUtils.newTaintedObject).to.be
         .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
     })
@@ -391,7 +392,7 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = null
       const value = Buffer.from('test')
       const result = taintTrackingOperations.newTaintedObject(iastContext, value)
-      expect(result).to.be.equal(value)
+      assert.strictEqual(result, value)
     })
   })
 
@@ -402,7 +403,7 @@ describe('IAST TaintTracking Operations', () => {
       }
       const value = 'value'
       taintTrackingOperations.isTainted(iastContext, value)
-      expect(taintedUtils.isTainted).to.be.called
+      sinon.assert.called(taintedUtils.isTainted)
       expect(taintedUtils.isTainted).to.be.calledWithExactly(
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
         value
@@ -429,7 +430,7 @@ describe('IAST TaintTracking Operations', () => {
       }
       const value = 'value'
       taintTrackingOperations.getRanges(iastContext, value)
-      expect(taintedUtils.getRanges).to.be.called
+      sinon.assert.called(taintedUtils.getRanges)
       expect(taintedUtils.getRanges).to.be.calledWithExactly(
         iastContext[taintTrackingOperations.IAST_TRANSACTION_ID],
         value
@@ -450,8 +451,8 @@ describe('IAST TaintTracking Operations', () => {
 
     it('Given null iastContext should return empty array', () => {
       const result = taintTrackingOperations.getRanges(null)
-      expect(result).to.be.instanceof(Array)
-      expect(result).to.have.length(0)
+      assert.ok(Array.isArray(result))
+      assert.strictEqual(result.length, 0)
     })
   })
 
@@ -497,21 +498,21 @@ describe('IAST TaintTracking Operations', () => {
       const a = 'hello   '
       const fn = a.trim
       global._ddiast.trim(fn.call(a), fn, a)
-      expect(taintedUtils.trim).to.be.called
+      sinon.assert.called(taintedUtils.trim)
     })
 
     it('Should call taintedUtils.trimStart method', () => {
       const a = 'hello   '
       const fn = a.trimStart
       global._ddiast.trim(fn.call(a), fn, a)
-      expect(taintedUtils.trim).to.be.called
+      sinon.assert.called(taintedUtils.trim)
     })
 
     it('Should call taintedUtils.trimEnd method', () => {
       const a = 'hello   '
       const fn = a.trimEnd
       global._ddiast.trimEnd(fn.call(a), fn, a)
-      expect(taintedUtils.trimEnd).to.be.called
+      sinon.assert.called(taintedUtils.trimEnd)
     })
 
     it('Should not call taintedUtils.trim method if invoked trim is not from an string', () => {

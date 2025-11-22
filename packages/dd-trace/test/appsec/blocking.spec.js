@@ -1,9 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 describe('blocking', () => {
   const defaultBlockedTemplate = {
@@ -72,12 +74,12 @@ describe('blocking', () => {
       res.headersSent = true
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.false
+      assert.strictEqual(blocked, false)
       expect(log.warn).to.have.been
         .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
-      expect(res.setHeader).to.not.have.been.called
-      expect(res.constructor.prototype.end).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+      sinon.assert.notCalled(res.setHeader)
+      sinon.assert.notCalled(res.constructor.prototype.end)
       expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
     })
 
@@ -85,56 +87,56 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'text/html; charset=utf-8',
         'Content-Length': 12
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'htmlBodyéé')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('should send blocking response with json type if present in the headers in priority', () => {
       req.headers.accept = 'text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8, application/json'
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('should send blocking response with json type if neither html or json is present in the headers', () => {
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('should send blocking response and call abortController if passed in arguments', () => {
       const abortController = new AbortController()
       const blocked = block(req, res, rootSpan, abortController)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(abortController.signal.aborted).to.be.true
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
+      assert.strictEqual(abortController.signal.aborted, true)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('should remove all headers before sending blocking response', () => {
@@ -142,17 +144,17 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.removeHeader).to.have.been.calledTwice
-      expect(res.removeHeader.firstCall).to.have.been.calledWithExactly('header1')
-      expect(res.removeHeader.secondCall).to.have.been.calledWithExactly('header2')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledTwice(res.removeHeader)
+      sinon.assert.calledWithExactly(res.removeHeader.firstCall, 'header1')
+      sinon.assert.calledWithExactly(res.removeHeader.secondCall, 'header2')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
   })
 
@@ -163,26 +165,26 @@ describe('blocking', () => {
       const abortController = new AbortController()
       const promise = registerBlockDelegation(req, res, rootSpan, abortController)
 
-      expect(rootSpan.setTag).to.not.have.been.called
-      expect(res.writeHead).to.not.have.been.called
-      expect(res.constructor.prototype.end).to.not.have.been.called
-      expect(abortController.signal.aborted).to.be.false
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.notCalled(rootSpan.setTag)
+      sinon.assert.notCalled(res.writeHead)
+      sinon.assert.notCalled(res.constructor.prototype.end)
+      assert.strictEqual(abortController.signal.aborted, false)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
 
       const blocked = callBlockDelegation(res)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
         'Content-Length': 8
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly('jsonBody')
-      expect(abortController.signal.aborted).to.be.true
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
+      assert.strictEqual(abortController.signal.aborted, true)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
 
       promise.then(blocked => {
-        expect(blocked).to.be.true
+        assert.strictEqual(blocked, true)
         done()
       })
     })
@@ -196,18 +198,18 @@ describe('blocking', () => {
 
       const blocked = callBlockDelegation(res)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnce
-      expect(res.writeHead).to.have.been.calledOnce
-      expect(res.constructor.prototype.end).to.have.been.calledOnce
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnce(rootSpan.setTag)
+      sinon.assert.calledOnce(res.writeHead)
+      sinon.assert.calledOnce(res.constructor.prototype.end)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
 
       firstPromise.then((blocked) => {
-        expect(blocked).to.be.true
+        assert.strictEqual(blocked, true)
 
         setTimeout(() => {
-          expect(secondPromise).to.not.have.been.called
-          expect(thirdPromise).to.not.have.been.called
+          sinon.assert.notCalled(secondPromise)
+          sinon.assert.notCalled(thirdPromise)
           done()
         }, 100)
       })
@@ -217,11 +219,11 @@ describe('blocking', () => {
       const blocked = callBlockDelegation(res)
 
       expect(blocked).to.not.be.ok
-      expect(log.warn).to.not.have.been.called
-      expect(rootSpan.setTag).to.not.have.been.called
-      expect(res.writeHead).to.not.have.been.called
-      expect(res.constructor.prototype.end).to.not.have.been.called
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.notCalled(log.warn)
+      sinon.assert.notCalled(rootSpan.setTag)
+      sinon.assert.notCalled(res.writeHead)
+      sinon.assert.notCalled(res.constructor.prototype.end)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('should cancel block delegations when block is called', (done) => {
@@ -231,22 +233,22 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(rootSpan.setTag).to.have.been.calledOnce
-      expect(res.writeHead).to.have.been.calledOnce
-      expect(res.constructor.prototype.end).to.have.been.calledOnce
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnce(rootSpan.setTag)
+      sinon.assert.calledOnce(res.writeHead)
+      sinon.assert.calledOnce(res.constructor.prototype.end)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
 
       const result = callBlockDelegation(res)
 
       expect(result).to.not.be.ok
-      expect(rootSpan.setTag).to.have.been.calledOnce
-      expect(res.writeHead).to.have.been.calledOnce
-      expect(res.constructor.prototype.end).to.have.been.calledOnce
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnce(rootSpan.setTag)
+      sinon.assert.calledOnce(res.writeHead)
+      sinon.assert.calledOnce(res.constructor.prototype.end)
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
 
       setTimeout(() => {
-        expect(promise).to.not.have.been.called
+        sinon.assert.notCalled(promise)
         done()
       }, 100)
     })
@@ -266,8 +268,8 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
     it('should block with default json template', () => {
@@ -275,8 +277,8 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan)
 
-      expect(blocked).to.be.true
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
   })
 
@@ -298,9 +300,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
     it('should block with default json template and custom status ' +
@@ -314,9 +316,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
     it('should block with default html template and custom status ' +
@@ -330,9 +332,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
     it('should block with default json template and custom status', () => {
@@ -344,9 +346,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
     it('should block with default json template and custom status ' +
@@ -359,9 +361,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
     })
 
     it('should block with default html template and custom status ' +
@@ -374,9 +376,9 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWith(401)
-      expect(res.constructor.prototype.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
     })
 
     it('should block with custom redirect', () => {
@@ -388,11 +390,11 @@ describe('blocking', () => {
 
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      expect(blocked).to.be.true
-      expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(res.writeHead, 301, {
         Location: '/you-have-been-blocked'
       })
-      expect(res.constructor.prototype.end).to.have.been.calledOnce
+      sinon.assert.calledOnce(res.constructor.prototype.end)
     })
   })
 })
@@ -408,7 +410,7 @@ describe('waf actions', () => {
     const actions = {
       block_request: blockRequestActionParameters
     }
-    expect(blocking.getBlockingAction(actions)).to.be.deep.equal(blockRequestActionParameters)
+    assert.deepStrictEqual(blocking.getBlockingAction(actions), blockRequestActionParameters)
   })
 
   it('get redirect_request as blocking action', () => {
@@ -419,18 +421,18 @@ describe('waf actions', () => {
     const actions = {
       redirect_request: redirectRequestActionParameters
     }
-    expect(blocking.getBlockingAction(actions)).to.be.deep.equal(redirectRequestActionParameters)
+    assert.deepStrictEqual(blocking.getBlockingAction(actions), redirectRequestActionParameters)
   })
 
   it('get undefined when no actions', () => {
     const actions = {}
-    expect(blocking.getBlockingAction(actions)).to.be.undefined
+    assert.strictEqual(blocking.getBlockingAction(actions), undefined)
   })
 
   it('get undefined when generate_stack action', () => {
     const actions = {
       generate_stack: {}
     }
-    expect(blocking.getBlockingAction(actions)).to.be.undefined
+    assert.strictEqual(blocking.getBlockingAction(actions), undefined)
   })
 })

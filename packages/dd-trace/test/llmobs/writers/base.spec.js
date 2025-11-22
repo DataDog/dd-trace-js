@@ -1,9 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const { useEnv } = require('../../../../../integration-tests/helpers')
 
@@ -55,16 +57,16 @@ describe('BaseLLMObsWriter', () => {
     writer = new BaseLLMObsWriter(options)
     writer.setAgentless(true)
 
-    expect(writer._agentless).to.be.true
-    expect(writer.url).to.equal('https://intake.site.com/endpoint')
+    assert.strictEqual(writer._agentless, true)
+    assert.strictEqual(writer.url, 'https://intake.site.com/endpoint')
   })
 
   it('constructs an agent proxy writer', () => {
     writer = new BaseLLMObsWriter(options)
     writer.setAgentless(false)
 
-    expect(writer._agentless).to.be.false
-    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/endpoint')
+    assert.strictEqual(writer._agentless, false)
+    assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/endpoint')
   })
 
   describe('with override origin', () => {
@@ -76,7 +78,7 @@ describe('BaseLLMObsWriter', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(false)
 
-      expect(writer.url).to.equal('http://override-origin:12345/evp_proxy/v2/endpoint')
+      assert.strictEqual(writer.url, 'http://override-origin:12345/evp_proxy/v2/endpoint')
     })
   })
 
@@ -93,7 +95,7 @@ describe('BaseLLMObsWriter', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(false)
 
-      expect(writer.url).to.equal('http://test-agent:12345/evp_proxy/v2/endpoint')
+      assert.strictEqual(writer.url, 'http://test-agent:12345/evp_proxy/v2/endpoint')
     })
   })
 
@@ -110,7 +112,7 @@ describe('BaseLLMObsWriter', () => {
       writer = new BaseLLMObsWriter(options)
       writer.setAgentless(false)
 
-      expect(writer.url).to.equal('unix:///var/run/datadog/apm.socket/evp_proxy/v2/endpoint')
+      assert.strictEqual(writer.url, 'unix:///var/run/datadog/apm.socket/evp_proxy/v2/endpoint')
     })
 
     it('makes the request with the correct options', () => {
@@ -122,8 +124,8 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('unix:///var/run/datadog/apm.socket/')
-      expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
+      assert.strictEqual(requestOptions.url.href, 'unix:///var/run/datadog/apm.socket/')
+      assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
     })
   })
 
@@ -134,7 +136,7 @@ describe('BaseLLMObsWriter', () => {
 
     process.emit('beforeExit')
 
-    expect(writer.flush).to.have.been.calledOnce
+    sinon.assert.calledOnce(writer.flush)
   })
 
   it('flushes when an uncaught exception is thrown', () => {})
@@ -147,7 +149,7 @@ describe('BaseLLMObsWriter', () => {
 
     clock.tick(1000)
 
-    expect(writer.flush).to.have.been.calledOnce
+    sinon.assert.calledOnce(writer.flush)
   })
 
   it('appends an event to the buffer', () => {
@@ -156,9 +158,9 @@ describe('BaseLLMObsWriter', () => {
     const event = { foo: 'bar–' }
     writer.append(event)
 
-    expect(writer._buffer).to.have.lengthOf(1)
-    expect(writer._buffer[0]).to.deep.equal(event)
-    expect(writer._bufferSize).to.equal(16)
+    assert.strictEqual(writer._buffer.length, 1)
+    assert.deepStrictEqual(writer._buffer[0], event)
+    assert.strictEqual(writer._bufferSize, 16)
   })
 
   it('does not append an event if the buffer is full', () => {
@@ -170,8 +172,8 @@ describe('BaseLLMObsWriter', () => {
     }
 
     writer.append({ foo: 'bar' })
-    expect(writer._buffer).to.have.lengthOf(1000)
-    expect(logger.warn).to.have.been.calledWith('BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
+    assert.strictEqual(writer._buffer.length, 1000)
+    sinon.assert.calledWith(logger.warn, 'BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
   describe('flush', () => {
@@ -184,10 +186,10 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('https://intake.site.com/')
-      expect(requestOptions.path).to.equal('/endpoint')
-      expect(requestOptions.headers['Content-Type']).to.equal('application/json')
-      expect(requestOptions.headers['DD-API-KEY']).to.equal('test')
+      assert.strictEqual(requestOptions.url.href, 'https://intake.site.com/')
+      assert.strictEqual(requestOptions.path, '/endpoint')
+      assert.strictEqual(requestOptions.headers['Content-Type'], 'application/json')
+      assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'test')
     })
 
     it('flushes a buffer in agent proxy mode', () => {
@@ -199,10 +201,10 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('http://localhost:8126/')
-      expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
-      expect(requestOptions.headers['Content-Type']).to.equal('application/json')
-      expect(requestOptions.headers['X-Datadog-EVP-Subdomain']).to.equal('intake')
+      assert.strictEqual(requestOptions.url.href, 'http://localhost:8126/')
+      assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
+      assert.strictEqual(requestOptions.headers['Content-Type'], 'application/json')
+      assert.strictEqual(requestOptions.headers['X-Datadog-EVP-Subdomain'], 'intake')
     })
 
     it('does not flush when agentless property is not set', () => {
@@ -213,14 +215,14 @@ describe('BaseLLMObsWriter', () => {
       writer.append(event)
       writer.flush()
 
-      expect(request).to.not.have.been.called
-      expect(writer._buffer).to.have.lengthOf(1)
-      expect(writer._buffer[0]).to.deep.equal(event)
+      sinon.assert.notCalled(request)
+      assert.strictEqual(writer._buffer.length, 1)
+      assert.deepStrictEqual(writer._buffer[0], event)
 
       writer.setAgentless(true)
       writer.flush()
 
-      expect(request).to.have.been.calledOnce
+      sinon.assert.calledOnce(request)
     })
   })
 
@@ -229,7 +231,7 @@ describe('BaseLLMObsWriter', () => {
     writer.setAgentless(true)
     writer.flush()
 
-    expect(request).to.not.have.been.called
+    sinon.assert.notCalled(request)
   })
 
   it('logs errors from the request', () => {
@@ -246,7 +248,7 @@ describe('BaseLLMObsWriter', () => {
 
     writer.flush()
 
-    expect(logger.error).to.have.been.calledWith(
+    sinon.assert.calledWith(logger.error,
       'Error sending %d LLMObs %s events to %s: %s', 1, undefined, 'https://intake.site.com/endpoint', 'boom', error
     )
   })
@@ -261,10 +263,10 @@ describe('BaseLLMObsWriter', () => {
 
       writer.destroy()
 
-      expect(writer._destroyed).to.be.true
-      expect(clearInterval).to.have.been.calledWith(writer._periodic)
-      expect(process.removeListener).to.have.been.calledWith('beforeExit', writer._beforeExitHandler)
-      expect(writer.flush).to.have.been.calledOnce
+      assert.strictEqual(writer._destroyed, true)
+      sinon.assert.calledWith(clearInterval, writer._periodic)
+      sinon.assert.calledWith(process.removeListener, 'beforeExit', writer._beforeExitHandler)
+      sinon.assert.calledOnce(writer.flush)
       expect(logger.debug)
         .to.have.been.calledWith('Stopping BaseLLMObsWriter')
     })
@@ -277,7 +279,7 @@ describe('BaseLLMObsWriter', () => {
       writer.destroy()
       writer.destroy()
 
-      expect(logger.debug).to.have.been.calledOnce
+      sinon.assert.calledOnce(logger.debug)
     })
   })
 })

@@ -1,12 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expect } = require('chai')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -91,19 +93,19 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0].meta).to.have.property('db.type', 'opensearch')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('opensearch.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('opensearch.url', '/_msearch')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].meta['db.type'], 'opensearch')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['opensearch.method'], 'POST')
+              assert.strictEqual(traces[0][0].meta['opensearch.url'], '/_msearch')
               expect(traces[0][0].meta).to.have.property(
                 'opensearch.body',
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
-              expect(traces[0][0].meta).to.have.property('opensearch.params', '{"size":100}')
-              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'opensearch')
+              assert.strictEqual(traces[0][0].meta['opensearch.params'], '{"size":100}')
+              assert.strictEqual(traces[0][0].meta.component, 'opensearch')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -130,7 +132,7 @@ describe('Plugin', () => {
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.not.have.property('opensearch.body')
+              assert.ok(!Object.hasOwn(traces[0][0].meta, 'opensearch.body'))
             })
             .then(done)
             .catch(done)
@@ -141,11 +143,11 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-              expect(traces[0][0]).to.have.property('type', 'elasticsearch')
-              expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'HEAD /')
+              assert.strictEqual(traces[0][0].type, 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta.component, 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -156,8 +158,8 @@ describe('Plugin', () => {
         it('should propagate context', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('parent_id')
-              expect(traces[0][0].parent_id).to.not.be.null
+              assert.ok(Object.hasOwn(traces[0][0], 'parent_id'))
+              assert.notStrictEqual(traces[0][0].parent_id, null)
             })
             .then(done)
             .catch(done)
@@ -175,10 +177,10 @@ describe('Plugin', () => {
           let error
 
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property('component', 'opensearch')
+            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(traces[0][0].meta.component, 'opensearch')
           })
             .then(done)
             .catch(done)
@@ -202,10 +204,10 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'HEAD /')
-              expect(traces[0][0]).to.have.property('type', 'elasticsearch')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'HEAD /')
+              assert.strictEqual(traces[0][0].type, 'elasticsearch')
             })
             .then(done)
             .catch(done)

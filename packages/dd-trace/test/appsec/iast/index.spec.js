@@ -1,19 +1,21 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const agent = require('../../plugins/agent')
 const iast = require('../../../src/appsec/iast')
 const iastContextFunctions = require('../../../src/appsec/iast/iast-context')
 const overheadController = require('../../../src/appsec/iast/overhead-controller')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
-const { testInRequest } = require('./utils')
 const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { getConfigFresh } = require('../../helpers/config')
+const agent = require('../../plugins/agent')
+const { testInRequest } = require('./utils')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -35,7 +37,7 @@ describe('IAST Index', () => {
         it('should not have any vulnerability', (done) => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta['_dd.iast.json']).to.be.undefined
+              assert.strictEqual(traces[0][0].meta['_dd.iast.json'], undefined)
             })
             .then(done)
             .catch(done)
@@ -80,7 +82,7 @@ describe('IAST Index', () => {
           agent
             .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
-              expect(mockedCleanIastContext).to.have.been.calledOnce
+              sinon.assert.calledOnce(mockedCleanIastContext)
             })
             .then(done)
             .catch(done)
@@ -93,7 +95,7 @@ describe('IAST Index', () => {
           agent
             .assertSomeTraces(traces => {
               expect(traces[0][0].meta['_dd.iast.json']).to.include('"WEAK_HASH"')
-              expect(releaseRequest).to.have.been.calledOnce
+              sinon.assert.calledOnce(releaseRequest)
             })
             .then(done)
             .catch(done)
@@ -157,7 +159,7 @@ describe('IAST Index', () => {
     describe('enable', () => {
       it('should enable AppsecFsPlugin', () => {
         mockIast.enable(config)
-        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly(IAST_MODULE)
+        sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, IAST_MODULE)
         expect(analyzers.enableAllAnalyzers).to.have.been.calledAfter(appsecFsPlugin.enable)
       })
     })
@@ -166,28 +168,28 @@ describe('IAST Index', () => {
       it('should disable AppsecFsPlugin', () => {
         mockIast.enable(config)
         mockIast.disable()
-        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly(IAST_MODULE)
+        sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, IAST_MODULE)
       })
     })
 
     describe('managing overhead controller global context', () => {
       it('should start global context refresher on iast enabled', () => {
         mockIast.enable(config)
-        expect(mockOverheadController.startGlobalContext).to.have.been.calledOnce
+        sinon.assert.calledOnce(mockOverheadController.startGlobalContext)
       })
 
       it('should finish global context refresher on iast disabled', () => {
         mockIast.enable(config)
 
         mockIast.disable()
-        expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
+        sinon.assert.calledOnce(mockOverheadController.finishGlobalContext)
       })
 
       it('should start global context only once when calling enable multiple times', () => {
         mockIast.enable(config)
         mockIast.enable(config)
 
-        expect(mockOverheadController.startGlobalContext).to.have.been.calledOnce
+        sinon.assert.calledOnce(mockOverheadController.startGlobalContext)
       })
 
       it('should not finish global context if not enabled before ', () => {
@@ -201,14 +203,14 @@ describe('IAST Index', () => {
       it('should start vulnerability reporter on iast enabled', () => {
         const fakeTracer = {}
         mockIast.enable(config, fakeTracer)
-        expect(mockVulnerabilityReporter.start).to.have.been.calledOnceWithExactly(config, fakeTracer)
+        sinon.assert.calledOnceWithExactly(mockVulnerabilityReporter.start, config, fakeTracer)
       })
 
       it('should stop vulnerability reporter on iast disabled', () => {
         mockIast.enable(config)
 
         mockIast.disable()
-        expect(mockVulnerabilityReporter.stop).to.have.been.calledOnce
+        sinon.assert.calledOnce(mockVulnerabilityReporter.stop)
       })
     })
 

@@ -26,7 +26,7 @@ describe('LogExporter', () => {
       exporter.export([span, span])
       log.restore()
       const result = '{"traces":[[{"tag":"test"},{"tag":"test"}]]}'
-      expect(log).to.have.been.calledWithMatch(result)
+      sinon.assert.calledWithMatch(log, result)
     })
 
     it('should send spans over multiple log lines when they are too large for a single log line', () => {
@@ -39,7 +39,7 @@ describe('LogExporter', () => {
       log.restore()
       const result = `${expectedPrefix}${span.tag}${expectedSuffix}`
       expect(log).to.have.calledTwice
-      expect(log).to.have.been.calledWithMatch(result)
+      sinon.assert.calledWithMatch(log, result)
     })
 
     it('should drop spans if they are too large for a single log line', () => {
@@ -50,7 +50,7 @@ describe('LogExporter', () => {
       log = sinon.stub(process.stdout, 'write')
       exporter.export([span, span])
       log.restore()
-      expect(log).not.to.have.been.called
+      sinon.assert.notCalled(log)
     })
   })
 })

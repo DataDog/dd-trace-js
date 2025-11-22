@@ -52,7 +52,7 @@ describe('Hardcoded Secret Analyzer', () => {
           })
 
           expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
-          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: testCase.id })
+          sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })
@@ -71,7 +71,7 @@ describe('Hardcoded Secret Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
   })
 

@@ -1,9 +1,9 @@
 'use strict'
 
-const { expect } = require('chai')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 require('../setup/core')
 
 describe('crashtracking', () => {
@@ -49,29 +49,29 @@ describe('crashtracking', () => {
       it('should initialize the binding', () => {
         crashtracker.start(config)
 
-        expect(binding.init).to.have.been.called
-        expect(log.error).to.not.have.been.called
+        sinon.assert.called(binding.init)
+        sinon.assert.notCalled(log.error)
       })
 
       it('should initialize the binding only once', () => {
         crashtracker.start(config)
         crashtracker.start(config)
 
-        expect(binding.init).to.have.been.calledOnce
+        sinon.assert.calledOnce(binding.init)
       })
 
       it('should reconfigure when started multiple times', () => {
         crashtracker.start(config)
         crashtracker.start(config)
 
-        expect(binding.updateConfig).to.have.been.called
-        expect(binding.updateMetadata).to.have.been.called
+        sinon.assert.called(binding.updateConfig)
+        sinon.assert.called(binding.updateMetadata)
       })
 
       it('should handle errors', () => {
         crashtracker.start(null)
 
-        expect(() => crashtracker.start(config)).to.not.throw()
+        assert.doesNotThrow(() => crashtracker.start(config))
       })
 
       it('should handle unix sockets', () => {
@@ -79,8 +79,8 @@ describe('crashtracking', () => {
 
         crashtracker.start(config)
 
-        expect(binding.init).to.have.been.called
-        expect(log.error).to.not.have.been.called
+        sinon.assert.called(binding.init)
+        sinon.assert.notCalled(log.error)
       })
     })
 
@@ -89,22 +89,22 @@ describe('crashtracking', () => {
         crashtracker.start(config)
         crashtracker.configure(config)
 
-        expect(binding.updateConfig).to.have.been.called
-        expect(binding.updateMetadata).to.have.been.called
+        sinon.assert.called(binding.updateConfig)
+        sinon.assert.called(binding.updateMetadata)
       })
 
       it('should reconfigure the binding only when started', () => {
         crashtracker.configure(config)
 
-        expect(binding.updateConfig).to.not.have.been.called
-        expect(binding.updateMetadata).to.not.have.been.called
+        sinon.assert.notCalled(binding.updateConfig)
+        sinon.assert.notCalled(binding.updateMetadata)
       })
 
       it('should handle errors', () => {
         crashtracker.start(config)
         crashtracker.configure(null)
 
-        expect(() => crashtracker.configure(config)).to.not.throw()
+        assert.doesNotThrow(() => crashtracker.configure(config))
       })
     })
   })

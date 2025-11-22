@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
@@ -24,7 +26,7 @@ describe('TracingPlugin', () => {
 
       plugin.startSpan('Test span', { childOf: 'some parent span' })
 
-      expect(startSpanSpy).to.have.been.calledWith(
+      sinon.assert.calledWith(startSpanSpy,
         'Test span',
         sinon.match({
           childOf: 'some parent span'
@@ -97,8 +99,8 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'commonPlugin', { service: 'not-the-right-test' },
         span => {
-          expect(span).to.have.property('service', 'not-the-right-test')
-          expect(span.meta).to.have.property('_dd.base_service', 'test')
+          assert.strictEqual(span.service, 'not-the-right-test')
+          assert.strictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })
@@ -107,8 +109,8 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'suffixPlugin', {},
         span => {
-          expect(span).to.have.property('service', 'test-suffix')
-          expect(span.meta).to.have.property('_dd.base_service', 'test')
+          assert.strictEqual(span.service, 'test-suffix')
+          assert.strictEqual(span.meta['_dd.base_service'], 'test')
         }
       )
     })
@@ -117,7 +119,7 @@ describe('common Plugin behaviour', () => {
       makeSpan(
         done, 'commonPlugin', {},
         span => {
-          expect(span).to.have.property('service', 'test')
+          assert.strictEqual(span.service, 'test')
           expect(span.meta).to.not.have.property('_dd.base_service', 'test')
         }
       )

@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 
 require('../../../../dd-trace/test/setup/core')
@@ -15,12 +15,12 @@ describe('parseTags', () => {
       'a.1.a': 'baz'
     }
 
-    expect(parseTags(obj)).to.deep.equal({
+    assert.deepStrictEqual(parseTags(obj), {
       a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }]
     })
   })
 
   it('should work with empty object', () => {
-    expect(parseTags({})).to.deep.equal({})
+    assert.deepStrictEqual(parseTags({}), {})
   })
 })

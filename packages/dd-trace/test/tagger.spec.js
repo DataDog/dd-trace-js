@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
@@ -21,51 +23,51 @@ describe('tagger', () => {
   it('should add tags as an object', () => {
     tagger.add(carrier, { foo: 'bar' })
 
-    expect(carrier).to.have.property('foo', 'bar')
+    assert.strictEqual(carrier.foo, 'bar')
   })
 
   it('should add tags as a string', () => {
     tagger.add(carrier, 'foo: bar,def,abc:,,baz:qux:quxx,  valid')
 
-    expect(carrier).to.have.property('foo', 'bar')
-    expect(carrier).to.have.property('baz', 'qux:quxx')
-    expect(carrier).to.have.property('def', '')
-    expect(carrier).to.have.property('abc', '')
-    expect(carrier).to.not.have.property('')
-    expect(carrier).to.have.property('valid', '')
+    assert.strictEqual(carrier.foo, 'bar')
+    assert.strictEqual(carrier.baz, 'qux:quxx')
+    assert.strictEqual(carrier.def, '')
+    assert.strictEqual(carrier.abc, '')
+    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.strictEqual(carrier.valid, '')
 
     tagger.add(carrier, ':')
 
-    expect(carrier).to.not.have.property('')
+    assert.ok(!Object.hasOwn(carrier, ''))
   })
 
   it('should not add empty tags', () => {
     tagger.add(carrier, '  ')
 
-    expect(carrier).to.not.have.property('')
+    assert.ok(!Object.hasOwn(carrier, ''))
 
     tagger.add(carrier, 'a:true,\t')
 
-    expect(carrier).to.have.property('a', 'true')
-    expect(carrier).to.not.have.property('')
+    assert.strictEqual(carrier.a, 'true')
+    assert.ok(!Object.hasOwn(carrier, ''))
 
     tagger.add(carrier, 'a:true,')
 
-    expect(carrier).to.have.property('a', 'true')
-    expect(carrier).to.not.have.property('')
+    assert.strictEqual(carrier.a, 'true')
+    assert.ok(!Object.hasOwn(carrier, ''))
   })
 
   it('should add tags as an array', () => {
     tagger.add(carrier, ['foo:bar', 'baz:qux'])
 
-    expect(carrier).to.have.property('foo', 'bar')
-    expect(carrier).to.have.property('baz', 'qux')
+    assert.strictEqual(carrier.foo, 'bar')
+    assert.strictEqual(carrier.baz, 'qux')
   })
 
   it('should store the original values', () => {
     tagger.add(carrier, { foo: 123 })
 
-    expect(carrier).to.have.property('foo', 123)
+    assert.strictEqual(carrier.foo, 123)
   })
 
   it('should handle missing key/value pairs', () => {
@@ -84,11 +86,11 @@ describe('tagger', () => {
       doNotSetTraceError: true
     })
 
-    expect(carrier).to.have.property(ERROR_TYPE, 'foo')
-    expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
-    expect(carrier).to.have.property(ERROR_STACK, 'foo')
-    expect(carrier).to.have.property('doNotSetTraceError', true)
-    expect(carrier).to.not.have.property('setTraceError')
+    assert.strictEqual(carrier[ERROR_TYPE], 'foo')
+    assert.strictEqual(carrier[ERROR_MESSAGE], 'foo')
+    assert.strictEqual(carrier[ERROR_STACK], 'foo')
+    assert.strictEqual(carrier.doNotSetTraceError, true)
+    assert.ok(!Object.hasOwn(carrier, 'setTraceError'))
 
     tagger.add(carrier, {
       [ERROR_TYPE]: 'foo',
@@ -96,9 +98,9 @@ describe('tagger', () => {
       [ERROR_STACK]: 'foo'
     })
 
-    expect(carrier).to.have.property(ERROR_TYPE, 'foo')
-    expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
-    expect(carrier).to.have.property(ERROR_STACK, 'foo')
-    expect(carrier).to.not.have.property('setTraceError')
+    assert.strictEqual(carrier[ERROR_TYPE], 'foo')
+    assert.strictEqual(carrier[ERROR_MESSAGE], 'foo')
+    assert.strictEqual(carrier[ERROR_STACK], 'foo')
+    assert.ok(!Object.hasOwn(carrier, 'setTraceError'))
   })
 })

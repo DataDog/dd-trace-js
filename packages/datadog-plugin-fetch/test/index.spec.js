@@ -1,15 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const tags = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { rawExpectedSchema } = require('./naming')
-
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
@@ -71,16 +71,16 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-              expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'GET')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('component', 'fetch')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'fetch')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
+              assert.strictEqual(traces[0][0].type, 'http')
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].meta.component, 'fetch')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'fetch')
+              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
             })
             .then(done)
             .catch(done)
@@ -97,15 +97,15 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-              expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'POST')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('component', 'fetch')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
+              assert.strictEqual(traces[0][0].type, 'http')
+              assert.strictEqual(traces[0][0].resource, 'POST')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+              assert.strictEqual(traces[0][0].meta['http.method'], 'POST')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].meta.component, 'fetch')
+              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
             })
             .then(done)
             .catch(done)
@@ -122,15 +122,15 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-              expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'GET')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('component', 'fetch')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
+              assert.strictEqual(traces[0][0].type, 'http')
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].meta.component, 'fetch')
+              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
             })
             .then(done)
             .catch(done)
@@ -147,7 +147,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           fetch(new globalThis.Request(`http://localhost:${port}/user`))
             .then(res => {
-              expect(res).to.have.property('status', 200)
+              assert.strictEqual(res.status, 200)
               done()
             })
             .catch(done)
@@ -164,8 +164,8 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
             })
             .then(done)
             .catch(done)
@@ -178,8 +178,8 @@ describe('Plugin', function () {
         const app = express()
 
         app.get('/user', (req, res) => {
-          expect(req.get('x-datadog-trace-id')).to.be.a('string')
-          expect(req.get('x-datadog-parent-id')).to.be.a('string')
+          assert.strictEqual(typeof req.get('x-datadog-trace-id'), 'string')
+          assert.strictEqual(typeof req.get('x-datadog-parent-id'), 'string')
 
           res.status(200).send()
         })
@@ -187,7 +187,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
             })
             .then(done)
             .catch(done)
@@ -200,9 +200,9 @@ describe('Plugin', function () {
         const app = express()
 
         app.get('/user', (req, res) => {
-          expect(req.get('foo')).to.be.a('string')
-          expect(req.get('x-datadog-trace-id')).to.be.a('string')
-          expect(req.get('x-datadog-parent-id')).to.be.a('string')
+          assert.strictEqual(typeof req.get('foo'), 'string')
+          assert.strictEqual(typeof req.get('x-datadog-trace-id'), 'string')
+          assert.strictEqual(typeof req.get('x-datadog-parent-id'), 'string')
 
           res.status(200).send()
         })
@@ -210,7 +210,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
             })
             .then(done)
             .catch(done)
@@ -224,10 +224,10 @@ describe('Plugin', function () {
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property('component', 'fetch')
+            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message || error.code)
+            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(traces[0][0].meta.component, 'fetch')
           })
           .then(done)
           .catch(done)
@@ -247,7 +247,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 0)
+              assert.strictEqual(traces[0][0].error, 0)
             })
             .then(done)
             .catch(done)
@@ -266,7 +266,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
+              assert.strictEqual(traces[0][0].error, 1)
             })
             .then(done)
             .catch(done)
@@ -283,8 +283,8 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.not.have.property('http.status_code')
+              assert.strictEqual(traces[0][0].error, 0)
+              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
             })
             .then(done)
             .catch(done)
@@ -309,7 +309,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
+              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
             })
             .then(done)
             .catch(done)
@@ -376,7 +376,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -411,7 +411,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('error', 1)
+              assert.strictEqual(traces[0][0].error, 1)
             })
             .then(done)
             .catch(done)
@@ -446,7 +446,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
+              assert.strictEqual(traces[0][0].service, `localhost:${port}`)
             })
             .then(done)
             .catch(done)
@@ -484,8 +484,8 @@ describe('Plugin', function () {
             .assertSomeTraces(traces => {
               const meta = traces[0][0].meta
 
-              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-baz`, 'qux')
-              expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
+              assert.strictEqual(meta[`${HTTP_REQUEST_HEADERS}.x-baz`], 'qux')
+              assert.strictEqual(meta[`${HTTP_RESPONSE_HEADERS}.x-foo`], 'bar')
             })
             .then(done)
             .catch(done)
@@ -528,7 +528,7 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property('foo', '/foo')
+              assert.strictEqual(traces[0][0].meta.foo, '/foo')
             })
             .then(done)
             .catch(done)
@@ -558,8 +558,8 @@ describe('Plugin', function () {
 
         app.get('/users', (req, res) => {
           try {
-            expect(req.get('x-datadog-trace-id')).to.be.undefined
-            expect(req.get('x-datadog-parent-id')).to.be.undefined
+            assert.strictEqual(req.get('x-datadog-trace-id'), undefined)
+            assert.strictEqual(req.get('x-datadog-parent-id'), undefined)
 
             res.status(200).send()
 
@@ -653,15 +653,15 @@ describe('Plugin', function () {
         appListener = server(app, port => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-              expect(traces[0][0]).to.have.property('type', 'http')
-              expect(traces[0][0]).to.have.property('resource', 'GET')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-              expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-              expect(traces[0][0].meta).to.have.property('component', 'fetch')
-              expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
+              assert.strictEqual(traces[0][0].type, 'http')
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+              assert.strictEqual(traces[0][0].meta.component, 'fetch')
+              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
             })
             .then(done)
             .catch(done)

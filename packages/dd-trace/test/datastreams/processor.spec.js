@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -69,12 +71,12 @@ describe('StatsPoint', () => {
     payloadSize.accept(100)
 
     const encoded = aggStats.encode()
-    expect(encoded.Hash).to.equal(DEFAULT_CURRENT_HASH.readBigUInt64LE())
-    expect(encoded.ParentHash).to.equal(DEFAULT_PARENT_HASH.readBigUInt64LE())
-    expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
-    expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
-    expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
-    expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
+    assert.strictEqual(encoded.Hash, DEFAULT_CURRENT_HASH.readBigUInt64LE())
+    assert.strictEqual(encoded.ParentHash, DEFAULT_PARENT_HASH.readBigUInt64LE())
+    assert.deepStrictEqual(encoded.EdgeTags, aggStats.edgeTags)
+    assert.deepStrictEqual(encoded.EdgeLatency, edgeLatency.toProto())
+    assert.deepStrictEqual(encoded.PathwayLatency, pathwayLatency.toProto())
+    assert.deepStrictEqual(encoded.PayloadSize, payloadSize.toProto())
   })
 })
 
@@ -85,29 +87,29 @@ describe('StatsBucket', () => {
     beforeEach(() => { buckets = new StatsBucket() })
 
     it('should start empty', () => {
-      expect(buckets.checkpoints.size).to.equal(0)
+      assert.strictEqual(buckets.checkpoints.size, 0)
     })
 
     it('should add a new entry when no matching key is found', () => {
       const bucket = buckets.forCheckpoint(mockCheckpoint)
       const checkpoints = buckets.checkpoints
       expect(bucket).to.be.an.instanceOf(StatsPoint)
-      expect(checkpoints.size).to.equal(1)
+      assert.strictEqual(checkpoints.size, 1)
       const [key, value] = Array.from(checkpoints.entries())[0]
-      expect(key.toString()).to.equal(mockCheckpoint.hash.toString())
-      expect(value).to.be.instanceOf(StatsPoint)
+      assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
+      assert.ok(value instanceof StatsPoint)
     })
 
     it('should not add a new entry if matching key is found', () => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(mockCheckpoint)
-      expect(buckets.checkpoints.size).to.equal(1)
+      assert.strictEqual(buckets.checkpoints.size, 1)
     })
 
     it('should add a new entry when new checkpoint does not match existing agg keys', () => {
       buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(anotherMockCheckpoint)
-      expect(buckets.checkpoints.size).to.equal(2)
+      assert.strictEqual(buckets.checkpoints.size, 2)
     })
   })
 
@@ -126,7 +128,7 @@ describe('StatsBucket', () => {
     })
 
     it('should start empty', () => {
-      expect(backlogBuckets.backlogs.size).to.equal(0)
+      assert.strictEqual(backlogBuckets.backlogs.size, 0)
     })
 
     it('should add a new entry when empty', () => {
@@ -134,7 +136,7 @@ describe('StatsBucket', () => {
       const backlogs = backlogBuckets.backlogs
       expect(bucket).to.be.an.instanceOf(Backlog)
       const [, value] = Array.from(backlogs.entries())[0]
-      expect(value).to.be.instanceOf(Backlog)
+      assert.ok(value instanceof Backlog)
     })
 
     it('should add a new entry when given different tags', () => {
@@ -148,7 +150,7 @@ describe('StatsBucket', () => {
 
       backlogBuckets.forBacklog(mockBacklog)
       backlogBuckets.forBacklog(otherMockBacklog)
-      expect(backlogBuckets.backlogs.size).to.equal(2)
+      assert.strictEqual(backlogBuckets.backlogs.size, 2)
     })
 
     it('should update the existing entry if offset is higher', () => {
@@ -162,8 +164,8 @@ describe('StatsBucket', () => {
 
       backlogBuckets.forBacklog(mockBacklog)
       const backlog = backlogBuckets.forBacklog(higherMockBacklog)
-      expect(backlog.offset).to.equal(higherMockBacklog.offset)
-      expect(backlogBuckets.backlogs.size).to.equal(1)
+      assert.strictEqual(backlog.offset, higherMockBacklog.offset)
+      assert.strictEqual(backlogBuckets.backlogs.size, 1)
     })
 
     it('should discard the passed backlog if offset is lower', () => {
@@ -177,8 +179,8 @@ describe('StatsBucket', () => {
 
       backlogBuckets.forBacklog(mockBacklog)
       const backlog = backlogBuckets.forBacklog(lowerMockBacklog)
-      expect(backlog.offset).to.equal(mockBacklog.offset)
-      expect(backlogBuckets.backlogs.size).to.equal(1)
+      assert.strictEqual(backlog.offset, mockBacklog.offset)
+      assert.strictEqual(backlogBuckets.backlogs.size, 1)
     })
   })
 })
@@ -186,9 +188,9 @@ describe('StatsBucket', () => {
 describe('TimeBuckets', () => {
   it('should acquire a span agg bucket for the given time', () => {
     const buckets = new TimeBuckets()
-    expect(buckets.size).to.equal(0)
+    assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
-    expect(buckets.size).to.equal(1)
+    assert.strictEqual(buckets.size, 1)
     expect(bucket).to.be.an.instanceOf(StatsBucket)
   })
 })
@@ -224,11 +226,11 @@ describe('DataStreamsProcessor', () => {
       port: config.port,
       url: config.url
     })
-    expect(processor.buckets).to.be.instanceOf(TimeBuckets)
-    expect(processor.hostname).to.equal(hostname())
-    expect(processor.enabled).to.equal(config.dsmEnabled)
-    expect(processor.env).to.equal(config.env)
-    expect(processor.tags).to.deep.equal(config.tags)
+    assert.ok(processor.buckets instanceof TimeBuckets)
+    assert.strictEqual(processor.hostname, hostname())
+    assert.strictEqual(processor.enabled, config.dsmEnabled)
+    assert.strictEqual(processor.env, config.env)
+    assert.deepStrictEqual(processor.tags, config.tags)
   })
 
   it('should track backlogs', () => {
@@ -239,20 +241,20 @@ describe('DataStreamsProcessor', () => {
       partition: 0,
       topic: 'test-topic'
     }
-    expect(processor.buckets.size).to.equal(0)
+    assert.strictEqual(processor.buckets.size, 0)
     processor.recordOffset({ timestamp: DEFAULT_TIMESTAMP, ...mockBacklog })
-    expect(processor.buckets.size).to.equal(1)
+    assert.strictEqual(processor.buckets.size, 1)
 
     const timeBucket = processor.buckets.values().next().value
-    expect(timeBucket).to.be.instanceOf(StatsBucket)
-    expect(timeBucket.backlogs.size).to.equal(1)
+    assert.ok(timeBucket instanceof StatsBucket)
+    assert.strictEqual(timeBucket.backlogs.size, 1)
 
     const backlog = timeBucket.forBacklog(mockBacklog)
-    expect(timeBucket.backlogs.size).to.equal(1)
-    expect(backlog).to.be.instanceOf(Backlog)
+    assert.strictEqual(timeBucket.backlogs.size, 1)
+    assert.ok(backlog instanceof Backlog)
 
     const encoded = backlog.encode()
-    expect(encoded).to.deep.equal({
+    assert.deepStrictEqual(encoded, {
       Tags: [
         'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume'
       ],
@@ -261,17 +263,17 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('should track latency stats', () => {
-    expect(processor.buckets.size).to.equal(0)
+    assert.strictEqual(processor.buckets.size, 0)
     processor.recordCheckpoint(mockCheckpoint)
-    expect(processor.buckets.size).to.equal(1)
+    assert.strictEqual(processor.buckets.size, 1)
 
     const timeBucket = processor.buckets.values().next().value
-    expect(timeBucket).to.be.instanceOf(StatsBucket)
-    expect(timeBucket.checkpoints.size).to.equal(1)
+    assert.ok(timeBucket instanceof StatsBucket)
+    assert.strictEqual(timeBucket.checkpoints.size, 1)
 
     const checkpointBucket = timeBucket.forCheckpoint(mockCheckpoint)
-    expect(timeBucket.checkpoints.size).to.equal(1)
-    expect(checkpointBucket).to.be.instanceOf(StatsPoint)
+    assert.strictEqual(timeBucket.checkpoints.size, 1)
+    assert.ok(checkpointBucket instanceof StatsPoint)
 
     edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
@@ -281,12 +283,12 @@ describe('DataStreamsProcessor', () => {
     payloadSize.accept(mockCheckpoint.payloadSize)
 
     const encoded = checkpointBucket.encode()
-    expect(encoded.Hash).to.equal(DEFAULT_CURRENT_HASH.readBigUInt64LE())
-    expect(encoded.ParentHash).to.equal(DEFAULT_PARENT_HASH.readBigUInt64LE())
-    expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
-    expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
-    expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
-    expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
+    assert.strictEqual(encoded.Hash, DEFAULT_CURRENT_HASH.readBigUInt64LE())
+    assert.strictEqual(encoded.ParentHash, DEFAULT_PARENT_HASH.readBigUInt64LE())
+    assert.deepStrictEqual(encoded.EdgeTags, mockCheckpoint.edgeTags)
+    assert.deepStrictEqual(encoded.EdgeLatency, edgeLatency.toProto())
+    assert.deepStrictEqual(encoded.PathwayLatency, pathwayLatency.toProto())
+    assert.deepStrictEqual(encoded.PayloadSize, payloadSize.toProto())
   })
 
   it('should export on interval', () => {
@@ -318,29 +320,29 @@ describe('DataStreamsProcessor', () => {
 
 describe('getSizeOrZero', () => {
   it('should return the size of a string', () => {
-    expect(getSizeOrZero('hello')).to.equal(5)
+    assert.strictEqual(getSizeOrZero('hello'), 5)
   })
 
   it('should handle unicode characters', () => {
     // emoji is 4 bytes
-    expect(getSizeOrZero('hello 😀')).to.equal(10)
+    assert.strictEqual(getSizeOrZero('hello 😀'), 10)
   })
 
   it('should return the size of an ArrayBuffer', () => {
     const buffer = new ArrayBuffer(10)
-    expect(getSizeOrZero(buffer)).to.equal(10)
+    assert.strictEqual(getSizeOrZero(buffer), 10)
   })
 
   it('should return the size of a Buffer', () => {
     const buffer = Buffer.from('hello', 'utf-8')
-    expect(getSizeOrZero(buffer)).to.equal(5)
+    assert.strictEqual(getSizeOrZero(buffer), 5)
   })
 })
 
 describe('getHeadersSize', () => {
   it('should return 0 for undefined/empty headers', () => {
-    expect(getHeadersSize(undefined)).to.equal(0)
-    expect(getHeadersSize({})).to.equal(0)
+    assert.strictEqual(getHeadersSize(undefined), 0)
+    assert.strictEqual(getHeadersSize({}), 0)
   })
 
   it('should return the total size of all headers', () => {
@@ -348,7 +350,7 @@ describe('getHeadersSize', () => {
       'Content-Type': 'application/json',
       'Content-Length': '100'
     }
-    expect(getHeadersSize(headers)).to.equal(45)
+    assert.strictEqual(getHeadersSize(headers), 45)
   })
 })
 
@@ -362,6 +364,6 @@ describe('getMessageSize', () => {
         'Content-Length': '100'
       }
     }
-    expect(getMessageSize(message)).to.equal(53)
+    assert.strictEqual(getMessageSize(message), 53)
   })
 })

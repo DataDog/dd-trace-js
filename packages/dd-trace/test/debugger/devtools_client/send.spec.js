@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 require('../../setup/mocha')
 
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -77,29 +78,29 @@ describe('input message http requests', function () {
     const callback = sinon.spy()
 
     send(message, logger, dd, snapshot, callback)
-    expect(request).to.not.have.been.called
-    expect(jsonBuffer.write).to.have.been.calledOnceWith(
+    sinon.assert.notCalled(request)
+    sinon.assert.calledOnceWithMatch(jsonBuffer.write,
       JSON.stringify(getPayload())
     )
-    expect(callback).to.not.have.been.called
+    sinon.assert.notCalled(callback)
   })
 
   it('should call request with the expected payload once the buffer is flushed', function (done) {
     send({ message: 1 }, logger, dd, snapshot)
     send({ message: 2 }, logger, dd, snapshot)
     send({ message: 3 }, logger, dd, snapshot)
-    expect(request).to.not.have.been.called
+    sinon.assert.notCalled(request)
 
     clock.tick(1000)
 
-    expect(request).to.have.been.calledOnceWith(JSON.stringify([
+    sinon.assert.calledOnceWithMatch(request, JSON.stringify([
       getPayload({ message: 1 }),
       getPayload({ message: 2 }),
       getPayload({ message: 3 })
     ]))
 
     const opts = getRequestOptions(request)
-    expect(opts).to.have.property('method', 'POST')
+    assert.strictEqual(opts.method, 'POST')
     expect(opts).to.have.property(
       'path',
       '/debugger/v1/input?ddtags=' +

@@ -1,10 +1,13 @@
 'use strict'
 
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 const path = require('path')
+
+const { expect } = require('chai')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const startApiMock = require('./api-mock')
-const { expect } = require('chai')
 const { executeRequest } = require('./util')
 
 describe('AIGuard SDK integration tests', () => {
@@ -59,16 +62,16 @@ describe('AIGuard SDK integration tests', () => {
       const headers = blocking ? { 'x-blocking-enabled': true } : null
       const response = await executeRequest(`${url}${endpoint}`, 'GET', headers)
       if (blocking && action !== 'ALLOW') {
-        expect(response.status).to.equal(403)
+        assert.strictEqual(response.status, 403)
         expect(response.body).to.contain(reason)
       } else {
-        expect(response.status).to.equal(200)
+        assert.strictEqual(response.status, 200)
         expect(response.body).to.have.nested.property('action', action)
         expect(response.body).to.have.nested.property('reason', reason)
       }
       await agent.assertMessageReceived(({ headers, payload }) => {
         const span = payload[0].find(span => span.name === 'ai_guard')
-        expect(span).not.to.be.null
+        assert.notStrictEqual(span, null)
       })
     })
   }

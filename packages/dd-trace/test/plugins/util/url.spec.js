@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 
 require('../../setup/core')
@@ -16,7 +16,7 @@ describe('filterSensitiveInfoFromRepository', () => {
       'git@github.com:DataDog/dd-trace-js.git'
     ]
     urls.forEach(url => {
-      expect(filterSensitiveInfoFromRepository(url)).to.equal(url)
+      assert.strictEqual(filterSensitiveInfoFromRepository(url), url)
     })
   })
 
@@ -26,9 +26,9 @@ describe('filterSensitiveInfoFromRepository', () => {
       'ssh://username@host.xz:port/path/to/repo.git/',
       'https://username@datadog.com/repository.git'
     ]
-    expect(filterSensitiveInfoFromRepository(sensitiveUrls[0])).to.equal('https://datadog.com/repository.git')
-    expect(filterSensitiveInfoFromRepository(sensitiveUrls[1])).to.equal('ssh://host.xz:port/path/to/repo.git/')
-    expect(filterSensitiveInfoFromRepository(sensitiveUrls[2])).to.equal('https://datadog.com/repository.git')
+    assert.strictEqual(filterSensitiveInfoFromRepository(sensitiveUrls[0]), 'https://datadog.com/repository.git')
+    assert.strictEqual(filterSensitiveInfoFromRepository(sensitiveUrls[1]), 'ssh://host.xz:port/path/to/repo.git/')
+    assert.strictEqual(filterSensitiveInfoFromRepository(sensitiveUrls[2]), 'https://datadog.com/repository.git')
   })
 
   it('does not crash for empty or invalid repository URLs', () => {
@@ -39,7 +39,7 @@ describe('filterSensitiveInfoFromRepository', () => {
       '1+1=2'
     ]
     invalidUrls.forEach(url => {
-      expect(filterSensitiveInfoFromRepository(url)).to.equal('')
+      assert.strictEqual(filterSensitiveInfoFromRepository(url), '')
     })
   })
 })

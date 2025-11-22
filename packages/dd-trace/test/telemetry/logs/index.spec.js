@@ -46,7 +46,7 @@ describe('telemetry logs', () => {
 
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be subscribe only once', () => {
@@ -58,7 +58,7 @@ describe('telemetry logs', () => {
       logs.start(defaultConfig)
       logs.start(defaultConfig)
 
-      expect(telemetryLog.subscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.subscribe)
     })
 
     it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -82,7 +82,7 @@ describe('telemetry logs', () => {
 
       logs.stop()
 
-      expect(telemetryLog.unsubscribe).to.have.been.calledTwice
+      sinon.assert.calledTwice(telemetryLog.unsubscribe)
     })
   })
 
