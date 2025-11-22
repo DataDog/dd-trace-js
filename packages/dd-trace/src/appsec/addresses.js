@@ -27,6 +27,11 @@ module.exports = {
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
   HTTP_OUTGOING_URL: 'server.io.net.url',
+  HTTP_OUTGOING_METHOD: 'server.io.net.request.method',
+  HTTP_OUTGOING_HEADERS: 'server.io.net.request.headers',
+  HTTP_OUTGOING_RESPONSE_STATUS: 'server.io.net.response.status',
+  HTTP_OUTGOING_RESPONSE_HEADERS: 'server.io.net.response.headers',
+  HTTP_OUTGOING_RESPONSE_BODY: 'server.io.net.response.body',
   FS_OPERATION_PATH: 'server.io.fs.file',
 
   DB_STATEMENT: 'server.db.statement',
