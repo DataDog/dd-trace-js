@@ -4551,7 +4551,7 @@ source-map-support@^0.5.16:
   integrity sha512-uBHU3L3czsIyYXKX88fdrGovxdSCoTGDRZ6SYXtSRxLZUzHg5P/66Ht6uoUlHu9EZod+inXhKo3qQgwXUT/y1w==
   dependencies:
     buffer-from "^1.0.0"
-    source-map "^0.6.0"
+    source-map "^0.6.0" 
 
 source-map@^0.6.0, source-map@^0.6.1:
   version "0.6.1"
