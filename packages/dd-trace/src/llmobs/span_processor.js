@@ -126,6 +126,11 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
+    // Handle prompt metadata for reusable prompts
+    if (mlObsTags['_ml_obs.meta.input.prompt']) {
+      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
+    }
+
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'

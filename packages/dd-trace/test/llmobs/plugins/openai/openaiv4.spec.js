@@ -755,6 +755,191 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' }
         })
       })
+
+      // Helper function to verify prompt tracking in span events
+      // Note: Prompt IDs (pmpt_*) are real reusable prompts created on "Datadog Staging" OpenAI's dashboard for testing
+      function assertPromptTracking (spanEvent, expectedPrompt, expectedInputMessages) {
+        // Verify input messages are captured from instructions
+        assert(spanEvent.meta.input.messages, 'Input messages should be present')
+        assert(Array.isArray(spanEvent.meta.input.messages), 'Input messages should be an array')
+
+        for (const expected of expectedInputMessages) {
+          const message = spanEvent.meta.input.messages.find(m => m.role === expected.role)
+          assert(message, `Should have a ${expected.role} message`)
+          assert.strictEqual(message.content, expected.content)
+        }
+
+        // Verify prompt metadata
+        assert(spanEvent.meta.input.prompt, 'Prompt metadata should be present')
+        const prompt = spanEvent.meta.input.prompt
+        assert.strictEqual(prompt.id, expectedPrompt.id)
+        assert.strictEqual(prompt.version, expectedPrompt.version)
+        assert.deepStrictEqual(prompt.variables, expectedPrompt.variables)
+        assert.deepStrictEqual(prompt.chat_template, expectedPrompt.chat_template)
+      }
+
+      it('submits a response span with prompt tracking - overlapping values', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: 'cat' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+          version: '1',
+          variables: { phrase: 'cat in the hat', word: 'cat' },
+          chat_template: [
+            { role: 'user', content: 'I saw a {{phrase}} and another {{word}}' }
+          ]
+        }, [
+          { role: 'user', content: 'I saw a cat in the hat and another cat' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - partial word match', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+            version: '2',
+            variables: { word: 'test' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a954c8988190a82b11560faa47cd0d6629899573dd8f',
+          version: '2',
+          variables: { word: 'test' },
+          chat_template: [
+            { role: 'developer', content: 'Reply with "OK".' },
+            { role: 'user', content: 'This is a {{word}} for {{word}}ing the {{word}}er' }
+          ]
+        }, [
+          { role: 'developer', content: 'Reply with "OK".' },
+          { role: 'user', content: 'This is a test for testing the tester' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - special characters', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+            version: '2',
+            variables: { price: '$99.99', item: 'groceries' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a99a3eec81959d5f2e408a2654380b2b15731a51f191',
+          version: '2',
+          variables: { price: '$99.99', item: 'groceries' },
+          chat_template: [
+            { role: 'user', content: 'The price of {{item}} is {{price}}.' }
+          ]
+        }, [
+          { role: 'user', content: 'The price of groceries is $99.99.' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - empty values', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+            version: '1',
+            variables: { phrase: 'cat in the hat', word: '' }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_6911a8b8f7648197b39bd62127a696910d4a05830d5ba1e6',
+          version: '1',
+          variables: { phrase: 'cat in the hat', word: '' },
+          chat_template: [
+            { role: 'user', content: 'I saw a {{phrase}} and another ' }
+          ]
+        }, [
+          { role: 'user', content: 'I saw a cat in the hat and another ' }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - mixed input types', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          prompt: {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: { type: 'input_text', text: 'Analyze these images and document' },
+              user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+              user_file: { type: 'input_file', file_id: 'file-LXG16g7US1sG6MQM7KQY1i' },
+              user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+            }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+          version: '2',
+          variables: {
+            user_message: 'Analyze these images and document',
+            user_image_1: '[image]',
+            user_file: 'file-LXG16g7US1sG6MQM7KQY1i',
+            user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+          },
+          chat_template: [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: {{user_message}}\n' +
+                'Image reference 1: [image]\n' +
+                'Document reference: {{user_file}}\n' +
+                'Image reference 2: {{user_image_2}}\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ]
+        }, [
+          {
+            role: 'user',
+            content: 'Analyze the following content from the user:\n\n' +
+              'Text message: Analyze these images and document\n' +
+              'Image reference 1: [image]\n' +
+              'Document reference: file-LXG16g7US1sG6MQM7KQY1i\n' +
+              'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+              'Please provide a comprehensive analysis.'
+          }
+        ])
+      })
     })
   })
 })
