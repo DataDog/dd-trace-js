@@ -364,7 +364,17 @@ The following tags are available to override Datadog-specific options:
 
 <h2 id="opentelemetry-api">OpenTelemetry Compatibility</h2>
 
-This library is OpenTelemetry compliant. Use the [OpenTelemetry API](https://opentelemetry.io/docs/instrumentation/js/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:
+This library is OpenTelemetry compliant. The OpenTelemetry API packages (`@opentelemetry/api` and `@opentelemetry/api-logs`) are peer dependencies and must be installed separately.
+
+Install the required packages:
+
+```bash
+npm install @opentelemetry/api
+# For OpenTelemetry logs support (optional)
+npm install @opentelemetry/api-logs
+```
+
+Use the [OpenTelemetry API](https://opentelemetry.io/docs/instrumentation/js/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:
 
 ```javascript
 const tracer = require('dd-trace').init()
@@ -381,7 +391,9 @@ The following attributes are available to override Datadog-specific options:
 
 <h3 id="opentelemetry-logs">OpenTelemetry Logs</h3>
 
-dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
+dd-trace-js includes experimental support for OpenTelemetry logs, designed as a drop-in replacement for the OpenTelemetry SDK. This support is primarily intended for logging libraries rather than direct user configuration. The `@opentelemetry/api-logs` package is a peer dependency and must be installed separately. If it is not installed, OpenTelemetry logs functionality is not available.
+
+Enable it by setting `DD_LOGS_OTEL_ENABLED=true` and use the [OpenTelemetry Logs API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api-logs.html) to emit structured log data:
 
 ```javascript
 require('dd-trace').init()
