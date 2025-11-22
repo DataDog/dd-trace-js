@@ -2,16 +2,37 @@
 const iitm = require('../../../dd-trace/src/iitm')
 const path = require('path')
 const ritm = require('../../../dd-trace/src/ritm')
+const log = require('../../../dd-trace/src/log')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+
+/**
+ * @param {string} moduleBaseDir
+ * @returns {string|undefined}
+ */
+function getVersion (moduleBaseDir) {
+  if (moduleBaseDir) {
+    return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
+  }
+  return process.version
+}
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
  * In practice, `modules` is always an array with a single entry.
  *
+ * @overload
+ * @param {string[]} modules list of modules to hook into
+ * @param {object} hookOptions hook options
+ * @param {Function} onrequire callback to be executed upon encountering module
+ */
+/**
+ * @overload
  * @param {string[]} modules list of modules to hook into
  * @param {object} hookOptions hook options
  * @param {Function} onrequire callback to be executed upon encountering module
  */
 function Hook (modules, hookOptions, onrequire) {
+  // TODO: Rewrite this to use class syntax. The same should be done for ritm.
   if (!(this instanceof Hook)) return new Hook(modules, hookOptions, onrequire)
 
   if (typeof hookOptions === 'function') {
@@ -31,6 +52,13 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     let defaultWrapResult
+
+    try {
+      moduleVersion ||= getVersion(moduleBaseDir)
+    } catch (error) {
+      log.error('Error getting version for "%s": %s', moduleName, error.message, error)
+      return
+    }
 
     if (
       isIitm &&
@@ -58,12 +86,6 @@ function Hook (modules, hookOptions, onrequire) {
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
-}
-
-Hook.prototype.unhook = function () {
-  this._ritmHook.unhook()
-  this._iitmHook.unhook()
-  this._patched = Object.create(null)
 }
 
 module.exports = Hook
