@@ -8,6 +8,7 @@ const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-ana
 const noHttponlyCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-httponly-cookie-analyzer')
 const { NO_HTTPONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIast } = require('../utils')
+
 describe('no HttpOnly cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     assert.strictEqual(NO_HTTPONLY_COOKIE, 'NO_HTTPONLY_COOKIE')

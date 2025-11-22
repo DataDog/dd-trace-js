@@ -6,6 +6,7 @@ const path = require('node:path')
 const { before, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+
 describe('Endpoints collection', () => {
   let cwd
 

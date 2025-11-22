@@ -1,4 +1,5 @@
 'use strict'
+
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')

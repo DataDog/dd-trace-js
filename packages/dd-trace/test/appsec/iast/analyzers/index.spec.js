@@ -1,4 +1,5 @@
 'use strict'
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')

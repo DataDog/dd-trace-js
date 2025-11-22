@@ -4,6 +4,7 @@ const Module = require('module')
 const assert = require('node:assert/strict')
 
 const sinon = require('sinon')
+
 describe('register', () => {
   let hooksMock
   let HookMock

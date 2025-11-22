@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+
 describe('IAST TaintTrackingFilter', () => {
   let filter
 

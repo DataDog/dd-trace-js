@@ -1,4 +1,5 @@
 'use strict'
+
 const assert = require('node:assert')
 const EventEmitter = require('node:events')
 const net = require('node:net')

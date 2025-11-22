@@ -12,6 +12,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const proxy = require('./proxy')
+
 describe('Plugin', () => {
   let Gateway
   let gateway

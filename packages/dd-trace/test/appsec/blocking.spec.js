@@ -6,6 +6,7 @@ const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
 describe('blocking', () => {
   const defaultBlockedTemplate = {
     html: 'block test',

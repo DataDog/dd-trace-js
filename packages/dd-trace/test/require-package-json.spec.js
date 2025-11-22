@@ -7,6 +7,7 @@ require('./setup/core')
 
 const requirePackageJson = require('../src/require-package-json')
 const packageJson = require('../../../package.json')
+
 describe('requirePackageJson', () => {
   it('should read absolute path', () => {
     const { version } = requirePackageJson(process.cwd(), module)

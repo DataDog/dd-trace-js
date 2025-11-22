@@ -6,6 +6,7 @@ const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const iastContextHandler = require('../../../src/appsec/iast/iast-context')
+
 describe('IAST context', () => {
   const iastContext = 'IAST_CONTEXT'
 

@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+
 describe('ldap-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
   const TAINTED_QUERY = 'vulnerable query'

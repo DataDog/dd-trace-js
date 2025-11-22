@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const { SourceIastPlugin } = require('../../../../../src/appsec/iast/iast-plugin')
 const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+
 describe('Kafka consumer plugin', () => {
   let kafkaConsumerPlugin
   let addSub, handler

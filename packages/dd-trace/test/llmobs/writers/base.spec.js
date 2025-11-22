@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { useEnv } = require('../../../../../integration-tests/helpers')
+
 describe('BaseLLMObsWriter', () => {
   let BaseLLMObsWriter
   let writer

@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const helpers = require('./kinesis_helpers')
 const { setup } = require('./spec_helpers')
+
 describe('Plugin', () => {
   describe('Serverless', function () {
     this.retries(5)

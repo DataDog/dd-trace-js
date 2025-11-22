@@ -9,6 +9,7 @@ const { after, before, describe, it } = require('mocha')
 const { USER_KEEP } = require('../../../../../ext/priority')
 const tracer = require('../../../../../index')
 const agent = require('../../plugins/agent')
+
 describe('track_event - Integration with the tracer', () => {
   let http
   let controller

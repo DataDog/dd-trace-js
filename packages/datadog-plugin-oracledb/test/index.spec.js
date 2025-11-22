@@ -1,4 +1,5 @@
 'use strict'
+
 const assert = require('node:assert')
 
 const { after, before, describe, it } = require('mocha')

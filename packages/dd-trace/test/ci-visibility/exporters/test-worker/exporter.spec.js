@@ -1,4 +1,5 @@
 'use strict'
+
 const { describe, it, beforeEach, afterEach, context } = require('tap').mocha
 const sinon = require('sinon')
 

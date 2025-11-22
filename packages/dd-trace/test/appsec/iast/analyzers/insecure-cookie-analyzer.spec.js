@@ -8,6 +8,7 @@ const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-ana
 const insecureCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/insecure-cookie-analyzer')
 const { INSECURE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIast } = require('../utils')
+
 describe('insecure cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     assert.strictEqual(INSECURE_COOKIE, 'INSECURE_COOKIE')

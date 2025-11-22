@@ -11,6 +11,7 @@ const { match } = require('sinon')
 const rules = require('../../../src/appsec/recommended.json')
 const Reporter = require('../../../src/appsec/reporter')
 const { getConfigFresh } = require('../../helpers/config')
+
 describe('WAF Manager', () => {
   const knownAddresses = new Set([
     'server.io.net.url',

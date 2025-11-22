@@ -8,6 +8,7 @@ const semver = require('semver')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+
 describe('Plugin', () => {
   let tracer
   let dbName

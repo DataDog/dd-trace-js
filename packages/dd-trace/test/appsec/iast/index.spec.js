@@ -16,6 +16,7 @@ const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { testInRequest } = require('./utils')
+
 describe('IAST Index', () => {
   beforeEach(() => {
     vulnerabilityReporter.clearCache()

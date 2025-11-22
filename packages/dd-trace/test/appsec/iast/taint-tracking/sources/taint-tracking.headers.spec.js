@@ -12,6 +12,7 @@ const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-t
 const { HTTP_REQUEST_HEADER_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { getConfigFresh } = require('../../../../helpers/config')
 const { testInRequest } = require('../../utils')
+
 describe('Headers sourcing', () => {
   function app (req) {
     const store = storage('legacy').getStore()

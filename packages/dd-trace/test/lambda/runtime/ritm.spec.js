@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { _extractModuleRootAndHandler, _extractModuleNameAndHandlerPath } = require('../../../src/lambda/runtime/ritm')
+
 describe('runtime', () => {
   describe('ritm', () => {
     describe('_extractModuleRootAndHandler', () => {

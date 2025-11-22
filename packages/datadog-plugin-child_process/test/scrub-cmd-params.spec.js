@@ -6,6 +6,7 @@ const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const scrubCmdParams = require('../src/scrub-cmd-params')
+
 describe('scrub cmds', () => {
   it('Should not scrub single command', () => {
     assert.deepStrictEqual(scrubCmdParams('ls -la'), ['ls', '-la'])

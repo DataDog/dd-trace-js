@@ -489,7 +489,7 @@ describe('Telemetry extended heartbeat', () => {
 
 // deleted this test for now since the global interval is now used for app-extended heartbeat
 // which is not supposed to be configurable
-// will ask Bryan why being able to change the interval is important after he is back from parental leave
+// TODO: Ask Bryan why being able to change the interval is important after he is back from parental leave
 describe('Telemetry retry', () => {
   let telemetry
   let capturedRequestType

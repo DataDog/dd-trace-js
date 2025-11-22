@@ -11,6 +11,7 @@ const { before, describe } = require('mocha')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
+
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('express-mongo-sanitize', 'express', '>4.18.0 <5.0.0', expressVersion => {

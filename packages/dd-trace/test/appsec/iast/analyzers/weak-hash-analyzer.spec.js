@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const weakHashAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-hash-analyzer')
 const { prepareTestServerForIast, testOutsideRequestHasVulnerability } = require('../utils')
+
 describe('weak-hash-analyzer', () => {
   const VULNERABLE_ALGORITHM = 'sha1'
   const NON_VULNERABLE_ALGORITHM = 'sha512'

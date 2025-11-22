@@ -17,6 +17,7 @@ const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/so
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
+
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', version => {
     if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {

@@ -11,6 +11,7 @@ const sinon = require('sinon')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
 describe('Plugin', () => {
   let tracer
   let restify

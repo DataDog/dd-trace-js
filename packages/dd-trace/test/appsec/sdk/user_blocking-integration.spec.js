@@ -12,6 +12,7 @@ const appsec = require('../../../src/appsec')
 const blocking = require('../../../src/appsec/blocking')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
+
 describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
     appsec: {

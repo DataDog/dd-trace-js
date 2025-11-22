@@ -5,6 +5,7 @@ const { exec } = require('node:child_process')
 
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
+
 describe('check-require-cache', () => {
   const opts = {
     cwd: __dirname,

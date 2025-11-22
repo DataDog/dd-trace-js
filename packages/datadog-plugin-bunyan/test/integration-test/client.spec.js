@@ -9,6 +9,7 @@ const {
   varySandbox
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 describe('esm', () => {
   let agent
   let proc

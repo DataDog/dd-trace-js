@@ -13,6 +13,7 @@ const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
+
 describe('set_user', () => {
   describe('Internal API', () => {
     const tracer = {}

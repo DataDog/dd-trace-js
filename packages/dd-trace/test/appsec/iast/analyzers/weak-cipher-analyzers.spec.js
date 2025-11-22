@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const weakCipherAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-cipher-analyzer')
 const { prepareTestServerForIast } = require('../utils')
+
 describe('weak-cipher-analyzer', () => {
   const VULNERABLE_CIPHER = 'des-ede-cbc'
   const NON_VULNERABLE_CIPHER = 'sha512'

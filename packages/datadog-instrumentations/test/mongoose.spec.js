@@ -13,6 +13,7 @@ const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
 
 const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish')
+
 describe('mongoose instrumentations', () => {
   // hack to be able to exclude cb test executions in >=7
   const iterationRanges = ['>4.0.0 <=6', '>=7']

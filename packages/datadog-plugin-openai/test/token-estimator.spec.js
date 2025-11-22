@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
 const { estimateTokens } = require('../src/token-estimator')
+
 describe('Plugin', () => {
   describe('openai token estimation', () => {
     function testEstimation (input, expected) {

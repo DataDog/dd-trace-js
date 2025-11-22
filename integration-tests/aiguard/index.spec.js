@@ -9,6 +9,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
+
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, url
 

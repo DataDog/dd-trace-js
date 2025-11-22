@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 
 const Activation = require('../../src/appsec/activation')
+
 describe('Appsec Activation', () => {
   let config
 

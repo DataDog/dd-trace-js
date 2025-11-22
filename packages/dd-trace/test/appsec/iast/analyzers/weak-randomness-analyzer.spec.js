@@ -12,6 +12,7 @@ const sinon = require('sinon')
 const weakRandomnessAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-randomness-analyzer')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { prepareTestServerForIast } = require('../utils')
+
 describe('weak-randomness-analyzer', () => {
   weakRandomnessAnalyzer.configure(true)
 

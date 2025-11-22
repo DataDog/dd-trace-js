@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')
+
 describe('helpers/instrument', () => {
   describe('AsyncResource', () => {
     it('should bind statically', () => {

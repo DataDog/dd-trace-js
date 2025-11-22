@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+
 describe('Plugin', () => {
   describe('http', () => {
     describe('Code Origin for Spans', () => {

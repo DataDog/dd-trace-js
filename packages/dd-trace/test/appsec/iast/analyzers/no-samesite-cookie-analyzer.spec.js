@@ -8,6 +8,7 @@ const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-ana
 const noSamesiteCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-samesite-cookie-analyzer')
 const { NO_SAMESITE_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIast } = require('../utils')
+
 describe('no SameSite cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
     assert.strictEqual(NO_SAMESITE_COOKIE, 'NO_SAMESITE_COOKIE')

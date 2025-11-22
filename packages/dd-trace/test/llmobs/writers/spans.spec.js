@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer

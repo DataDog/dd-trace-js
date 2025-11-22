@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { expect } = require('chai')
 
 const shimmer = require('../src/shimmer')
+
 describe('shimmer', () => {
   describe('with a method', () => {
     it('should wrap getter method', () => {

@@ -7,6 +7,7 @@ const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
+
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])

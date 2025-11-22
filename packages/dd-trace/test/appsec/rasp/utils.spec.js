@@ -6,6 +6,7 @@ const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
 describe('RASP - utils.js', () => {
   let web, utils, stackTrace, config, telemetry
   const raspRule = { type: 'type', variant: 'variant' }

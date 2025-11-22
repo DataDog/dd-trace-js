@@ -8,6 +8,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+
 describe('Plugin', () => {
   let WebSocket
   let wsServer

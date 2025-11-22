@@ -18,6 +18,7 @@ const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { testInRequest } = require('./utils')
+
 describe('Overhead controller', () => {
   let oceContextKey, overheadController, web
 
