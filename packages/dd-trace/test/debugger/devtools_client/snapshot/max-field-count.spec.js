@@ -6,8 +6,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
+const { DEFAULT_MAX_FIELD_COUNT } = require('../../../../src/debugger/devtools_client/snapshot/constants')
 
-const DEFAULT_MAX_FIELD_COUNT = 20
 const target = getTargetCodePath(__filename)
 
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
