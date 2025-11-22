@@ -1,0 +1,12 @@
+{
+  "name": "dd-trace-mysql-sample-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node sample-app.js"
+  },
+  "dependencies": {
+    "mysql": "latest",
+    "dd-trace": "file:../../../../"
+  }
+}

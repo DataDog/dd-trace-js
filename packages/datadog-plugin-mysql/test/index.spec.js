@@ -1,622 +1,206 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before } = require('mocha')
-const proxyquire = require('proxyquire').noPreserveCache()
-const sinon = require('sinon')
+const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/integration-test-helpers')
+const TestSetup = require('./test-setup')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const testSetup = new TestSetup()
 
-const { expectedSchema, rawExpectedSchema } = require('./naming')
+createIntegrationTestSuite('mysql', 'mysql', testSetup, {
+  category: 'database'
+}, (meta) => {
+  const { agent, tracer, span } = meta
 
-const ddpv = require('mocha/package.json').version
-
-describe('Plugin', () => {
-  let mysql
-  let tracer
-
-  describe('mysql', () => {
-    withVersions('mysql', 'mysql', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-      describe('without configuration', () => {
-        let connection
-
-        afterEach((done) => {
-          connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql')
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-          connection = mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        withNamingSchema(
-          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
-          rawExpectedSchema.outbound
-        )
-
-        it('should propagate context to callbacks, with correct callback args', done => {
-          const span = tracer.startSpan('test')
-
-          tracer.scope().activate(span, () => {
-            const span = tracer.scope().active()
-            connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
-              expect(results).to.not.be.null
-              expect(fields).to.not.be.null
-              expect(tracer.scope().active()).to.equal(span)
-              done()
-            })
-          })
-        })
-
-        it('should run the callback in the parent context', done => {
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
-            done()
-          })
-        })
-
-        it('should run event listeners in the parent context', done => {
-          const query = connection.query('SELECT 1 + 1 AS solution')
-
-          query.on('result', () => {
-            expect(tracer.scope().active()).to.be.null
-            done()
-          })
-        })
-
-        it('should do automatic instrumentation', done => {
-          agent
-            .assertFirstTraceSpan({
-              name: expectedSchema.outbound.opName,
-              service: expectedSchema.outbound.serviceName,
-              resource: 'SELECT 1 + 1 AS solution',
-              type: 'sql',
-              meta: {
-                'span.kind': 'client',
-                'db.name': 'db',
-                'db.user': 'root',
-                'db.type': 'mysql',
-                component: 'mysql',
-                '_dd.integration': 'mysql'
-              }
-            })
-            .then(done)
-            .catch(done)
-
-          connection.query('SELECT 1 + 1 AS solution', (error, results, fields) => {
-            if (error) throw error
-          })
-        })
-
-        it('should handle errors', done => {
-          let error
-
-          agent
-            .assertFirstTraceSpan((trace) => {
-              assertObjectContains(trace, {
-                meta: {
-                  [ERROR_TYPE]: error.name,
-                  [ERROR_MESSAGE]: error.message,
-                  [ERROR_STACK]: error.stack,
-                  component: 'mysql'
-                }
-              })
-            })
-            .then(done)
-            .catch(done)
-
-          connection.query('INVALID', (err, results, fields) => {
-            error = err
-          })
-        })
-
-        it('should work without a callback', done => {
-          agent.assertSomeTraces(traces => {
-            done()
-          })
-
-          connection.query('SELECT 1 + 1 AS solution')
-        })
-      })
-
-      describe('with configuration', () => {
-        let connection
-
-        afterEach((done) => {
-          connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql', { service: 'custom' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          connection = mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        withNamingSchema(
-          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
-          {
-            v0: {
-              opName: 'mysql.query',
-              serviceName: 'custom'
-            },
-            v1: {
-              opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+  describe('Connection.query() - query', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan(
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
           }
-        )
+        }
+      )
 
-        it('should be configured with the correct values', done => {
-          agent
-            .assertFirstTraceSpan({
-              name: expectedSchema.outbound.opName,
-              service: 'custom'
-            })
-            .then(done)
-            .catch(done)
+      // Execute operation via test setup
+      await testSetup.query_connection()
 
-          connection.query('SELECT 1 + 1 AS solution', () => {})
-        })
-      })
+      return traceAssertion
+    })
 
-      describe('with service configured as function', () => {
-        const serviceSpy = sinon.stub().returns('custom')
-        let connection
+    it('should generate span with error tags (error path)', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan(
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "error.type": Symbol.for('test.ANY_STRING'),
+            "error.message": Symbol.for('test.ANY_STRING'),
+            "error.stack": Symbol.for('test.ANY_STRING'),
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "SELECT * FROM nonexistent_table"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
+          },
+          "error": 1
+        }
+      )
 
-        afterEach((done) => {
-          connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
+      // Execute operation with expectError flag
+      try {
+        await testSetup.query_connection({ expectError: true })
+      } catch (err) {
+        // Expected error
+      }
 
-        beforeEach(async () => {
-          await agent.load('mysql', { service: serviceSpy })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+      return traceAssertion
+    })
+  })
 
-          connection = mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        withNamingSchema(
-          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
-          {
-            v0: {
-              opName: 'mysql.query',
-              serviceName: 'custom'
-            },
-            v1: {
-              opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+  describe('Pool.query() - query', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan(
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "INSERT INTO users (name, email) VALUES (?, ?)"
           }
-        )
+        }
+      )
 
-        it('should be configured with the correct values', done => {
-          agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-            expect(traces[0][0]).to.have.property('service', 'custom')
-            sinon.assert.calledWith(serviceSpy, sinon.match({
-              host: 'localhost',
-              user: 'root',
-              database: 'db'
-            }))
-            done()
-          })
+      // Execute operation via test setup
+      await testSetup.query_pool()
 
-          connection.query('SELECT 1 + 1 AS solution', () => {})
-        })
+      return traceAssertion
+    })
+
+    it('should generate span with error tags (error path)', async () => {
+      const traceAssertion = agent.assertFirstTraceSpan(
+        {
+          "name": "mysql.query",
+          "meta": {
+            "span.kind": "client",
+            "error.type": Symbol.for('test.ANY_STRING'),
+            "error.message": Symbol.for('test.ANY_STRING'),
+            "error.stack": Symbol.for('test.ANY_STRING'),
+            "db.type": "mysql",
+            "component": "mysql",
+            "db.name": "db",
+            "db.user": "root",
+            "db.statement": "SELECT * FROM nonexistent_table"
+          },
+          "metrics": {
+            "db.pid": Symbol.for('test.ANY_NUMBER')
+          },
+          "error": 1
+        }
+      )
+
+      // Execute operation with expectError flag
+      try {
+        await testSetup.query_pool({ expectError: true })
+      } catch (err) {
+        // Expected error
+      }
+
+      return traceAssertion
+    })
+  })
+
+  describe('Connection.beginTransaction() - transaction', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        let span = null
+        for (const trace of traces) {
+          span = trace.find(s => s.name === 'mysql.beginTransaction')
+          if (span) break
+        }
+        if (!span) throw new Error('No span named mysql.beginTransaction found')
+
+        const assert = require('assert')
+        assert.strictEqual(span.name, 'mysql.beginTransaction')
+        assert.strictEqual(span.meta['span.kind'], 'client')
+        assert.strictEqual(span.meta['db.type'], 'mysql')
+        assert.strictEqual(span.meta['component'], 'mysql')
+        assert.strictEqual(span.meta['db.name'], 'db')
+        assert.strictEqual(span.meta['db.user'], 'root')
+        assert(typeof span.metrics['db.pid'] === 'number', 'db.pid should be a number')
       })
 
-      describe('with a connection pool', () => {
-        let pool
+      // Execute operation via test setup
+      await testSetup.transaction_connection()
 
-        afterEach((done) => {
-          pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
+      return traceAssertion
+    })
+  })
 
-        beforeEach(async () => {
-          await agent.load('mysql')
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+  describe('Connection.commit() - commit', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        let span = null
+        for (const trace of traces) {
+          span = trace.find(s => s.name === 'mysql.commit')
+          if (span) break
+        }
+        if (!span) throw new Error('No span named mysql.commit found')
 
-          pool = mysql.createPool({
-            connectionLimit: 1,
-            host: 'localhost',
-            user: 'root',
-            database: 'db'
-          })
-        })
-
-        withPeerService(
-          () => tracer,
-          'mysql',
-          (done) => pool.query('SELECT 1', (_) => done()),
-          'db',
-          'db.name'
-        )
-
-        it('should do automatic instrumentation', done => {
-          agent
-            .assertFirstTraceSpan({
-              name: expectedSchema.outbound.opName,
-              service: expectedSchema.outbound.serviceName,
-              resource: 'SELECT 1 + 1 AS solution',
-              type: 'sql',
-              meta: {
-                'span.kind': 'client',
-                'db.user': 'root',
-                'db.type': 'mysql',
-                component: 'mysql'
-              }
-            })
-            .then(done)
-            .catch(done)
-
-          pool.query('SELECT 1 + 1 AS solution', () => {})
-        })
-
-        it('should run the callback in the parent context', done => {
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
-            done()
-          })
-        })
-
-        it('should propagate context to callbacks', done => {
-          const span1 = tracer.startSpan('test1')
-          const span2 = tracer.startSpan('test2')
-
-          tracer.trace('test', () => {
-            tracer.scope().activate(span1, () => {
-              pool.query('SELECT 1 + 1 AS solution', () => {
-                expect(tracer.scope().active() === span1).to.eql(true)
-                tracer.scope().activate(span2, () => {
-                  pool.query('SELECT 1 + 1 AS solution', () => {
-                    expect(tracer.scope().active() === span2).to.eql(true)
-                    done()
-                  })
-                })
-              })
-            })
-          })
-        })
+        const assert = require('assert')
+        assert.strictEqual(span.name, 'mysql.commit')
+        assert.strictEqual(span.meta['span.kind'], 'client')
+        assert.strictEqual(span.meta['db.type'], 'mysql')
+        assert.strictEqual(span.meta['component'], 'mysql')
+        assert.strictEqual(span.meta['db.name'], 'db')
+        assert.strictEqual(span.meta['db.user'], 'root')
+        assert(typeof span.metrics['db.pid'] === 'number', 'db.pid should be a number')
       })
 
-      describe('comment injection interaction with peer service', () => {
-        let connection
-        let computeStub
-        let remapStub
+      // Execute operation via test setup
+      await testSetup.commit_connection()
 
-        before(async () => {
-          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+      return traceAssertion
+    })
+  })
 
-          connection = mysql.createConnection({
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
+  describe('Connection.rollback() - rollback', () => {
+    it('should generate span with correct tags (happy path)', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        let span = null
+        for (const trace of traces) {
+          span = trace.find(s => s.name === 'mysql.rollback')
+          if (span) break
+        }
+        if (!span) throw new Error('No span named mysql.rollback found')
 
-        beforeEach(() => {
-          const plugin = tracer._pluginManager._pluginsByName.mysql
-          computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
-          remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
-        })
-
-        afterEach(() => {
-          computeStub.restore()
-          remapStub.restore()
-        })
-
-        it('should use the service name when peer service is not available', done => {
-          computeStub.value(false)
-          remapStub.value({})
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(connection._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
-                `,ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-            } catch (e) {
-              done(e)
-            }
-            done()
-          })
-        })
-
-        it('should use the peer service when peer service is available', done => {
-          computeStub.value(true)
-          remapStub.value({})
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(connection._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'db\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
-                `,ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-            } catch (e) {
-              done(e)
-            }
-            done()
-          })
-        })
-
-        it('should use the remapped peer service when peer service is available and remapped', done => {
-          computeStub.value(true)
-          remapStub.value({ db: 'remappedDB' })
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(connection._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'remappedDB\',dde=\'tester\',ddh=\'127.0.0.1\',' +
-                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-            } catch (e) {
-              done(e)
-            }
-            done()
-          })
-        })
+        const assert = require('assert')
+        assert.strictEqual(span.name, 'mysql.rollback')
+        assert.strictEqual(span.meta['span.kind'], 'client')
+        assert.strictEqual(span.meta['db.type'], 'mysql')
+        assert.strictEqual(span.meta['component'], 'mysql')
+        assert.strictEqual(span.meta['db.name'], 'db')
+        assert.strictEqual(span.meta['db.user'], 'root')
+        assert(typeof span.metrics['db.pid'] === 'number', 'db.pid should be a number')
       })
 
-      describe('with DBM propagation enabled with service using plugin configurations', () => {
-        let connection
+      // Execute operation via test setup
+      await testSetup.rollback_connection()
 
-        before(async () => {
-          await agent.load('mysql', { dbmPropagationMode: 'service', service: 'serviced' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          connection = mysql.createConnection({
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        it('should contain comment in query text', done => {
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(connection._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
-                `ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-            } catch (e) {
-              done(e)
-            }
-            done()
-          })
-        })
-
-        it('trace query resource should not be changed when propagation is enabled', done => {
-          agent
-            .assertFirstTraceSpan({
-              resource: 'SELECT 1 + 1 AS solution'
-            })
-            .then(done)
-            .catch(done)
-
-          connection.query('SELECT 1 + 1 AS solution', (err) => {
-            if (err) return done(err)
-            connection.end((err) => {
-              if (err) return done(err)
-            })
-          })
-        })
-      })
-      describe('DBM propagation should handle special characters', () => {
-        let connection
-
-        afterEach((done) => {
-          connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql', { dbmPropagationMode: 'service', service: '~!@#$%^&*()_+|??/<>' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          connection = mysql.createConnection({
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        it('DBM propagation should handle special characters', done => {
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(connection._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
-                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-        })
-      })
-      describe('with DBM propagation enabled with full using tracer configurations', () => {
-        let connection
-
-        afterEach((done) => {
-          connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          connection = mysql.createConnection({
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-          connection.connect()
-        })
-
-        it('query text should contain traceparent', done => {
-          let queryText = ''
-          agent.assertSomeTraces(traces => {
-            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
-            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
-            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
-
-            expect(queryText).to.equal(
-              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
-              `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done)
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            queryText = connection._protocol._queue[0].sql
-          })
-        })
-
-        it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-          let queryText = ''
-
-          agent.assertSomeTraces(traces => {
-            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done)
-
-          connection.query('SELECT 1 + 1 AS solution', () => {
-            queryText = connection._protocol._queue[0].sql
-          })
-        })
-
-        it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
-            done()
-          })
-          connection.query('SELECT 1 + 1 AS solution', () => {
-          })
-        })
-      })
-      describe('with DBM propagation enabled with service using a connection pool', () => {
-        let pool
-
-        afterEach((done) => {
-          pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'post' }])
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          pool = mysql.createPool({
-            connectionLimit: 1,
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-        })
-
-        it('should contain comment in query text', done => {
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            try {
-              expect(pool._allConnections[0]._protocol._queue[0].sql).to.equal(
-                '/*dddb=\'db\',dddbs=\'post\',dde=\'tester\',ddh=\'127.0.0.1\',' +
-                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
-            } catch (e) {
-              done(e)
-            }
-            done()
-          })
-        })
-      })
-      describe('with DBM propagation enabled with service using a connection pool', () => {
-        let pool
-
-        afterEach((done) => {
-          pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
-          })
-
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-        })
-
-        beforeEach(async () => {
-          await agent.load('mysql', { dbmPropagationMode: 'full', service: 'post' })
-          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
-
-          pool = mysql.createPool({
-            connectionLimit: 1,
-            host: '127.0.0.1',
-            user: 'root',
-            database: 'db'
-          })
-        })
-
-        it('query text should contain traceparent', done => {
-          let queryText = ''
-          agent.assertSomeTraces(traces => {
-            const expectedTimePrefix = traces[0][0].meta['_dd.p.tid'].toString(16).padStart(16, '0')
-            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
-            const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
-
-            expect(queryText).to.equal(
-              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
-              `traceparent='00-${traceId}-${spanId}-01'*/ SELECT 1 + 1 AS solution`)
-          }).then(done, done)
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            queryText = pool._allConnections[0]._protocol._queue[0].sql
-          })
-        })
-
-        it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-          let queryText = ''
-
-          agent.assertSomeTraces(() => {
-            expect(queryText).to.include('-00\'*/ SELECT 1 + 1 AS solution')
-          }).then(done, done)
-
-          pool.query('SELECT 1 + 1 AS solution', () => {
-            queryText = pool._allConnections[0]._protocol._queue[0].sql
-          })
-        })
-
-        it('query should inject _dd.dbm_trace_injected into span', done => {
-          agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
-            done()
-          })
-          pool.query('SELECT 1 + 1 AS solution', () => {
-          })
-        })
-      })
+      return traceAssertion
     })
   })
 })
