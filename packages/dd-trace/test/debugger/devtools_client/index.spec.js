@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
@@ -23,7 +25,24 @@ const event = {
 }
 
 describe('onPause', function () {
-  let session, send, onPaused, ackReceived, log
+  /**
+   * @typedef {{
+   *   on: sinon.SinonSpy & { args: Array<[string, Function]> },
+   *   post: sinon.SinonSpy,
+   *   emit: sinon.SinonSpy,
+   *   '@noCallThru'?: boolean
+   * }} MockSession
+   */
+  /** @type {MockSession} */
+  let session
+  /** @type {Function} */
+  let send
+  /** @type {Function} */
+  let onPaused
+  /** @type {sinon.SinonSpy} */
+  let ackReceived
+  /** @type {unknown} */
+  let log
 
   beforeEach(async function () {
     ackReceived = sinon.spy()
@@ -82,6 +101,7 @@ describe('onPause', function () {
     })
 
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')
+    assert(onPausedCall, 'onPaused call should be found')
     onPaused = onPausedCall[1]
   })
 
