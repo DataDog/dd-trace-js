@@ -1,0 +1,51 @@
+name: Update 3rd-party licenses
+
+on:
+  pull_request:
+    paths:
+      - 'yarn.lock'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-3rdparty-licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Check out dd-license-attribution
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: DataDog/dd-license-attribution
+          path: dd-license-attribution
+
+      - name: Install dd-license-attribution
+        working-directory: dd-license-attribution
+        run: |
+          pip install .
+
+      - name: Regenerate LICENSE-3rdparty.csv
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          dd-license-attribution generate-sbom-csv \
+            --no-scancode-strategy \
+            --no-github-sbom-strategy \
+            https://github.com/datadog/dd-trace-js > LICENSE-3rdparty.csv
+      - name: Run LICENSE-3rdparty.csv update check
+        run: ./.github/scripts/update-3rdparty-licenses.sh
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+
