@@ -175,9 +175,8 @@ function enableRewriter (telemetryVerbosity) {
           shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
         }
       }
+      enableEsmRewriter(telemetryVerbosity)
     }
-
-    enableEsmRewriter(telemetryVerbosity)
   } catch (e) {
     log.error('Error enabling Rewriter', e)
   }
