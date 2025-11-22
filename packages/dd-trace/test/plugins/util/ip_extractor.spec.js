@@ -20,7 +20,7 @@ describe('ip extractor', () => {
     })
     appListener = server
       .listen(0, 'localhost', () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
   })

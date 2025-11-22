@@ -30,7 +30,7 @@ withVersions('express', 'express', expressVersion => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })

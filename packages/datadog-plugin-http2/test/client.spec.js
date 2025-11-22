@@ -36,7 +36,9 @@ describe('Plugin', () => {
           server = require(loadPlugin).createServer()
         }
         server.on('stream', app)
-        server.listen(0, 'localhost', () => listener(server.address().port))
+        server.listen(0, 'localhost', () => listener(
+          (/** @type {import('net').AddressInfo} */ (server.address())).port
+        ))
         return server
       }
 

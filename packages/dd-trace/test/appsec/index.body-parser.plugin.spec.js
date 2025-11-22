@@ -32,7 +32,7 @@ withVersions('body-parser', 'body-parser', version => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
