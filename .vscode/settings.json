@@ -1,9 +1,20 @@
 {
-  "eslint.workingDirectories": [
-    "."
-  ],
+  // Ensure that the ESLint config file used by VSCode is always the correct one, and that the working directory can
+  // always be identified. VSCode could become confused if this project is checked out inside a folder named
+  // `node_modules` and would start complain about unpublished files every place we reference a relative file in a
+  // `require` call.
+  "eslint.workingDirectories": ["."],
   "eslint.options": {
     "overrideConfigFile": "${workspaceFolder}/eslint.config.mjs"
   },
-  "typescript.tsdk": "node_modules/typescript/lib"
+
+  // Use the workspace version of TypeScript instead of VSCode's bundled version
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  
+  // Enable type checking for JavaScript files
+  "js/ts.implicitProjectConfig.checkJs": true,
+  
+  // Ensure the language server respects tsconfig files
+  "typescript.disableAutomaticTypeAcquisition": false
 }

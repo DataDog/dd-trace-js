@@ -5,7 +5,7 @@
 const { builtinModules } = require('node:module')
 
 if (builtinModules.includes('inspector/promises')) {
-  // @ts-ignore - inspector/promises is available in Node.js 20+ but not in @types/node@18
+  // @ts-expect-error - inspector/promises is available in Node.js 20+ but not in @types/node@18
   module.exports = require('node:inspector/promises')
 } else {
   const inspector = require('node:inspector')
