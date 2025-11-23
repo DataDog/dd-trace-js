@@ -46,6 +46,7 @@ let snapshotProbeIndexBuffer, snapshotProbeIndex
 
 if (SUPPORT_ARRAY_BUFFER_RESIZE) {
   // TODO: Is a limit of 256 snapshots ever going to be a problem?
+  // @ts-ignore - ArrayBuffer constructor with maxByteLength is available in Node.js 20+ but not in @types/node@18
   // eslint-disable-next-line n/no-unsupported-features/es-syntax
   snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
   // TODO: Is a limit of 256 probes ever going to be a problem?
