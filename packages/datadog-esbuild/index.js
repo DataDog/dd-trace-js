@@ -138,6 +138,22 @@ ${build.initialOptions.banner.js}`
     externalModules.add('@opentelemetry/api-logs')
   }
 
+  try {
+    require.resolve('@opentelemetry/core')
+  } catch (error) {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/core')
+    externalModules.add('@opentelemetry/core')
+  }
+
+  try {
+    require.resolve('@opentelemetry/resources')
+  } catch (error) {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/resources')
+    externalModules.add('@opentelemetry/resources')
+  }
+
   const esmBuild = isESMBuild(build)
   if (esmBuild) {
     if (!build.initialOptions.banner.js.includes('import { createRequire as $dd_createRequire } from \'module\'')) {

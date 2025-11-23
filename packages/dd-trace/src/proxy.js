@@ -215,8 +215,8 @@ class Tracer extends NoopProxy {
       }
 
       if (config.otelLogsEnabled) {
-        const { checkOpenTelemetryLogsPeerDeps } = require('./opentelemetry/check_peer_deps')
-        if (checkOpenTelemetryLogsPeerDeps()) {
+        const { checkOpenTelemetryLogsApiDeps } = require('./opentelemetry/check_peer_deps')
+        if (checkOpenTelemetryLogsApiDeps()) {
           require('./opentelemetry/logs').initializeOpenTelemetryLogs(config)
         }
       }
@@ -313,8 +313,8 @@ class Tracer extends NoopProxy {
    * @override
    */
   get TracerProvider () {
-    const { checkOpenTelemetryPeerDeps } = require('./opentelemetry/check_peer_deps')
-    if (checkOpenTelemetryPeerDeps()) {
+    const { checkOpenTelemetryAPIDeps } = require('./opentelemetry/check_peer_deps')
+    if (checkOpenTelemetryAPIDeps()) {
       return require('./opentelemetry/tracer_provider')
     }
     return null

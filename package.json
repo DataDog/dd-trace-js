@@ -132,8 +132,6 @@
     "@datadog/sketches-js": "2.1.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@isaacs/ttlcache": "^2.0.1",
-    "@opentelemetry/core": ">=1.14.0 <1.31.0",
-    "@opentelemetry/resources": ">=1.0.0 <1.31.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.10",
     "escape-string-regexp": "^5.0.0",
@@ -161,13 +159,21 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
-    "@opentelemetry/api-logs": "<1.0.0"
+    "@opentelemetry/api-logs": "<1.0.0",
+    "@opentelemetry/core": ">=1.14.0 <1.31.0",
+    "@opentelemetry/resources": ">=1.0.0 <1.31.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
       "optional": true
     },
     "@opentelemetry/api-logs": {
+      "optional": true
+    },
+    "@opentelemetry/core": {
+      "optional": true
+    },
+    "@opentelemetry/resources": {
       "optional": true
     }
   },
@@ -180,6 +186,8 @@
     "@openfeature/server-sdk": "~1.20.0",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
+    "@opentelemetry/core": ">=1.14.0 <1.31.0",
+    "@opentelemetry/resources": ">=1.0.0 <1.31.0",
     "@stylistic/eslint-plugin": "^5.5.0",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.10",
