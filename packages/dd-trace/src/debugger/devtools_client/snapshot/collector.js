@@ -7,7 +7,7 @@ const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
 
 module.exports = {
-  getRuntimeObject: getObject
+  collectObjectProperties
 }
 
 /**
@@ -22,7 +22,7 @@ module.exports = {
  */
 
 /**
- * Get the properties of an object using the Chrome DevTools Protocol.
+ * Collect the properties of an object using the Chrome DevTools Protocol.
  *
  * @param {string} objectId - The ID of the object to get the properties of
  * @param {GetObjectOptions} opts - The options for the snapshot. Also used to track the deadline and communicate the
@@ -33,7 +33,7 @@ module.exports = {
  *   track the current object type and should not be set by the caller.
  * @returns {Promise<Object[]>} The properties of the object
  */
-async function getObject (objectId, opts, depth = 0, collection = false) {
+async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
   const { result, privateProperties } = await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true // exclude inherited properties
@@ -76,7 +76,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
       work.push([
         prop.value,
-        () => getObjectProperties(subtype, objectId, opts, depth).then((properties) => {
+        () => collectPropertiesBySubtype(subtype, objectId, opts, depth).then((properties) => {
           prop.value.properties = properties
         })
       ])
@@ -113,7 +113,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
   return props
 }
 
-function getObjectProperties (subtype, objectId, opts, depth) {
+function collectPropertiesBySubtype (subtype, objectId, opts, depth) {
   if (ITERABLE_SUBTYPES.has(subtype)) {
     return getIterable(objectId, opts, depth)
   } else if (subtype === 'promise') {
@@ -123,7 +123,7 @@ function getObjectProperties (subtype, objectId, opts, depth) {
   } else if (subtype === 'arraybuffer') {
     return getArrayBuffer(objectId, opts, depth)
   }
-  return getObject(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
+  return collectObjectProperties(objectId, opts, depth + 1, subtype === 'array' || subtype === 'typedarray')
 }
 
 // TODO: The following extra information from `internalProperties` might be relevant to include for functions:
