@@ -103,7 +103,7 @@ class NoopProxy {
     if (checkOpenTelemetryAPIDeps()) {
       return require('../opentelemetry/tracer_provider')
     }
-    return null
+    return require('../opentelemetry/noop/tracer_provider')
   }
 }
 

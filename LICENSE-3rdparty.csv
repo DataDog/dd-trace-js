@@ -34,8 +34,8 @@ require,source-map,BSD-3-Clause,Copyright (c) 2009-2011, Mozilla Foundation and 
 require,ttl-set,MIT,Copyright (c) 2024 Thomas Watson
 dev,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
 dev,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
-dev,require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
-dev,require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
+dev,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
+dev,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
 dev,@babel/helpers,MIT,Copyright (c) 2014-present Sebastian McKenzie and other contributors
 dev,@types/chai,MIT,Copyright (c) Microsoft Corp.
 dev,@types/mocha,MIT,Copyright (c) Microsoft Corp.
