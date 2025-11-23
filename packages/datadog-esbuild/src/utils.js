@@ -16,13 +16,12 @@ const loadGetExportsModule = () => {
   return getExportsModulePromise
 }
 
-const getExports = async (srcUrl, context, getSource) => {
-  if (NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)) {
+const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
+  ? async (srcUrl, context, getSource) => {
     const mod = await loadGetExportsModule()
     return mod.getExports(srcUrl, context, getSource)
   }
-  return getExportsImporting(srcUrl, context, getSource)
-}
+  : getExportsImporting
 
 function isStarExportLine (line) {
   return /^\* from /.test(line)
@@ -93,6 +92,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
   } else {
     srcUrl = pathToFileURL(path)
     exportNames = await getExports(srcUrl, context, getSource)
+    process._rawDebug('This is getExports ', exportNames)
   }
 
   const starExports = new Set()
