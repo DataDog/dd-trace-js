@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 
 const { channel } = require('../../../../../datadog-instrumentations/src/helpers/instrument')
@@ -60,11 +61,11 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedRanges = getRanges(iastContext, req.query.param)
           const notSanitizedRanges = getRanges(iastContext, taintedString)
 
-          expect(sanitizedRanges.length).to.be.equal(1)
-          expect(notSanitizedRanges.length).to.be.equal(1)
+          assert.strictEqual(sanitizedRanges.length, 1)
+          assert.strictEqual(notSanitizedRanges.length, 1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
-          expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
+          assert.strictEqual(sanitizedRanges[0].secureMarks, NOSQL_MONGODB_INJECTION_MARK)
+          assert.strictEqual(notSanitizedRanges[0].secureMarks, 0)
         })
 
         it('Secure mark is added in nested objects', () => {
@@ -79,11 +80,11 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedRanges = getRanges(iastContext, req.body.key1.key2)
           const notSanitizedRanges = getRanges(iastContext, taintedString)
 
-          expect(sanitizedRanges.length).to.be.equal(1)
-          expect(notSanitizedRanges.length).to.be.equal(1)
+          assert.strictEqual(sanitizedRanges.length, 1)
+          assert.strictEqual(notSanitizedRanges.length, 1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
-          expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
+          assert.strictEqual(sanitizedRanges[0].secureMarks, NOSQL_MONGODB_INJECTION_MARK)
+          assert.strictEqual(notSanitizedRanges[0].secureMarks, 0)
         })
       })
 
@@ -99,11 +100,11 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedRanges = getRanges(iastContext, sanitizedObject.param)
           const notSanitizedRanges = getRanges(iastContext, taintedString)
 
-          expect(sanitizedRanges.length).to.be.equal(1)
-          expect(notSanitizedRanges.length).to.be.equal(1)
+          assert.strictEqual(sanitizedRanges.length, 1)
+          assert.strictEqual(notSanitizedRanges.length, 1)
 
-          expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
+          assert.strictEqual(notSanitizedRanges[0].secureMarks, 0)
+          assert.strictEqual(sanitizedRanges[0].secureMarks, NOSQL_MONGODB_INJECTION_MARK)
         })
 
         it('Secure mark is added in nested objects', () => {
@@ -117,11 +118,11 @@ describe('nosql injection detection in mongodb', () => {
           const sanitizedRanges = getRanges(iastContext, sanitizedObject.key1.key2)
           const notSanitizedRanges = getRanges(iastContext, taintedString)
 
-          expect(sanitizedRanges.length).to.be.equal(1)
-          expect(notSanitizedRanges.length).to.be.equal(1)
+          assert.strictEqual(sanitizedRanges.length, 1)
+          assert.strictEqual(notSanitizedRanges.length, 1)
 
-          expect(sanitizedRanges[0].secureMarks).to.be.equal(NOSQL_MONGODB_INJECTION_MARK)
-          expect(notSanitizedRanges[0].secureMarks).to.be.equal(0)
+          assert.strictEqual(sanitizedRanges[0].secureMarks, NOSQL_MONGODB_INJECTION_MARK)
+          assert.strictEqual(notSanitizedRanges[0].secureMarks, 0)
         })
       })
     })

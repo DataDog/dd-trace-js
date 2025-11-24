@@ -1,11 +1,9 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, before } = require('mocha')
+const { before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-
 require('../../setup/mocha')
 
 describe('findScriptFromPartialPath', function () {
@@ -145,7 +143,7 @@ describe('findScriptFromPartialPath', function () {
       function testPath (path) {
         return function () {
           const result = state.findScriptFromPartialPath(path)
-          expect(result).to.deep.equal({ url, scriptId, sourceMapURL: undefined, source: undefined })
+          assert.deepStrictEqual(result, { url, scriptId, sourceMapURL: undefined, source: undefined })
         }
       }
     })
@@ -154,19 +152,19 @@ describe('findScriptFromPartialPath', function () {
   describe('multiple partial matches', function () {
     it('should match the longest partial match', function () {
       const result = state.findScriptFromPartialPath('server/index.js')
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         url: 'file:///server/index.js', scriptId: 'should-match', sourceMapURL: undefined, source: undefined
       })
     })
 
     it('should match the shorter of two equal length partial matches', function () {
       const result1 = state.findScriptFromPartialPath('foo/index.js')
-      expect(result1).to.deep.equal({
+      assert.deepStrictEqual(result1, {
         url: 'file:///foo/index.js', scriptId: 'should-match-shortest-a', sourceMapURL: undefined, source: undefined
       })
 
       const result2 = state.findScriptFromPartialPath('bar/index.js')
-      expect(result2).to.deep.equal({
+      assert.deepStrictEqual(result2, {
         url: 'file:///bar/index.js', scriptId: 'should-match-shortest-b', sourceMapURL: undefined, source: undefined
       })
     })
@@ -175,7 +173,7 @@ describe('findScriptFromPartialPath', function () {
   describe('source maps', function () {
     it('should match the source map path', function () {
       const result = state.findScriptFromPartialPath('source-mapped/index.ts')
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         url: 'file:///source-mapped/index.js',
         scriptId: 'should-match-source-mapped',
         sourceMapURL: 'index.js.map',
@@ -185,7 +183,7 @@ describe('findScriptFromPartialPath', function () {
 
     it('should normalize relative source paths', function () {
       const result = state.findScriptFromPartialPath('source-mapped/folder/./file.ts')
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         url: 'file:///source-mapped/index.js',
         scriptId: 'should-match-source-mapped',
         sourceMapURL: 'index.js.map',
@@ -214,26 +212,26 @@ describe('findScriptFromPartialPath', function () {
     it('should be cleared when calling clearState', function () {
       const path = 'server/index.js'
 
-      expect(state._loadedScripts.length).to.be.above(0)
-      expect(state._scriptUrls.size).to.be.above(0)
+      assert.ok(state._loadedScripts.length > 0)
+      assert.ok(state._scriptUrls.size > 0)
 
       const result = state.findScriptFromPartialPath(path)
-      expect(result).to.be.an('object')
+      assert.ok(typeof result === 'object' && result !== null)
 
       state.clearState()
 
-      expect(state._loadedScripts.length).to.equal(0)
-      expect(state._scriptUrls.size).to.equal(0)
+      assert.strictEqual(state._loadedScripts.length, 0)
+      assert.strictEqual(state._scriptUrls.size, 0)
 
       const result2 = state.findScriptFromPartialPath(path)
-      expect(result2).to.be.null
+      assert.strictEqual(result2, null)
     })
   })
 
   function testPathNoMatch (path) {
     return function () {
       const result = state.findScriptFromPartialPath(path)
-      expect(result).to.be.null
+      assert.strictEqual(result, null)
     }
   }
 })

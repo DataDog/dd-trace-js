@@ -1,6 +1,5 @@
 'use strict'
 
-const { expect } = require('chai')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
@@ -24,5 +23,5 @@ const crashtracking = proxyquire('../../src/crashtracking', {
 crashtracking.start()
 crashtracking.configure()
 
-expect(noop.start).to.have.been.called
-expect(noop.configure).to.have.been.called
+sinon.assert.called(noop.start)
+sinon.assert.called(noop.configure)

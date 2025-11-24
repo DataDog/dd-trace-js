@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -26,12 +28,12 @@ describe('log', () => {
 
     it('should have getConfig function', () => {
       const log = require('../src/log')
-      expect(log.getConfig).to.be.a('function')
+      assert.strictEqual(typeof log.getConfig, 'function')
     })
 
     it('should be configured with default config if no environment variables are set', () => {
       const log = require('../src/log')
-      expect(log.getConfig()).to.deep.equal({
+      assert.deepStrictEqual(log.getConfig(), {
         enabled: false,
         logger: undefined,
         logLevel: 'debug'
@@ -44,7 +46,7 @@ describe('log', () => {
       config.enabled = 1
       config.logger = 1
       config.logLevel = 1
-      expect(log.getConfig()).to.deep.equal({
+      assert.deepStrictEqual(log.getConfig(), {
         enabled: false,
         logger: undefined,
         logLevel: 'debug'
@@ -56,68 +58,68 @@ describe('log', () => {
       process.env.DD_TRACE_DEBUG = 'false'
       process.env.OTEL_LOG_LEVEL = 'debug'
       const config = proxyquire('../src/log', {}).getConfig()
-      expect(config).to.have.property('enabled', false)
-      expect(config).to.have.property('logLevel', 'error')
+      assert.strictEqual(config.enabled, false)
+      assert.strictEqual(config.logLevel, 'error')
     })
 
     it('should initialize with OTEL environment variables when DD env vars are not set', () => {
       process.env.OTEL_LOG_LEVEL = 'debug'
       const config = proxyquire('../src/log', {}).getConfig()
-      expect(config).to.have.property('enabled', true)
-      expect(config).to.have.property('logLevel', 'debug')
+      assert.strictEqual(config.enabled, true)
+      assert.strictEqual(config.logLevel, 'debug')
     })
 
     it('should initialize from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'true'
       const config = proxyquire('../src/log', {}).getConfig()
-      expect(config).to.have.property('enabled', true)
+      assert.strictEqual(config.enabled, true)
     })
 
     it('should read case-insensitive booleans from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'TRUE'
       const config = proxyquire('../src/log', {}).getConfig()
-      expect(config).to.have.property('enabled', true)
+      assert.strictEqual(config.enabled, true)
     })
 
     describe('isEnabled', () => {
       it('prefers fleetStableConfigValue over env and local', () => {
         const log = proxyquire('../src/log', {})
-        expect(log.isEnabled('true', 'false')).to.equal(true)
-        expect(log.isEnabled('false', 'true')).to.equal(false)
+        assert.strictEqual(log.isEnabled('true', 'false'), true)
+        assert.strictEqual(log.isEnabled('false', 'true'), false)
       })
 
       it('uses DD_TRACE_DEBUG when fleetStableConfigValue is not set', () => {
         process.env.DD_TRACE_DEBUG = 'true'
         let log = proxyquire('../src/log', {})
-        expect(log.isEnabled(undefined, 'false')).to.equal(true)
+        assert.strictEqual(log.isEnabled(undefined, 'false'), true)
 
         process.env.DD_TRACE_DEBUG = 'false'
         log = proxyquire('../src/log', {})
-        expect(log.isEnabled(undefined, 'true')).to.equal(false)
+        assert.strictEqual(log.isEnabled(undefined, 'true'), false)
       })
 
       it('uses OTEL_LOG_LEVEL=debug when DD vars are not set', () => {
         process.env.OTEL_LOG_LEVEL = 'debug'
         let log = proxyquire('../src/log', {})
-        expect(log.isEnabled(undefined, undefined)).to.equal(true)
+        assert.strictEqual(log.isEnabled(undefined, undefined), true)
 
         process.env.OTEL_LOG_LEVEL = 'info'
         log = proxyquire('../src/log', {})
-        expect(log.isEnabled(undefined, undefined)).to.equal(false)
+        assert.strictEqual(log.isEnabled(undefined, undefined), false)
       })
 
       it('falls back to localStableConfigValue', () => {
         const log = proxyquire('../src/log', {})
-        expect(log.isEnabled(undefined, 'false')).to.equal(false)
-        expect(log.isEnabled(undefined, 'true')).to.equal(true)
+        assert.strictEqual(log.isEnabled(undefined, 'false'), false)
+        assert.strictEqual(log.isEnabled(undefined, 'true'), true)
       })
 
       it('falls back to internal config.enabled when nothing else provided', () => {
         const log = proxyquire('../src/log', {})
         log.toggle(true)
-        expect(log.isEnabled()).to.equal(true)
+        assert.strictEqual(log.isEnabled(), true)
         log.toggle(false)
-        expect(log.isEnabled()).to.equal(false)
+        assert.strictEqual(log.isEnabled(), false)
       })
     })
   })
@@ -153,14 +155,14 @@ describe('log', () => {
     })
 
     it('should support chaining', () => {
-      expect(() => {
+      assert.doesNotThrow(() => {
         log
           .use(logger)
           .toggle(true)
           .error('error')
           .debug('debug')
           .reset()
-      }).to.not.throw()
+      })
     })
 
     it('should call the logger in a noop context', () => {
@@ -175,13 +177,13 @@ describe('log', () => {
       it('should log to console by default', () => {
         log.debug('debug')
 
-        expect(console.debug).to.have.been.calledWith('debug')
+        sinon.assert.calledWith(console.debug, 'debug')
       })
 
       it('should support callbacks that return a message', () => {
         log.debug(() => 'debug')
 
-        expect(console.debug).to.have.been.calledWith('debug')
+        sinon.assert.calledWith(console.debug, 'debug')
       })
     })
 
@@ -189,7 +191,7 @@ describe('log', () => {
       it('should not log to console by default', () => {
         log.trace('trace')
 
-        expect(console.debug).to.not.have.been.called
+        sinon.assert.notCalled(console.debug)
       })
 
       it('should log to console after setting log level to trace', function foo () {
@@ -202,11 +204,11 @@ describe('log', () => {
         log.toggle(true, 'trace')
         log.trace('argument', { hello: 'world' }, new Foo())
 
-        expect(console.debug).to.have.been.calledOnce
-        expect(console.debug.firstCall.args[0]).to.match(
+        sinon.assert.calledOnce(console.debug)
+        assert.match(console.debug.firstCall.args[0],
           /^Trace: Test.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
-        expect(console.debug.firstCall.args[0].split('\n').length).to.be.gte(3)
+        assert.ok(console.debug.firstCall.args[0].split('\n').length >= 3)
       })
     })
 
@@ -214,100 +216,100 @@ describe('log', () => {
       it('should log to console by default', () => {
         log.error(error)
 
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should support callbacks that return a error', () => {
         log.error(() => error)
 
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should convert strings to errors', () => {
         log.error('error')
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'error')
       })
 
       // NOTE: There is no usage for this case. should we continue supporting it?
       it('should convert empty values to errors', () => {
         log.error()
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'undefined')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'undefined')
       })
 
       it('should convert invalid types to errors', () => {
         log.error(123)
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', '123')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, '123')
       })
 
       it('should reuse error messages for non-errors', () => {
         log.error({ message: 'test' })
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'test')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'test')
       })
 
       it('should convert messages from callbacks to errors', () => {
         log.error(() => 'error')
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'error')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'error')
       })
 
       it('should allow a message + Error', () => {
         log.error('this is an error', new Error('cause'))
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error')
-        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
+        assert.ok(console.error.secondCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
       })
 
       it('should allow a templated message', () => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42)
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error of type: ERR code: 42')
       })
 
       it('should allow a templated message + Error', () => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42, new Error('cause'))
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error of type: ERR code: 42')
-        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.secondCall.args[0]).to.have.property('message', 'cause')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error of type: ERR code: 42')
+        assert.ok(console.error.secondCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
       })
 
       it('should allow a message + Error + LogConfig', () => {
         log.error('this is an error with a log config', log.NO_TRANSMIT)
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error with a log config')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error with a log config')
       })
 
       it('should allow a message + NoTransmitError', () => {
         log.error('this is an error without a log config', new log.NoTransmitError('bad underlying thing'))
 
-        expect(console.error).to.have.been.called
-        expect(console.error.firstCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.firstCall.args[0]).to.have.property('message', 'this is an error without a log config')
-        expect(console.error.secondCall.args[0]).to.be.instanceof(Error)
-        expect(console.error.secondCall.args[0]).to.have.property('message', 'bad underlying thing')
+        sinon.assert.called(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error without a log config')
+        assert.ok(console.error.secondCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.secondCall.args[0].message, 'bad underlying thing')
       })
     })
 
@@ -317,8 +319,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.not.have.been.called
-        expect(console.error).to.not.have.been.called
+        sinon.assert.notCalled(console.debug)
+        sinon.assert.notCalled(console.error)
       })
 
       it('should enable the logger', () => {
@@ -327,8 +329,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should set minimum log level when enabled with logLevel argument set to a valid string', () => {
@@ -336,8 +338,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.not.have.been.called
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.notCalled(console.debug)
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should set default log level when enabled with logLevel argument set to an invalid string', () => {
@@ -345,8 +347,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should set min log level when enabled w/logLevel arg set to valid string w/wrong case or whitespace', () => {
@@ -354,8 +356,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.not.have.been.called
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.notCalled(console.debug)
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should log all log levels greater than or equal to minimum log level', () => {
@@ -363,8 +365,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should enable default log level when enabled with logLevel argument set to invalid input', () => {
@@ -372,8 +374,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should enable default log level when enabled without logLevel argument', () => {
@@ -381,8 +383,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
     })
 
@@ -392,8 +394,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(logger.debug).to.have.been.calledWith('debug')
-        expect(logger.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(logger.debug, 'debug')
+        sinon.assert.calledWith(logger.error, error)
       })
 
       it('be a no op with an empty logger', () => {
@@ -401,8 +403,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('be a no op with an invalid logger', () => {
@@ -410,8 +412,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
     })
 
@@ -423,8 +425,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
 
       it('should reset the toggle', () => {
@@ -433,8 +435,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.not.have.been.called
-        expect(console.error).to.not.have.been.called
+        sinon.assert.notCalled(console.debug)
+        sinon.assert.notCalled(console.error)
       })
 
       it('should reset the minimum log level to defaults', () => {
@@ -445,8 +447,8 @@ describe('log', () => {
         log.debug('debug')
         log.error(error)
 
-        expect(console.debug).to.have.been.calledWith('debug')
-        expect(console.error).to.have.been.calledWith(error)
+        sinon.assert.calledWith(console.debug, 'debug')
+        sinon.assert.calledWith(console.error, error)
       })
     })
 
@@ -454,7 +456,7 @@ describe('log', () => {
       it('should log a deprecation warning', () => {
         log.deprecate('test', 'message')
 
-        expect(console.error).to.have.been.calledOnce
+        sinon.assert.calledOnce(console.error)
         const consoleErrorArg = console.error.getCall(0).args[0]
         expect(typeof consoleErrorArg).to.be.eq('object')
         expect(consoleErrorArg.message).to.be.eq('message')
@@ -464,7 +466,7 @@ describe('log', () => {
         log.deprecate('test', 'message')
         log.deprecate('test', 'message')
 
-        expect(console.error).to.have.been.calledOnce
+        sinon.assert.calledOnce(console.error)
       })
     })
 
@@ -483,14 +485,14 @@ describe('log', () => {
         it('should call logger error', () => {
           logWriter.error(error)
 
-          expect(console.error).to.have.been.calledOnceWith(error)
+          sinon.assert.calledOnceWithExactly(console.error, error)
         })
 
         it('should call console.error no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.error(error)
 
-          expect(console.error).to.have.been.calledOnceWith(error)
+          sinon.assert.calledOnceWithExactly(console.error, error)
         })
       })
 
@@ -498,21 +500,21 @@ describe('log', () => {
         it('should call logger warn', () => {
           logWriter.warn('warn')
 
-          expect(console.warn).to.have.been.calledOnceWith('warn')
+          sinon.assert.calledOnceWithExactly(console.warn, 'warn')
         })
 
         it('should call logger debug if warn is not provided', () => {
           logWriter.use(logger)
           logWriter.warn('warn')
 
-          expect(logger.debug).to.have.been.calledOnceWith('warn')
+          sinon.assert.calledOnceWithExactly(logger.debug, 'warn')
         })
 
         it('should call console.warn no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.warn('warn')
 
-          expect(console.warn).to.have.been.calledOnceWith('warn')
+          sinon.assert.calledOnceWithExactly(console.warn, 'warn')
         })
       })
 
@@ -520,21 +522,21 @@ describe('log', () => {
         it('should call logger info', () => {
           logWriter.info('info')
 
-          expect(console.info).to.have.been.calledOnceWith('info')
+          sinon.assert.calledOnceWithExactly(console.info, 'info')
         })
 
         it('should call logger debug if info is not provided', () => {
           logWriter.use(logger)
           logWriter.info('info')
 
-          expect(logger.debug).to.have.been.calledOnceWith('info')
+          sinon.assert.calledOnceWithExactly(logger.debug, 'info')
         })
 
         it('should call console.info no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.info('info')
 
-          expect(console.info).to.have.been.calledOnceWith('info')
+          sinon.assert.calledOnceWithExactly(console.info, 'info')
         })
       })
 
@@ -542,14 +544,14 @@ describe('log', () => {
         it('should call logger debug', () => {
           logWriter.debug('debug')
 
-          expect(console.debug).to.have.been.calledOnceWith('debug')
+          sinon.assert.calledOnceWithExactly(console.debug, 'debug')
         })
 
         it('should call console.debug no matter enable flag value', () => {
           logWriter.toggle(false)
           logWriter.debug('debug')
 
-          expect(console.debug).to.have.been.calledOnceWith('debug')
+          sinon.assert.calledOnceWithExactly(console.debug, 'debug')
         })
       })
     })
