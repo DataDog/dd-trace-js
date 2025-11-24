@@ -913,7 +913,7 @@ describe('integrations', () => {
           version: '2',
           variables: {
             user_message: 'Analyze these images and document',
-            user_image_1: '[image]',
+            user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
             user_file: 'file-LXG16g7US1sG6MQM7KQY1i',
             user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
           },
@@ -923,8 +923,8 @@ describe('integrations', () => {
               content: 'Analyze the following content from the user:\n\n' +
                 'Text message: {{user_message}}\n' +
                 'Image reference 1: [image]\n' +
-                'Document reference: {{user_file}}\n' +
-                'Image reference 2: {{user_image_2}}\n\n' +
+                'Document reference: [file]\n' +
+                'Image reference 2: [image]\n\n' +
                 'Please provide a comprehensive analysis.'
             }
           ]
