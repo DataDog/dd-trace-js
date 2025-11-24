@@ -106,7 +106,6 @@ function Hook (modules, options, onrequire) {
       return _origRequire.apply(this, arguments)
     }
 
-    const core = !filename.includes(path.sep)
     const builtin = isBuiltinModuleName(filename)
     const moduleId = builtin ? normalizeModuleName(filename) : filename
     let name, basedir, hooks
