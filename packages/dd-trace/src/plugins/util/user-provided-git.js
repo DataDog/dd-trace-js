@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariables } = require('../../config/helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -47,22 +47,20 @@ function validateGitCommitSha (gitCommitSha) {
 }
 
 function getUserProviderGitMetadata () {
-  const {
-    DD_GIT_COMMIT_SHA,
-    DD_GIT_BRANCH,
-    DD_GIT_REPOSITORY_URL,
-    DD_GIT_TAG,
-    DD_GIT_COMMIT_MESSAGE,
-    DD_GIT_COMMIT_COMMITTER_NAME,
-    DD_GIT_COMMIT_COMMITTER_EMAIL,
-    DD_GIT_COMMIT_COMMITTER_DATE,
-    DD_GIT_COMMIT_AUTHOR_NAME,
-    DD_GIT_COMMIT_AUTHOR_EMAIL,
-    DD_GIT_COMMIT_AUTHOR_DATE,
-    DD_GIT_PULL_REQUEST_BASE_BRANCH,
-    DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-    DD_GIT_COMMIT_HEAD_SHA
-  } = getEnvironmentVariables()
+  const DD_GIT_COMMIT_SHA = getValueFromEnvSources('DD_GIT_COMMIT_SHA')
+  const DD_GIT_BRANCH = getValueFromEnvSources('DD_GIT_BRANCH')
+  const DD_GIT_REPOSITORY_URL = getValueFromEnvSources('DD_GIT_REPOSITORY_URL')
+  const DD_GIT_TAG = getValueFromEnvSources('DD_GIT_TAG')
+  const DD_GIT_COMMIT_MESSAGE = getValueFromEnvSources('DD_GIT_COMMIT_MESSAGE')
+  const DD_GIT_COMMIT_COMMITTER_NAME = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_NAME')
+  const DD_GIT_COMMIT_COMMITTER_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_EMAIL')
+  const DD_GIT_COMMIT_COMMITTER_DATE = getValueFromEnvSources('DD_GIT_COMMIT_COMMITTER_DATE')
+  const DD_GIT_COMMIT_AUTHOR_NAME = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_NAME')
+  const DD_GIT_COMMIT_AUTHOR_EMAIL = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_EMAIL')
+  const DD_GIT_COMMIT_AUTHOR_DATE = getValueFromEnvSources('DD_GIT_COMMIT_AUTHOR_DATE')
+  const DD_GIT_PULL_REQUEST_BASE_BRANCH = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH')
+  const DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA = getValueFromEnvSources('DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA')
+  const DD_GIT_COMMIT_HEAD_SHA = getValueFromEnvSources('DD_GIT_COMMIT_HEAD_SHA')
 
   const branch = normalizeRef(DD_GIT_BRANCH)
   let tag = normalizeRef(DD_GIT_TAG)

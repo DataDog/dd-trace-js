@@ -82,6 +82,15 @@ describe('profiler', function () {
     sourceMapCreate = sinon.stub()
   }
 
+  function makeStartOptions (overrides = {}) {
+    return {
+      profilers,
+      exporters,
+      url: 'http://127.0.0.1:8126',
+      ...overrides
+    }
+  }
+
   describe('not serverless', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
@@ -106,22 +115,22 @@ describe('profiler', function () {
     })
 
     it('should start the internal time profilers', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
     it('should start only once', async () => {
-      await profiler._start({ profilers, exporters })
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
+      await profiler._start(makeStartOptions())
 
       sinon.assert.calledOnce(wallProfiler.start)
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
     it('should stop the internal profilers', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
       profiler.stop()
 
       sinon.assert.calledOnce(wallProfiler.stop)
@@ -131,7 +140,7 @@ describe('profiler', function () {
     it('should stop when starting failed', async () => {
       wallProfiler.start.throws()
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
@@ -141,7 +150,7 @@ describe('profiler', function () {
     it('should stop when capturing failed', async () => {
       wallProfiler.profile.throws(new Error('boom'))
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -157,7 +166,7 @@ describe('profiler', function () {
       const rejected = Promise.reject(new Error('boom'))
       wallProfiler.encode.returns(rejected)
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -174,7 +183,7 @@ describe('profiler', function () {
       const rejected = Promise.reject(new Error('boom'))
       exporter.export.returns(rejected)
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -187,7 +196,7 @@ describe('profiler', function () {
     })
 
     it('should flush when the interval is reached', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       clock.tick(interval)
 
@@ -197,7 +206,7 @@ describe('profiler', function () {
     })
 
     it('should flush when the profiler is stopped', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       profiler.stop()
 
@@ -225,7 +234,7 @@ describe('profiler', function () {
       process.env = {
         DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: compression
       }
-      await profiler._start({ profilers, exporters, tags: { foo: 'foo' } })
+      await profiler._start(makeStartOptions({ tags: { foo: 'foo' } }))
       process.env = env
 
       clock.tick(interval)
@@ -267,7 +276,7 @@ describe('profiler', function () {
     it('should log exporter errors', async () => {
       exporter.export.rejects(new Error('boom'))
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -279,7 +288,7 @@ describe('profiler', function () {
     it('should log encoded profile', async () => {
       exporter.export.rejects(new Error('boom'))
 
-      await profiler._start({ profilers, exporters, logger })
+      await profiler._start(makeStartOptions({ logger }))
 
       clock.tick(interval)
 
@@ -304,7 +313,7 @@ describe('profiler', function () {
     })
 
     it('should have a new start time for each capture', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       clock.tick(interval)
       await waitForExport()
@@ -331,7 +340,7 @@ describe('profiler', function () {
     })
 
     it('should not pass source mapper to profilers when disabled', async () => {
-      await profiler._start({ profilers, exporters, sourceMap: false })
+      await profiler._start(makeStartOptions({ sourceMap: false }))
 
       const options = profilers[0].start.args[0][0]
       assert.strictEqual(options.mapper, undefined)
@@ -340,7 +349,7 @@ describe('profiler', function () {
     it('should pass source mapper to profilers when enabled', async () => {
       const mapper = {}
       sourceMapCreate.returns(mapper)
-      await profiler._start({ profilers, exporters, sourceMap: true })
+      await profiler._start(makeStartOptions({ sourceMap: true }))
 
       const options = profilers[0].start.args[0][0]
       assert.ok(Object.hasOwn(options, 'mapper'))
@@ -350,7 +359,7 @@ describe('profiler', function () {
     it('should work with a root working dir and source maps on', async () => {
       const error = new Error('fail')
       sourceMapCreate.rejects(error)
-      await profiler._start({ profilers, exporters, logger, sourceMap: true })
+      await profiler._start(makeStartOptions({ logger, sourceMap: true }))
       assert.strictEqual(consoleLogger.error.args[0][0], error)
       assert.strictEqual(profiler.enabled, true)
     })
@@ -407,7 +416,7 @@ describe('profiler', function () {
     })
 
     it('should increment profiled intervals after one interval elapses', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
       assert.strictEqual(profiler.profiledIntervals, 0)
 
       clock.tick(interval)
@@ -417,7 +426,7 @@ describe('profiler', function () {
     })
 
     it('should flush when flush after intervals is reached', async () => {
-      await profiler._start({ profilers, exporters })
+      await profiler._start(makeStartOptions())
 
       // flushAfterIntervals + 1 becauses flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {

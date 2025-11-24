@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
+const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -120,12 +120,12 @@ module.exports = {
         GIT_COMMIT: JENKINS_GIT_COMMIT,
         GIT_URL: JENKINS_GIT_REPOSITORY_URL,
         GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1,
-        DD_CUSTOM_TRACE_ID,
         NODE_NAME,
         NODE_LABELS,
         CHANGE_ID,
         CHANGE_TARGET
       } = env
+      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -135,7 +135,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }), // TODO: Get resolved for this
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET

@@ -7,8 +7,8 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const origRequire = Module.prototype.require
 // derived from require-in-the-middle@3 with tweaks
@@ -113,7 +113,7 @@ function Hook (modules, options, onrequire) {
       name = filename
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
+      const hasLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat

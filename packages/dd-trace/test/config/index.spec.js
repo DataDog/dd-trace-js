@@ -12,7 +12,7 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../../src/constants')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
+const { getEnvironmentVariable, getEnvironmentVariables, _resetStableConfigForTesting } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 
@@ -3081,6 +3081,7 @@ describe('Config', () => {
     let tempDir
     let localConfigPath
     let fleetConfigPath
+
     beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
@@ -3088,6 +3089,7 @@ describe('Config', () => {
       fleetConfigPath = path.join(tempDir, 'fleet.yaml')
       process.env.DD_TEST_LOCAL_CONFIG_PATH = localConfigPath
       process.env.DD_TEST_FLEET_CONFIG_PATH = fleetConfigPath
+      _resetStableConfigForTesting()
     })
 
     afterEach(() => {
@@ -3141,11 +3143,15 @@ rules:
     configuration:
       DD_SERVICE: service_local_stable
 `)
+      _resetStableConfigForTesting()
+
       const config2 = getConfig()
       assert.strictEqual(config2?.service, 'service_local_stable')
 
       // 3. Env > Local stable > Default
       process.env.DD_SERVICE = 'service_env'
+      _resetStableConfigForTesting()
+
       const config3 = getConfig()
       assert.strictEqual(config3?.service, 'service_env')
 
@@ -3162,6 +3168,7 @@ rules:
     configuration:
       DD_SERVICE: service_fleet_stable
 `)
+      _resetStableConfigForTesting()
       const config4 = getConfig()
       assert.strictEqual(config4?.service, 'service_fleet_stable')
 
@@ -3299,6 +3306,7 @@ apm_configuration_default:
   DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
   DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '5'
 `)
+      _resetStableConfigForTesting()
       let config = getConfig()
       assertObjectContains(config, {
         apiKey: 'local-api-key',
@@ -3319,6 +3327,7 @@ apm_configuration_default:
       process.env.DD_APP_KEY = 'env-app-key'
       process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
       process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+      _resetStableConfigForTesting()
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'env-api-key',
@@ -3351,6 +3360,7 @@ rules:
       DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
       DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '15'
 `)
+      _resetStableConfigForTesting()
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'fleet-api-key',
@@ -3559,6 +3569,89 @@ rules:
       getConfig()
 
       assert.strictEqual(log.warn.called, false)
+    })
+  })
+
+  context('resourceRenamingEnabled', () => {
+    let originalResourceRenamingEnabled
+    let originalAppsecEnabled
+
+    beforeEach(() => {
+      originalResourceRenamingEnabled = process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      originalAppsecEnabled = process.env.DD_APPSEC_ENABLED
+      delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      delete process.env.DD_APPSEC_ENABLED
+    })
+
+    afterEach(() => {
+      if (originalResourceRenamingEnabled !== undefined) {
+        process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = originalResourceRenamingEnabled
+      } else {
+        delete process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED
+      }
+      if (originalAppsecEnabled !== undefined) {
+        process.env.DD_APPSEC_ENABLED = originalAppsecEnabled
+      } else {
+        delete process.env.DD_APPSEC_ENABLED
+      }
+    })
+
+    it('should be false by default', () => {
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is true', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'true'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be disabled when DD_TRACE_RESOURCE_RENAMING_ENABLED is false', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should be enabled when appsec is enabled via env var', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should be enabled when appsec is enabled via options', () => {
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec setting', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should prioritize DD_TRACE_RESOURCE_RENAMING_ENABLED over appsec option', () => {
+      process.env.DD_TRACE_RESOURCE_RENAMING_ENABLED = 'false'
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should enable when appsec is enabled via both env and options', () => {
+      process.env.DD_APPSEC_ENABLED = 'true'
+      const config = getConfig({ appsec: { enabled: true } })
+      expect(config).to.have.property('resourceRenamingEnabled', true)
+    })
+
+    it('should remain false when appsec is disabled', () => {
+      process.env.DD_APPSEC_ENABLED = 'false'
+      const config = getConfig()
+      expect(config).to.have.property('resourceRenamingEnabled', false)
+    })
+
+    it('should remain false when appsec is disabled via options', () => {
+      const config = getConfig({ appsec: { enabled: false } })
+      expect(config).to.have.property('resourceRenamingEnabled', false)
     })
   })
 
