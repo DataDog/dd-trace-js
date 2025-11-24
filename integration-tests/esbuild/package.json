@@ -20,7 +20,7 @@
   "author": "Thomas Hunter II <tlhunter@datadog.com>",
   "license": "ISC",
   "dependencies": {
-    "@apollo/server": "5.1.0",
+    "@apollo/server": "5.2.0",
     "@koa/router": "14.0.0",
     "aws-sdk": "2.1692.0",
     "axios": "1.13.2",
