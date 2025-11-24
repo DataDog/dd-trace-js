@@ -1,6 +1,6 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getResolvedEnv } = require('../../dd-trace/src/config-env-sources')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const spanContexts = new WeakMap()
 
@@ -86,7 +86,7 @@ function injectTraceContext (tracer, span, msg) {
 }
 
 function batchLinksAreEnabled () {
-  const sb = getEnvironmentVariable('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
+  const sb = getResolvedEnv('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
   return sb !== 'false'
 }
 
