@@ -321,8 +321,8 @@ describe('ConfigEnvSources', () => {
   })
 })
 
-describe('getEnvironmentVariableSources', () => {
-  let getEnvironmentVariableSources
+describe('getResolvedEnv', () => {
+  let getResolvedEnv
   let resetConfigEnvSources
   let getEnvironmentVariablesStub
   let isInServerlessEnvironmentStub
@@ -343,7 +343,7 @@ describe('getEnvironmentVariableSources', () => {
     })
 
     resetConfigEnvSources = configEnvSourcesMod.resetConfigEnvSources
-    getEnvironmentVariableSources = configEnvSourcesMod.getEnvironmentVariableSources
+    getResolvedEnv = configEnvSourcesMod.getResolvedEnv
 
     // Reset singleton
     resetConfigEnvSources()
@@ -360,7 +360,7 @@ describe('getEnvironmentVariableSources', () => {
       DD_ENV: 'production'
     })
 
-    const value = getEnvironmentVariableSources('DD_SERVICE')
+    const value = getResolvedEnv('DD_SERVICE')
 
     expect(value).to.equal('my-service')
   })
@@ -371,7 +371,7 @@ describe('getEnvironmentVariableSources', () => {
     })
 
     // DD_AGENT_HOST is the canonical name, DD_TRACE_AGENT_HOSTNAME is an alias
-    const value = getEnvironmentVariableSources('DD_AGENT_HOST')
+    const value = getResolvedEnv('DD_AGENT_HOST')
 
     expect(value).to.equal('alias-hostname')
   })
@@ -381,7 +381,7 @@ describe('getEnvironmentVariableSources', () => {
       DD_SERVICE: 'my-service'
     })
 
-    const value = getEnvironmentVariableSources('DD_ENV')
+    const value = getResolvedEnv('DD_ENV')
 
     expect(value).to.be.undefined
   })
@@ -392,7 +392,7 @@ describe('getEnvironmentVariableSources', () => {
       DD_TRACE_AGENT_HOSTNAME: 'alias-hostname'
     })
 
-    const value = getEnvironmentVariableSources('DD_AGENT_HOST')
+    const value = getResolvedEnv('DD_AGENT_HOST')
 
     expect(value).to.equal('canonical-hostname')
   })
@@ -401,7 +401,7 @@ describe('getEnvironmentVariableSources', () => {
     getEnvironmentVariablesStub.returns({})
 
     expect(() => {
-      getEnvironmentVariableSources('DD_UNSUPPORTED_CONFIG')
+      getResolvedEnv('DD_UNSUPPORTED_CONFIG')
     }).to.throw('Missing DD_UNSUPPORTED_CONFIG env/configuration in "supported-configurations.json" file.')
   })
 
@@ -409,7 +409,7 @@ describe('getEnvironmentVariableSources', () => {
     getEnvironmentVariablesStub.returns({})
 
     expect(() => {
-      getEnvironmentVariableSources('OTEL_UNSUPPORTED_CONFIG')
+      getResolvedEnv('OTEL_UNSUPPORTED_CONFIG')
     }).to.throw('Missing OTEL_UNSUPPORTED_CONFIG env/configuration in "supported-configurations.json" file.')
   })
 
@@ -419,7 +419,7 @@ describe('getEnvironmentVariableSources', () => {
       PATH: '/usr/bin'
     })
 
-    const value = getEnvironmentVariableSources('NODE_ENV')
+    const value = getResolvedEnv('NODE_ENV')
 
     expect(value).to.equal('production')
   })
@@ -429,8 +429,8 @@ describe('getEnvironmentVariableSources', () => {
       DD_SERVICE: 'my-service'
     })
 
-    getEnvironmentVariableSources('DD_SERVICE')
-    getEnvironmentVariableSources('DD_ENV')
+    getResolvedEnv('DD_SERVICE')
+    getResolvedEnv('DD_ENV')
 
     // getEnvironmentVariables should only be called once (when singleton is created)
     expect(getEnvironmentVariablesStub.callCount).to.equal(1)
@@ -464,11 +464,11 @@ describe('getEnvironmentVariableSources', () => {
       './config_stable': StableConfigStub
     })
 
-    const getEnvVarSources = configEnvSourcesMod.getEnvironmentVariableSources
+    const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
 
     // Fleet should win for DD_SERVICE
-    expect(getEnvVarSources('DD_SERVICE')).to.equal('fleet-service')
+    expect(getResolvedEnvFn('DD_SERVICE')).to.equal('fleet-service')
     // Env var should be used for DD_ENV
-    expect(getEnvVarSources('DD_ENV')).to.equal('production')
+    expect(getResolvedEnvFn('DD_ENV')).to.equal('production')
   })
 })
