@@ -1,22 +1,22 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, beforeEach, afterEach } = require('mocha')
-const semver = require('semver')
-
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const axios = require('axios')
+const { afterEach, beforeEach, describe } = require('mocha')
+const semver = require('semver')
+
 const { NODE_MAJOR } = require('../../../../../../version')
-const { prepareTestServerForIastInExpress } = require('../utils')
-const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
-const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
-const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
+const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { SQL_ROW_VALUE } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { withVersions } = require('../../../setup/mocha')
+const { prepareTestServerForIastInExpress } = require('../utils')
 
 describe('Code injection vulnerability', () => {
   withVersions('express', 'express', version => {
@@ -52,7 +52,7 @@ describe('Code injection vulnerability', () => {
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                 .then(res => {
-                  expect(res.data).to.equal('test-result')
+                  assert.strictEqual(res.data, 'test-result')
                 })
                 .catch(done)
             }
@@ -113,7 +113,7 @@ describe('Code injection vulnerability', () => {
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                 .then(res => {
-                  expect(res.data).to.equal(3)
+                  assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
             }
@@ -152,7 +152,7 @@ describe('Code injection vulnerability', () => {
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                 .then(res => {
-                  expect(res.data).to.equal(3)
+                  assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
             }
@@ -191,7 +191,7 @@ describe('Code injection vulnerability', () => {
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                 .then(res => {
-                  expect(res.data).to.equal(3)
+                  assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
             }
@@ -231,7 +231,7 @@ describe('Code injection vulnerability', () => {
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=return%201%2B2`)
                 .then(res => {
-                  expect(res.data).to.equal(3)
+                  assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
             }
@@ -272,7 +272,7 @@ describe('Code injection vulnerability', () => {
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                   .then(res => {
-                    expect(res.data).to.equal(3)
+                    assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
               }
@@ -314,7 +314,7 @@ describe('Code injection vulnerability', () => {
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                   .then(res => {
-                    expect(res.data).to.equal(3)
+                    assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
               }
@@ -356,7 +356,7 @@ describe('Code injection vulnerability', () => {
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?script=1%2B2`)
                   .then(res => {
-                    expect(res.data).to.equal(3)
+                    assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
               }

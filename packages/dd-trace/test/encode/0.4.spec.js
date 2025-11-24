@@ -1,6 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
@@ -60,16 +62,16 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
-      expect(trace).to.be.instanceof(Array)
-      expect(trace[0]).to.be.instanceof(Object)
-      expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
-      expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
-      expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-      expect(trace[0].start).to.equal(123n)
-      expect(trace[0].duration).to.equal(456n)
-      expect(trace[0].name).to.equal(data[0].name)
-      expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
-      expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      assert.ok(Array.isArray(trace))
+      assert.ok(trace[0] instanceof Object)
+      assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
+      assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
+      assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
+      assert.deepStrictEqual(trace[0].meta, { bar: 'baz' })
+      assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
     it('should truncate long IDs', () => {
@@ -83,21 +85,21 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
-      expect(trace[0].trace_id.toString(16)).to.equal('1234abcd1234abcd')
-      expect(trace[0].span_id.toString(16)).to.equal('1234abcd1234abcd')
-      expect(trace[0].parent_id.toString(16)).to.equal('1234abcd1234abcd')
+      assert.strictEqual(trace[0].trace_id.toString(16), '1234abcd1234abcd')
+      assert.strictEqual(trace[0].span_id.toString(16), '1234abcd1234abcd')
+      assert.strictEqual(trace[0].parent_id.toString(16), '1234abcd1234abcd')
     })
 
     it('should report its count', () => {
-      expect(encoder.count()).to.equal(0)
+      assert.strictEqual(encoder.count(), 0)
 
       encoder.encode(data)
 
-      expect(encoder.count()).to.equal(1)
+      assert.strictEqual(encoder.count(), 1)
 
       encoder.encode(data)
 
-      expect(encoder.count()).to.equal(2)
+      assert.strictEqual(encoder.count(), 2)
     })
 
     it('should flush when the payload size limit is reached', function () {
@@ -108,7 +110,7 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      expect(writer.flush).to.have.been.called
+      sinon.assert.called(writer.flush)
     })
 
     it('should reset after making a payload', () => {
@@ -117,13 +119,13 @@ describe('encode', () => {
 
       const payload = encoder.makePayload()
 
-      expect(encoder.count()).to.equal(0)
-      expect(payload).to.have.length(5)
-      expect(payload[0]).to.equal(0xdd)
-      expect(payload[1]).to.equal(0)
-      expect(payload[2]).to.equal(0)
-      expect(payload[3]).to.equal(0)
-      expect(payload[4]).to.equal(0)
+      assert.strictEqual(encoder.count(), 0)
+      assert.strictEqual(payload.length, 5)
+      assert.strictEqual(payload[0], 0xdd)
+      assert.strictEqual(payload[1], 0)
+      assert.strictEqual(payload[2], 0)
+      assert.strictEqual(payload[3], 0)
+      assert.strictEqual(payload[4], 0)
     })
 
     it('should log adding an encoded trace to the buffer if enabled', () => {
@@ -132,13 +134,13 @@ describe('encode', () => {
 
       const message = logger.debug.firstCall.args[0]()
 
-      expect(message).to.match(/^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
+      assert.match(message, /^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
     })
 
     it('should not log adding an encoded trace to the buffer by default', () => {
       encoder.encode(data)
 
-      expect(logger.debug).to.not.have.been.called
+      sinon.assert.notCalled(logger.debug)
     })
 
     it('should work when the buffer is resized', function () {
@@ -167,25 +169,25 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const [decodedPayload] = msgpack.decode(buffer, { useBigInt64: true })
       decodedPayload.forEach(decodedData => {
-        expect(decodedData).to.include({
+        assertObjectContains(decodedData, {
           name: 'bigger name than expected',
           resource: 'test-r',
           service: 'test-s',
           type: 'foo',
           error: 0
         })
-        expect(decodedData.start).to.equal(123n)
-        expect(decodedData.duration).to.equal(456n)
-        expect(decodedData.meta).to.eql({
+        assert.strictEqual(decodedData.start, 123n)
+        assert.strictEqual(decodedData.duration, 456n)
+        assert.deepStrictEqual(decodedData.meta, {
           bar: 'baz'
         })
-        expect(decodedData.metrics).to.eql({
+        assert.deepStrictEqual(decodedData.metrics, {
           example: 1,
           moreExample: 2
         })
-        expect(decodedData.trace_id.toString(16)).to.equal('1234abcd1234abcd')
-        expect(decodedData.span_id.toString(16)).to.equal('1234abcd1234abcd')
-        expect(decodedData.parent_id.toString(16)).to.equal('1234abcd1234abcd')
+        assert.strictEqual(decodedData.trace_id.toString(16), '1234abcd1234abcd')
+        assert.strictEqual(decodedData.span_id.toString(16), '1234abcd1234abcd')
+        assert.strictEqual(decodedData.parent_id.toString(16), '1234abcd1234abcd')
       })
     })
 
@@ -210,7 +212,7 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      expect(trace[0].meta.events).to.deep.equal(encodedLink)
+      assert.deepStrictEqual(trace[0].meta.events, encodedLink)
     })
 
     it('should encode spanLinks', () => {
@@ -230,16 +232,16 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      expect(trace).to.be.instanceof(Array)
-      expect(trace[0]).to.be.instanceof(Object)
-      expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
-      expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
-      expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-      expect(trace[0].start).to.equal(123n)
-      expect(trace[0].duration).to.equal(456n)
-      expect(trace[0].name).to.equal(data[0].name)
-      expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
-      expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      assert.ok(Array.isArray(trace))
+      assert.ok(trace[0] instanceof Object)
+      assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
+      assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
+      assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
+      assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
+      assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
     it('should encode spanLinks with just span and trace id', () => {
@@ -252,16 +254,16 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      expect(trace).to.be.instanceof(Array)
-      expect(trace[0]).to.be.instanceof(Object)
-      expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
-      expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
-      expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-      expect(trace[0].start).to.equal(123n)
-      expect(trace[0].duration).to.equal(456n)
-      expect(trace[0].name).to.equal(data[0].name)
-      expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
-      expect(trace[0].metrics).to.deep.equal({ example: 1 })
+      assert.ok(Array.isArray(trace))
+      assert.ok(trace[0] instanceof Object)
+      assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
+      assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
+      assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
+      assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
+      assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
     describe('meta_struct', () => {
@@ -278,8 +280,8 @@ describe('encode', () => {
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
 
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.be.equal(metaStruct.foo)
-        expect(msgpack.decode(trace[0].meta_struct.baz)).to.be.equal(metaStruct.baz)
+        assert.strictEqual(msgpack.decode(trace[0].meta_struct.foo), metaStruct.foo)
+        assert.strictEqual(msgpack.decode(trace[0].meta_struct.baz), metaStruct.baz)
       })
 
       it('should ignore array in meta_struct', () => {
@@ -291,7 +293,7 @@ describe('encode', () => {
 
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
-        expect(trace[0].meta_struct).to.deep.equal({})
+        assert.deepStrictEqual(trace[0].meta_struct, {})
       })
 
       it('should encode meta_struct with empty object and array', () => {
@@ -306,8 +308,8 @@ describe('encode', () => {
 
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(metaStruct.foo)
-        expect(msgpack.decode(trace[0].meta_struct.bar)).to.deep.equal(metaStruct.bar)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), metaStruct.foo)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.bar), metaStruct.bar)
       })
 
       it('should encode meta_struct with possible real use case', () => {
@@ -361,7 +363,7 @@ describe('encode', () => {
 
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
-        expect(msgpack.decode(trace[0].meta_struct['_dd.stack'])).to.deep.equal(metaStruct['_dd.stack'])
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct['_dd.stack']), metaStruct['_dd.stack'])
       })
 
       it('should encode meta_struct ignoring circular references in objects', () => {
@@ -392,7 +394,7 @@ describe('encode', () => {
             }
           }
         }
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
       })
 
       it('should encode meta_struct ignoring circular references in arrays', () => {
@@ -417,7 +419,7 @@ describe('encode', () => {
             bar: 'baz'
           }]
         }
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
       })
 
       it('should encode meta_struct ignoring undefined properties', () => {
@@ -437,8 +439,8 @@ describe('encode', () => {
         const expectedMetaStruct = {
           foo: 'bar'
         }
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
-        expect(trace[0].meta_struct.undefinedProperty).to.be.undefined
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
+        assert.strictEqual(trace[0].meta_struct.undefinedProperty, undefined)
       })
 
       it('should encode meta_struct ignoring null properties', () => {
@@ -458,8 +460,8 @@ describe('encode', () => {
         const expectedMetaStruct = {
           foo: 'bar'
         }
-        expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
-        expect(trace[0].meta_struct.nullProperty).to.be.undefined
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
+        assert.strictEqual(trace[0].meta_struct.nullProperty, undefined)
       })
 
       it('should not encode null meta_struct', () => {
@@ -472,7 +474,7 @@ describe('encode', () => {
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
 
-        expect(trace[0].meta_struct).to.be.undefined
+        assert.strictEqual(trace[0].meta_struct, undefined)
       })
     })
   })
@@ -537,7 +539,7 @@ describe('encode', () => {
         }
       ]
 
-      expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+      assert.deepStrictEqual(trace[0].span_events, formattedTopLevelEvent)
     })
 
     it('should encode span events as a top-level field when agent supports it ' +
@@ -576,7 +578,7 @@ describe('encode', () => {
         }
       ]
 
-      expect(trace[0].span_events).to.deep.equal(formattedTopLevelEvent)
+      assert.deepStrictEqual(trace[0].span_events, formattedTopLevelEvent)
     })
 
     it('should call log.debug only once for the same unsupported key', () => {
@@ -639,10 +641,10 @@ describe('encode', () => {
       encoder.encode(data)
 
       // Assert that log.debug was called once for each unique unsupported key
-      expect(logger.debug.callCount).to.equal(3)
-      expect(logger.debug.getCall(0).args[0]).to.match(/unsupported_key1/)
-      expect(logger.debug.getCall(1).args[0]).to.match(/unsupported_key2/)
-      expect(logger.debug.getCall(2).args[0]).to.match(/unsupported_key3/)
+      assert.strictEqual(logger.debug.callCount, 3)
+      assert.match(logger.debug.getCall(0).args[0], /unsupported_key1/)
+      assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
+      assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
     })
   })
 })

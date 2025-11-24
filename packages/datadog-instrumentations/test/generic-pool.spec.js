@@ -1,8 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { beforeEach, describe, it } = require('mocha')
 require('..')
 
 const { storage } = require('../../datadog-core')
@@ -35,7 +35,7 @@ describe('Instrumentation', () => {
         storage('legacy').run(store, () => {
           pool.acquire((err, resource) => {
             pool.release(resource)
-            expect(storage('legacy').getStore()).to.equal(store)
+            assert.strictEqual(storage('legacy').getStore(), store)
             done()
           })
         })
@@ -64,7 +64,7 @@ describe('Instrumentation', () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage('legacy').getStore()).to.equal(store)
+              assert.strictEqual(storage('legacy').getStore(), store)
             })
             .catch(done)
         })
@@ -73,7 +73,7 @@ describe('Instrumentation', () => {
           pool.acquire()
             .then(resource => {
               pool.release(resource)
-              expect(storage('legacy').getStore()).to.equal(store2)
+              assert.strictEqual(storage('legacy').getStore(), store2)
               done()
             })
             .catch(done)
