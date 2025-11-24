@@ -347,15 +347,7 @@ describe('getEnvironmentVariableSources', () => {
     ConfigEnvSources = configEnvSourcesMod.ConfigEnvSources
     getConfigEnvSources = configEnvSourcesMod.getConfigEnvSources
     resetConfigEnvSources = configEnvSourcesMod.resetConfigEnvSources
-
-    // Load config-helper with mocked config-env-sources
-    const configHelperMod = proxyquire('../src/config-helper', {
-      './config-env-sources': {
-        getConfigEnvSources
-      }
-    })
-
-    getEnvironmentVariableSources = configHelperMod.getEnvironmentVariableSources
+    getEnvironmentVariableSources = configEnvSourcesMod.getEnvironmentVariableSources
 
     // Reset singleton
     resetConfigEnvSources()
@@ -449,8 +441,6 @@ describe('getEnvironmentVariableSources', () => {
   })
 
   it('should work with merged values from stable config and env vars', () => {
-    isInServerlessEnvironmentStub.returns(false)
-
     const StableConfigStub = sinon.stub().returns({
       localEntries: {
         DD_SERVICE: 'local-service'
@@ -461,7 +451,8 @@ describe('getEnvironmentVariableSources', () => {
       warnings: []
     })
 
-    getEnvironmentVariablesStub.returns({
+    const isInServerlessStub = sinon.stub().returns(false)
+    const getEnvVarsStub = sinon.stub().returns({
       DD_ENV: 'production'
     })
 
@@ -469,21 +460,15 @@ describe('getEnvironmentVariableSources', () => {
     resetConfigEnvSources()
     const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
       './config-helper': {
-        getEnvironmentVariables: getEnvironmentVariablesStub
+        getEnvironmentVariables: getEnvVarsStub
       },
       './serverless': {
-        isInServerlessEnvironment: isInServerlessEnvironmentStub
+        isInServerlessEnvironment: isInServerlessStub
       },
       './config_stable': StableConfigStub
     })
 
-    const configHelperMod = proxyquire('../src/config-helper', {
-      './config-env-sources': {
-        getConfigEnvSources: configEnvSourcesMod.getConfigEnvSources
-      }
-    })
-
-    const getEnvVarSources = configHelperMod.getEnvironmentVariableSources
+    const getEnvVarSources = configEnvSourcesMod.getEnvironmentVariableSources
 
     // Fleet should win for DD_SERVICE
     expect(getEnvVarSources('DD_SERVICE')).to.equal('fleet-service')

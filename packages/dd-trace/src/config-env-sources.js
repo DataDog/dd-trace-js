@@ -102,9 +102,44 @@ function resetConfigEnvSources () {
   configEnvSourcesInstance = null
 }
 
+/**
+ * Returns the resolved configuration value from ConfigEnvSources (which merges local stable config,
+ * environment variables, and fleet stable config in that priority order). Falls back to aliases if the
+ * canonical name is not set. Throws an error if the configuration is not supported.
+ *
+ * @param {string} name Environment variable name
+ * @returns {string|undefined}
+ * @throws {Error} if the configuration is not supported
+ */
+function getEnvironmentVariableSources (name) {
+  const { supportedConfigurations, aliases } = require('./supported-configurations.json')
+  const aliasToCanonical = {}
+  for (const canonical of Object.keys(aliases)) {
+    for (const alias of aliases[canonical]) {
+      aliasToCanonical[alias] = canonical
+    }
+  }
+
+  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+      !supportedConfigurations[name]) {
+    throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+  }
+  const config = getConfigEnvSources()
+  const value = config[name]
+  if (value === undefined && aliases[name]) {
+    for (const alias of aliases[name]) {
+      if (config[alias] !== undefined) {
+        return config[alias]
+      }
+    }
+  }
+  return value
+}
+
 module.exports = {
   ConfigEnvSources,
   createConfigEnvSources,
   getConfigEnvSources,
-  resetConfigEnvSources // for tests?
+  resetConfigEnvSources,
+  getEnvironmentVariableSources
 }
