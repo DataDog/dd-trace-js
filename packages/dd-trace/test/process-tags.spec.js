@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('tap').mocha
 
 require('./setup/core')
 
@@ -262,6 +262,69 @@ describe('process-tags', () => {
     it('should preserve allowed characters in combination', () => {
       expect(sanitize('my_file-v1.0/test.js')).to.equal('my_file-v1.0/test.js')
       expect(sanitize('package_name-2.4.6/lib/index.js')).to.equal('package_name-2.4.6/lib/index.js')
+    })
+  })
+
+  describe('DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED', () => {
+    let env
+    let getConfig
+    let SpanProcessor
+
+    beforeEach(() => {
+      env = process.env
+      process.env = {}
+    })
+
+    afterEach(() => {
+      process.env = env
+      delete require.cache[require.resolve('../src/config')]
+      delete require.cache[require.resolve('../src/span_processor')]
+    })
+
+    it('should enable process tags propagation when set to true', () => {
+      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
+
+      getConfig = require('../src/config')
+      const config = getConfig()
+
+      expect(config.propagateProcessTags).to.exist
+      expect(config.propagateProcessTags.enabled).to.equal(true)
+
+      SpanProcessor = require('../src/span_processor')
+      const processor = new SpanProcessor(undefined, undefined, config)
+
+      expect(processor._processTags).to.be.a('string')
+      expect(processor._processTags).to.not.be.false
+      expect(processor._processTags).to.include('entrypoint')
+    })
+
+    it('should disable process tags propagation when set to false', () => {
+      process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
+
+      getConfig = require('../src/config')
+      const config = getConfig()
+
+      expect(config.propagateProcessTags).to.exist
+      expect(config.propagateProcessTags.enabled).to.equal(false)
+
+      SpanProcessor = require('../src/span_processor')
+      const processor = new SpanProcessor(undefined, undefined, config)
+
+      expect(processor._processTags).to.equal(false)
+    })
+
+    it('should disable process tags propagation when not set', () => {
+      // Don't set the environment variable
+
+      getConfig = require('../src/config')
+      const config = getConfig()
+
+      expect(config.propagateProcessTags?.enabled).to.not.equal(true)
+
+      SpanProcessor = require('../src/span_processor')
+      const processor = new SpanProcessor(undefined, undefined, config)
+
+      expect(processor._processTags).to.equal(false)
     })
   })
 })
