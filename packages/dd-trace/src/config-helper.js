@@ -96,5 +96,3 @@ module.exports = {
     return config
   }
 }
-
-
