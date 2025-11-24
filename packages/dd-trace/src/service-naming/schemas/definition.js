@@ -56,7 +56,7 @@ class SchemaDefinition {
 
     return {
       opName: () => opName,
-      serviceName: identityService  // Default to using the main service name
+      serviceName: identityService // Default to using the main service name
     }
   }
 }

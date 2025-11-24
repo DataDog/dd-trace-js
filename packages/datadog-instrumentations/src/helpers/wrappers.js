@@ -3,103 +3,103 @@
 const { tracingChannel } = require('dc-polyfill')
 
 function _sanitizeChannelName (channelName) {
-    // remove tracing prefix if it exists from channel name
-    if (channelName.startsWith('tracing:')) {
-        return channelName.slice(8)
-    }
-    return channelName
+  // remove tracing prefix if it exists from channel name
+  if (channelName.startsWith('tracing:')) {
+    return channelName.slice(8)
+  }
+  return channelName
 }
 
 function createWrapper (channelName, operator) {
-    const channel = tracingChannel(_sanitizeChannelName(channelName))
+  const channel = tracingChannel(_sanitizeChannelName(channelName))
 
-    return function (original) {
-        return function (...args) {
-            const ctx = {
-                self: this,
-                arguments: args,
-                args
-            }
+  return function (original) {
+    return function (...args) {
+      const ctx = {
+        self: this,
+        arguments: args,
+        args
+      }
 
-            if (operator === 'tracePromise') {
-                return channel.tracePromise(original, ctx, this, ...args)
-            } else if (operator === 'traceSync') {
-                return channel.traceSync(original, ctx, this, ...args)
-            } else if (operator === 'traceCallback') {
-                return channel.traceCallback(original, -1, ctx, this, ...args)
-            } else if (operator === 'traceHandler') {
-                const handlerIndex = args.findIndex(a => typeof a === 'function')
-                if (handlerIndex === -1) {
-                    return original.apply(this, args)
-                }
-
-                const originalHandler = args[handlerIndex]
-                args[handlerIndex] = function wrappedHandler (...handlerArgs) {
-                    const handlerCtx = {
-                        self: ctx.self,
-                        args: handlerArgs,
-                        handler: originalHandler
-                    }
-
-                    return channel.asyncStart.runStores(handlerCtx, () => {
-                        try {
-                            const result = originalHandler.apply(ctx.self, handlerArgs)
-                            if (result && typeof result.then === 'function') {
-                                return result.then(
-                                    res => {
-                                        channel.asyncEnd.publish(handlerCtx)
-                                        return res
-                                    },
-                                    err => {
-                                        handlerCtx.error = err
-                                        channel.error.publish(handlerCtx)
-                                        channel.asyncEnd.publish(handlerCtx)
-                                        throw err
-                                    }
-                                )
-                            }
-                            channel.asyncEnd.publish(handlerCtx)
-                            return result
-                        } catch (e) {
-                            handlerCtx.error = e
-                            channel.error.publish(handlerCtx)
-                            channel.asyncEnd.publish(handlerCtx)
-                            throw e
-                        }
-                    })
-                }
-
-                return original.apply(this, args)
-            }
-            return original.apply(this, args)
+      if (operator === 'tracePromise') {
+        return channel.tracePromise(original, ctx, this, ...args)
+      } else if (operator === 'traceSync') {
+        return channel.traceSync(original, ctx, this, ...args)
+      } else if (operator === 'traceCallback') {
+        return channel.traceCallback(original, -1, ctx, this, ...args)
+      } else if (operator === 'traceHandler') {
+        const handlerIndex = args.findIndex(a => typeof a === 'function')
+        if (handlerIndex === -1) {
+          return original.apply(this, args)
         }
+
+        const originalHandler = args[handlerIndex]
+        args[handlerIndex] = function wrappedHandler (...handlerArgs) {
+          const handlerCtx = {
+            self: ctx.self,
+            args: handlerArgs,
+            handler: originalHandler
+          }
+
+          return channel.asyncStart.runStores(handlerCtx, () => {
+            try {
+              const result = originalHandler.apply(ctx.self, handlerArgs)
+              if (result && typeof result.then === 'function') {
+                return result.then(
+                  res => {
+                    channel.asyncEnd.publish(handlerCtx)
+                    return res
+                  },
+                  err => {
+                    handlerCtx.error = err
+                    channel.error.publish(handlerCtx)
+                    channel.asyncEnd.publish(handlerCtx)
+                    throw err
+                  }
+                )
+              }
+              channel.asyncEnd.publish(handlerCtx)
+              return result
+            } catch (e) {
+              handlerCtx.error = e
+              channel.error.publish(handlerCtx)
+              channel.asyncEnd.publish(handlerCtx)
+              throw e
+            }
+          })
+        }
+
+        return original.apply(this, args)
+      }
+      return original.apply(this, args)
     }
+  }
 }
 
 function createEventWrapper (channelName, finishEventName) {
-    const channel = tracingChannel(_sanitizeChannelName(channelName))
+  const channel = tracingChannel(_sanitizeChannelName(channelName))
 
-    return function (original) {
-        return function (...args) {
-            const ctx = {
-                this: this,
-                args
-            }
+  return function (original) {
+    return function (...args) {
+      const ctx = {
+        this: this,
+        args
+      }
 
-            const callback = args[args.length - 1]
-            const eventName = args[args.length - 2]
+      const callback = args[args.length - 1]
+      const eventName = args[args.length - 2]
 
-            if (typeof callback !== 'function') {
-                return original.apply(this, args)
-            }
+      if (typeof callback !== 'function') {
+        return original.apply(this, args)
+      }
 
-            if (eventName !== finishEventName) {
-                return original.apply(this, args)
-            }
+      if (eventName !== finishEventName) {
+        return original.apply(this, args)
+      }
 
-            return channel.traceCallback(original, -1, ctx, this, ...args)
-        }
+      return channel.traceCallback(original, -1, ctx, this, ...args)
     }
+  }
 }
 
 /**
@@ -137,38 +137,38 @@ function createEventWrapper (channelName, finishEventName) {
  * shimmer.wrap(bullmq, 'Worker', wrapWorker)
  */
 function createConstructorWrapper (channelName, options = {}) {
-    const { wrapMethods = [], callbackIndex = -1, operator = 'tracePromise' } = options
+  const { wrapMethods = [], callbackIndex = -1, operator = 'tracePromise' } = options
 
-    return function (Constructor) {
-        return class extends Constructor {
-            constructor (...args) {
-                // Wrap callback if specified (callback pattern)
-                if (callbackIndex >= 0 && callbackIndex < args.length) {
-                    const originalCallback = args[callbackIndex]
-                    if (typeof originalCallback === 'function') {
-                        // Create wrapper using the specified operator
-                        const wrapper = createWrapper(channelName, operator)
-                        args[callbackIndex] = wrapper(originalCallback)
-                    }
-                }
-
-                // Call original constructor
-                super(...args)
-
-                // Wrap instance methods if specified (access pattern)
-                for (const methodName of wrapMethods) {
-                    if (this[methodName] && typeof this[methodName] === 'function') {
-                        const wrapper = createWrapper(channelName, operator)
-                        this[methodName] = wrapper(this[methodName])
-                    }
-                }
-            }
+  return function (Constructor) {
+    return class extends Constructor {
+      constructor (...args) {
+        // Wrap callback if specified (callback pattern)
+        if (callbackIndex >= 0 && callbackIndex < args.length) {
+          const originalCallback = args[callbackIndex]
+          if (typeof originalCallback === 'function') {
+            // Create wrapper using the specified operator
+            const wrapper = createWrapper(channelName, operator)
+            args[callbackIndex] = wrapper(originalCallback)
+          }
         }
+
+        // Call original constructor
+        super(...args)
+
+        // Wrap instance methods if specified (access pattern)
+        for (const methodName of wrapMethods) {
+          if (this[methodName] && typeof this[methodName] === 'function') {
+            const wrapper = createWrapper(channelName, operator)
+            this[methodName] = wrapper(this[methodName])
+          }
+        }
+      }
     }
+  }
 }
 
 module.exports = {
-    createWrapper,
-    createEventWrapper,
-    createConstructorWrapper
+  createWrapper,
+  createEventWrapper,
+  createConstructorWrapper
 }
