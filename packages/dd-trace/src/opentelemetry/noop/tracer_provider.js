@@ -34,25 +34,17 @@ class NoopTracerProvider {
     return noopTracer
   }
 
-  addSpanProcessor () {
-    // No-op
-  }
+  addSpanProcessor () {}
 
   getActiveSpanProcessor () {
     return noopSpanProcessor
   }
 
-  register () {
-    // No-op
-  }
+  register () {}
 
-  forceFlush () {
-    // No-op
-  }
+  forceFlush () {}
 
-  shutdown () {
-    // No-op
-  }
+  shutdown () {}
 }
 
 module.exports = NoopTracerProvider
