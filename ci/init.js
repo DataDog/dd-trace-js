@@ -45,6 +45,7 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL
 }
 
+// This needs to query for declarative config, but we can't use config singleton here bc not initialized yet, I think?
 let shouldInit = !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
 const isAgentlessEnabled = isTrue(getEnvironmentVariable('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
 
@@ -80,6 +81,7 @@ if (isTestWorker) {
 }
 
 if (shouldInit) {
+  // only after line 85 can we use the config singleton (?)
   tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
