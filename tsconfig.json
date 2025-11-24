@@ -11,6 +11,6 @@
     "./packages/dd-trace/src/debugger/**/*.mjs"
   ],
   "exclude": [
-    "./integration-tests/debugger/target-app/source-map-support/typescript.js"
+    "./integration-tests/debugger/target-app/**/*"
   ]
 }
