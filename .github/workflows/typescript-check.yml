@@ -1,0 +1,25 @@
+name: TypeScript type check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: 0 4 * * *
+    
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+
+      - name: Set up Node.js
+        uses: ./.github/actions/node/active-lts
+
+      - name: Install dependencies
+        uses: ./.github/actions/install
+
+      - name: Run TypeScript type check
+        run: yarn type:check
