@@ -5,22 +5,19 @@ const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
 const { dependencies } = require('./package.json')
 
-const include = [
+const include = new Set([
+  ...Object.keys(dependencies),
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
   'source-map/lib/util'
-]
+])
 
-const exclude = [
+const exclude = new Set([
   'mutexify' // we only ever use `mutexify/promise`
-]
-
-const names = Object.keys(dependencies)
-  .concat(include)
-  .filter(name => !exclude.includes(name))
+])
 
 module.exports = {
-  entry: Object.fromEntries(names.map(name => [name, name])),
+  entry: Object.fromEntries(include.difference(exclude).entries()),
   target: 'node',
   mode: 'production',
   devtool: false,
@@ -28,6 +25,7 @@ module.exports = {
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
+      excludedPackageTest: packageName => !include.has(packageName),
       renderLicenses: modules => modules[0].licenseText,
       stats: {
         warnings: false
