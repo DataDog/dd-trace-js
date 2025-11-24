@@ -7,8 +7,6 @@ require,@datadog/openfeature-node-server,Apache license 2.0,Copyright 2024 Datad
 require,@datadog/pprof,Apache license 2.0,Copyright 2019 Google Inc.
 require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@datadog/wasm-js-rewriter,Apache license 2.0,Copyright 2018 Datadog Inc.
-require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
-require,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/resources,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@isaacs/ttlcache,Blue Oak,Copyright Isaac Z. Schlueter and Contributors
@@ -47,6 +45,8 @@ dev,@eslint/js,MIT,Copyright OpenJS Foundation and other contributors, <www.open
 dev,@msgpack/msgpack,ISC,Copyright 2019 The MessagePack Community
 dev,@openfeature/core,Apache-2.0,Copyright OpenFeature Authors
 dev,@openfeature/server-sdk,Apache-2.0,Copyright OpenFeature Authors
+dev,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
+dev,@opentelemetry/api-logs,Apache license 2.0,Copyright OpenTelemetry Authors
 dev,@rspack/cli,MIT,Copyright (c) 2022-present Bytedance Inc and its affiliates.
 dev,@rspack/core,MIT,Copyright (c) 2022-present Bytedance Inc and its affiliates.
 dev,@stylistic/eslint-plugin,MIT,Copyright OpenJS Foundation and other contributors, <www.openjsf.org>

@@ -123,10 +123,16 @@
     "version.js"
   ],
   "dependencies": {
-    "@opentelemetry/api": ">=1.0.0 <1.10.0",
-    "@opentelemetry/api-logs": "<1.0.0",
     "dc-polyfill": "^0.1.10",
     "import-in-the-middle": "^1.14.2"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.0.0 <1.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
@@ -143,6 +149,8 @@
     "@msgpack/msgpack": "^3.1.2",
     "@openfeature/core": "^1.9.0",
     "@openfeature/server-sdk": "~1.20.0",
+    "@opentelemetry/api": ">=1.0.0 <1.10.0",
+    "@opentelemetry/api-logs": "<1.0.0",
     "@stylistic/eslint-plugin": "^5.5.0",
     "@types/chai": "^4.3.16",
     "@types/mocha": "^10.0.10",
