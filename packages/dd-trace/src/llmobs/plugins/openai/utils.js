@@ -3,20 +3,15 @@
 /**
  * Extracts chat templates from OpenAI response instructions by replacing text variable values with placeholders.
  *
- * Takes the rendered instructions from an OpenAI response and reverse-engineers the original template
- * by replacing actual text variable values with their placeholder names (e.g., "Hello John" -> "Hello {{name}}").
- *
+ * Performs reverse templating: reconstructs the template by replacing actual values with {{variable_name}}.
  * Images and files always use generic [image] and [file] markers for deterministic templating.
  *
- * @param {Array<Object>} instructions - Array of ResponseInputMessageItem objects from OpenAI response
- *   Each instruction has: { role: string, content: Array<{type: 'input_text', text: string}>, type: 'message' }
- * @param {Object<string, string|Object>} variables - Map of variable names to values from ResponsePrompt
- *   Values can be strings or ResponseInputText objects with a .text property
- * @returns {Array<{role: string, content: string}>} Array of template messages with placeholders like {{variable_name}}
+ * @param {Array<Object>} instructions - From Response.instructions (array of ResponseInputMessageItem)
+ * @param {Object<string, string>} variables - Normalized variables (output of normalizePromptVariables)
+ * @returns {Array<{role: string, content: string}>} Chat template with placeholders
  */
 function extractChatTemplateFromInstructions (instructions, variables) {
-  if (!instructions || !Array.isArray(instructions)) return []
-  if (!variables || typeof variables !== 'object') return []
+  if (!Array.isArray(instructions) || !variables) return []
 
   const chatTemplate = []
 
@@ -25,7 +20,7 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   for (const [varName, varValue] of Object.entries(variables)) {
     const valueStr = varValue ? String(varValue) : ''
     // Only include text variables - exclude image/file markers to ensure deterministic templates
-    if (valueStr && valueStr !== '[image]' && valueStr !== '[file]' && valueStr !== '[file_data]') {
+    if (valueStr && valueStr !== '[image]' && valueStr !== '[file]') {
       valueToPlaceholder[valueStr] = `{{${varName}}}`
     }
   }
@@ -62,12 +57,10 @@ function extractChatTemplateFromInstructions (instructions, variables) {
 }
 
 /**
- * Extracts text content from a content item for chat template (uses generic markers).
+ * Extracts text content for chat template (uses generic markers for images/files).
  *
- * Images and files always use generic markers for deterministic templating.
- *
- * @param {Object} contentItem - A content item from OpenAI response
- * @returns {string|null} The extracted text or null if no content
+ * @param {Object} contentItem - Content item from instruction.content
+ * @returns {string|null} Text content, '[image]', '[file]', or null
  */
 function extractTextForTemplate (contentItem) {
   // Extract text content
@@ -88,10 +81,10 @@ function extractTextForTemplate (contentItem) {
 }
 
 /**
- * Extracts text content from a content item for input messages (uses actual values).
+ * Extracts text content for input messages (uses actual image_url/file_id values).
  *
- * @param {Object} contentItem - A content item from OpenAI response
- * @returns {string|null} The extracted text or null if no content
+ * @param {Object} contentItem - Content item from instruction.content
+ * @returns {string|null} Text content with actual URLs/file references
  */
 function extractTextFromContentItem (contentItem) {
   // Extract text content
@@ -112,15 +105,15 @@ function extractTextFromContentItem (contentItem) {
 }
 
 /**
- * Normalizes prompt variables by extracting meaningful values from OpenAI's response objects.
+ * Normalizes prompt variables by extracting meaningful values from OpenAI SDK response objects.
  *
- * @param {Object<string, string|Object>} variables - Map of variable names to values
+ * Converts ResponseInputText, ResponseInputImage, and ResponseInputFile objects to simple string values.
+ *
+ * @param {Object<string, string|Object>} variables - From ResponsePrompt.variables
  * @returns {Object<string, string>} Normalized variables with simple string values
  */
 function normalizePromptVariables (variables) {
-  if (!variables || typeof variables !== 'object') {
-    return {}
-  }
+  if (!variables) return {}
 
   const normalized = {}
   for (const [key, value] of Object.entries(variables)) {
@@ -131,8 +124,7 @@ function normalizePromptVariables (variables) {
       } else if (value.type === 'input_image') { // ResponseInputImage
         normalizedValue = value.image_url || value.file_id || '[image]'
       } else if (value.type === 'input_file') { // ResponseInputFile
-        normalizedValue = value.file_url || value.file_id || value.filename ||
-          (value.file_data ? '[file_data]' : '[file]')
+        normalizedValue = value.file_url || value.file_id || value.filename || '[file]'
       }
     }
     normalized[key] = normalizedValue

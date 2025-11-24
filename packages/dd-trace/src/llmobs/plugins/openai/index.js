@@ -406,22 +406,17 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
     // Handle prompt tracking for reusable prompts
-    if (inputs.prompt && response && response.prompt && typeof response.prompt === 'object') {
+    if (inputs.prompt && response && response.prompt) {
       const { id, version } = response.prompt // ResponsePrompt
-      const variables = inputs.prompt.variables
-      if (id && version && variables) {
-        const instructions = response.instructions
-        if (Array.isArray(instructions)) {
-          const normalizedVariables = normalizePromptVariables(variables)
-          const chatTemplate = extractChatTemplateFromInstructions(instructions, normalizedVariables)
-
-          this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
-            id,
-            version,
-            variables: normalizedVariables,
-            chat_template: chatTemplate
-          })
-        }
+      if (id && version) {
+        const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
+        const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
+        this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+          id,
+          version,
+          variables: normalizedVariables,
+          chat_template: chatTemplate
+        })
       }
     }
 
