@@ -471,4 +471,78 @@ describe('getResolvedEnv', () => {
     // Env var should be used for DD_ENV
     expect(getResolvedEnvFn('DD_ENV')).to.equal('production')
   })
+
+  describe('compatibility with getEnvironmentVariable', () => {
+    it('should return env var values when no stable config exists (serverless)', () => {
+      // Set up env without stable config (serverless mode)
+      isInServerlessEnvironmentStub.returns(true)
+      getEnvironmentVariablesStub.returns({
+        DD_SERVICE: 'my-service',
+        DD_ENV: 'production',
+        DD_TRACE_AGENT_PORT: '8126'
+      })
+
+      resetConfigEnvSources()
+      const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
+        './config-helper': {
+          getEnvironmentVariables: getEnvironmentVariablesStub
+        },
+        './serverless': {
+          isInServerlessEnvironment: isInServerlessEnvironmentStub
+        }
+      })
+
+      const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
+
+      // Should return the env var values directly (no stable config involved)
+      expect(getResolvedEnvFn('DD_SERVICE')).to.equal('my-service')
+      expect(getResolvedEnvFn('DD_ENV')).to.equal('production')
+      expect(getResolvedEnvFn('DD_TRACE_AGENT_PORT')).to.equal('8126')
+    })
+
+    it('should return undefined for unset values', () => {
+      isInServerlessEnvironmentStub.returns(true)
+      getEnvironmentVariablesStub.returns({
+        DD_SERVICE: 'my-service'
+      })
+
+      resetConfigEnvSources()
+      const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
+        './config-helper': {
+          getEnvironmentVariables: getEnvironmentVariablesStub
+        },
+        './serverless': {
+          isInServerlessEnvironment: isInServerlessEnvironmentStub
+        }
+      })
+
+      const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
+
+      // Should return undefined for unset supported config
+      expect(getResolvedEnvFn('DD_ENV')).to.be.undefined
+      expect(getResolvedEnvFn('DD_VERSION')).to.be.undefined
+    })
+
+    it('should throw same error for unsupported configuration', () => {
+      isInServerlessEnvironmentStub.returns(true)
+      getEnvironmentVariablesStub.returns({})
+
+      resetConfigEnvSources()
+      const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
+        './config-helper': {
+          getEnvironmentVariables: getEnvironmentVariablesStub
+        },
+        './serverless': {
+          isInServerlessEnvironment: isInServerlessEnvironmentStub
+        }
+      })
+
+      const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
+
+      // Both should throw for unsupported DD_ vars
+      expect(() => getResolvedEnvFn('DD_UNSUPPORTED_VAR')).to.throw(
+        'Missing DD_UNSUPPORTED_VAR env/configuration in "supported-configurations.json" file.'
+      )
+    })
+  })
 })
