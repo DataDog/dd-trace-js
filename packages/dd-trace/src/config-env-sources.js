@@ -90,7 +90,7 @@ function resetConfigEnvSources () {
  * @returns {string|undefined}
  * @throws {Error} if the configuration is not supported
  */
-function getEnvironmentVariableSources (name) {
+function getResolvedEnv (name) {
   const { supportedConfigurations, aliases } = require('./supported-configurations.json')
   const aliasToCanonical = {}
   for (const canonical of Object.keys(aliases)) {
@@ -120,5 +120,5 @@ module.exports = {
   createConfigEnvSources,
   getConfigEnvSources,
   resetConfigEnvSources,
-  getEnvironmentVariableSources
+  getResolvedEnv
 }
