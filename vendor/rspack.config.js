@@ -37,11 +37,6 @@ module.exports = {
       patterns: [
         {
           from: '**/*.d.ts',
-          context: join(__dirname, 'node_modules', '@opentelemetry', 'api', 'build', 'src'),
-          to: '@opentelemetry/api'
-        },
-        {
-          from: '**/*.d.ts',
           context: join(__dirname, 'node_modules', 'opentracing', 'lib'),
           to: 'opentracing'
         },
