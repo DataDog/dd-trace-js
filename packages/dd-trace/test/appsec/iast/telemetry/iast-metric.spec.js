@@ -1,10 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
+const { expect } = require('chai')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 const {
   getExecutedMetric,
   getInstrumentedMetric,
@@ -93,19 +94,19 @@ describe('Metrics', () => {
   it('getExecutedMetric should return a metric depending on tag', () => {
     let metric = getExecutedMetric(TagKey.VULNERABILITY_TYPE)
 
-    expect(metric).to.be.equal(EXECUTED_SINK)
+    assert.strictEqual(metric, EXECUTED_SINK)
 
     metric = getExecutedMetric(TagKey.SOURCE_TYPE)
-    expect(metric).to.be.equal(EXECUTED_SOURCE)
+    assert.strictEqual(metric, EXECUTED_SOURCE)
   })
 
   it('getInstrumentedMetric should return a metric depending on tag', () => {
     let metric = getInstrumentedMetric(TagKey.VULNERABILITY_TYPE)
 
-    expect(metric).to.be.equal(INSTRUMENTED_SINK)
+    assert.strictEqual(metric, INSTRUMENTED_SINK)
 
     metric = getInstrumentedMetric(TagKey.SOURCE_TYPE)
-    expect(metric).to.be.equal(INSTRUMENTED_SOURCE)
+    assert.strictEqual(metric, INSTRUMENTED_SOURCE)
   })
 
   describe('NoTaggedIastMetric', () => {

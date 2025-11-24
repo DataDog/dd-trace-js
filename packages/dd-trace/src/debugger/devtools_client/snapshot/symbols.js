@@ -2,5 +2,6 @@
 
 module.exports = {
   collectionSizeSym: Symbol('datadog.collectionSize'),
-  fieldCountSym: Symbol('datadog.fieldCount')
+  fieldCountSym: Symbol('datadog.fieldCount'),
+  timeBudgetSym: Symbol('datadog.timeout')
 }

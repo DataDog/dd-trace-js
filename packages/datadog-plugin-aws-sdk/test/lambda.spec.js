@@ -1,13 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
 const JSZip = require('jszip')
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { after, before, describe, it } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { rawExpectedSchema } = require('./lambda-naming')
+const { setup } = require('./spec_helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const zip = new JSZip()
 
@@ -95,16 +97,16 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
-            expect(span.meta).to.include({
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
+            assertObjectContains(span.meta, {
               functionname: 'ironmaiden',
               aws_service: 'Lambda',
               region: 'us-east-1'
             })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
@@ -126,12 +128,12 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
 
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
@@ -153,12 +155,12 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
 
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({

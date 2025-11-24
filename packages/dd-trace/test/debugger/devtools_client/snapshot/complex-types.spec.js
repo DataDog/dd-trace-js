@@ -1,7 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 require('../../../setup/mocha')
 
@@ -30,9 +33,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       const localState = new Promise((_resolve) => { resolve = _resolve })
 
       session.once('Debugger.paused', async ({ params }) => {
-        expect(params.hitBreakpoints.length).to.eq(1)
+        assert.strictEqual(params.hitBreakpoints.length, 1)
 
-        resolve((await getLocalStateForCallFrame(params.callFrames[0], { maxFieldCount: Number.MAX_SAFE_INTEGER }))())
+        resolve((await getLocalStateForCallFrame(
+          params.callFrames[0],
+          { maxFieldCount: Number.MAX_SAFE_INTEGER })
+        )())
       })
 
       await setAndTriggerBreakpoint(target, 10)
@@ -41,7 +47,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('should contain expected properties from closure scope', function () {
-      expect(Object.keys(state).length).to.equal(28)
+      assert.strictEqual(Object.keys(state).length, 28)
 
       // from block scope
       // ... tested individually in the remaining it-blocks inside this describe-block
@@ -141,9 +147,9 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakMap', function () {
-      expect(state).to.have.property('wmap')
+      assert.ok(Object.hasOwn(state, 'wmap'))
       expect(state.wmap).to.have.keys('type', 'entries')
-      expect(state.wmap.entries).to.be.an('array')
+      assert.ok(Array.isArray(state.wmap.entries))
       state.wmap.entries = state.wmap.entries.sort((a, b) => a[1].value - b[1].value)
       expect(state).to.have.deep.property('wmap', {
         type: 'WeakMap',
@@ -158,9 +164,9 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('WeakSet', function () {
-      expect(state).to.have.property('wset')
+      assert.ok(Object.hasOwn(state, 'wset'))
       expect(state.wset).to.have.keys('type', 'elements')
-      expect(state.wset.elements).to.be.an('array')
+      assert.ok(Array.isArray(state.wset.elements))
       state.wset.elements = state.wset.elements.sort((a, b) => a.fields.a.value - b.fields.a.value)
       expect(state).to.have.deep.property('wset', {
         type: 'WeakSet',
@@ -180,21 +186,21 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('Error', function () {
-      expect(state).to.have.property('err')
+      assert.ok(Object.hasOwn(state, 'err'))
       expect(state.err).to.have.keys('type', 'fields')
-      expect(state.err).to.have.property('type', 'CustomError')
-      expect(state.err.fields).to.be.an('object')
+      assert.strictEqual(state.err.type, 'CustomError')
+      assert.ok(typeof state.err.fields === 'object' && state.err.fields !== null)
       expect(state.err.fields).to.have.keys('stack', 'message', 'foo')
       expect(state.err.fields).to.deep.include({
         message: { type: 'string', value: 'boom!' },
         foo: { type: 'number', value: '42' }
       })
       expect(state.err.fields.stack).to.have.keys('type', 'value', 'truncated', 'size')
-      expect(state.err.fields.stack.value).to.be.a('string')
-      expect(state.err.fields.stack.value).to.match(/^Error: boom!/)
-      expect(state.err.fields.stack.size).to.be.a('number')
+      assert.strictEqual(typeof state.err.fields.stack.value, 'string')
+      assert.match(state.err.fields.stack.value, /^Error: boom!/)
+      assert.strictEqual(typeof state.err.fields.stack.size, 'number')
       expect(state.err.fields.stack.size).to.above(255)
-      expect(state.err.fields.stack).to.deep.include({
+      assertObjectContains(state.err.fields.stack, {
         type: 'string',
         truncated: true
       })
@@ -316,9 +322,9 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('circular reference in object', function () {
-      expect(state).to.have.property('circular')
-      expect(state.circular).to.have.property('type', 'Object')
-      expect(state.circular).to.have.property('fields')
+      assert.ok(Object.hasOwn(state, 'circular'))
+      assert.strictEqual(state.circular.type, 'Object')
+      assert.ok(Object.hasOwn(state.circular, 'fields'))
       // For the circular field, just check that at least one of the expected properties are present
       expect(state.circular.fields).to.deep.include({
         regex: { type: 'RegExp', value: '/foo/' }

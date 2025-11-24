@@ -80,8 +80,17 @@ async function addBreakpoint (probe) {
     log.debug(
       '[debugger:devtools_client] Translating location using source map for %s:%d:%d (probe: %s, version: %d)',
       file, lineNumber, columnNumber, probe.id, probe.version
-    );
-    ({ line: lineNumber, column: columnNumber } = await getGeneratedPosition(url, source, lineNumber, sourceMapURL))
+    )
+    const position = await getGeneratedPosition(url, source, lineNumber, sourceMapURL)
+    if (position.line !== null && position.column !== null) {
+      lineNumber = position.line
+      columnNumber = position.column
+    } else {
+      throw new Error(
+        // eslint-disable-next-line @stylistic/max-len
+        `Could not find generated position for ${url}:${lineNumber}:${columnNumber} (probe: ${probe.id}, version: ${probe.version})`
+      )
+    }
   }
 
   try {
