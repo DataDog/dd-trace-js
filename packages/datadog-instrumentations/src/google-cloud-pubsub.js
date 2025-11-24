@@ -257,9 +257,9 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   console.log(`${LOG_PREFIX} Wrapping LeaseManager._dispense, .remove, and .clear methods`)
   console.log(`${LOG_PREFIX} Current subscriber count - receiveStartCh: ${receiveStartCh.hasSubscribers}, receiveFinishCh: ${receiveFinishCh.hasSubscribers}`)
 
-  // Use a strongly-held Map keyed by message.id instead of WeakMap
-  // This prevents context loss if message objects are recycled or GC'd
-  const messageContexts = new Map()
+  // Use a WeakMap keyed by message object (not message.id)
+  // This ensures we retrieve the exact same context object that was mutated by runStores
+  const messageContexts = new WeakMap()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
     const timestamp = new Date().toISOString()
@@ -269,13 +269,12 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     // ALWAYS create context and publish events, even if no subscribers yet
     // The consumer plugin might subscribe later, and we don't want to lose this message
     console.log(`${LOG_PREFIX} Publishing to receiveStartCh and running dispense with context`)
-    const ctx = { message }
     
-    // Store the context by message.id (strongly held) so we can retrieve it in remove()
-    if (message?.id) {
-      messageContexts.set(message.id, ctx)
-      console.log(`${LOG_PREFIX} Stored context in Map for message ${message.id}`)
-    }
+    // Use WeakMap keyed by message object instead of Map keyed by message.id
+    // This ensures we get the exact same context object back in remove()
+    const ctx = { message }
+    messageContexts.set(message, ctx)
+    console.log(`${LOG_PREFIX} Stored context in WeakMap for message ${message?.id}`)
     
     return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
   })
@@ -284,22 +283,16 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
     const timestamp = new Date().toISOString()
     console.log(`${LOG_PREFIX} [${timestamp}] remove() called - messageId: ${message?.id}, hasSubscribers: ${receiveFinishCh.hasSubscribers}`)
     
-    // Retrieve the context from _dispense using message.id
-    const ctx = (message?.id && messageContexts.get(message.id)) || { message }
-    console.log(`${LOG_PREFIX} Context retrieved from Map: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
+    // Retrieve the SAME context object from _dispense using message object as key
+    const ctx = messageContexts.get(message) || { message }
+    console.log(`${LOG_PREFIX} Context retrieved from WeakMap: hasCurrentStore=${!!ctx.currentStore}, hasParentStore=${!!ctx.parentStore}`)
     
-    // Always publish finish event to ensure span cleanup
-    if (message?.id) {
-      messageContexts.delete(message.id)
-      console.log(`${LOG_PREFIX} Deleted context from Map for message ${message.id}`)
-    }
+    // Clean up the WeakMap entry
+    messageContexts.delete(message)
+    console.log(`${LOG_PREFIX} Deleted context from WeakMap for message ${message?.id}`)
     
-    if (receiveFinishCh.hasSubscribers) {
-      receiveFinishCh.publish(ctx)
-    } else {
-      console.log(`${LOG_PREFIX} WARNING: receiveFinishCh has no subscribers!`)
-    }
-    return remove.apply(this, arguments)
+    // CRITICAL: Use runStores to preserve async context chain for span finishing
+    return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {

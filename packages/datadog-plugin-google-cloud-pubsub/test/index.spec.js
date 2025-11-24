@@ -410,6 +410,20 @@ describe('Plugin', () => {
           resource = `projects/${project}/topics/${dsmTopicName}`
           pubsub = new PubSub({ projectId: project })
           tracer.use('google-cloud-pubsub', { dsmEnabled: true })
+          
+          // CRITICAL: Enable DSM on the tracer's processor if it was disabled
+          // This is needed because the tracer was created in the "without configuration" suite with dsmEnabled: false
+          if (tracer._dataStreamsProcessor && !tracer._dataStreamsProcessor.enabled) {
+            tracer._dataStreamsProcessor.enabled = true
+            // Start the flush timer if it wasn't started
+            if (!tracer._dataStreamsProcessor.timer && tracer._dataStreamsProcessor.flushInterval) {
+              tracer._dataStreamsProcessor.timer = setInterval(
+                tracer._dataStreamsProcessor.onInterval.bind(tracer._dataStreamsProcessor),
+                tracer._dataStreamsProcessor.flushInterval
+              )
+              tracer._dataStreamsProcessor.timer.unref()
+            }
+          }
 
           dsmTopic = await pubsub.createTopic(dsmTopicName)
           dsmTopic = dsmTopic[0]
