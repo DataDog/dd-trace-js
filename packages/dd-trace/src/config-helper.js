@@ -4,6 +4,7 @@
 
 const { deprecate } = require('util')
 const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
+const { getConfigEnvSources } = require('./config-env-sources')
 
 /**
  * Types for environment variable handling.
@@ -80,7 +81,6 @@ module.exports = {
    * @returns {string|undefined}
    * @throws {Error} if the configuration is not supported
    */
-  // This method, and callers of this method, need to be updated to check for declarative config sources as well.
   getEnvironmentVariable (name) {
     if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
         !supportedConfigurations[name]) {
@@ -95,5 +95,34 @@ module.exports = {
       }
     }
     return config
+  },
+
+
+    /**
+   * Returns the resolved configuration value from ConfigEnvSources (which merges local stable config,
+   * environment variables, and fleet stable config in that priority order). Falls back to aliases if the
+   * canonical name is not set. Throws an error if the configuration is not supported.
+   *
+   * @param {string} name Environment variable name
+   * @returns {string|undefined}
+   * @throws {Error} if the configuration is not supported
+   */
+  getEnvironmentVariableSources (name) {
+    if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
+        !supportedConfigurations[name]) {
+      throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
+    }
+    const config = getConfigEnvSources()
+    const value = config[name]
+    if (value === undefined && aliases[name]) {
+      for (const alias of aliases[name]) {
+        if (config[alias] !== undefined) {
+          return config[alias]
+        }
+      }
+    }
+    return value
   }
 }
+
+
