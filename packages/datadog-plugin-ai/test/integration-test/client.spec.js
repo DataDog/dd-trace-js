@@ -42,7 +42,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
 
         // special check for ai spans

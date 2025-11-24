@@ -93,8 +93,8 @@ describe('input message http requests', function () {
 
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.method, 'POST')
-    assert.ok('path' in opts);
-  assert.strictEqual(opts['path'], '/debugger/v1/input?ddtags=' +
+    assert.ok('path' in opts)
+    assert.strictEqual(opts.path, '/debugger/v1/input?ddtags=' +
         `env%3A${process.env.DD_ENV}%2C` +
         `version%3A${process.env.DD_VERSION}%2C` +
         `debugger_version%3A${version}%2C` +

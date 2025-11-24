@@ -55,7 +55,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command: 'ls -l' })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,
@@ -79,7 +79,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command: 'ls -l', shell: true })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,
@@ -105,7 +105,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,
@@ -132,7 +132,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command, shell: true })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,
@@ -160,7 +160,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,
@@ -188,7 +188,7 @@ describe('Child process plugin', () => {
 
         shellPlugin.start({ command, shell: true })
 
-        sinon.assert.calledOnceWithExactly(tracerStub.startSpan, 
+        sinon.assert.calledOnceWithExactly(tracerStub.startSpan,
           'command_execution',
           {
             startTime: undefined,

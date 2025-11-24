@@ -1212,8 +1212,8 @@ describe('sdk', () => {
         }
       })
 
-      assert.ok('categorical_value' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]);
-  assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]['categorical_value'], 'foo')
+      assert.ok('categorical_value' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
     it('defaults to the current time if no timestamp is provided', () => {
@@ -1225,8 +1225,8 @@ describe('sdk', () => {
         value: 0.6
       })
 
-      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]);
-  assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]['timestamp_ms'], 1234)
+      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
       Date.now.restore()
     })
 

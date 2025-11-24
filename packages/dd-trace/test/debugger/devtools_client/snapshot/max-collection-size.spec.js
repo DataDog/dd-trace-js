@@ -52,12 +52,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
         it('should have expected number of elements in state', function () {
           assert.strictEqual(Object.keys(state).length, ((Array.isArray(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']) ? ['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'] : [['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']])).length)
-assert.ok(((Array.isArray(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']) ? ['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'] : [['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']])).every(k => Object.hasOwn(state, k)))
+          assert.ok(((Array.isArray(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']) ? ['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'] : [['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']])).every(k => Object.hasOwn(state, k)))
         })
 
         it('Array', function () {
-          assert.ok('arr' in state);
-assert.deepStrictEqual(state['arr'], {
+          assert.ok('arr' in state)
+          assert.deepStrictEqual(state.arr, {
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
@@ -66,8 +66,8 @@ assert.deepStrictEqual(state['arr'], {
         })
 
         it('Map', function () {
-          assert.ok('map' in state);
-assert.deepStrictEqual(state['map'], {
+          assert.ok('map' in state)
+          assert.deepStrictEqual(state.map, {
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
@@ -76,8 +76,8 @@ assert.deepStrictEqual(state['map'], {
         })
 
         it('Set', function () {
-          assert.ok('set' in state);
-assert.deepStrictEqual(state['set'], {
+          assert.ok('set' in state)
+          assert.deepStrictEqual(state.set, {
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
@@ -127,8 +127,8 @@ assert.deepStrictEqual(state['set'], {
         })
 
         it('TypedArray', function () {
-          assert.ok('typedArray' in state);
-assert.deepStrictEqual(state['typedArray'], {
+          assert.ok('typedArray' in state)
+          assert.deepStrictEqual(state.typedArray, {
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',

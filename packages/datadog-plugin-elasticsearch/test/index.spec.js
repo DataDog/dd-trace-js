@@ -94,8 +94,8 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '{"query":{"match_all":{}}}')
                 assert.strictEqual(traces[0][0].meta['elasticsearch.params'], '{"sort":"name","size":100}')
               } else {
-                assert.ok('elasticsearch.body' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '{"query":{"match_all":{}},"sort":"name","size":100}')
+                assert.ok('elasticsearch.body' in traces[0][0].meta)
+                assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '{"query":{"match_all":{}},"sort":"name","size":100}')
               }
             })
             .then(done)
@@ -123,8 +123,8 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
               assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
               assert.strictEqual(traces[0][0].meta['elasticsearch.url'], '/_msearch')
-              assert.ok('elasticsearch.body' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]')
+              assert.ok('elasticsearch.body' in traces[0][0].meta)
+              assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]')
             })
             .then(done)
             .catch(done)

@@ -490,8 +490,8 @@ describe('Plugin', () => {
               callback(null, {})
 
               try {
-                assert.ok('foo' in call.metadata.getMap());
-  assert.strictEqual(call.metadata.getMap()['foo'], 'bar')
+                assert.ok('foo' in call.metadata.getMap())
+                assert.strictEqual(call.metadata.getMap().foo, 'bar')
                 done()
               } catch (e) {
                 done(e)

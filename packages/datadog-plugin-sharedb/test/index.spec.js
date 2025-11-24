@@ -95,8 +95,8 @@ describe('Plugin', () => {
 
             agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].service, 'test')
-              assert.ok('resource' in traces[0][0]);
-  assert.strictEqual(traces[0][0]['resource'], 'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
+              assert.ok('resource' in traces[0][0])
+              assert.strictEqual(traces[0][0].resource, 'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
               assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
               assert.strictEqual(traces[0][0].meta.service, 'test')
               assert.strictEqual(traces[0][0].meta['sharedb.action'], 'query-fetch')

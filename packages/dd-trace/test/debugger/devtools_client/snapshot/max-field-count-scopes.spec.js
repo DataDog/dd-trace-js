@@ -29,7 +29,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       it('should capture expected snapshot', function () {
         // Expect the snapshot to have captured the first 3 fields from each scope
         assert.strictEqual(Object.keys(state).length, ((Array.isArray(['a1', 'b1', 'c1', 'a2', 'b2', 'c2']) ? ['a1', 'b1', 'c1', 'a2', 'b2', 'c2'] : [['a1', 'b1', 'c1', 'a2', 'b2', 'c2']])).length)
-assert.ok(((Array.isArray(['a1', 'b1', 'c1', 'a2', 'b2', 'c2']) ? ['a1', 'b1', 'c1', 'a2', 'b2', 'c2'] : [['a1', 'b1', 'c1', 'a2', 'b2', 'c2']])).every(k => Object.hasOwn(state, k)))
+        assert.ok(((Array.isArray(['a1', 'b1', 'c1', 'a2', 'b2', 'c2']) ? ['a1', 'b1', 'c1', 'a2', 'b2', 'c2'] : [['a1', 'b1', 'c1', 'a2', 'b2', 'c2']])).every(k => Object.hasOwn(state, k)))
       })
     })
   })

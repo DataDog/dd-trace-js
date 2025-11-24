@@ -73,7 +73,7 @@ describe('pg instrumentation', () => {
                 queryClientStartChannel.subscribe(abortQuery)
 
                 client.query('SELECT 1', (err) => {
-                  assert.strictEqual(err['message'], 'Test')
+                  assert.strictEqual(err.message, 'Test')
                   done()
                 })
               })
@@ -90,7 +90,7 @@ describe('pg instrumentation', () => {
                 try {
                   await client.query('SELECT 1')
                 } catch (err) {
-                  assert.strictEqual(err['message'], 'Test')
+                  assert.strictEqual(err.message, 'Test')
 
                   return
                 }
@@ -119,7 +119,7 @@ describe('pg instrumentation', () => {
                   client.query(query)
 
                   query.on('error', err => {
-                    assert.strictEqual(err['message'], 'Test')
+                    assert.strictEqual(err.message, 'Test')
                     done()
                   })
 
@@ -144,7 +144,7 @@ describe('pg instrumentation', () => {
 
                   const query = new Query('SELECT 1')
                   query.callback = err => {
-                    assert.strictEqual(err['message'], 'Test')
+                    assert.strictEqual(err.message, 'Test')
                     done()
                   }
 
@@ -167,7 +167,7 @@ describe('pg instrumentation', () => {
                   const query = new Query('SELECT 1')
 
                   client.query(query, err => {
-                    assert.strictEqual(err['message'], 'Test')
+                    assert.strictEqual(err.message, 'Test')
                     done()
                   })
                 })
@@ -211,7 +211,7 @@ describe('pg instrumentation', () => {
             queryPoolStartChannel.subscribe(abortQuery)
 
             pool.query('SELECT 1', (err) => {
-              assert.strictEqual(err['message'], 'Test')
+              assert.strictEqual(err.message, 'Test')
               done()
             })
           })
@@ -228,7 +228,7 @@ describe('pg instrumentation', () => {
             try {
               await pool.query('SELECT 1')
             } catch (err) {
-              assert.strictEqual(err['message'], 'Test')
+              assert.strictEqual(err.message, 'Test')
               return
             }
 

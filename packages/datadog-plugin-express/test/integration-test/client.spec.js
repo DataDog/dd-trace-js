@@ -44,13 +44,13 @@ describe('esm', () => {
             : 'router'
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-            assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
             assert.ok(Array.isArray(payload))
             assert.strictEqual(payload.length, 1)
             assert.ok(Array.isArray(payload[0]))
             assert.strictEqual(payload[0].length, numberOfSpans)
-            assert.strictEqual(payload[0][0]['name'], 'express.request')
-            assert.strictEqual(payload[0][1]['name'], `${whichMiddleware}.middleware`)
+            assert.strictEqual(payload[0][0].name, 'express.request')
+            assert.strictEqual(payload[0][1].name, `${whichMiddleware}.middleware`)
           })
         }).timeout(50000)
       })
@@ -69,12 +69,12 @@ describe('esm', () => {
           const numberOfSpans = 1
 
           return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-            assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
             assert.ok(Array.isArray(payload))
             assert.strictEqual(payload.length, 1)
             assert.ok(Array.isArray(payload[0]))
             assert.strictEqual(payload[0].length, numberOfSpans)
-            assert.strictEqual(payload[0][0]['name'], 'express.request')
+            assert.strictEqual(payload[0][0].name, 'express.request')
           })
         }).timeout(50000)
       })

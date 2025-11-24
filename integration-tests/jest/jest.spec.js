@@ -239,8 +239,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
             assert.ok(test != null)
 
-            assert.strictEqual(test.meta['language'], 'javascript')
-            assert.strictEqual(test.meta['service'], 'plugin-tests')
+            assert.strictEqual(test.meta.language, 'javascript')
+            assert.strictEqual(test.meta.service, 'plugin-tests')
             assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(test.meta[TEST_FRAMEWORK], 'jest')
             assert.strictEqual(test.meta[TEST_NAME], name)
@@ -316,7 +316,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             )
 
             assert.ok(testSpan != null)
-            assert.strictEqual(testSpan.meta['language'], 'javascript')
+            assert.strictEqual(testSpan.meta.language, 'javascript')
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(testSpan.meta[TEST_FRAMEWORK], 'jest')
             assert.strictEqual(testSpan.meta[TEST_NAME], name)
@@ -369,7 +369,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             )
 
             assert.ok(testSpan != null)
-            assert.strictEqual(testSpan.meta['language'], 'javascript')
+            assert.strictEqual(testSpan.meta.language, 'javascript')
             assert.strictEqual(testSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
             assert.strictEqual(testSpan.meta[TEST_FRAMEWORK], 'jest')
             assert.strictEqual(testSpan.meta[TEST_NAME], name)
@@ -897,7 +897,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
 
           assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
+            .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
@@ -1395,9 +1395,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const [coveragePayload] = codeCovRequest.payload
         assert.strictEqual(codeCovRequest.headers['dd-api-key'], '1')
 
-        assert.strictEqual(coveragePayload['name'], 'coverage1')
-        assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+        assert.strictEqual(coveragePayload.name, 'coverage1')
+        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+        assert.strictEqual(coveragePayload.type, 'application/msgpack')
         assert.ok(coveragePayload.content.includes({
           version: 2
         }))
@@ -1498,9 +1498,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload['name'], 'coverage1')
-        assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+        assert.strictEqual(coveragePayload.name, 'coverage1')
+        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+        assert.strictEqual(coveragePayload.type, 'application/msgpack')
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
@@ -3481,7 +3481,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
 
           assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
+            .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`
@@ -3565,7 +3565,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
 
           assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
+            .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`

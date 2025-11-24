@@ -215,9 +215,9 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
       span.setBaggageItem('foo', 'bar')
 
-      assert.ok('foo' in span.context()._baggageItems);
-  assert.strictEqual(span.context()._baggageItems['foo'], 'bar')
-      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems['foo'] !== 'bar')
+      assert.ok('foo' in span.context()._baggageItems)
+      assert.strictEqual(span.context()._baggageItems.foo, 'bar')
+      assert.ok(!('foo' in parent._baggageItems) || parent._baggageItems.foo !== 'bar')
     })
 
     it('should pass baggage items to future causal spans', () => {
@@ -235,8 +235,8 @@ describe('Span', () => {
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
-      assert.ok('foo' in span.context()._baggageItems);
-  assert.strictEqual(span.context()._baggageItems['foo'], 'bar')
+      assert.ok('foo' in span.context()._baggageItems)
+      assert.strictEqual(span.context()._baggageItems.foo, 'bar')
     })
   })
 

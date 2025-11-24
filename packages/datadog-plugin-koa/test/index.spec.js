@@ -520,8 +520,8 @@ describe('Plugin', () => {
                   const spans = sort(traces[0])
 
                   assert.strictEqual(spans[0].resource, 'GET /forums/:fid/discussions/:did/posts/:pid')
-                  assert.ok('http.url' in spans[0].meta);
-  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/forums/123/discussions/456/posts/789`)
+                  assert.ok('http.url' in spans[0].meta)
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/forums/123/discussions/456/posts/789`)
                 })
                 .then(done)
                 .catch(done)
@@ -557,8 +557,8 @@ describe('Plugin', () => {
                     const spans = sort(traces[0])
 
                     assert.strictEqual(spans[0].resource, 'GET /first/child')
-                    assert.ok('http.url' in spans[0].meta);
-  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/first/child`)
+                    assert.ok('http.url' in spans[0].meta)
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/first/child`)
                   })
                   .then(done)
                   .catch(done)

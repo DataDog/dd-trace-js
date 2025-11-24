@@ -38,11 +38,11 @@ describe('graphql', () => {
 
   it('should not report any attack', async () => {
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
       assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.strictEqual(payload[1][0]['name'], 'web.request')
+      assert.strictEqual(payload[1][0].name, 'web.request')
       assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
       assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
       assert.ok(!Object.hasOwn(payload[1][0].meta, '_dd.appsec.event'))
@@ -100,11 +100,11 @@ describe('graphql', () => {
     }
 
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
       assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.strictEqual(payload[1][0]['name'], 'web.request')
+      assert.strictEqual(payload[1][0].name, 'web.request')
       assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
       assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')

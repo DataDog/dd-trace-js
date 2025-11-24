@@ -236,8 +236,8 @@ describe('Plugin', () => {
               }
               assert.strictEqual(traces[0][0].error, 0)
               assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-              assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/completions')
+              assert.ok('openai.request.endpoint' in traces[0][0].meta)
+              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/completions')
 
               assert.strictEqual(traces[0][0].meta.component, 'openai')
               assert.strictEqual(traces[0][0].meta['_dd.integration'], 'openai')
@@ -501,8 +501,8 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/v1/models/*')
 
             assert.strictEqual(traces[0][0].metrics['openai.response.deleted'], 1)
-            assert.ok('openai.response.id' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
+            assert.ok('openai.response.id' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -715,8 +715,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
 
             assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4.1-mini-2025-04-14')
             assert.match(traces[0][0].meta['openai.response.id'], /^ftjob-/)
@@ -836,8 +836,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'GET')
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/fine_tuning/jobs')
 
             assert.ok(Object.hasOwn(traces[0][0].metrics, 'openai.response.count'))
           })
@@ -904,8 +904,8 @@ describe('Plugin', () => {
               }
               assert.strictEqual(traces[0][0].error, 0)
               assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-              assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/generations')
+              assert.ok('openai.request.endpoint' in traces[0][0].meta)
+              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/generations')
               assert.strictEqual(traces[0][0].meta['openai.request.model'], 'dall-e-3')
             })
 
@@ -965,8 +965,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/edits')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/edits')
             // TODO(sabrenner): fix in a follow-up (super simple - img.name)
           })
 
@@ -1008,8 +1008,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/variations')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/images/variations')
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -1052,8 +1052,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
 
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/transcriptions')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/transcriptions')
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-4o-mini-transcribe')
           })
@@ -1094,8 +1094,8 @@ describe('Plugin', () => {
             }
             assert.strictEqual(traces[0][0].error, 0)
 
-            assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/translations')
+            assert.ok('openai.request.endpoint' in traces[0][0].meta)
+            assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/audio/translations')
             assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
             assert.strictEqual(traces[0][0].meta['openai.request.model'], 'whisper-1')
           })
@@ -1146,8 +1146,8 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].error, 0)
 
               assert.strictEqual(traces[0][0].meta['openai.request.method'], 'POST')
-              assert.ok('openai.request.endpoint' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/chat/completions')
+              assert.ok('openai.request.endpoint' in traces[0][0].meta)
+              assert.strictEqual(traces[0][0].meta['openai.request.endpoint'], '/vcr/openai/chat/completions')
 
               assert.strictEqual(traces[0][0].meta['openai.request.model'], 'gpt-3.5-turbo')
               assert.ok(Object.hasOwn(traces[0][0].meta, 'openai.response.model'))

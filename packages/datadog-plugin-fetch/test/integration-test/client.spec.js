@@ -29,7 +29,7 @@ describe('esm', () => {
   context('fetch', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
         const isFetch = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'fetch'))
         assert.strictEqual(isFetch, true)

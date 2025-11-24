@@ -566,7 +566,7 @@ describe('IAST TaintTracking Operations', () => {
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
       assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).length)
-assert.ok(((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).every(k => Object.hasOwn(noop, k)))
+      assert.ok(((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).every(k => Object.hasOwn(noop, k)))
     })
 
     it('should have the same properties as TaintTrackingDebug', () => {
@@ -574,7 +574,7 @@ assert.ok(((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)]
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
       assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).length)
-assert.ok(((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).every(k => Object.hasOwn(noop, k)))
+      assert.ok(((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).every(k => Object.hasOwn(noop, k)))
     })
 
     it('should have the same properties as csiMethods', () => {
@@ -583,7 +583,7 @@ assert.ok(((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object
       const csiExpectedMethods = getExpectedMethods()
 
       assert.strictEqual(Object.keys(tt).length, ((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).length)
-assert.ok(((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).every(k => Object.hasOwn(tt, k)))
+      assert.ok(((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).every(k => Object.hasOwn(tt, k)))
     })
   })
 })

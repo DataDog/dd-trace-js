@@ -104,15 +104,15 @@ describe('TaintTracking', () => {
         const result = propFnInstrumented(jsonTainted)
         assert.strictEqual(isTainted(iastContext, result.command), true)
         assert.deepStrictEqual(getRanges(iastContext, result.command), [{
-            start: 0,
-            end: 6,
-            iinfo: {
-              parameterName: 'command',
-              parameterValue: 'ls -la',
-              type: 'request.type'
-            },
-            secureMarks: 0
-          }])
+          start: 0,
+          end: 6,
+          iinfo: {
+            parameterName: 'command',
+            parameterValue: 'ls -la',
+            type: 'request.type'
+          },
+          secureMarks: 0
+        }])
 
         const resultOrig = propFnOriginal(jsonTainted)
         assert.deepStrictEqual(result, resultOrig)

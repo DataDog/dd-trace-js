@@ -153,7 +153,7 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assert.ok(!('_sampling_priority_v1' in traces[0][0].metrics) || traces[0][0].metrics['_sampling_priority_v1'] !== USER_KEEP)
+        assert.ok(!('_sampling_priority_v1' in traces[0][0].metrics) || traces[0][0].metrics._sampling_priority_v1 !== USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })

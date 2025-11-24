@@ -138,8 +138,8 @@ describe('endpoints telemetry', () => {
       const firstPayload = sendData.firstCall.args[4]
       const secondPayload = sendData.secondCall.args[4]
 
-      assert.ok('is_first' in firstPayload);
-  assert.strictEqual(firstPayload['is_first'], true)
+      assert.ok('is_first' in firstPayload)
+      assert.strictEqual(firstPayload.is_first, true)
       assert.strictEqual(Boolean(secondPayload.is_first), false)
     })
 

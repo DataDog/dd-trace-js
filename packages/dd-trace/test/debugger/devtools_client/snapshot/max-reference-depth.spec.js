@@ -24,13 +24,13 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.keys(state.myNestedObj).length, 2)
 
-        assert.ok('deepObj' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepObj'], {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object', notCapturedReason: 'depth'
         })
 
-        assert.ok('deepArr' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepArr'], {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array', notCapturedReason: 'depth'
         })
       })
@@ -47,8 +47,8 @@ assert.deepStrictEqual(state.myNestedObj.fields['deepArr'], {
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        assert.ok('deepObj' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepObj'], {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -70,8 +70,8 @@ assert.deepStrictEqual(state.myNestedObj.fields['deepObj'], {
           }
         })
 
-        assert.ok('deepArr' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepArr'], {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',
@@ -98,8 +98,8 @@ assert.deepStrictEqual(state.myNestedObj.fields['deepArr'], {
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        assert.ok('deepObj' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepObj'], {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -114,8 +114,8 @@ assert.deepStrictEqual(state.myNestedObj.fields['deepObj'], {
           }
         })
 
-        assert.ok('deepArr' in state.myNestedObj.fields);
-assert.deepStrictEqual(state.myNestedObj.fields['deepArr'], {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',

@@ -48,12 +48,12 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0]['name'], 'azure.functions.invoke')
+        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
       })
     }).timeout(60_000)
 

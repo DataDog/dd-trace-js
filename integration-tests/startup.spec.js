@@ -65,12 +65,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           }
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
@@ -116,12 +116,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           }
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `localhost:${agent.port}`)
+          assert.strictEqual(headers.host, `localhost:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
@@ -145,12 +145,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           }
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
@@ -163,12 +163,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           }
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `localhost:${agent.port}`)
+          assert.strictEqual(headers.host, `localhost:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
@@ -191,12 +191,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           execArgv
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], '127.0.0.1:8126')
+          assert.strictEqual(headers.host, '127.0.0.1:8126')
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
@@ -209,12 +209,12 @@ execArgvs.forEach(({ execArgv, skip }) => {
           }
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], '127.0.0.1:8126')
+          assert.strictEqual(headers.host, '127.0.0.1:8126')
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
