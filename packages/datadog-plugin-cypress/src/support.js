@@ -45,7 +45,7 @@ function getTestProperties (testName) {
 }
 
 function retryTest (test, suiteTests, numRetries, tags) {
-  if (isTestIsolationEnabled) {
+  if (!isTestIsolationEnabled) {
     return
   }
   const originalTestIndex = suiteTests.indexOf(test)

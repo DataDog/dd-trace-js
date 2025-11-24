@@ -8,6 +8,7 @@ const ddTracePlugin = require('dd-trace/ci/cypress/plugin')
 module.exports = {
   defaultCommandTimeout: 1000,
   e2e: {
+    testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
         cypressFailFast(on, config)

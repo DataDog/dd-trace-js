@@ -73,6 +73,8 @@ const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 
+const onlyLatestIt = version === 'latest' ? it : it.skip
+
 const moduleTypes = [
   {
     type: 'commonJS',
@@ -1652,6 +1654,75 @@ moduleTypes.forEach(({
           receiverPromise,
         ])
       })
+
+      onlyLatestIt('does not retry new tests when testIsolation is false', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes', // This test will be considered new
+              'other context fails'
+            ]
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // Should only have 2 tests, no retries
+            assert.equal(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 1)
+
+            // No retries should occur when testIsolation is false
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+
+            newTests.forEach(newTest => {
+              assert.equal(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
+            })
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          }, 25000)
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              CYPRESS_TEST_ISOLATION: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
     })
 
     context('flaky test retries', () => {
@@ -1849,6 +1920,57 @@ moduleTypes.forEach(({
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
               SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
+
+      onlyLatestIt('does not retry flaky tests when testIsolation is false', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            // Should only have 3 tests, no retries
+            assert.equal(tests.length, 3)
+
+            // No retries should occur when testIsolation is false
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, 0)
+            assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
+          }, 30000)
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              CYPRESS_TEST_ISOLATION: 'false'
             },
             stdio: 'pipe'
           }
@@ -2546,6 +2668,78 @@ moduleTypes.forEach(({
           eventsPromise
         ])
       })
+
+      onlyLatestIt('does not retry attempt to fix tests when testIsolation is false', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true }
+        })
+
+        receiver.setTestManagementTests({
+          cypress: {
+            suites: {
+              'cypress/e2e/attempt-to-fix.js': {
+                tests: {
+                  'attempt to fix is attempt to fix': {
+                    properties: {
+                      attempt_to_fix: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+
+            const attemptToFixTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'attempt to fix is attempt to fix'
+            )
+
+            // Should only have 1 test, no retries when testIsolation is false
+            assert.equal(attemptToFixTests.length, 1)
+
+            attemptToFixTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
+              // No retries should occur
+              assert.notProperty(test.meta, TEST_IS_RETRY)
+              assert.notProperty(test.meta, TEST_RETRY_REASON)
+            })
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              CYPRESS_SHOULD_ALWAYS_PASS: '1',
+              CYPRESS_TEST_ISOLATION: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
+      })
     })
 
     context('libraries capabilities', () => {
@@ -2782,6 +2976,73 @@ moduleTypes.forEach(({
             { isModified: true, isEfd: true, isNew: true }
           )
         })
+      })
+
+      onlyLatestIt('does not retry impacted tests when testIsolation is false', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          known_tests_enabled: true
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+            const impactedTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test')
+
+            // Should only have 1 test, no retries when testIsolation is false
+            assert.equal(impactedTests.length, 1)
+
+            for (const impactedTest of impactedTests) {
+              assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+            }
+
+            // No retries should occur when testIsolation is false
+            const retriedTests = tests.filter(
+              test => test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_NAME] === 'impacted test is impacted test'
+            )
+            assert.equal(retriedTests.length, 0)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/impacted-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              GITHUB_BASE_REF: '',
+              CYPRESS_TEST_ISOLATION: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise
+        ])
       })
     })
   })

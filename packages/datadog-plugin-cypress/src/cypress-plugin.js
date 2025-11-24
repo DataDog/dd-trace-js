@@ -133,11 +133,12 @@ function getCypressCommand (details) {
   return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
 }
 
-function getIsTestIsolationEnabled (details) {
-  if (!details || !details.config) {
-    return false
+function getIsTestIsolationEnabled (cypressConfig) {
+  if (!cypressConfig) {
+    // If we can't read testIsolation config parameter, we default to allowing retries
+    return true
   }
-  return details.config.testIsolation || false
+  return cypressConfig.testIsolation !== undefined ? cypressConfig.testIsolation : true
 }
 
 function getLibraryConfiguration (tracer, testConfiguration) {
@@ -303,6 +304,12 @@ class CypressPlugin {
     this.tracer = tracer
     this.cypressConfig = cypressConfig
 
+    this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
+
+    if (!this.isTestIsolationEnabled) {
+      log.warn('Test isolation is disabled, retries will not be enabled')
+    }
+
     // we have to do it here because the tracer is not initialized in the constructor
     this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
       tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
@@ -331,7 +338,7 @@ class CypressPlugin {
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           this.isKnownTestsEnabled = isKnownTestsEnabled
-          if (isFlakyTestRetriesEnabled) {
+          if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
             this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
@@ -475,7 +482,6 @@ class CypressPlugin {
     // This is for the case where the user has not returned the promise from the init function
     await this.libraryConfigurationPromise
 
-    this.isTestIsolationEnabled = getIsTestIsolationEnabled(details)
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
