@@ -24,21 +24,31 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         before(async () => {
           const cwd = path.resolve(__dirname, `../../../versions/@prisma/client@${range}`)
-          await fs.cp(
-            path.resolve(__dirname, './schema.prisma'),
-            cwd + '/schema.prisma',
-          )
+          console.log('version', version)
+          if (version === '6.1.0') {
+            await fs.cp(
+              path.resolve(__dirname, './provider-prisma-client-js/schema.prisma'),
+              cwd,
+            )
+          } else {
+            await fs.cp(
+              path.resolve(__dirname, './provider-prisma-client/schema.prisma'),
+              cwd,
+            )
+          }
           await agent.load('prisma')
-          execSync('./node_modules/.bin/prisma generate', {
+          execSync('./node_modules/.bin/prisma generate --no-hints', {
             cwd, // Ensure the current working directory is where the schema is located
             stdio: 'inherit'
           })
-          prisma = require(`../../../versions/@prisma/client@${range}`).get()
+          prisma = (version === '6.1.0') ? 
+            require(`../../../versions/@prisma/client@${range}`).get() :
+            require(`../../../versions/@prisma/generated/prisma/client`) 
           prismaClient = new prisma.PrismaClient()
-          const matched = version.match(/(\d+)\.\d+\.\d+$/)
-          const majorVersion = matched[1]
-          tracingHelper = global.PRISMA_INSTRUMENTATION?.helper ||
-            global[`V${majorVersion}_PRISMA_INSTRUMENTATION`]?.helper
+          // const matched = version.match(/(\d+)\.\d+\.\d+$/)
+          // const majorVersion = matched[1]
+          // tracingHelper = global.PRISMA_INSTRUMENTATION?.helper ||
+          //   global[`V${majorVersion}_PRISMA_INSTRUMENTATION`]?.helper
         })
 
         after(() => {
@@ -214,7 +224,9 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${range}`).get()
+            prisma = (version === '6.1.0') ? 
+              require(`../../../versions/@prisma/client@${range}`).get() :
+              require(`../../../versions/@prisma/generated/prisma/client`)
             prismaClient = new prisma.PrismaClient()
           })
 
@@ -241,7 +253,10 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${range}`).get()
+            prisma = (version === '6.1.0') ? 
+            require(`../../../versions/@prisma/client@${range}`).get() :
+            require(`../../../versions/@prisma/generated/prisma/client`) 
+ 
             prismaClient = new prisma.PrismaClient()
           })
 
@@ -275,7 +290,10 @@ describe('Plugin', () => {
           after(() => { return agent.close({ ritmReset: false }) })
 
           beforeEach(() => {
-            prisma = require(`../../../versions/@prisma/client@${range}`).get()
+            prisma = (version === '6.1.0') ? 
+              require(`../../../versions/@prisma/client@${range}`).get() :
+              require(`../../../versions/@prisma/generated/prisma/client`) 
+             
             prismaClient = new prisma.PrismaClient()
           })
 

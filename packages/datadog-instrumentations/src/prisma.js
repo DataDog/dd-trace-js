@@ -5,6 +5,7 @@ const {
   addHook
 } = require('./helpers/instrument')
 
+
 const prismaEngineStart = channel('apm:prisma:engine:start')
 const tracingChannel = require('dc-polyfill').tracingChannel
 const clientCH = tracingChannel('apm:prisma:client')
@@ -15,14 +16,19 @@ const allowedClientSpanOperations = new Set([
   'transaction'
 ])
 
-class TracingHelper {
+class DatadogTracingHelper {
   dbConfig = null
+
+  constructor (dbConfig = null) {
+    this.dbConfig = dbConfig
+  }
   isEnabled () {
     return true
   }
 
   // needs a sampled tracecontext to generate engine spans
   getTraceParent (context) {
+    // TODO: Fix the id
     return '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' // valid sampled traceparent
   }
 
@@ -34,7 +40,9 @@ class TracingHelper {
     }
   }
 
-  getActiveContext () {}
+  getActiveContext () {
+    // TODO: Fix context
+  }
 
   runInChildSpan (options, callback) {
     if (typeof options === 'string') {
@@ -63,43 +71,49 @@ class TracingHelper {
   }
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
-  const tracingHelper = new TracingHelper()
 
-  // we need to patch the prototype to get db config since this works for ESM and CJS alike.
-  const originalRequest = prisma.PrismaClient.prototype._request
-  prisma.PrismaClient.prototype._request = function () {
-    if (!tracingHelper.dbConfig) {
-      const inlineDatasources = this._engine?.config.inlineDatasources
-      const overrideDatasources = this._engine?.config.overrideDatasources
-      const datasources = inlineDatasources?.db.url?.value ?? overrideDatasources?.db?.url
-      if (datasources) {
-        const result = parseDBString(datasources)
-        tracingHelper.setDbString(result)
+addHook({ name: '@prisma/client', versions: ['>=6.1.0'], file: 'runtime/library.js' }, (runtime, versions) => {
+  const originalGetPrismaClient = runtime.getPrismaClient
+  let datadogTracingHelper = new DatadogTracingHelper()
+
+  const runtime2 = new Proxy(runtime, {
+    get (target, prop) {
+      if (prop === 'getPrismaClient') {
+        console.log('Grabbing the config')
+        return function (config) {
+          
+          const datasources = config.inlineDatasources?.db.url?.value
+          if (datasources) {
+            const dbConfig = parseDBString(datasources)
+            datadogTracingHelper.setDbString(dbConfig)
+          }
+
+          // Call the original getPrismaClient with the config
+          const PrismaClient = originalGetPrismaClient.call(this, config)
+          
+          return class WrappedPrismaClientClass extends PrismaClient {
+            constructor (clientConfig) {
+              super(clientConfig)
+              this._tracingHelper = datadogTracingHelper
+              this._engine.tracingHelper = datadogTracingHelper
+            }
+          }
+        }
       }
+      return target[prop]
     }
-    return originalRequest.apply(this, arguments)
-  }
+  })
 
-  /*
-    * This is taking advantage of the built in tracing support from Prisma.
-    * The below variable is setting a global tracing helper that Prisma uses
-    * to enable OpenTelemetry.
-  */
-  // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  const versions = version.split('.')
-  if (versions[0] === '6' && versions[1] < 4) {
-    global.PRISMA_INSTRUMENTATION = {
-      helper: tracingHelper
-    }
-  } else {
-    global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
-      helper: tracingHelper
-    }
-  }
+  // Another route is to use the global.PRISMA_INSTRUMENTATION to set the tracingHelper
 
-  return prisma
-})
+  // if (versions[0] === '6' && versions[1] < 4) {
+  //   global.PRISMA_INSTRUMENTATION = { helper: datadogTracingHelper }
+  // } else {
+  //   global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = { helper: datadogTracingHelper }
+  // }
+
+  return runtime2
+})  
 
 function parseDBString (dbString) {
   const url = new URL(dbString)
