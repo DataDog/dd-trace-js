@@ -57,8 +57,6 @@ function getCounter (event, ddVar, otelVar) {
   return counter
 }
 
-// TODO: I wonder if the mapping needs to be considered for ConfigEnvSources
-// But probably not, as we are looking for explicit env vars in there
 const otelDdEnvMapping = {
   OTEL_LOG_LEVEL: 'DD_TRACE_LOG_LEVEL',
   OTEL_PROPAGATORS: 'DD_TRACE_PROPAGATION_STYLE',
@@ -277,7 +275,7 @@ class Config {
   }
 
   constructor (options = {}) {
-    // TODO: We can remove this if we move the stable config loading to ConfigEnvSources
+    // TODO (mtoffl01, 2025-11-24): We can remove this if we move the stable config loading to ConfigEnvSources
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
       const StableConfig = require('./config_stable')
@@ -306,7 +304,6 @@ class Config {
     log.toggle(this.debug, this.logLevel)
 
     // Process stable config warnings, if any
-    // TODO: ConfigEnvSources will probably need to handle this?
     for (const warning of this.stableConfig?.warnings ?? []) {
       log.warn(warning)
     }
