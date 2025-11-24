@@ -220,6 +220,7 @@ interface Plugins {
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
+  "log4js": tracer.plugins.log4js;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -229,6 +230,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "neo4j-driver": tracer.plugins.neo4j_driver;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "openai": tracer.plugins.openai;
@@ -2174,6 +2176,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mariadb](https://github.com/mariadb-corporation/mariadb-connector-nodejs) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [log4js](https://github.com/npmjs/package/log4js) library.
+     */
+    interface log4js extends Instrumentation {}
+
     interface mariadb extends mysql {}
 
     /**
@@ -2254,6 +2262,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [net](https://nodejs.org/api/net.html) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [neo4j-driver](https://github.com/npmjs/package/neo4j-driver) database client library.
+     */
+    interface neo4j_driver extends Instrumentation {}
+
     interface net extends Instrumentation {}
 
     /**

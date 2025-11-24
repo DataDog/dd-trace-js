@@ -677,6 +677,24 @@ jobs:
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  log4js:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: log4js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+
   mariadb:
     runs-on: ubuntu-latest
     services:
@@ -829,6 +847,25 @@ jobs:
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  neo4j-driver:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: neo4j-driver
+      SERVICES: neo4j
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
 
   net:
     runs-on: ubuntu-latest
