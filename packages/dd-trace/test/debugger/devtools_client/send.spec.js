@@ -79,7 +79,8 @@ describe('input message http requests', function () {
 
     send(message, logger, dd, snapshot, callback)
     sinon.assert.notCalled(request)
-    sinon.assert.calledOnceWithMatch(jsonBuffer.write,
+    sinon.assert.calledOnceWithMatch(
+      /** @type {sinon.SinonSpy} */ (jsonBuffer.write),
       JSON.stringify(getPayload())
     )
     sinon.assert.notCalled(callback)
