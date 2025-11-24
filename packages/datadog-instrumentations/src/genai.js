@@ -15,15 +15,9 @@ function wrapGenerateContent (method) {
         return original.apply(this, args)
       }
 
-      const inputs = args[0]
       const normalizedName = normalizeMethodName(method)
 
-      const ctx = {
-        methodName: normalizedName,
-        inputs,
-        args,
-        model: inputs?.model || 'unknown'
-      }
+      const ctx = { args, methodName: normalizedName }
 
       return genaiTracingChannel.start.runStores(ctx, () => {
         let result
@@ -31,14 +25,15 @@ function wrapGenerateContent (method) {
           result = original.apply(this, arguments)
         } catch (error) {
           finish(ctx, null, error)
+          throw error
+        } finally {
+          genaiTracingChannel.end.publish(ctx)
         }
-
         return result.then(response => {
-          if (method === 'generateContentStream') {
+          if (response[Symbol.asyncIterator]) {
             shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
           } else {
             finish(ctx, response, null)
-            genaiTracingChannel.end.publish(ctx)
           }
           return response
         }).catch(error => {
@@ -91,29 +86,29 @@ addHook({
   versions: ['>=1.19.0']
 }, exports => {
   // Wrap GoogleGenAI to intercept when it creates Models instances
-  if (exports.GoogleGenAI) {
-    shimmer.wrap(exports, 'GoogleGenAI', GoogleGenAI => {
-      return class extends GoogleGenAI {
-        constructor (...args) {
-          super(...args)
+  if (!exports.GoogleGenAI) return exports
 
-          // Wrap the models property after it's created
-          if (this.models) {
-            if (this.models.generateContent) {
-              shimmer.wrap(this.models, 'generateContent', wrapGenerateContent('generateContent'))
-            }
-            if (this.models.generateContentStream) {
-              shimmer.wrap(this.models, 'generateContentStream', wrapGenerateContent('generateContentStream'))
-            }
-            if (this.models.embedContent) {
-              shimmer.wrap(this.models, 'embedContent', wrapGenerateContent('embedContent'))
-            }
+  shimmer.wrap(exports, 'GoogleGenAI', GoogleGenAI => {
+    return class extends GoogleGenAI {
+      constructor (...args) {
+        super(...args)
+
+        // We are patching the instance instead of the prototype because when it is compiled form 
+        // typescript, the models property is not available on the prototype.
+        if (this.models) {
+          if (this.models.generateContent) {
+            shimmer.wrap(this.models, 'generateContent', wrapGenerateContent('generateContent'))
+          }
+          if (this.models.generateContentStream) {
+            shimmer.wrap(this.models, 'generateContentStream', wrapGenerateContent('generateContentStream'))
+          }
+          if (this.models.embedContent) {
+            shimmer.wrap(this.models, 'embedContent', wrapGenerateContent('embedContent'))
           }
         }
       }
-    })
-  }
-
+    }
+  })
   return exports
 })
 

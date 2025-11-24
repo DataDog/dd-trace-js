@@ -27,7 +27,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       if (!done) return
 
       // Aggregate streaming chunks into a single response
-      ctx.result = this._aggregateStreamingChunks(ctx.chunks)
+      ctx.result = this.#aggregateStreamingChunks(ctx.chunks)
     })
   }
 
@@ -36,12 +36,12 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   // ============================================================================
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const methodName = ctx.methodName
+    const { args, methodName } = ctx
     if (!methodName) return
 
-    const inputs = ctx.inputs
+    const inputs = args[0]
     const operation = getOperation(methodName)
-    const kind = operation === 'embedding' ? 'embedding' : 'llm'
+    const kind = operation
 
     return {
       modelProvider: 'google',
@@ -52,17 +52,17 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   setLLMObsTags (ctx) {
+    const { args, methodName } = ctx
     const span = ctx.currentStore?.span
-    const methodName = ctx.methodName
     if (!methodName) return
 
-    const inputs = ctx.inputs
+    const inputs = args[0]
     const response = ctx.result
     const error = !!span.context()._tags.error
 
     const operation = getOperation(methodName)
 
-    if (operation === 'chat') {
+    if (operation === 'llm') {
       this._tagGenerateContent(span, inputs, response, error, ctx.isStreaming)
     } else if (operation === 'embedding') {
       this._tagEmbedding(span, inputs, response, error)
@@ -78,7 +78,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   // Streaming Utilities
   // ============================================================================
 
-  _aggregateStreamingChunks (chunks) {
+  #aggregateStreamingChunks (chunks) {
     const response = { candidates: [] }
 
     for (const chunk of chunks) {
@@ -103,6 +103,9 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     const inputMessages = this._formatInputMessages(inputs.contents)
 
+    const metadata = this._extractMetadata(config)
+    this._tagger.tagMetadata(span, metadata)
+
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
@@ -111,8 +114,6 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     const outputMessages = this._formatOutputMessages(response, isStreaming)
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
-    const metadata = this._extractMetadata(config)
-    this._tagger.tagMetadata(span, metadata)
   }
 
   _tagEmbedding (span, inputs, response, error) {
@@ -125,7 +126,6 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     const embeddingOutput = this._formatEmbeddingOutput(response)
     this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
-    this._tagger.tagMetadata(span, {})
   }
 
   // ============================================================================
@@ -235,8 +235,8 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       if (!content?.parts) continue
 
       // Skip special cases in streaming (handle them as non-streaming)
-      if (content.parts.some(part => part.functionCall || 
-                                     part.executableCode || 
+      if (content.parts.some(part => part.functionCall ||
+                                     part.executableCode ||
                                      part.codeExecutionResult)) {
         messages.push(...this._formatNonStreamingCandidate(candidate))
         continue
@@ -505,15 +505,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 // ============================================================================
 
 function getOperation (methodName) {
-  if (!methodName) return 'unknown'
-
-  if (methodName.includes('embed')) {
-    return 'embedding'
-  } else if (methodName.includes('generate')) {
-    return 'chat'
-  }
-
-  return 'unknown'
+  return methodName.includes('embed') ? 'embedding' : 'llm'
 }
 
 module.exports = GenAiLLMObsPlugin

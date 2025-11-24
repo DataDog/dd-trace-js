@@ -11,7 +11,10 @@ class GenAiTracingPlugin extends TracingPlugin {
   static get kind () { return 'client' }
 
   bindStart (ctx) {
-    const { methodName, inputs, promptText, model } = ctx
+    const { args, methodName } = ctx
+
+    const inputs = args[0]
+    const model = inputs?.model || 'unknown'
 
     const service = this.serviceName({ pluginConfig: this.config })
 
@@ -30,12 +33,13 @@ class GenAiTracingPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
+    const { span } = ctx.currentStore
+    if (!span) return
+
     if (ctx.result) {
-      ctx.currentStore.span.setTag('google_genai.response.model', ctx.result.modelVersion || ctx.inputs?.model)
+      span.setTag('google_genai.response.model', ctx.result.modelVersion || ctx.inputs?.model)
     }
-    if (ctx.currentStore.span) {
-      ctx.currentStore.span.finish()
-    }
+    span.finish()
   }
 }
 
