@@ -54,8 +54,8 @@ describe('Plugin', () => {
           logger = log4js.getLogger()
         })
 
-        afterEach(() => {
-          log4js.shutdown()
+        afterEach((done) => {
+          log4js.shutdown(done)
         })
 
         it('should not alter the default behavior', () => {
@@ -103,8 +103,8 @@ describe('Plugin', () => {
           logger = log4js.getLogger()
         })
 
-        afterEach(() => {
-          log4js.shutdown()
+        afterEach((done) => {
+          log4js.shutdown(done)
         })
 
         it('should add the trace identifiers to the default logger', () => {
