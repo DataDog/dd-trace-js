@@ -407,9 +407,9 @@
     rimraf "^3.0.0"
 
 "@isaacs/ttlcache@^2.0.1":
-  version "2.1.1"
-  resolved "https://registry.yarnpkg.com/@isaacs/ttlcache/-/ttlcache-2.1.1.tgz#60f940f427088d5553cc373577bcfbba33a7333e"
-  integrity sha512-idlHm4Umu3Atw80UOTicChGv5kUA9SuF77NFW1g2/cKunb9yaoCYP/1rSiMn6HG0ELEQZh2BrRZoCRgVS2QL0w==
+  version "2.1.2"
+  resolved "https://registry.yarnpkg.com/@isaacs/ttlcache/-/ttlcache-2.1.2.tgz#63f0b897382df54412ab9c9a178107b67ed73c2b"
+  integrity sha512-lmG2ZHXBo7tgF1I3vGvBMnUJYhaNE25fmx+tUfotvE3vsARzxiiDXmCBI6Ch8qEHeHmfunr+eVPgIaIc8xIkbg==
 
 "@istanbuljs/load-nyc-config@^1.0.0":
   version "1.1.0"
