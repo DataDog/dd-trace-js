@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -70,16 +72,16 @@ describe('External Logger', () => {
 
     externalLogger.flush((err) => {
       try {
-        expect(request[0]).to.have.property('message', 'oh no, something is up')
-        expect(request[0]).to.have.property('custom', 'field')
-        expect(request[0]).to.have.property('attribute', 'funky')
-        expect(request[0]).to.have.property('service', 'outer_space')
-        expect(request[0]).to.have.property('level', 'info')
-        expect(request[0]).to.have.property('dd.trace_id', '000001000')
-        expect(request[0]).to.have.property('dd.span_id', '9999991999')
+        assert.strictEqual(request[0].message, 'oh no, something is up')
+        assert.strictEqual(request[0].custom, 'field')
+        assert.strictEqual(request[0].attribute, 'funky')
+        assert.strictEqual(request[0].service, 'outer_space')
+        assert.strictEqual(request[0].level, 'info')
+        assert.strictEqual(request[0]['dd.trace_id'], '000001000')
+        assert.strictEqual(request[0]['dd.span_id'], '9999991999')
         expect(request[0].timestamp).to.be.greaterThanOrEqual(currentTime)
-        expect(request[0]).to.have.property('ddsource', 'logging_from_space')
-        expect(request[0]).to.have.property('ddtags', 'env:external_logger,version:1.2.3,service:external')
+        assert.strictEqual(request[0].ddsource, 'logging_from_space')
+        assert.strictEqual(request[0].ddtags, 'env:external_logger,version:1.2.3,service:external')
       } catch (e) {
         done(e)
         return
@@ -95,10 +97,10 @@ describe('External Logger', () => {
       .reply(202, {})
 
     externalLogger.enqueue({})
-    expect(externalLogger.queue.length).to.equal(1)
+    assert.strictEqual(externalLogger.queue.length, 1)
 
     externalLogger.flush((err) => {
-      expect(externalLogger.queue.length).to.equal(0)
+      assert.strictEqual(externalLogger.queue.length, 0)
       done(err)
     })
   })
@@ -111,7 +113,7 @@ describe('External Logger', () => {
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
       expect(err).to.be.an.instanceOf(Error)
-      expect(errorLog.getCall(0).args[0]).to.be.equal(
+      assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 logs, received response code 400'
       )
       done()
@@ -126,7 +128,7 @@ describe('External Logger', () => {
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
       expect(err).to.be.an.instanceOf(Error)
-      expect(errorLog.getCall(0).args[0]).to.be.equal(
+      assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 log(s), with error missing API key'
       )
       done()
@@ -139,10 +141,10 @@ describe('External Logger', () => {
     for (let i = 0; i < 10; i++) {
       externalLogger.enqueue({})
     }
-    expect(flusher).to.not.have.been.called
+    sinon.assert.notCalled(flusher)
 
     externalLogger.enqueue({})
-    expect(flusher).to.have.been.called
+    sinon.assert.called(flusher)
 
     flusher.restore()
     done()

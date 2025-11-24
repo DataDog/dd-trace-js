@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
@@ -19,7 +21,7 @@ describe('OTel TracerProvider', () => {
     const provider = new TracerProvider()
     provider.register()
 
-    expect(trace.getTracerProvider().getDelegate()).to.equal(provider)
+    assert.strictEqual(trace.getTracerProvider().getDelegate(), provider)
   })
 
   it('should get tracer', () => {
@@ -27,23 +29,23 @@ describe('OTel TracerProvider', () => {
     const tracer = provider.getTracer()
 
     expect(tracer).to.be.an.instanceOf(Tracer)
-    expect(tracer).to.equal(provider.getTracer())
+    assert.strictEqual(tracer, provider.getTracer())
   })
 
   it('should get unique tracers by name and version key', () => {
     const provider = new TracerProvider()
     const tracer = provider.getTracer('a', '1')
 
-    expect(tracer).to.equal(provider.getTracer('a', '1'))
-    expect(tracer).to.not.equal(provider.getTracer('a', '2'))
-    expect(tracer).to.not.equal(provider.getTracer('b', '1'))
+    assert.strictEqual(tracer, provider.getTracer('a', '1'))
+    assert.notStrictEqual(tracer, provider.getTracer('a', '2'))
+    assert.notStrictEqual(tracer, provider.getTracer('b', '1'))
   })
 
   it('should get active span processor', () => {
     const provider = new TracerProvider()
 
     // Initially is a NoopSpanProcessor
-    expect(provider._processors.length).to.equal(0)
+    assert.strictEqual(provider._processors.length, 0)
     expect(provider.getActiveSpanProcessor()).to.be.an.instanceOf(NoopSpanProcessor)
 
     // Swap out shutdown function to check if it's called
@@ -52,8 +54,8 @@ describe('OTel TracerProvider', () => {
 
     // After adding a span processor it should be a MultiSpanProcessor
     provider.addSpanProcessor(new NoopSpanProcessor())
-    expect(shutdown).to.have.been.calledOnce
-    expect(provider._processors.length).to.equal(1)
+    sinon.assert.calledOnce(shutdown)
+    assert.strictEqual(provider._processors.length, 1)
     expect(provider.getActiveSpanProcessor()).to.be.an.instanceOf(MultiSpanProcessor)
   })
 
@@ -64,7 +66,7 @@ describe('OTel TracerProvider', () => {
     processor.shutdown = sinon.stub()
 
     provider.shutdown()
-    expect(processor.shutdown).to.have.been.calledOnce
+    sinon.assert.calledOnce(processor.shutdown)
   })
 
   it('should delegate forceFlush to active span processor', () => {
@@ -74,6 +76,6 @@ describe('OTel TracerProvider', () => {
     processor.forceFlush = sinon.stub()
 
     provider.forceFlush()
-    expect(processor.forceFlush).to.have.been.calledOnce
+    sinon.assert.calledOnce(processor.forceFlush)
   })
 })

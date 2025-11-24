@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 /* eslint-disable no-console */
 
 const childProcess = require('child_process')
@@ -8,7 +9,6 @@ const util = require('util')
 const os = require('os')
 const path = require('path')
 const { once } = require('events')
-const { expect } = require('chai')
 const latests = require('../plugins/versions/package.json').dependencies
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
@@ -125,7 +125,7 @@ async function runSequential (testCmd) {
 
 function defaultRunner ({ withoutTracer, withTracer }) {
   try {
-    expect(withTracer.code).to.equal(withoutTracer.code)
+    assert.strictEqual(withTracer.code, withoutTracer.code)
   } catch (e) {
     console.log(`======= BEGIN STDOUT WITHOUT TRACER
 ${withoutTracer.stdout}

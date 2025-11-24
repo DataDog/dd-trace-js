@@ -1,14 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const tags = require('../../../ext/tags')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -107,17 +107,17 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
-                expect(traces[0][0]).to.have.property('type', 'http')
-                expect(traces[0][0]).to.have.property('resource', 'GET')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                expect(traces[0][0].meta).to.have.property('component', 'http2')
-                expect(traces[0][0].meta).to.have.property('_dd.integration', 'http2')
-                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-                expect(traces[0][0].metrics).to.have.property('network.destination.port', port)
+                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
+                assert.strictEqual(traces[0][0].type, 'http')
+                assert.strictEqual(traces[0][0].resource, 'GET')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
+                assert.strictEqual(traces[0][0].meta.component, 'http2')
+                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'http2')
+                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+                assert.strictEqual(traces[0][0].metrics['network.destination.port'], port)
               })
               .then(done)
               .catch(done)
@@ -144,8 +144,8 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/`)
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/`)
               })
               .then(done)
               .catch(done)
@@ -172,7 +172,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
               })
               .then(done)
               .catch(done)
@@ -205,7 +205,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
               })
               .then(done)
               .catch(done)
@@ -233,7 +233,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
               })
               .then(done)
               .catch(done)
@@ -278,7 +278,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
               })
               .then(done)
               .catch(done)
@@ -322,7 +322,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.url', `${protocol}://localhost:${port}/`)
+                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/`)
               })
               .then(done)
               .catch(done)
@@ -345,8 +345,8 @@ describe('Plugin', () => {
 
         it('should inject its parent span in the headers', done => {
           const app = (stream, headers) => {
-            expect(headers['x-datadog-trace-id']).to.be.a('string')
-            expect(headers['x-datadog-parent-id']).to.be.a('string')
+            assert.strictEqual(typeof headers['x-datadog-trace-id'], 'string')
+            assert.strictEqual(typeof headers['x-datadog-parent-id'], 'string')
 
             stream.respond({
               ':status': 200
@@ -357,7 +357,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
               })
               .then(done)
               .catch(done)
@@ -376,8 +376,8 @@ describe('Plugin', () => {
         it('should skip injecting if the Authorization header contains an AWS signature', done => {
           const app = (stream, headers) => {
             try {
-              expect(headers['x-datadog-trace-id']).to.be.undefined
-              expect(headers['x-datadog-parent-id']).to.be.undefined
+              assert.strictEqual(headers['x-datadog-trace-id'], undefined)
+              assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
                 ':status': 200
@@ -408,8 +408,8 @@ describe('Plugin', () => {
         it('should skip injecting if one of the Authorization headers contains an AWS signature', done => {
           const app = (stream, headers) => {
             try {
-              expect(headers['x-datadog-trace-id']).to.be.undefined
-              expect(headers['x-datadog-parent-id']).to.be.undefined
+              assert.strictEqual(headers['x-datadog-trace-id'], undefined)
+              assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
                 ':status': 200
@@ -440,8 +440,8 @@ describe('Plugin', () => {
         it('should skip injecting if the X-Amz-Signature header is set', done => {
           const app = (stream, headers) => {
             try {
-              expect(headers['x-datadog-trace-id']).to.be.undefined
-              expect(headers['x-datadog-parent-id']).to.be.undefined
+              assert.strictEqual(headers['x-datadog-trace-id'], undefined)
+              assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
                 ':status': 200
@@ -472,8 +472,8 @@ describe('Plugin', () => {
         it('should skip injecting if the X-Amz-Signature query param is set', done => {
           const app = (stream, headers) => {
             try {
-              expect(headers['x-datadog-trace-id']).to.be.undefined
-              expect(headers['x-datadog-parent-id']).to.be.undefined
+              assert.strictEqual(headers['x-datadog-trace-id'], undefined)
+              assert.strictEqual(headers['x-datadog-parent-id'], undefined)
 
               stream.respond({
                 ':status': 200
@@ -516,7 +516,7 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               const req = client.request({ ':path': '/user' })
               req.on('response', (headers, flags) => {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               })
 
@@ -532,11 +532,11 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'http2')
-              expect(traces[0][0].metrics).to.have.property('network.destination.port', 7357)
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta.component, 'http2')
+              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 7357)
             })
             .then(done)
             .catch(done)
@@ -561,7 +561,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('error', 0)
+                assert.strictEqual(traces[0][0].error, 0)
               })
               .then(done)
               .catch(done)
@@ -588,7 +588,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
+                assert.strictEqual(traces[0][0].error, 1)
               })
               .then(done)
               .catch(done)
@@ -617,7 +617,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const spans = traces[0]
-                expect(spans.length).to.equal(3)
+                assert.strictEqual(spans.length, 3)
               })
               .then(done)
               .catch(done)
@@ -671,7 +671,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('service', 'custom')
+                assert.strictEqual(traces[0][0].service, 'custom')
               })
               .then(done)
               .catch(done)
@@ -762,7 +762,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('error', 1)
+                assert.strictEqual(traces[0][0].error, 1)
               })
               .then(done)
               .catch(done)
@@ -841,7 +841,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
+                assert.strictEqual(traces[0][0].service, `localhost:${port}`)
               })
               .then(done)
               .catch(done)
@@ -887,8 +887,8 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.:path`, '/user')
-                expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
+                assert.strictEqual(meta[`${HTTP_REQUEST_HEADERS}.:path`], '/user')
+                assert.strictEqual(meta[`${HTTP_RESPONSE_HEADERS}.x-foo`], 'bar')
               })
               .then(done)
               .catch(done)

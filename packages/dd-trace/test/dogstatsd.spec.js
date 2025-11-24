@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -79,7 +79,7 @@ describe('dogstatsd', () => {
     assertData = undefined
     sockets = []
     httpServer = http.createServer((req, res) => {
-      expect(req.url).to.equal('/dogstatsd/v2/proxy')
+      assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
       req.on('data', d => httpData.push(d))
       req.on('end', () => {
         res.statusCode = statusCode
@@ -94,7 +94,7 @@ describe('dogstatsd', () => {
       }
       udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
       httpUdsServer = http.createServer((req, res) => {
-        expect(req.url).to.equal('/dogstatsd/v2/proxy')
+        assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
         req.on('data', d => httpData.push(d))
         req.on('end', () => {
           res.end()
@@ -122,12 +122,12 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 10)
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
-    expect(udp4.send.firstCall.args[1]).to.equal(0)
-    expect(udp4.send.firstCall.args[2]).to.equal(14)
-    expect(udp4.send.firstCall.args[3]).to.equal('8125')
-    expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g\n')
+    assert.strictEqual(udp4.send.firstCall.args[1], 0)
+    assert.strictEqual(udp4.send.firstCall.args[2], 14)
+    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
   it('should send histograms', () => {
@@ -136,12 +136,12 @@ describe('dogstatsd', () => {
     client.histogram('test.histogram', 10)
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
-    expect(udp4.send.firstCall.args[1]).to.equal(0)
-    expect(udp4.send.firstCall.args[2]).to.equal(20)
-    expect(udp4.send.firstCall.args[3]).to.equal('8125')
-    expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.histogram:10|h\n')
+    assert.strictEqual(udp4.send.firstCall.args[1], 0)
+    assert.strictEqual(udp4.send.firstCall.args[2], 20)
+    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
   it('should send counters', () => {
@@ -150,9 +150,9 @@ describe('dogstatsd', () => {
     client.increment('test.count', 10)
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
-    expect(udp4.send.firstCall.args[2]).to.equal(16)
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
+    assert.strictEqual(udp4.send.firstCall.args[2], 16)
   })
 
   it('should send multiple metrics', () => {
@@ -163,9 +163,9 @@ describe('dogstatsd', () => {
     client.decrement('test.count', 5)
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\ntest.count:10|c\ntest.count:-5|c\n')
-    expect(udp4.send.firstCall.args[2]).to.equal(46)
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g\ntest.count:10|c\ntest.count:-5|c\n')
+    assert.strictEqual(udp4.send.firstCall.args[2], 46)
   })
 
   it('should support tags', () => {
@@ -174,9 +174,9 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
-    expect(udp4.send.firstCall.args[2]).to.equal(31)
+    sinon.assert.called(udp4.send)
+    assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar,baz:qux\n')
+    assert.strictEqual(udp4.send.firstCall.args[2], 31)
   })
 
   it('should buffer metrics', () => {
@@ -189,7 +189,7 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1, tags)
     client.flush()
 
-    expect(udp4.send).to.have.been.calledTwice
+    sinon.assert.calledTwice(udp4.send)
   })
 
   it('should not flush if the queue is empty', () => {
@@ -197,9 +197,9 @@ describe('dogstatsd', () => {
 
     client.flush()
 
-    expect(udp4.send).to.not.have.been.called
-    expect(udp6.send).to.not.have.been.called
-    expect(dns.lookup).to.not.have.been.called
+    sinon.assert.notCalled(udp4.send)
+    sinon.assert.notCalled(udp6.send)
+    sinon.assert.notCalled(dns.lookup)
   })
 
   it('should not flush if the dns lookup fails', () => {
@@ -210,9 +210,9 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1)
     client.flush()
 
-    expect(dns.lookup).to.have.been.called
-    expect(udp4.send).to.not.have.been.called
-    expect(udp6.send).to.not.have.been.called
+    sinon.assert.called(dns.lookup)
+    sinon.assert.notCalled(udp4.send)
+    sinon.assert.notCalled(udp6.send)
   })
 
   it('should not call DNS if the host is an IPv4 address', () => {
@@ -223,8 +223,8 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1)
     client.flush()
 
-    expect(udp4.send).to.have.been.called
-    expect(dns.lookup).to.not.have.been.called
+    sinon.assert.called(udp4.send)
+    sinon.assert.notCalled(dns.lookup)
   })
 
   it('should not call DNS if the host is an IPv6 address', () => {
@@ -235,8 +235,8 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1)
     client.flush()
 
-    expect(udp6.send).to.have.been.called
-    expect(dns.lookup).to.not.have.been.called
+    sinon.assert.called(udp6.send)
+    sinon.assert.notCalled(dns.lookup)
   })
 
   it('should support configuration', () => {
@@ -250,19 +250,19 @@ describe('dogstatsd', () => {
     client.gauge('test.avg', 1, ['baz:qux'])
     client.flush()
 
-    expect(udp6.send).to.have.been.called
-    expect(udp6.send.firstCall.args[0].toString()).to.equal('prefix.test.avg:1|g|#foo:bar,baz:qux\n')
-    expect(udp6.send.firstCall.args[1]).to.equal(0)
-    expect(udp6.send.firstCall.args[2]).to.equal(37)
-    expect(udp6.send.firstCall.args[3]).to.equal(7777)
-    expect(udp6.send.firstCall.args[4]).to.equal('::1')
+    sinon.assert.called(udp6.send)
+    assert.strictEqual(udp6.send.firstCall.args[0].toString(), 'prefix.test.avg:1|g|#foo:bar,baz:qux\n')
+    assert.strictEqual(udp6.send.firstCall.args[1], 0)
+    assert.strictEqual(udp6.send.firstCall.args[2], 37)
+    assert.strictEqual(udp6.send.firstCall.args[3], 7777)
+    assert.strictEqual(udp6.send.firstCall.args[4], '::1')
   })
 
   const udsIt = os.platform() === 'win32' ? it.skip : it
   udsIt('should support HTTP via unix domain socket', (done) => {
     assertData = () => {
       try {
-        expect(Buffer.concat(httpData).toString()).to.equal('test.avg:0|g\ntest.avg2:2|g\n')
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:0|g\ntest.avg2:2|g\n')
         done()
       } catch (e) {
         done(e)
@@ -281,7 +281,7 @@ describe('dogstatsd', () => {
   it('should support HTTP via port', (done) => {
     assertData = () => {
       try {
-        expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
         done()
       } catch (e) {
         done(e)
@@ -300,7 +300,7 @@ describe('dogstatsd', () => {
   it('should support HTTP via URL object', (done) => {
     assertData = () => {
       try {
-        expect(Buffer.concat(httpData).toString()).to.equal('test.avg:1|g\ntest.avg2:2|g\n')
+        assert.strictEqual(Buffer.concat(httpData).toString(), 'test.avg:1|g\ntest.avg2:2|g\n')
         done()
       } catch (e) {
         done(e)
@@ -320,9 +320,9 @@ describe('dogstatsd', () => {
     assertData = () => {
       setTimeout(() => {
         try {
-          expect(udp4.send).to.have.been.called
-          expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c\n')
-          expect(udp4.send.firstCall.args[2]).to.equal(16)
+          sinon.assert.called(udp4.send)
+          assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c\n')
+          assert.strictEqual(udp4.send.firstCall.args[2], 16)
           done()
         } catch (e) {
           done(e)
@@ -344,9 +344,9 @@ describe('dogstatsd', () => {
   it('should fail over to UDP when receiving network error from agent', (done) => {
     udp4.send = sinon.stub().callsFake(() => {
       try {
-        expect(udp4.send).to.have.been.called
-        expect(udp4.send.firstCall.args[0].toString()).to.equal('test.foo:10|c\n')
-        expect(udp4.send.firstCall.args[2]).to.equal(14)
+        sinon.assert.called(udp4.send)
+        assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.foo:10|c\n')
+        assert.strictEqual(udp4.send.firstCall.args[2], 14)
         done()
       } catch (e) {
         done(e)
@@ -375,8 +375,8 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 10, { foo: 'bar' })
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar\n')
     })
 
     it('.gauge() with tags', () => {
@@ -387,8 +387,8 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 20, { foo: 'bar', baz: 'qux' })
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.avg:10|g|#foo:bar',
         'test.avg:20|g|#foo:bar,baz:qux'
       ].join('\n') + '\n')
@@ -401,8 +401,8 @@ describe('dogstatsd', () => {
       client.increment('test.count', 10)
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:20|c\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:20|c\n')
     })
 
     it('.increment() with default', () => {
@@ -412,8 +412,8 @@ describe('dogstatsd', () => {
       client.increment('test.count')
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:2|c\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:2|c\n')
     })
 
     it('.increment() with tags', () => {
@@ -424,8 +424,8 @@ describe('dogstatsd', () => {
       client.increment('test.count', 10, { foo: 'bar', baz: 'qux' })
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.count:10|c|#foo:bar',
         'test.count:20|c|#foo:bar,baz:qux'
       ].join('\n') + '\n')
@@ -438,8 +438,8 @@ describe('dogstatsd', () => {
       client.decrement('test.count', 10)
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-20|c\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:-20|c\n')
     })
 
     it('.decrement() with default', () => {
@@ -449,8 +449,8 @@ describe('dogstatsd', () => {
       client.decrement('test.count')
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-2|c\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:-2|c\n')
     })
 
     it('.distribution()', () => {
@@ -460,8 +460,8 @@ describe('dogstatsd', () => {
       client.distribution('test.dist', 10)
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\ntest.dist:10|d\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.dist:10|d\ntest.dist:10|d\n')
     })
 
     it('.histogram()', () => {
@@ -471,8 +471,8 @@ describe('dogstatsd', () => {
       client.histogram('test.histogram', 10)
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.histogram.min:10|g',
         'test.histogram.max:10|g',
         'test.histogram.sum:20|c',
@@ -492,8 +492,8 @@ describe('dogstatsd', () => {
       client.histogram('test.histogram', 10, { foo: 'bar', baz: 'qux' })
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.histogram.min:10|g|#foo:bar',
         'test.histogram.max:10|g|#foo:bar',
         'test.histogram.sum:10|c|#foo:bar',
@@ -519,8 +519,8 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 10, ['foo:bar', 'baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar,baz:qux\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar,baz:qux\n')
     })
 
     it('should support array-based tags for increment', () => {
@@ -529,8 +529,8 @@ describe('dogstatsd', () => {
       client.increment('test.count', 10, ['foo:bar', 'baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:10|c|#foo:bar,baz:qux\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c|#foo:bar,baz:qux\n')
     })
 
     it('should support array-based tags for decrement', () => {
@@ -539,8 +539,8 @@ describe('dogstatsd', () => {
       client.decrement('test.count', 10, ['foo:bar', 'baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.count:-10|c|#foo:bar,baz:qux\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:-10|c|#foo:bar,baz:qux\n')
     })
 
     it('should support array-based tags for distribution', () => {
@@ -549,8 +549,8 @@ describe('dogstatsd', () => {
       client.distribution('test.dist', 10, ['foo:bar', 'baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d|#foo:bar,baz:qux\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.dist:10|d|#foo:bar,baz:qux\n')
     })
 
     it('should support array-based tags for histogram', () => {
@@ -559,8 +559,8 @@ describe('dogstatsd', () => {
       client.histogram('test.histogram', 10, ['foo:bar', 'baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.histogram.min:10|g|#foo:bar,baz:qux',
         'test.histogram.max:10|g|#foo:bar,baz:qux',
         'test.histogram.sum:10|c|#foo:bar,baz:qux',
@@ -578,8 +578,8 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 10, [])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g\n')
     })
 
     it('should handle mixed tag formats', () => {
@@ -589,8 +589,8 @@ describe('dogstatsd', () => {
       client.gauge('test.avg', 20, ['baz:qux'])
       client.flush()
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal([
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), [
         'test.avg:10|g|#foo:bar',
         'test.avg:20|g|#baz:qux'
       ].join('\n') + '\n')
@@ -605,12 +605,12 @@ describe('dogstatsd', () => {
 
       client.gauge('test.avg', 10, { foo: 'bar' })
 
-      expect(udp4.send).not.to.have.been.called
+      sinon.assert.notCalled(udp4.send)
 
       clock.tick(10 * 1000)
 
-      expect(udp4.send).to.have.been.called
-      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g|#foo:bar\n')
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar\n')
     })
   })
 })

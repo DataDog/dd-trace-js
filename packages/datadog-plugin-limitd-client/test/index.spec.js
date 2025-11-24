@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -38,7 +39,7 @@ describe('Plugin', () => {
             if (err) return done(err)
 
             try {
-              expect(storage('legacy').getStore()).to.equal(span)
+              assert.strictEqual(storage('legacy').getStore(), span)
               done()
             } catch (e) {
               done(e)
