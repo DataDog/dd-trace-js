@@ -50,7 +50,7 @@ describe('ConfigEnvSources', () => {
   describe('constructor', () => {
     it('should merge sources in correct priority order: local < env < fleet', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       // Mock stable config with local and fleet entries
       StableConfigStub.returns({
         localEntries: {
@@ -85,7 +85,7 @@ describe('ConfigEnvSources', () => {
 
     it('should use environment variables when stable config is not available', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       // StableConfig throws error (not available)
       StableConfigStub.throws(new Error('Config not found'))
 
@@ -118,7 +118,7 @@ describe('ConfigEnvSources', () => {
 
     it('should handle undefined values correctly', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: {
           DD_SERVICE: 'local-service',
@@ -146,7 +146,7 @@ describe('ConfigEnvSources', () => {
 
     it('should make values accessible as properties', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: {},
         fleetEntries: {},
@@ -163,12 +163,12 @@ describe('ConfigEnvSources', () => {
       // Access as property
       expect(sources.DD_SERVICE).to.equal('my-service')
       // Access as bracket notation
-      expect(sources['DD_ENV']).to.equal('production')
+      expect(sources.DD_ENV).to.equal('production')
     })
 
     it('should handle empty stable config entries', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: null,
         fleetEntries: undefined,
@@ -213,7 +213,7 @@ describe('ConfigEnvSources', () => {
 
     it('should create instance only once', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: {},
         fleetEntries: {},
@@ -246,7 +246,7 @@ describe('ConfigEnvSources', () => {
 
     it('should allow fresh instance creation with updated values', () => {
       isInServerlessEnvironmentStub.returns(true)
-      
+
       getEnvironmentVariablesStub.onCall(0).returns({
         DD_SERVICE: 'service-1'
       })
@@ -268,7 +268,7 @@ describe('ConfigEnvSources', () => {
   describe('priority scenarios', () => {
     it('should prioritize fleet over env over local', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: {
           DD_TRACE_SAMPLE_RATE: '0.1',
@@ -298,7 +298,7 @@ describe('ConfigEnvSources', () => {
 
     it('should not override defined values with undefined', () => {
       isInServerlessEnvironmentStub.returns(false)
-      
+
       StableConfigStub.returns({
         localEntries: {
           DD_SERVICE: 'local-service'
@@ -323,8 +323,6 @@ describe('ConfigEnvSources', () => {
 
 describe('getEnvironmentVariableSources', () => {
   let getEnvironmentVariableSources
-  let ConfigEnvSources
-  let getConfigEnvSources
   let resetConfigEnvSources
   let getEnvironmentVariablesStub
   let isInServerlessEnvironmentStub
@@ -344,8 +342,6 @@ describe('getEnvironmentVariableSources', () => {
       }
     })
 
-    ConfigEnvSources = configEnvSourcesMod.ConfigEnvSources
-    getConfigEnvSources = configEnvSourcesMod.getConfigEnvSources
     resetConfigEnvSources = configEnvSourcesMod.resetConfigEnvSources
     getEnvironmentVariableSources = configEnvSourcesMod.getEnvironmentVariableSources
 
@@ -476,4 +472,3 @@ describe('getEnvironmentVariableSources', () => {
     expect(getEnvVarSources('DD_ENV')).to.equal('production')
   })
 })
-
