@@ -24,19 +24,30 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
-const modulesOfInterest = new Set()
+function moduleOfInterestKey (name, file) {
+  return file ? `${name}/${file}` : name
+}
 
-for (const [name, instrumentation] of Object.entries(instrumentations)) {
-  for (const entry of instrumentation) {
-    if (!entry.file) {
-      modulesOfInterest.add(name) // e.g. "redis"
-    } else {
-      modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
-    }
+const builtinCanonicalNames = new Set(require('module').builtinModules)
+
+function addModuleOfInterest (name, file) {
+  if (!name) return
+
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
+
+  if (builtinCanonicalNames.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
+const modulesOfInterest = new Set()
+
+for (const instrumentation of Object.values(instrumentations)) {
+  for (const entry of instrumentation) {
+    addModuleOfInterest(entry.name, entry.file)
+  }
+}
+
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
 const fs = require('fs')
@@ -44,7 +55,7 @@ const { execSync } = require('child_process')
 
 const builtins = new Set()
 
-for (const builtin of RAW_BUILTINS) {
+for (const builtin of builtinCanonicalNames) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
