@@ -31,7 +31,7 @@ describe('express-mongo-sanitize', () => {
         })
 
         server = app.listen(0, () => {
-          port = server.address().port
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           done()
         })
       })

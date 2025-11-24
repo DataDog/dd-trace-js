@@ -1,0 +1,9 @@
+{
+  "eslint.workingDirectories": [
+    "."
+  ],
+  "eslint.options": {
+    "overrideConfigFile": "${workspaceFolder}/eslint.config.mjs"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

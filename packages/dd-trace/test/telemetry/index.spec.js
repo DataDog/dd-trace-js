@@ -216,7 +216,7 @@ describe('telemetry', () => {
       telemetry.start({
         telemetry: { enabled: false, heartbeatInterval: 60000 },
         hostname: 'localhost',
-        port: server.address().port
+        port: (/** @type {import('net').AddressInfo} */ (server.address())).port
       })
 
       setTimeout(() => {

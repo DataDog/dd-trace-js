@@ -63,7 +63,7 @@ describe('Inferred Proxy Spans', function () {
 
     return new Promise((resolve, reject) => {
       appListener = server.listen(0, '127.0.0.1', () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         appListener._connections = connections
         resolve()
       })
