@@ -19,6 +19,39 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
+function stripNodeProtocol (name) {
+  if (typeof name !== 'string') return name
+  return name.startsWith('node:') ? name.slice(5) : name
+}
+
+const builtinModules = new Set(Module.builtinModules.map(stripNodeProtocol))
+
+function isBuiltinModuleName (name) {
+  if (typeof name !== 'string') return false
+  return builtinModules.has(stripNodeProtocol(name))
+}
+
+function normalizeModuleName (name) {
+  if (typeof name !== 'string') return name
+  const stripped = stripNodeProtocol(name)
+  return builtinModules.has(stripped) ? stripped : name
+}
+
+function normalizeModulesList (modules) {
+  const normalized = []
+  const seen = new Set()
+
+  for (const mod of modules) {
+    const normalizedName = normalizeModuleName(mod)
+    if (typeof normalizedName !== 'string') continue
+    if (seen.has(normalizedName)) continue
+    seen.add(normalizedName)
+    normalized.push(normalizedName)
+  }
+
+  return normalized
+}
+
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
@@ -37,15 +70,15 @@ function Hook (modules, options, onrequire) {
     options = {}
   }
 
-  modules ??= []
+  const normalizedModules = Array.isArray(modules) ? normalizeModulesList(modules) : []
   options ??= {}
 
-  this.modules = modules
+  this.modules = normalizedModules
   this.options = options
   this.onrequire = onrequire
 
   if (Array.isArray(modules)) {
-    for (const mod of modules) {
+    for (const mod of normalizedModules) {
       const hooks = moduleHooks[mod]
 
       if (hooks) {
@@ -73,27 +106,28 @@ function Hook (modules, options, onrequire) {
       return _origRequire.apply(this, arguments)
     }
 
-    const core = !filename.includes(path.sep)
+    const builtin = isBuiltinModuleName(filename)
+    const moduleId = builtin ? normalizeModuleName(filename) : filename
     let name, basedir, hooks
     // return known patched modules immediately
-    if (cache[filename]) {
+    if (cache[moduleId]) {
       // require.cache was potentially altered externally
       const cacheEntry = require.cache[filename]
       if (cacheEntry && cacheEntry.exports !== cache[filename].original) {
         return cacheEntry.exports
       }
 
-      return cache[filename].exports
+      return cache[moduleId].exports
     }
 
     // Check if this module has a patcher in-progress already.
     // Otherwise, mark this module as patching in-progress.
-    const patched = patching[filename]
+    const patched = patching[moduleId]
     if (patched) {
       // If it's already patched, just return it as-is.
       return origRequire.apply(this, arguments)
     }
-    patching[filename] = true
+    patching[moduleId] = true
 
     const payload = {
       filename,
@@ -112,12 +146,12 @@ function Hook (modules, options, onrequire) {
 
     // The module has already been loaded,
     // so the patching mark can be cleaned up.
-    delete patching[filename]
+    delete patching[moduleId]
 
-    if (core) {
-      hooks = moduleHooks[filename]
+    if (builtin) {
+      hooks = moduleHooks[moduleId]
       if (!hooks) return exports // abort if module name isn't on whitelist
-      name = filename
+      name = moduleId
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
       const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
@@ -159,14 +193,14 @@ function Hook (modules, options, onrequire) {
 
     // ensure that the cache entry is assigned a value before calling
     // onrequire, in case calling onrequire requires the same module.
-    cache[filename] = { exports }
-    cache[filename].original = exports
+    cache[moduleId] = { exports }
+    cache[moduleId].original = exports
 
     for (const hook of hooks) {
-      cache[filename].exports = hook(cache[filename].exports, name, basedir)
+      cache[moduleId].exports = hook(cache[moduleId].exports, name, basedir)
     }
 
-    return cache[filename].exports
+    return cache[moduleId].exports
   }
 }
 

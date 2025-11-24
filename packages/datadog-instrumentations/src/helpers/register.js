@@ -30,6 +30,7 @@ const disabledInstrumentations = new Set(
 )
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const HOOK_SYMBOL = Symbol('hookExportsSet')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -124,6 +125,7 @@ for (const name of names) {
         }
       }
 
+      hook[HOOK_SYMBOL] ??= new WeakSet()
       const fullFilename = filename(name, file)
 
       let matchesFile = moduleName === fullFilename
@@ -136,12 +138,16 @@ for (const name of names) {
       }
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
+        if (hook[HOOK_SYMBOL].has(moduleExports)) {
+          return moduleExports
+        }
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
         instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
           loadChannel.publish({ name })
 
           moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
+          hook[HOOK_SYMBOL].add(moduleExports)
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [

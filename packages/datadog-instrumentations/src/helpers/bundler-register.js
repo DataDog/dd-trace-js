@@ -82,7 +82,7 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
+  for (const { name, file, versions, hook } of instrumentation) {
     if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
       continue
     }
