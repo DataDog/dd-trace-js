@@ -8,12 +8,11 @@ const { isInServerlessEnvironment } = require('./serverless')
  * This class loads and merges local stable config, environment variables, and fleet stable config
  * in the correct priority order BEFORE the main Config class is instantiated.
  *
- * Priority order (ascending - higher priority wins):
+ * Priority order (ascending):
  * 1. Local stable config (lowest priority)
  * 2. Environment variables (middle priority)
  * 3. Fleet/Managed stable config (highest priority)
  *
- * This allows configuration to be resolved before tracer.init() is called.
  */
 class ConfigEnvSources {
   constructor () {
@@ -22,7 +21,6 @@ class ConfigEnvSources {
     let localStableConfig = {}
     let fleetStableConfig = {}
 
-    // Load stable config first (if not in serverless)
     if (!isServerless) {
       const result = this.#loadStableConfig()
       if (result) {
@@ -31,21 +29,15 @@ class ConfigEnvSources {
       }
     }
 
-    // Load environment variables
     const envVars = getEnvironmentVariables()
 
-    // Merge in priority order: local < env < fleet
-    // Start with local stable config (lowest priority)
     Object.assign(this, localStableConfig)
-
-    // Override with environment variables (middle priority)
     for (const [key, value] of Object.entries(envVars)) {
       if (value !== undefined) {
         this[key] = value
       }
     }
 
-    // Override with fleet stable config (highest priority)
     for (const [key, value] of Object.entries(fleetStableConfig)) {
       if (value !== undefined) {
         this[key] = value
@@ -70,24 +62,12 @@ class ConfigEnvSources {
   }
 }
 
-/**
- * Create and return a ConfigEnvSources instance
- * This can be called early in the application lifecycle
- * @returns {ConfigEnvSources}
- */
 function createConfigEnvSources () {
   return new ConfigEnvSources()
 }
 
-/**
- * Singleton instance for cases where we want to ensure sources are loaded once
- */
 let configEnvSourcesInstance = null
 
-/**
- * Get or create a singleton ConfigEnvSources instance
- * @returns {ConfigEnvSources}
- */
 function getConfigEnvSources () {
   if (!configEnvSourcesInstance) {
     configEnvSourcesInstance = new ConfigEnvSources()
@@ -103,8 +83,7 @@ function resetConfigEnvSources () {
 }
 
 /**
- * Returns the resolved configuration value from ConfigEnvSources (which merges local stable config,
- * environment variables, and fleet stable config in that priority order). Falls back to aliases if the
+ * Returns the resolved configuration value from ConfigEnvSources. Falls back to aliases if the
  * canonical name is not set. Throws an error if the configuration is not supported.
  *
  * @param {string} name Environment variable name
