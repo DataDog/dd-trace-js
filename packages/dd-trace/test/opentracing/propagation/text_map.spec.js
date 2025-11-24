@@ -101,12 +101,12 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-datadog-trace-id' in carrier);
-  assert.strictEqual(carrier['x-datadog-trace-id'], '123')
-      assert.ok('x-datadog-parent-id' in carrier);
-  assert.strictEqual(carrier['x-datadog-parent-id'], '456')
-      assert.ok('ot-baggage-foo' in carrier);
-  assert.strictEqual(carrier['ot-baggage-foo'], 'bar')
+      assert.ok('x-datadog-trace-id' in carrier)
+      assert.strictEqual(carrier['x-datadog-trace-id'], '123')
+      assert.ok('x-datadog-parent-id' in carrier)
+      assert.strictEqual(carrier['x-datadog-parent-id'], '456')
+      assert.ok('ot-baggage-foo' in carrier)
+      assert.strictEqual(carrier['ot-baggage-foo'], 'bar')
       assert.strictEqual(carrier.baggage, undefined)
     })
 
@@ -165,8 +165,8 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-datadog-sampling-priority' in carrier);
-  assert.strictEqual(carrier['x-datadog-sampling-priority'], '0')
+      assert.ok('x-datadog-sampling-priority' in carrier)
+      assert.strictEqual(carrier['x-datadog-sampling-priority'], '0')
     })
 
     it('should inject the origin', () => {
@@ -180,8 +180,8 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-datadog-origin' in carrier);
-  assert.strictEqual(carrier['x-datadog-origin'], 'synthetics')
+      assert.ok('x-datadog-origin' in carrier)
+      assert.strictEqual(carrier['x-datadog-origin'], 'synthetics')
     })
 
     it('should inject trace tags prefixed for propagation', () => {
@@ -198,8 +198,8 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-datadog-tags' in carrier);
-  assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.foo=foo,_dd.p.baz=baz')
+      assert.ok('x-datadog-tags' in carrier)
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.foo=foo,_dd.p.baz=baz')
     })
 
     it('should drop trace tags if too large', () => {
@@ -279,16 +279,16 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-b3-traceid' in carrier);
-  assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
-      assert.ok('x-b3-spanid' in carrier);
-  assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
-      assert.ok('x-b3-parentspanid' in carrier);
-  assert.strictEqual(carrier['x-b3-parentspanid'], '0000000000000789')
-      assert.ok('x-b3-sampled' in carrier);
-  assert.strictEqual(carrier['x-b3-sampled'], '1')
-      assert.ok('x-b3-flags' in carrier);
-  assert.strictEqual(carrier['x-b3-flags'], '1')
+      assert.ok('x-b3-traceid' in carrier)
+      assert.strictEqual(carrier['x-b3-traceid'], '0000000000000123')
+      assert.ok('x-b3-spanid' in carrier)
+      assert.strictEqual(carrier['x-b3-spanid'], '0000000000000456')
+      assert.ok('x-b3-parentspanid' in carrier)
+      assert.strictEqual(carrier['x-b3-parentspanid'], '0000000000000789')
+      assert.ok('x-b3-sampled' in carrier)
+      assert.strictEqual(carrier['x-b3-sampled'], '1')
+      assert.ok('x-b3-flags' in carrier)
+      assert.strictEqual(carrier['x-b3-flags'], '1')
     })
 
     it('should inject the 128-bit trace ID in B3 headers when available as tag', () => {
@@ -306,8 +306,8 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-b3-traceid' in carrier);
-  assert.strictEqual(carrier['x-b3-traceid'], '00000000000002340000000000000123')
+      assert.ok('x-b3-traceid' in carrier)
+      assert.strictEqual(carrier['x-b3-traceid'], '00000000000002340000000000000123')
     })
 
     it('should inject the 128-bit trace ID in B3 headers when available as ID', () => {
@@ -325,8 +325,8 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.ok('x-b3-traceid' in carrier);
-  assert.strictEqual(carrier['x-b3-traceid'], '00000000000002340000000000000123')
+      assert.ok('x-b3-traceid' in carrier)
+      assert.strictEqual(carrier['x-b3-traceid'], '00000000000002340000000000000123')
     })
 
     it('should inject the traceparent header', () => {
@@ -350,10 +350,10 @@ describe('TextMapPropagator', () => {
       propagator.inject(spanContext, carrier)
       assert.strictEqual(spanContext._isRemote, false)
 
-      assert.ok('traceparent' in carrier);
-  assert.strictEqual(carrier['traceparent'], '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
-      assert.ok('tracestate' in carrier);
-  assert.strictEqual(carrier['tracestate'], 'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh')
+      assert.ok('traceparent' in carrier)
+      assert.strictEqual(carrier.traceparent, '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
+      assert.ok('tracestate' in carrier)
+      assert.strictEqual(carrier.tracestate, 'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh')
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
@@ -451,7 +451,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(undefined, carrier)
 
-        sinon.assert.calledWith(tracerMetrics.count, 
+        sinon.assert.calledWith(tracerMetrics.count,
           'context_header.truncated',
           ['truncation_reason:baggage_item_count_exceeded']
         )
@@ -471,7 +471,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(undefined, carrier)
 
-        sinon.assert.calledWith(tracerMetrics.count, 
+        sinon.assert.calledWith(tracerMetrics.count,
           'context_header.truncated',
           ['truncation_reason:baggage_byte_count_exceeded']
         )
@@ -715,8 +715,8 @@ describe('TextMapPropagator', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      assert.ok('origin' in spanContext._trace);
-  assert.strictEqual(spanContext._trace['origin'], 'synthetics')
+      assert.ok('origin' in spanContext._trace)
+      assert.strictEqual(spanContext._trace.origin, 'synthetics')
     })
 
     it('should extract trace tags', () => {
@@ -846,8 +846,8 @@ describe('TextMapPropagator', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
 
-      assert.ok('_dd.parent_id' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '2244eeee6666aaaa')
+      assert.ok('_dd.parent_id' in spanContext._trace.tags)
+      assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '2244eeee6666aaaa')
     })
 
     it('should preserve trace header tid when tracestate contains an inconsistent tid', () => {
@@ -859,8 +859,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._traceId.toString(16), '640cfd8d00000000abcdefab12345678')
-      assert.ok('_dd.p.tid' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '640cfd8d00000000')
+      assert.ok('_dd.p.tid' in spanContext._trace.tags)
+      assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '640cfd8d00000000')
     })
 
     it('should preserve trace header tid when tracestate contains a malformed tid', () => {
@@ -872,8 +872,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._traceId.toString(16), '640cfd8d00000000abcdefab12345678')
-      assert.ok('_dd.p.tid' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '640cfd8d00000000')
+      assert.ok('_dd.p.tid' in spanContext._trace.tags)
+      assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '640cfd8d00000000')
     })
 
     it('should set the last datadog parent id to zero when p: is NOT in the tracestate', () => {
@@ -919,8 +919,8 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
       assert.strictEqual(parseInt(spanContext._spanId.toString(), 16), 73456)
       assert.strictEqual(parseInt(spanContext._traceId.toString(), 16), 61185)
-      assert.ok('_dd.parent_id' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '000000000000000f')
+      assert.ok('_dd.parent_id' in spanContext._trace.tags)
+      assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '000000000000000f')
     })
 
     it('extracts span_id from tracecontext headers and stores p value from tracestate in trace_distributed_tags',
@@ -935,8 +935,8 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         assert.strictEqual(parseInt(spanContext._spanId.toString(), 16), 73456)
         assert.strictEqual(parseInt(spanContext._traceId.toString(), 16), 61185)
-        assert.ok('_dd.parent_id' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '0000000000000001')
+        assert.ok('_dd.parent_id' in spanContext._trace.tags)
+        assert.strictEqual(spanContext._trace.tags['_dd.parent_id'], '0000000000000001')
       })
 
     it('should publish spanContext and carrier', () => {
@@ -1281,8 +1281,8 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(spanContext._spanId.toString(16), '5555eeee6666ffff')
         assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
         assert.strictEqual(spanContext._trace.origin, 'foo')
-        assert.ok('_dd.p.foo_bar_baz_' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.p.foo_bar_baz_'], 'abc_!@#$%^&*()_+`-=')
+        assert.ok('_dd.p.foo_bar_baz_' in spanContext._trace.tags)
+        assert.strictEqual(spanContext._trace.tags['_dd.p.foo_bar_baz_'], 'abc_!@#$%^&*()_+`-=')
         assert.deepStrictEqual(spanContext._trace.tags['_dd.p.dm'], '-4')
       })
 
@@ -1294,8 +1294,8 @@ describe('TextMapPropagator', () => {
         const carrier = textMap
         const spanContext = propagator.extract(carrier)
         assert.strictEqual(spanContext._traceId.toString(16), '1111aaaa2222bbbb3333cccc4444dddd')
-        assert.ok('_dd.p.tid' in spanContext._trace.tags);
-  assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '1111aaaa2222bbbb')
+        assert.ok('_dd.p.tid' in spanContext._trace.tags)
+        assert.strictEqual(spanContext._trace.tags['_dd.p.tid'], '1111aaaa2222bbbb')
       })
 
       it('should skip extracting upper bits for 64-bit trace IDs', () => {

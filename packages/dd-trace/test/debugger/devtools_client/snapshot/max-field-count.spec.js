@@ -41,9 +41,9 @@ function generateTestCases (config) {
 
     it('should capture expected snapshot', function () {
       assert.strictEqual(Object.keys(state).length, ((Array.isArray(['obj']) ? ['obj'] : [['obj']])).length)
-assert.ok(((Array.isArray(['obj']) ? ['obj'] : [['obj']])).every(k => Object.hasOwn(state, k)))
-      assert.ok('obj' in state);
-assert.deepStrictEqual(state['obj'], {
+      assert.ok(((Array.isArray(['obj']) ? ['obj'] : [['obj']])).every(k => Object.hasOwn(state, k)))
+      assert.ok('obj' in state)
+      assert.deepStrictEqual(state.obj, {
         type: 'Object',
         fields: expectedFields,
         notCapturedReason: 'fieldCount',

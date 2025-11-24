@@ -97,8 +97,8 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
               assert.strictEqual(traces[0][0].meta['opensearch.method'], 'POST')
               assert.strictEqual(traces[0][0].meta['opensearch.url'], '/_msearch')
-              assert.ok('opensearch.body' in traces[0][0].meta);
-  assert.strictEqual(traces[0][0].meta['opensearch.body'], '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]')
+              assert.ok('opensearch.body' in traces[0][0].meta)
+              assert.strictEqual(traces[0][0].meta['opensearch.body'], '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]')
               assert.strictEqual(traces[0][0].meta['opensearch.params'], '{"size":100}')
               assert.strictEqual(traces[0][0].meta.component, 'opensearch')
               assert.strictEqual(traces[0][0].meta['_dd.integration'], 'opensearch')

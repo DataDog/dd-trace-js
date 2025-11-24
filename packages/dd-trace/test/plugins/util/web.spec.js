@@ -133,8 +133,8 @@ describe('plugins/util/web', () => {
           queryStringObfuscation: 'a*'
         })
 
-        assert.ok('queryStringObfuscation' in config);
-assert.deepStrictEqual(config['queryStringObfuscation'], /a*/gi)
+        assert.ok('queryStringObfuscation' in config)
+        assert.deepStrictEqual(config.queryStringObfuscation, /a*/gi)
       })
 
       it('should default to true when passed a bad regex', () => {
@@ -333,8 +333,8 @@ assert.deepStrictEqual(config['queryStringObfuscation'], /a*/gi)
           config.service = 'test2'
           web.instrument(tracer, config, req, res, 'test.request')
 
-          assert.ok('service.name' in span.context()._tags);
-  assert.strictEqual(span.context()._tags['service.name'], 'test2')
+          assert.ok('service.name' in span.context()._tags)
+          assert.strictEqual(span.context()._tags['service.name'], 'test2')
         })
       })
 

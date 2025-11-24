@@ -52,8 +52,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       // ... tested individually in the remaining it-blocks inside this describe-block
 
       // from closure scope
-      assert.ok('ref' in state);
-assert.deepStrictEqual(state['ref'], {
+      assert.ok('ref' in state)
+      assert.deepStrictEqual(state.ref, {
         type: 'Object',
         fields: {
           wmo1: { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -63,8 +63,8 @@ assert.deepStrictEqual(state['ref'], {
           wso3: { type: 'Object', fields: { a: { type: 'number', value: '3' } } }
         }
       })
-      assert.ok('get' in state);
-assert.deepStrictEqual(state['get'], {
+      assert.ok('get' in state)
+      assert.deepStrictEqual(state.get, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -74,8 +74,8 @@ assert.deepStrictEqual(state['get'], {
     })
 
     it('object literal', function () {
-      assert.ok('oblit' in state);
-assert.deepStrictEqual(state['oblit'], {
+      assert.ok('oblit' in state)
+      assert.deepStrictEqual(state.oblit, {
         type: 'Object',
         fields: {
           a: { type: 'number', value: '1' },
@@ -90,8 +90,8 @@ assert.deepStrictEqual(state['oblit'], {
     })
 
     it('custom object from class', function () {
-      assert.ok('obnew' in state);
-assert.deepStrictEqual(state['obnew'], {
+      assert.ok('obnew' in state)
+      assert.deepStrictEqual(state.obnew, {
         type: 'MyClass',
         fields: {
           foo: { type: 'number', value: '42' },
@@ -101,8 +101,8 @@ assert.deepStrictEqual(state['obnew'], {
     })
 
     it('Array', function () {
-      assert.ok('arr' in state);
-assert.deepStrictEqual(state['arr'], {
+      assert.ok('arr' in state)
+      assert.deepStrictEqual(state.arr, {
         type: 'Array',
         elements: [
           { type: 'number', value: '1' },
@@ -113,21 +113,21 @@ assert.deepStrictEqual(state['arr'], {
     })
 
     it('RegExp', function () {
-      assert.ok('regex' in state);
-assert.deepStrictEqual(state['regex'], { type: 'RegExp', value: '/foo/' })
+      assert.ok('regex' in state)
+      assert.deepStrictEqual(state.regex, { type: 'RegExp', value: '/foo/' })
     })
 
     it('Date', function () {
-      assert.ok('date' in state);
-assert.deepStrictEqual(state['date'], {
+      assert.ok('date' in state)
+      assert.deepStrictEqual(state.date, {
         type: 'Date',
         value: '2024-09-20T07:22:59Z' // missing milliseconds due to API limitation (should have been `998`)
       })
     })
 
     it('Map', function () {
-      assert.ok('map' in state);
-assert.deepStrictEqual(state['map'], {
+      assert.ok('map' in state)
+      assert.deepStrictEqual(state.map, {
         type: 'Map',
         entries: [
           [{ type: 'number', value: '1' }, { type: 'number', value: '2' }],
@@ -137,8 +137,8 @@ assert.deepStrictEqual(state['map'], {
     })
 
     it('Set', function () {
-      assert.ok('set' in state);
-assert.deepStrictEqual(state['set'], {
+      assert.ok('set' in state)
+      assert.deepStrictEqual(state.set, {
         type: 'Set',
         elements: [
           {
@@ -157,11 +157,11 @@ assert.deepStrictEqual(state['set'], {
     it('WeakMap', function () {
       assert.ok(Object.hasOwn(state, 'wmap'))
       assert.strictEqual(Object.keys(state.wmap).length, (['type', 'entries']).length)
-assert.ok((['type', 'entries']).every(k => Object.hasOwn(state.wmap, k)))
+      assert.ok((['type', 'entries']).every(k => Object.hasOwn(state.wmap, k)))
       assert.ok(Array.isArray(state.wmap.entries))
       state.wmap.entries = state.wmap.entries.sort((a, b) => a[1].value - b[1].value)
-      assert.ok('wmap' in state);
-assert.deepStrictEqual(state['wmap'], {
+      assert.ok('wmap' in state)
+      assert.deepStrictEqual(state.wmap, {
         type: 'WeakMap',
         entries: [[
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -176,11 +176,11 @@ assert.deepStrictEqual(state['wmap'], {
     it('WeakSet', function () {
       assert.ok(Object.hasOwn(state, 'wset'))
       assert.strictEqual(Object.keys(state.wset).length, (['type', 'elements']).length)
-assert.ok((['type', 'elements']).every(k => Object.hasOwn(state.wset, k)))
+      assert.ok((['type', 'elements']).every(k => Object.hasOwn(state.wset, k)))
       assert.ok(Array.isArray(state.wset.elements))
       state.wset.elements = state.wset.elements.sort((a, b) => a.fields.a.value - b.fields.a.value)
-      assert.ok('wset' in state);
-assert.deepStrictEqual(state['wset'], {
+      assert.ok('wset' in state)
+      assert.deepStrictEqual(state.wset, {
         type: 'WeakSet',
         elements: [
           { type: 'Object', fields: { a: { type: 'number', value: '1' } } },
@@ -191,8 +191,8 @@ assert.deepStrictEqual(state['wset'], {
     })
 
     it('Generator', function () {
-      assert.ok('gen' in state);
-assert.deepStrictEqual(state['gen'], {
+      assert.ok('gen' in state)
+      assert.deepStrictEqual(state.gen, {
         type: 'generator',
         fields: { foo: { type: 'number', value: '42' } }
       })
@@ -201,17 +201,17 @@ assert.deepStrictEqual(state['gen'], {
     it('Error', function () {
       assert.ok(Object.hasOwn(state, 'err'))
       assert.strictEqual(Object.keys(state.err).length, (['type', 'fields']).length)
-assert.ok((['type', 'fields']).every(k => Object.hasOwn(state.err, k)))
+      assert.ok((['type', 'fields']).every(k => Object.hasOwn(state.err, k)))
       assert.strictEqual(state.err.type, 'CustomError')
       assert.ok(typeof state.err.fields === 'object' && state.err.fields !== null)
       assert.strictEqual(Object.keys(state.err.fields).length, (['stack', 'message', 'foo']).length)
-assert.ok((['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)))
+      assert.ok((['stack', 'message', 'foo']).every(k => Object.hasOwn(state.err.fields, k)))
       assertObjectContains(state.err.fields, {
         message: { type: 'string', value: 'boom!' },
         foo: { type: 'number', value: '42' }
       })
       assert.strictEqual(Object.keys(state.err.fields.stack).length, (['type', 'value', 'truncated', 'size']).length)
-assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)))
+      assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(state.err.fields.stack, k)))
       assert.strictEqual(typeof state.err.fields.stack.value, 'string')
       assert.match(state.err.fields.stack.value, /^Error: boom!/)
       assert.strictEqual(typeof state.err.fields.stack.size, 'number')
@@ -223,8 +223,8 @@ assert.ok((['type', 'value', 'truncated', 'size']).every(k => Object.hasOwn(stat
     })
 
     it('Function', function () {
-      assert.ok('fn' in state);
-assert.deepStrictEqual(state['fn'], {
+      assert.ok('fn' in state)
+      assert.deepStrictEqual(state.fn, {
         type: 'Function',
         fields: {
           foo: {
@@ -238,8 +238,8 @@ assert.deepStrictEqual(state['fn'], {
     })
 
     it('Bound function', function () {
-      assert.ok('bfn' in state);
-assert.deepStrictEqual(state['bfn'], {
+      assert.ok('bfn' in state)
+      assert.deepStrictEqual(state.bfn, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -249,8 +249,8 @@ assert.deepStrictEqual(state['bfn'], {
     })
 
     it('Arrow function', function () {
-      assert.ok('afn' in state);
-assert.deepStrictEqual(state['afn'], {
+      assert.ok('afn' in state)
+      assert.deepStrictEqual(state.afn, {
         type: 'Function',
         fields: {
           length: { type: 'number', value: '0' },
@@ -260,18 +260,18 @@ assert.deepStrictEqual(state['afn'], {
     })
 
     it('Class', function () {
-      assert.ok('cls' in state);
-assert.deepStrictEqual(state['cls'], { type: 'class MyClass' })
+      assert.ok('cls' in state)
+      assert.deepStrictEqual(state.cls, { type: 'class MyClass' })
     })
 
     it('Anonymous class', function () {
-      assert.ok('acls' in state);
-assert.deepStrictEqual(state['acls'], { type: 'class' })
+      assert.ok('acls' in state)
+      assert.deepStrictEqual(state.acls, { type: 'class' })
     })
 
     it('Proxy for object literal', function () {
-      assert.ok('prox' in state);
-assert.deepStrictEqual(state['prox'], {
+      assert.ok('prox' in state)
+      assert.deepStrictEqual(state.prox, {
         type: NODE_20_PLUS ? 'Proxy(Object)' : 'Proxy',
         fields: {
           target: { type: 'boolean', value: 'true' }
@@ -280,8 +280,8 @@ assert.deepStrictEqual(state['prox'], {
     })
 
     it('Proxy for custom class', function () {
-      assert.ok('custProx' in state);
-assert.deepStrictEqual(state['custProx'], {
+      assert.ok('custProx' in state)
+      assert.deepStrictEqual(state.custProx, {
         type: NODE_20_PLUS ? 'Proxy(MyClass)' : 'Proxy',
         fields: {
           foo: { type: 'number', value: '42' }
@@ -290,8 +290,8 @@ assert.deepStrictEqual(state['custProx'], {
     })
 
     it('Promise: Pending', function () {
-      assert.ok('pPen' in state);
-assert.deepStrictEqual(state['pPen'], {
+      assert.ok('pPen' in state)
+      assert.deepStrictEqual(state.pPen, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'pending' },
@@ -301,8 +301,8 @@ assert.deepStrictEqual(state['pPen'], {
     })
 
     it('Promise: Resolved', function () {
-      assert.ok('pRes' in state);
-assert.deepStrictEqual(state['pRes'], {
+      assert.ok('pRes' in state)
+      assert.deepStrictEqual(state.pRes, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'fulfilled' },
@@ -312,8 +312,8 @@ assert.deepStrictEqual(state['pRes'], {
     })
 
     it('Promise: Rejected', function () {
-      assert.ok('pRej' in state);
-assert.deepStrictEqual(state['pRej'], {
+      assert.ok('pRej' in state)
+      assert.deepStrictEqual(state.pRej, {
         type: 'Promise',
         fields: {
           '[[PromiseState]]': { type: 'string', value: 'rejected' },
@@ -323,8 +323,8 @@ assert.deepStrictEqual(state['pRej'], {
     })
 
     it('TypedArray', function () {
-      assert.ok('tarr' in state);
-assert.deepStrictEqual(state['tarr'], {
+      assert.ok('tarr' in state)
+      assert.deepStrictEqual(state.tarr, {
         type: 'Int8Array',
         elements: [
           { type: 'number', value: '72' },
@@ -335,16 +335,16 @@ assert.deepStrictEqual(state['tarr'], {
     })
 
     it('ArrayBuffer', function () {
-      assert.ok('ab' in state);
-assert.deepStrictEqual(state['ab'], {
+      assert.ok('ab' in state)
+      assert.deepStrictEqual(state.ab, {
         type: 'ArrayBuffer',
         value: 'HAL'
       })
     })
 
     it('SharedArrayBuffer', function () {
-      assert.ok('sab' in state);
-assert.deepStrictEqual(state['sab'], {
+      assert.ok('sab' in state)
+      assert.deepStrictEqual(state.sab, {
         type: 'SharedArrayBuffer',
         value: 'hello\x01\x02\x03world'
       })
@@ -361,8 +361,8 @@ assert.deepStrictEqual(state['sab'], {
     })
 
     it('non-enumerable property', function () {
-      assert.ok('hidden' in state);
-assert.deepStrictEqual(state['hidden'], { type: 'string', value: 'secret' })
+      assert.ok('hidden' in state)
+      assert.deepStrictEqual(state.hidden, { type: 'string', value: 'secret' })
     })
   })
 })

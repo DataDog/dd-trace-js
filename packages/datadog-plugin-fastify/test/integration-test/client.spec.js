@@ -35,7 +35,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
@@ -45,7 +45,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server1.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
@@ -55,7 +55,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server2.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })

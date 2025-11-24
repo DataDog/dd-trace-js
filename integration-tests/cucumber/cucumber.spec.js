@@ -191,8 +191,8 @@ describe(`cucumber@${version} commonJS`, () => {
 
           testSpans.forEach(testSpan => {
             const testName = testSpan.meta[TEST_NAME]
-            assert.strictEqual(testSpan.meta['language'], 'javascript')
-            assert.strictEqual(testSpan.meta['service'], 'cucumber-test-service')
+            assert.strictEqual(testSpan.meta.language, 'javascript')
+            assert.strictEqual(testSpan.meta.service, 'cucumber-test-service')
             const { status } = testInfoByTestName[testName]
             assert.strictEqual(testSpan.meta[TEST_STATUS], status,
               `Expected status for ${testName} to be ${status}`)
@@ -254,7 +254,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(stepSpan.meta['step.status'], stepStatus,
                 `Test ${testName} should have step ${name} with status ${stepStatus}`)
               assert.strictEqual(stepSpan.meta[COMPONENT], 'cucumber')
-              assert.notStrictEqual(stepSpan['type'], 'test')
+              assert.notStrictEqual(stepSpan.type, 'test')
             })
           })
         })
@@ -502,9 +502,9 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.ok(!Object.hasOwn(codeCovRequest.headers, 'dd-api-key'))
             }
 
-            assert.strictEqual(coveragePayload['name'], 'coverage1')
-            assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-            assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+            assert.strictEqual(coveragePayload.name, 'coverage1')
+            assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+            assert.strictEqual(coveragePayload.type, 'application/msgpack')
             assert.ok(coveragePayload.content.includes({
               version: 2
             }))
@@ -624,9 +624,9 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.ok(!Object.hasOwn(coverageRequest.headers, 'dd-api-key'))
                 assert.ok(!Object.hasOwn(eventsRequest.headers, 'dd-api-key'))
               }
-              assert.strictEqual(coveragePayload['name'], 'coverage1')
-              assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-              assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+              assert.strictEqual(coveragePayload.name, 'coverage1')
+              assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+              assert.strictEqual(coveragePayload.type, 'application/msgpack')
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
 
@@ -1961,7 +1961,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
 
               assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-                  .endsWith('ci-visibility/features-di/support/sum.js'), true)
+                .endsWith('ci-visibility/features-di/support/sum.js'), true)
               assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
               const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`

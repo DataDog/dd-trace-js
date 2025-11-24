@@ -277,10 +277,10 @@ describe('Plugin', () => {
           it('should use the configuration for the receiver', (done) => {
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              assert.ok('name' in span);
-  assert.strictEqual(span['name'], expectedSchema.receive.opName)
-              assert.ok('service' in span);
-  assert.strictEqual(span['service'], 'a_test_service')
+              assert.ok('name' in span)
+              assert.strictEqual(span.name, expectedSchema.receive.opName)
+              assert.ok('service' in span)
+              assert.strictEqual(span.service, 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
@@ -289,10 +289,10 @@ describe('Plugin', () => {
           it('should use the configuration for the sender', (done) => {
             agent.assertSomeTraces(traces => {
               const span = traces[0][0]
-              assert.ok('name' in span);
-  assert.strictEqual(span['name'], expectedSchema.send.opName)
-              assert.ok('service' in span);
-  assert.strictEqual(span['service'], 'a_test_service')
+              assert.ok('name' in span)
+              assert.strictEqual(span.name, expectedSchema.send.opName)
+              assert.ok('service' in span)
+              assert.strictEqual(span.service, 'a_test_service')
             })
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })

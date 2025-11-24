@@ -39,7 +39,7 @@ describe('esm', () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
 
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'connect.request'), true)
         })

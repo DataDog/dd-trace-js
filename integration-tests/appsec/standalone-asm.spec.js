@@ -26,14 +26,14 @@ describe('Standalone ASM', () => {
   function assertKeep ({ meta, metrics }) {
     assert.strictEqual(meta['_dd.p.ts'], '02')
 
-    assert.strictEqual(metrics['_sampling_priority_v1'], USER_KEEP)
+    assert.strictEqual(metrics._sampling_priority_v1, USER_KEEP)
     assert.strictEqual(metrics['_dd.apm.enabled'], 0)
   }
 
   function assertDrop ({ meta, metrics }) {
     assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
 
-    assert.strictEqual(metrics['_sampling_priority_v1'], AUTO_REJECT)
+    assert.strictEqual(metrics._sampling_priority_v1, AUTO_REJECT)
     assert.strictEqual(metrics['_dd.apm.enabled'], 0)
   }
 
@@ -99,7 +99,7 @@ describe('Standalone ASM', () => {
           assert.ok(!Object.hasOwn(meta, 'manual.keep'))
           assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
 
-          assert.strictEqual(metrics['_sampling_priority_v1'], AUTO_KEEP)
+          assert.strictEqual(metrics._sampling_priority_v1, AUTO_KEEP)
           assert.strictEqual(metrics['_dd.apm.enabled'], 0)
         }
       }, 70000, 2)

@@ -84,12 +84,12 @@ describe('SpanProcessor', () => {
 
     processor.process(finishedSpan)
 
-    assert.ok('started' in trace);
-assert.deepStrictEqual(trace['started'], [])
-    assert.ok('finished' in trace);
-assert.deepStrictEqual(trace['finished'], [])
-    assert.ok('_tags' in finishedSpan.context());
-assert.deepStrictEqual(finishedSpan.context()['_tags'], {})
+    assert.ok('started' in trace)
+    assert.deepStrictEqual(trace.started, [])
+    assert.ok('finished' in trace)
+    assert.deepStrictEqual(trace.finished, [])
+    assert.ok('_tags' in finishedSpan.context())
+    assert.deepStrictEqual(finishedSpan.context()._tags, {})
   })
 
   it('should skip traces with unfinished spans', () => {
@@ -120,10 +120,10 @@ assert.deepStrictEqual(finishedSpan.context()['_tags'], {})
       { formatted: true }
     ])
 
-    assert.ok('started' in trace);
-assert.deepStrictEqual(trace['started'], [activeSpan])
-    assert.ok('finished' in trace);
-assert.deepStrictEqual(trace['finished'], [])
+    assert.ok('started' in trace)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.ok('finished' in trace)
+    assert.deepStrictEqual(trace.finished, [])
   })
 
   it('should configure span sampler correctly', () => {
@@ -162,12 +162,12 @@ assert.deepStrictEqual(trace['finished'], [])
 
     processor.process(finishedSpan)
 
-    assert.ok('started' in trace);
-assert.deepStrictEqual(trace['started'], [])
-    assert.ok('finished' in trace);
-assert.deepStrictEqual(trace['finished'], [])
-    assert.ok('_tags' in finishedSpan.context());
-assert.deepStrictEqual(finishedSpan.context()['_tags'], {})
+    assert.ok('started' in trace)
+    assert.deepStrictEqual(trace.started, [])
+    assert.ok('finished' in trace)
+    assert.deepStrictEqual(trace.finished, [])
+    assert.ok('_tags' in finishedSpan.context())
+    assert.deepStrictEqual(finishedSpan.context()._tags, {})
     sinon.assert.notCalled(exporter.export)
   })
 
@@ -178,10 +178,10 @@ assert.deepStrictEqual(finishedSpan.context()['_tags'], {})
     trace.finished = [finishedSpan]
     processor.process(activeSpan)
 
-    assert.ok('started' in trace);
-assert.deepStrictEqual(trace['started'], [activeSpan])
-    assert.ok('finished' in trace);
-assert.deepStrictEqual(trace['finished'], [])
+    assert.ok('started' in trace)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.ok('finished' in trace)
+    assert.deepStrictEqual(trace.finished, [])
     assert.strictEqual(spanFormat.callCount, 1)
     sinon.assert.calledWith(spanFormat, finishedSpan, true)
   })

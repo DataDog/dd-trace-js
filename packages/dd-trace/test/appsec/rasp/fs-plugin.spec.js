@@ -104,8 +104,8 @@ describe('AppsecFsPlugin', () => {
       let store = appsecFsPlugin._onFsOperationStart()
 
       assert.ok(Object.hasOwn(store, 'fs'))
-      assert.strictEqual(store.fs['parentStore'], origStore)
-      assert.strictEqual(store.fs['root'], true)
+      assert.strictEqual(store.fs.parentStore, origStore)
+      assert.strictEqual(store.fs.root, true)
 
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
@@ -120,17 +120,17 @@ describe('AppsecFsPlugin', () => {
       const rootStore = appsecFsPlugin._onFsOperationStart()
 
       assert.ok(Object.hasOwn(rootStore, 'fs'))
-      assert.strictEqual(rootStore.fs['parentStore'], origStore)
-      assert.strictEqual(rootStore.fs['root'], true)
+      assert.strictEqual(rootStore.fs.parentStore, origStore)
+      assert.strictEqual(rootStore.fs.root, true)
 
       storage('legacy').enterWith(rootStore)
 
       let store = appsecFsPlugin._onFsOperationStart()
 
       assert.ok(Object.hasOwn(store, 'fs'))
-      assert.strictEqual(store.fs['parentStore'], rootStore)
-      assert.strictEqual(store.fs['root'], false)
-      assert.strictEqual(store['orig'], true)
+      assert.strictEqual(store.fs.parentStore, rootStore)
+      assert.strictEqual(store.fs.root, false)
+      assert.strictEqual(store.orig, true)
 
       storage('legacy').enterWith(store)
 
@@ -155,8 +155,8 @@ describe('AppsecFsPlugin', () => {
       let store = appsecFsPlugin._onResponseRenderStart()
 
       assert.ok(Object.hasOwn(store, 'fs'))
-      assert.strictEqual(store.fs['parentStore'], origStore)
-      assert.strictEqual(store.fs['opExcluded'], true)
+      assert.strictEqual(store.fs.parentStore, origStore)
+      assert.strictEqual(store.fs.opExcluded, true)
 
       storage('legacy').enterWith(store)
 

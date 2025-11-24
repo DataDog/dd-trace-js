@@ -56,7 +56,7 @@ describe('test-api-manual', () => {
       assert.strictEqual(passedTest.content.meta['test.custom.tag'], 'custom.value')
 
       const customSpan = events.find(event => event.type === 'span')
-      assert.strictEqual(customSpan.content['resource'], 'custom.span')
+      assert.strictEqual(customSpan.content.resource, 'custom.span')
     }).catch(done)
 
     childProcess = exec(

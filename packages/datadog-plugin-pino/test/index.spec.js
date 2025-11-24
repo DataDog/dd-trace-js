@@ -72,8 +72,8 @@ describe('Plugin', () => {
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
               assert.ok('dd' in record)
-              assert.ok('msg' in record);
-assert.deepStrictEqual(record['msg'], 'message')
+              assert.ok('msg' in record)
+              assert.deepStrictEqual(record.msg, 'message')
             })
           })
 
@@ -122,8 +122,8 @@ assert.deepStrictEqual(record['msg'], 'message')
                 span_id: span.context().toSpanId()
               })
 
-              assert.ok('msg' in record);
-assert.deepStrictEqual(record['msg'], 'message')
+              assert.ok('msg' in record)
+              assert.deepStrictEqual(record.msg, 'message')
             })
           })
 
@@ -136,21 +136,21 @@ assert.deepStrictEqual(record['msg'], 'message')
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
               if (record.err) { // pino >=7
-                assert.ok('message' in record.err);
-  assert.strictEqual(record.err['message'], error.message)
-                assert.ok('type' in record.err);
-  assert.strictEqual(record.err['type'], 'Error')
-                assert.ok('stack' in record.err);
-  assert.strictEqual(record.err['stack'], error.stack)
+                assert.ok('message' in record.err)
+                assert.strictEqual(record.err.message, error.message)
+                assert.ok('type' in record.err)
+                assert.strictEqual(record.err.type, 'Error')
+                assert.ok('stack' in record.err)
+                assert.strictEqual(record.err.stack, error.stack)
               } else { // pino <7
-                assert.ok('msg' in record);
-  assert.strictEqual(record['msg'], error.message)
+                assert.ok('msg' in record)
+                assert.strictEqual(record.msg, error.message)
                 // ** TODO ** add this back once we fix it
                 if (NODE_MAJOR < 21) {
-                  assert.ok('type' in record);
-  assert.strictEqual(record['type'], 'Error')
-                  assert.ok('stack' in record);
-  assert.strictEqual(record['stack'], error.stack)
+                  assert.ok('type' in record)
+                  assert.strictEqual(record.type, 'Error')
+                  assert.ok('stack' in record)
+                  assert.strictEqual(record.stack, error.stack)
                 }
               }
             })
@@ -178,8 +178,8 @@ assert.deepStrictEqual(record['msg'], 'message')
             assert.ok('dd' in record)
             assert.ok(!('trace_id' in record.dd))
             assert.ok(!('span_id' in record.dd))
-            assert.ok('msg' in record);
-assert.deepStrictEqual(record['msg'], 'message')
+            assert.ok('msg' in record)
+            assert.deepStrictEqual(record.msg, 'message')
           })
 
           if (semver.intersects(version, '>=5.14.0')) {
@@ -204,10 +204,10 @@ assert.deepStrictEqual(record['msg'], 'message')
                   span_id: span.context().toSpanId()
                 })
 
-                assert.ok('msg' in record);
-assert.deepStrictEqual(record['msg'], 'message')
-                assert.ok('addedMixin' in record);
-assert.deepStrictEqual(record['addedMixin'], true)
+                assert.ok('msg' in record)
+                assert.deepStrictEqual(record.msg, 'message')
+                assert.ok('addedMixin' in record)
+                assert.deepStrictEqual(record.addedMixin, true)
               })
             })
           }

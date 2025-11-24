@@ -358,7 +358,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.strictEqual(carrier['tracestate'], 'other=id:0xC0FFEE')
+      assert.strictEqual(carrier.tracestate, 'other=id:0xC0FFEE')
       assert.ok(!Object.hasOwn(carrier, 'traceparent'))
     })
   })

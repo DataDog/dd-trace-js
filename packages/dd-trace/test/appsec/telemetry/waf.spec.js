@@ -365,8 +365,8 @@ describe('Appsec Waf Telemetry metrics', () => {
     describe('WAF Truncation metrics', () => {
       it('should report truncated string metrics', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedString: 5000 }, req)
-        assert.ok('input_truncated' in result);
-  assert.strictEqual(result['input_truncated'], true)
+        assert.ok('input_truncated' in result)
+        assert.strictEqual(result.input_truncated, true)
 
         sinon.assert.calledWith(count, 'waf.input_truncated', { truncation_reason: 1 })
         sinon.assert.calledWith(inc, 1)
@@ -374,8 +374,8 @@ describe('Appsec Waf Telemetry metrics', () => {
 
       it('should report truncated container size metrics', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerSize: 300 }, req)
-        assert.ok('input_truncated' in result);
-  assert.strictEqual(result['input_truncated'], true)
+        assert.ok('input_truncated' in result)
+        assert.strictEqual(result.input_truncated, true)
 
         sinon.assert.calledWith(count, 'waf.input_truncated', { truncation_reason: 2 })
         sinon.assert.calledWith(inc, 1)
@@ -383,8 +383,8 @@ describe('Appsec Waf Telemetry metrics', () => {
 
       it('should report truncated container depth metrics', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags({ maxTruncatedContainerDepth: 20 }, req)
-        assert.ok('input_truncated' in result);
-  assert.strictEqual(result['input_truncated'], true)
+        assert.ok('input_truncated' in result)
+        assert.strictEqual(result.input_truncated, true)
 
         sinon.assert.calledWith(count, 'waf.input_truncated', { truncation_reason: 4 })
         sinon.assert.calledWith(inc, 1)
@@ -396,16 +396,16 @@ describe('Appsec Waf Telemetry metrics', () => {
           maxTruncatedContainerSize: 300,
           maxTruncatedContainerDepth: 20
         }, req)
-        assert.ok('input_truncated' in result);
-  assert.strictEqual(result['input_truncated'], true)
+        assert.ok('input_truncated' in result)
+        assert.strictEqual(result.input_truncated, true)
 
         sinon.assert.calledWith(count, 'waf.input_truncated', { truncation_reason: 7 })
       })
 
       it('should not report truncation metrics when no truncation occurs', () => {
         const result = appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
-        assert.ok('input_truncated' in result);
-  assert.strictEqual(result['input_truncated'], false)
+        assert.ok('input_truncated' in result)
+        assert.strictEqual(result.input_truncated, false)
 
         sinon.assert.neverCalledWith(count, 'waf.input_truncated')
         sinon.assert.neverCalledWith(distribution, 'waf.truncated_value_size')

@@ -35,7 +35,7 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
           const metaContainsNet = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'net'))

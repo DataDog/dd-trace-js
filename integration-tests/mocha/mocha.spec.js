@@ -309,7 +309,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(tests.length, 1)
             const [test] = tests
             assert.strictEqual(test.meta[COMPONENT], 'mocha')
-            assert.strictEqual(test.meta['language'], 'javascript')
+            assert.strictEqual(test.meta.language, 'javascript')
             assert.strictEqual(test.meta[TEST_NAME], 'mocha-test-fail can fail')
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[TEST_TYPE], 'test')
@@ -1485,9 +1485,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const [coveragePayload] = codeCovRequest.payload
         assert.strictEqual(codeCovRequest.headers['dd-api-key'], '1')
 
-        assert.strictEqual(coveragePayload['name'], 'coverage1')
-        assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+        assert.strictEqual(coveragePayload.name, 'coverage1')
+        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+        assert.strictEqual(coveragePayload.type, 'application/msgpack')
         assert.ok(coveragePayload.content.includes({
           version: 2
         }))
@@ -1592,9 +1592,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload['name'], 'coverage1')
-        assert.strictEqual(coveragePayload['filename'], 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload['type'], 'application/msgpack')
+        assert.strictEqual(coveragePayload.name, 'coverage1')
+        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
+        assert.strictEqual(coveragePayload.type, 'application/msgpack')
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
@@ -3260,7 +3260,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           assert.strictEqual(retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED], 'true')
           assert.strictEqual(retriedTest.meta[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_FILE_SUFFIX}`]
-              .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
+            .endsWith('ci-visibility/dynamic-instrumentation/dependency.js'), true)
           assert.strictEqual(retriedTest.metrics[`${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_LINE_SUFFIX}`], 6)
 
           const snapshotIdKey = `${DI_DEBUG_ERROR_PREFIX}.0.${DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX}`

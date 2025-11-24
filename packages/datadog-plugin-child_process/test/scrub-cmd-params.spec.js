@@ -48,21 +48,21 @@ describe('scrub cmds', () => {
     assert.deepStrictEqual(scrubCmdParams('md5 -s pony'), ['md5', '?', '?'])
 
     assert.deepStrictEqual(scrubCmdParams('cat passwords.txt | while read line; do; md5 -s $line; done'), [
-        'cat',
-        'passwords.txt',
-        '|',
-        'while',
-        'read',
-        'line',
-        ';',
-        'do',
-        ';',
-        'md5',
-        '?',
-        '?',
-        ';',
-        'done'
-      ])
+      'cat',
+      'passwords.txt',
+      '|',
+      'while',
+      'read',
+      'line',
+      ';',
+      'do',
+      ';',
+      'md5',
+      '?',
+      '?',
+      ';',
+      'done'
+    ])
   })
 
   it('should scrub shell expressions', () => {

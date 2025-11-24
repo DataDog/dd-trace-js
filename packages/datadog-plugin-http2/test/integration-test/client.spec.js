@@ -37,13 +37,13 @@ describe('esm', () => {
       it(`is instrumented loaded with ${variant}`, async () => {
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.strictEqual(headers['host'], `127.0.0.1:${agent.port}`)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.strictEqual(payload[0][0]['name'], 'web.request')
-          assert.strictEqual(payload[0][0].meta['component'], 'http2')
+          assert.strictEqual(payload[0][0].name, 'web.request')
+          assert.strictEqual(payload[0][0].meta.component, 'http2')
         })
         await curl(proc)
         return resultPromise

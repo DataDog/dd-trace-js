@@ -14,7 +14,6 @@ const waf = require('../../src/appsec/waf')
 const { ACKNOWLEDGED, UNACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
 const { getConfigFresh } = require('../helpers/config')
 
-
 describe('AppSec Rule Manager', () => {
   let config
 

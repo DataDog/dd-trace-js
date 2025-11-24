@@ -165,8 +165,8 @@ describe('log', () => {
 
     it('should call the logger in a noop context', () => {
       logger.debug = () => {
-        assert.ok('noop' in storage('legacy').getStore());
-  assert.strictEqual(storage('legacy').getStore()['noop'], true)
+        assert.ok('noop' in storage('legacy').getStore())
+        assert.strictEqual(storage('legacy').getStore().noop, true)
       }
 
       log.use(logger).debug('debug')

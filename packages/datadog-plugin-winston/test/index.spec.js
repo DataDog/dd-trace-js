@@ -392,10 +392,10 @@ describe('Plugin', () => {
                 assert.strictEqual(loggedInfo.message, 'test error with stack')
 
                 assert.ok('dd' in loggedInfo)
-                assert.ok('trace_id' in loggedInfo.dd);
-  assert.strictEqual(loggedInfo.dd['trace_id'], span.context().toTraceId(true))
-                assert.ok('span_id' in loggedInfo.dd);
-  assert.strictEqual(loggedInfo.dd['span_id'], span.context().toSpanId())
+                assert.ok('trace_id' in loggedInfo.dd)
+                assert.strictEqual(loggedInfo.dd.trace_id, span.context().toTraceId(true))
+                assert.ok('span_id' in loggedInfo.dd)
+                assert.strictEqual(loggedInfo.dd.span_id, span.context().toSpanId())
               })
             })
           })

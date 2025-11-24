@@ -1508,8 +1508,8 @@ describe('Plugin', () => {
 
               try {
                 assert.notStrictEqual(span, null)
-                assert.ok('_name' in span.context());
-  assert.strictEqual(span.context()['_name'], expectedSchema.server.opName)
+                assert.ok('_name' in span.context())
+                assert.strictEqual(span.context()._name, expectedSchema.server.opName)
                 done()
               } catch (e) {
                 done(e)
