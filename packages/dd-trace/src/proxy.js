@@ -98,6 +98,7 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
+      // This has the be the FIRST call to getConfig, because it has the real `options`, right?
       const config = getConfig(options) // TODO: support dynamic code config
 
       if (config.crashtracking.enabled) {
