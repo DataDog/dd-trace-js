@@ -133,6 +133,13 @@ function getCypressCommand (details) {
   return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
 }
 
+function getIsTestIsolationEnabled (details) {
+  if (!details || !details.config) {
+    return false
+  }
+  return details.config.testIsolation || false
+}
+
 function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getLibraryConfiguration) {
@@ -467,6 +474,8 @@ class CypressPlugin {
     // We need to make sure that the plugin is initialized before running the tests
     // This is for the case where the user has not returned the promise from the init function
     await this.libraryConfigurationPromise
+
+    this.isTestIsolationEnabled = getIsTestIsolationEnabled(details)
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
@@ -801,7 +810,8 @@ class CypressPlugin {
           testManagementTests: this.getTestSuiteProperties(testSuite),
           isImpactedTestsEnabled: this.isImpactedTestsEnabled,
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
-          repositoryRoot: this.repositoryRoot
+          repositoryRoot: this.repositoryRoot,
+          isTestIsolationEnabled: this.isTestIsolationEnabled
         }
 
         if (this.testSuiteSpan) {

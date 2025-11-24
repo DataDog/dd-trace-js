@@ -9,6 +9,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
+let isTestIsolationEnabled = false
 
 // We need to grab the original window as soon as possible,
 // in case the test changes the origin. If the test does change the origin,
@@ -44,12 +45,19 @@ function getTestProperties (testName) {
 }
 
 function retryTest (test, suiteTests, numRetries, tags) {
+  if (isTestIsolationEnabled) {
+    return
+  }
+  const originalTestIndex = suiteTests.indexOf(test)
+  if (originalTestIndex === -1) {
+    return
+  }
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     // TODO: figure out if reported duration is skewed.
-    suiteTests.unshift(clonedTest)
+    suiteTests.splice(originalTestIndex + 1 + retryIndex, 0, clonedTest)
     tags.forEach(tag => {
       clonedTest[tag] = true
     })
@@ -127,6 +135,7 @@ before(function () {
       testManagementTests = suiteConfig.testManagementTests
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
+      isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
     }
   })
 })
