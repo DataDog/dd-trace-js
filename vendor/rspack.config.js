@@ -49,7 +49,9 @@ module.exports = {
   ],
   output: {
     filename: '[name]/index.js',
-    libraryTarget: 'commonjs2',
+    library: {
+      type: 'commonjs2'
+    },
     path: join(__dirname, '..', 'packages', 'node_modules'),
     clean: true
   },

@@ -33,7 +33,7 @@ function addSecurityControls (data) {
     .map(sc => sc.trim())
 
   for (const subpath of securityControls) {
-    data.include.push(new RegExp(regexpEscape(subpath)))
+    data.include.push(new RegExp(regexpEscape.default(subpath)))
   }
 }
 
