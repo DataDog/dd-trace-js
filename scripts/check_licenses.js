@@ -9,7 +9,12 @@ const vendorPkg = require(path.join(__dirname, '..', 'vendor', 'package.json'))
 const keys = obj => Object.keys(obj)
 
 const filePath = path.join(__dirname, '..', '/LICENSE-3rdparty.csv')
-const deps = new Set(keys(pkg.dependencies).concat(keys(pkg.optionalDependencies || {}), keys(vendorPkg.dependencies)))
+const deps = new Set([
+  keys(pkg.dependencies),
+  keys(pkg.optionalDependencies || {}),
+  keys(pkg.peerDependencies || {}),
+  keys(vendorPkg.dependencies)
+].flat())
 const devDeps = new Set(Object.keys(pkg.devDependencies).concat(Object.keys(vendorPkg.devDependencies)))
 
 let index = 0
