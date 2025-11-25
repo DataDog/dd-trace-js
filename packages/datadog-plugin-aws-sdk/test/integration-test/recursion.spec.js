@@ -10,7 +10,7 @@ const {
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { assert } = require('chai')
 
-describe.only('recursion regression test', () => {
+describe('recursion regression test', () => {
   let agent
   let proc
 
