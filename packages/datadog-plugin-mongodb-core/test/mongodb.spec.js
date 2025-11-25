@@ -10,6 +10,7 @@ const sinon = require('sinon')
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { resetConfigEnvSources } = require('../../dd-trace/src/config-env-sources')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
@@ -221,7 +222,7 @@ describe('Plugin', () => {
             })
           })
 
-          it('shoud sanitize BigInts when doing a multi statement update', async () => {
+          it('should sanitize BigInts when doing a multi statement update', async () => {
             collection.bulkWrite([
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } }
@@ -759,10 +760,12 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is disabled via env var', () => {
           before(() => {
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
+            resetConfigEnvSources()
             return agent.load('mongodb-core', {})
           })
 
           after(() => {
+            delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             return agent.close({ ritmReset: false })
           })
 
@@ -799,10 +802,12 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is enabled via env var', () => {
           before(() => {
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
+            resetConfigEnvSources()
             return agent.load('mongodb-core', {})
           })
 
           after(() => {
+            delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             return agent.close({ ritmReset: false })
           })
 

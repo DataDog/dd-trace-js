@@ -1,7 +1,7 @@
 'use strict'
 const { inspect } = require('util')
 const { isTrue } = require('../util')
-const { getResolvedEnv } = require('../config-env-sources')
+const { getEnvironmentVariable } = require('../config-helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
@@ -112,8 +112,8 @@ const log = {
   isEnabled (fleetStableConfigValue, localStableConfigValue) {
     return isTrue(
       fleetStableConfigValue ??
-      getResolvedEnv('DD_TRACE_DEBUG') ??
-      (getResolvedEnv('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
+      getEnvironmentVariable('DD_TRACE_DEBUG') ??
+      (getEnvironmentVariable('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
       localStableConfigValue ??
       config.enabled
     )
@@ -126,8 +126,8 @@ const log = {
   ) {
     return optionsValue ??
       fleetStableConfigValue ??
-      getResolvedEnv('DD_TRACE_LOG_LEVEL') ??
-      getResolvedEnv('OTEL_LOG_LEVEL') ??
+      getEnvironmentVariable('DD_TRACE_LOG_LEVEL') ??
+      getEnvironmentVariable('OTEL_LOG_LEVEL') ??
       localStableConfigValue ??
       config.logLevel
   }
