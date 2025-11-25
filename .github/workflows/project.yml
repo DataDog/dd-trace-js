@@ -58,9 +58,12 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
+      - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C package
+      - run: yarn --prod --ignore-optional
+        working-directory: ./package
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
+        working-directory: ./package
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
