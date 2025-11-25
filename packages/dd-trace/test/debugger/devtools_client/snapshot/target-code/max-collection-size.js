@@ -2,8 +2,8 @@
 
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../../../src/debugger/devtools_client/snapshot/constants')
 
-// `LARGE_SIZE` is larger the default maxCollectionSize, but lower than the large object skip threshold, after which
-// nothing is captured.
+// `LARGE_SIZE` is larger than the default maxCollectionSize, but lower than the large object skip threshold, after
+// which nothing is captured.
 const LARGE_SIZE = LARGE_OBJECT_SKIP_THRESHOLD - 1
 
 function run () {
