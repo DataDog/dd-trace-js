@@ -39,6 +39,13 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
 
   function reloadLoggerAndConfig () {
+    // Reset ConfigEnvSources singleton to pick up new environment variables.
+    // This is necessary because ConfigEnvSources caches env vars at instantiation,
+    // and modules like index.js that call getResolvedEnv() at module-level need
+    // to see the updated values when tests modify process.env.
+    const { resetConfigEnvSources } = require('../src/config-env-sources')
+    resetConfigEnvSources()
+
     log = proxyquire('../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
