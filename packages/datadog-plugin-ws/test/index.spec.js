@@ -4,10 +4,10 @@ const assert = require('node:assert')
 const { once } = require('node:events')
 
 const { expect } = require('chai')
-const { describe, before, after, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let WebSocket
@@ -72,11 +72,11 @@ describe('Plugin', () => {
           })
 
           client.on('message', (msg) => {
-            expect(msg.toString()).to.equal('test message')
+            assert.strictEqual(msg.toString(), 'test message')
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'web.request')
+            assert.strictEqual(traces[0][0].name, 'web.request')
           })
         })
 
@@ -90,12 +90,12 @@ describe('Plugin', () => {
 
           client.on('open', () => {
             setTimeout(() => {
-              expect(connectionReceived).to.be.true
+              assert.strictEqual(connectionReceived, true)
             }, 1000)
           })
 
           client.on('message', msg => {
-            expect(msg.toString()).to.equal('echo')
+            assert.strictEqual(msg.toString(), 'echo')
           })
           setTimeout(() => {
             done()
@@ -117,7 +117,7 @@ describe('Plugin', () => {
           })
 
           client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             done()
           })
 
@@ -127,12 +127,12 @@ describe('Plugin', () => {
         it('should instrument message receiving', done => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('test message from client')
+              assert.strictEqual(data.toString(), 'test message from client')
             })
           })
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
-            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
+            assert.strictEqual(traces[0][0].name, 'websocket.receive')
+            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
           })
             .then(done)
             .catch(done)
@@ -151,7 +151,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'websocket.close')
+            assert.strictEqual(traces[0][0].name, 'websocket.close')
           })
         })
       })
@@ -180,9 +180,9 @@ describe('Plugin', () => {
           messageReceived = false
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -192,14 +192,14 @@ describe('Plugin', () => {
           })
 
           client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('resource', `websocket /${route}`)
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
+            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
           })
         })
 
@@ -209,20 +209,20 @@ describe('Plugin', () => {
             ws.send('test message')
           })
           wsServer.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
-            expect(messageReceived).to.equal(true)
+            assert.strictEqual(data.toString(), 'test message')
+            assert.strictEqual(messageReceived, true)
           })
 
           client.on('message', (data) => {
             client.send(data)
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -233,14 +233,14 @@ describe('Plugin', () => {
           })
           client.on('message', (data) => {
             client.send(data)
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })
@@ -269,14 +269,14 @@ describe('Plugin', () => {
           messageReceived = false
 
           client.on('message', (data) => {
-            expect(data.toString()).to.equal('test message')
+            assert.strictEqual(data.toString(), 'test message')
             messageReceived = true
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -286,9 +286,9 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'web.request')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })
@@ -315,7 +315,7 @@ describe('Plugin', () => {
         it('should not inherit sampling decisions from root trace', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('test message from client')
+              assert.strictEqual(data.toString(), 'test message from client')
             })
           })
 
@@ -325,9 +325,9 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
-            expect(traces[0][0].meta).to.have.property('span.kind', 'consumer')
-            expect(traces[0][0]).to.have.property('name', 'websocket.receive')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
+            assert.strictEqual(traces[0][0].name, 'websocket.receive')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -335,7 +335,7 @@ describe('Plugin', () => {
           let firstTraceId
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
-              expect(data.toString()).to.equal('With a great big hug...')
+              assert.strictEqual(data.toString(), 'With a great big hug...')
             })
             ws.send('We are a happy family!')
           })
@@ -352,10 +352,10 @@ describe('Plugin', () => {
           return agent.assertSomeTraces(traces => {
             const metaData = JSON.parse(traces[0][0].meta['_dd.span_links'])
             const spanId = Number(BigInt('0x' + metaData[0].span_id))
-            expect(spanId).to.equal(firstTraceId)
-            expect(traces[0][0]).to.have.property('service', 'custom-ws-service')
-            expect(traces[0][0]).to.have.property('name', 'websocket.send')
-            expect(traces[0][0]).to.have.property('type', 'websocket')
+            assert.strictEqual(spanId, firstTraceId)
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })

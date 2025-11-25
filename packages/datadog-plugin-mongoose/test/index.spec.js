@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
-const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 
 describe('Plugin', () => {
   let tracer
@@ -69,7 +70,7 @@ describe('Plugin', () => {
 
         return tracer.scope().activate(span, () => {
           return kitty.save().then(() => {
-            expect(tracer.scope().active()).to.equal(span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
       })
@@ -83,7 +84,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             Cat.find({ name: 'Zildjian' }).exec(() => {
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -100,7 +101,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -120,7 +121,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return promise.then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -132,7 +133,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.find({ name: 'Zildjian' }).exec().then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -144,7 +145,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec().then(() => {
-              expect(tracer.scope().active()).to.equal(span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })

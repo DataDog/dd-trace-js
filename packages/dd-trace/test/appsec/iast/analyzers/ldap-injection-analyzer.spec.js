@@ -1,9 +1,11 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
@@ -39,23 +41,23 @@ describe('ldap-injection-analyzer', () => {
   ldapInjectionAnalyzer.configure(true)
 
   it('should subscribe to ldapjs client search channel', () => {
-    expect(ldapInjectionAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(ldapInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:ldapjs:client:search')
+    assert.strictEqual(ldapInjectionAnalyzer._subscriptions.length, 1)
+    assert.strictEqual(ldapInjectionAnalyzer._subscriptions[0]._channel.name, 'datadog:ldapjs:client:search')
   })
 
   it('should not detect vulnerability when no query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no vulnerable query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable(NOT_TAINTED_QUERY)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should report "LDAP_INJECTION" vulnerability', () => {
@@ -87,8 +89,8 @@ describe('ldap-injection-analyzer', () => {
         './injection-analyzer': InjectionAnalyzer
       })
     proxiedLdapInjectionAnalyzer.analyze(TAINTED_QUERY)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'LDAP_INJECTION' })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, {}, { type: 'LDAP_INJECTION' })
   })
 
   it('should call analyzeAll when datadog:ldapjs:client:search event is published', () => {
