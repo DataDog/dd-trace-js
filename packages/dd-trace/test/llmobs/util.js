@@ -317,6 +317,9 @@ function useLlmObs ({
   })
 
   before(() => {
+    // Reset ConfigEnvSources after useEnv sets environment variables
+    const { resetConfigEnvSources } = require('../../src/config-env-sources')
+    resetConfigEnvSources()
     return agent.load(plugin, {}, {
       llmobs: {
         mlApp: 'test',
@@ -326,7 +329,12 @@ function useLlmObs ({
     })
   })
 
-  beforeEach(resetTracesPromises)
+  beforeEach(() => {
+    // Reset ConfigEnvSources before each test to ensure environment changes are picked up
+    const { resetConfigEnvSources } = require('../../src/config-env-sources')
+    resetConfigEnvSources()
+    resetTracesPromises()
+  })
 
   after(() => {
     return agent.close({ ritmReset: false, ...closeOptions })
