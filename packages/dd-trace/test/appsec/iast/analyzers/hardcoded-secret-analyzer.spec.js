@@ -35,7 +35,7 @@ describe('Hardcoded Secret Analyzer', () => {
     suite.forEach((testCase) => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
-        it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+        it(`should match rule ${testCase.id} with #${sampleIndex + 1}`, () => {
           const value = sample.join('')
           const ident = testCase.type === NameAndValue ? value.split(' = ')[0] : undefined
 
