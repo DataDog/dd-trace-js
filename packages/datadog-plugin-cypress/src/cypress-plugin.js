@@ -138,7 +138,7 @@ function getIsTestIsolationEnabled (cypressConfig) {
     // If we can't read testIsolation config parameter, we default to allowing retries
     return true
   }
-  return cypressConfig.testIsolation !== undefined ? cypressConfig.testIsolation : true
+  return cypressConfig.testIsolation === undefined ? true : cypressConfig.testIsolation
 }
 
 function getLibraryConfiguration (tracer, testConfiguration) {
