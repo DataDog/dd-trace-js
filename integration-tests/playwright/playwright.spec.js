@@ -80,7 +80,7 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
     let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
 
-    useSandbox([`@playwright/test@${version}`, 'typescript'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       cwd = sandboxCwd()
@@ -278,6 +278,8 @@ versions.forEach((version) => {
           stdio: 'inherit'
         }
       )
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
       childProcess.stdout.on('data', chunk => {
         testOutput += chunk.toString()
       })
