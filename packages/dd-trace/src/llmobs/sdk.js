@@ -14,7 +14,7 @@ const Span = require('../opentracing/span')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getResolvedEnv } = require('../config-env-sources')
 const telemetry = require('./telemetry')
 
 const LLMObsTagger = require('./tagger')
@@ -53,7 +53,7 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const DD_LLMOBS_ENABLED = getEnvironmentVariable('DD_LLMOBS_ENABLED')
+    const DD_LLMOBS_ENABLED = getResolvedEnv('DD_LLMOBS_ENABLED')
 
     if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')

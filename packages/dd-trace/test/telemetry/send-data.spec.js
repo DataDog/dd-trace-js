@@ -156,6 +156,9 @@ describe('sendData', () => {
 
   it('should also work in CI Visibility agentless mode', () => {
     process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
+    // Reset ConfigEnvSources to pick up the DD_CIVISIBILITY_AGENTLESS_ENABLED
+    const { resetConfigEnvSources } = require('../../src/config-env-sources')
+    resetConfigEnvSources()
 
     sendDataModule.sendData(
       {

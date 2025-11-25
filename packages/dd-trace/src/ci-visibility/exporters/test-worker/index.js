@@ -26,6 +26,7 @@ function getInterprocessTraceCode () {
   if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
+  // ??
   if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
