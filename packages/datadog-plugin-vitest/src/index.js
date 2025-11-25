@@ -2,7 +2,7 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getResolvedEnv } = require('../../dd-trace/src/config-env-sources')
 
 const {
   TEST_STATUS,
@@ -281,11 +281,11 @@ class VitestPlugin extends CiPlugin {
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
-      this.command = getEnvironmentVariable('DD_CIVISIBILITY_TEST_COMMAND')
+      this.command = getResolvedEnv('DD_CIVISIBILITY_TEST_COMMAND')
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
-        'x-datadog-trace-id': getEnvironmentVariable('DD_CIVISIBILITY_TEST_SESSION_ID'),
-        'x-datadog-parent-id': getEnvironmentVariable('DD_CIVISIBILITY_TEST_MODULE_ID')
+        'x-datadog-trace-id': getResolvedEnv('DD_CIVISIBILITY_TEST_SESSION_ID'),
+        'x-datadog-parent-id': getResolvedEnv('DD_CIVISIBILITY_TEST_MODULE_ID')
       })
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
@@ -405,7 +405,7 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getResolvedEnv('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
       })
       this.tracer._exporter.flush(onFinish)
     })
