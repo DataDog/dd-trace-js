@@ -1,0 +1,221 @@
+interactions:
+- request:
+    body: "{\n  \"include\": [\n    \"message.input_image.image_url\"\n  ],\n  \"prompt\":
+      {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+      \   \"version\": \"2\",\n    \"variables\": {\n      \"user_message\": {\n        \"type\":
+      \"input_text\",\n        \"text\": \"Analyze these images and document\"\n      },\n
+      \     \"user_image_1\": {\n        \"type\": \"input_image\",\n        \"image_url\":
+      \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\",\n
+      \       \"detail\": \"auto\"\n      },\n      \"user_file\": {\n        \"type\":
+      \"input_file\",\n        \"file_id\": \"file-LXG16g7US1sG6MQM7KQY1i\"\n      },\n
+      \     \"user_image_2\": {\n        \"type\": \"input_image\",\n        \"file_id\":
+      \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n        \"detail\": \"auto\"\n      }\n    }\n
+      \ }\n}"
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip,deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '743'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - OpenAI/JS 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-arch
+      : - arm64
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-lang
+      : - js
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-os
+      : - MacOS
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-package-version
+      : - 4.87.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-retry-count
+      : - '0'
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime
+      : - node
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-runtime-version
+      : - v22.17.0
+      ? !!python/object/apply:multidict._multidict.istr
+      - x-stainless-timeout
+      : - '600000'
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_035cb4adfd1e7855016925b8fda2488192bbaaa2662df8fbce\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1764079871,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"error\": null,\n  \"incomplete_details\": null,\n
+        \ \"instructions\": [\n    {\n      \"type\": \"message\",\n      \"content\":
+        [],\n      \"role\": \"developer\"\n    },\n    {\n      \"type\": \"message\",\n
+        \     \"content\": [\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"Analyze the following content from the user:\\n\\nText message: Analyze
+        these images and document\\nImage reference 1: \"\n        },\n        {\n
+        \         \"type\": \"input_image\",\n          \"detail\": \"auto\",\n          \"file_id\":
+        null,\n          \"image_url\": \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\"\n
+        \       },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\nDocument reference: \"\n        },\n        {\n          \"type\": \"input_file\",\n
+        \         \"file_id\": \"file-LXG16g7US1sG6MQM7KQY1i\"\n        },\n        {\n
+        \         \"type\": \"input_text\",\n          \"text\": \"\\nImage reference
+        2: \"\n        },\n        {\n          \"type\": \"input_image\",\n          \"detail\":
+        \"auto\",\n          \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n          \"image_url\":
+        null\n        },\n        {\n          \"type\": \"input_text\",\n          \"text\":
+        \"\\n\\nPlease provide a comprehensive analysis.\"\n        }\n      ],\n
+        \     \"role\": \"user\"\n    }\n  ],\n  \"max_output_tokens\": null,\n  \"max_tool_calls\":
+        null,\n  \"model\": \"o4-mini-2025-04-16\",\n  \"output\": [\n    {\n      \"id\":
+        \"rs_035cb4adfd1e7855016925b900ec448192a4ec9719d6745583\",\n      \"type\":
+        \"reasoning\",\n      \"summary\": []\n    },\n    {\n      \"id\": \"msg_035cb4adfd1e7855016925b9077d2081929a70c8a5198119d9\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"Here\\u2019s a breakdown
+        of what you\\u2019ve provided and how you might go about \\u201canalyzing\\u201d
+        each piece:\\n\\n1. Image #1: The Python Logo  \\n   \\u2013 Two snake\\u2010like
+        shapes (one blue, one yellow), interlocked to form the familiar Python emblem.
+        \ \\n   \\u2013 Clearly signifies the Python programming language.  \\n\\n2.
+        \\u201cDummy PDF file\\u201d (no content supplied)  \\n   \\u2013 You\\u2019ve
+        indicated there\\u2019s a PDF but haven\\u2019t supplied actual pages or text.
+        \ \\n   \\u2013 Since it\\u2019s a placeholder, we can only sketch out an
+        analysis approach, not report on any real content.  \\n\\n3. Image #2: Very
+        tall, narrow black\\u2010background strip  \\n   \\u2013 On close inspection
+        it appears to be a screenshot of text (perhaps code or PDF text) but it\\u2019s
+        too low\\u2010resolution here to read.  \\n   \\u2013 Presumably this is what
+        a page of your \\u201cDummy PDF\\u201d looks like in image form.  \\n\\n\\u2014\\u2014\\u2014\\n\\nHow
+        to do a \\u201ccomprehensive analysis\\u201d of these items:\\n\\nA. Identify
+        & classify each input  \\n   1. Logo image \\u2192 an icon, no text.  \\n
+        \  2. PDF (if supplied) \\u2192 digital document, probably containing text,
+        maybe tables, figures.  \\n   3. Screenshot image of text \\u2192 treat as
+        image-of-text.  \\n\\nB. For the logo (Image #1)  \\n   \\u2013 You already
+        know it\\u2019s Python\\u2019s. You might note its colors, the version of
+        the logo (flat vs. pre-2017 3D style), and that it carries no hidden data.\\n\\nC.
+        For the PDF (or its screenshot)  \\n   1. Text extraction  \\n     \\u2022
+        If you have the PDF file natively: use PyPDF2, pdfminer.six or Apache Tika
+        to pull out plain text and metadata.  \\n     \\u2022 If you only have an
+        image of each page: run OCR (e.g. Tesseract via pytesseract) after binarizing
+        and deskewing.  \\n   2. Structure & layout analysis  \\n     \\u2022 Detect
+        headings (font sizes/styles) vs. body text.  \\n     \\u2022 Locate tables
+        or figures (with tools like Camelot or pdfplumber).  \\n   3. Content summarization
+        \ \\n     \\u2022 Once text is extracted, run NLP pipelines:  \\n       \\u2013
+        Sentence splitting, tokenization (NLTK, spaCy)  \\n       \\u2013 Keyword
+        extraction (TF-IDF or RAKE)  \\n       \\u2013 Topic modeling (LDA) or transformer-based
+        summarization (HuggingFace\\u2019s BART/T5)  \\n   4. Named-entity recognition
+        \ \\n     \\u2022 Identify people, places, dates, organizations (again spaCy
+        or transformers).  \\n   5. If it\\u2019s code:  \\n     \\u2022 Syntax-highlight
+        or parse it (use a Python parser for Python code; highlight.js for general
+        code).  \\n     \\u2022 Count lines of code, detect language, flag TODOs or
+        comments.  \\n\\nD. For the screenshot image (Image #2)  \\n   \\u2013 Preprocess:
+        crop, convert to grayscale, threshold to boost contrast.  \\n   \\u2013 OCR
+        to recover the underlying text.  \\n   \\u2013 Compare the OCR\\u2019d text
+        to what you get from a native PDF extract, if applicable (to gauge OCR accuracy).
+        \ \\n\\nE. Putting it all together  \\n   1. Metadata report: file sizes,
+        page count, image resolutions.  \\n   2. High-level summary: what topics or
+        languages appear in the document.  \\n   3. Raw text export (for archiving).
+        \ \\n   4. Structured outputs (JSON) containing:  \\n     \\u2022 Document
+        title, authors, dates  \\n     \\u2022 Sections and their summaries  \\n     \\u2022
+        Extracted tables (as CSV)  \\n     \\u2022 Code blocks (with line counts,
+        detected language)  \\n   5. Visualizations (optional):  \\n     \\u2022 Word
+        clouds of key terms  \\n     \\u2022 Topic-model clusters  \\n     \\u2022
+        Charts of entity counts  \\n\\nF. Example Python snippet (illustrative)  \\n```python\\nimport
+        pdfplumber, pytesseract\\nfrom PIL import Image\\n\\n# 1) Extract text from
+        PDF directly\\nwith pdfplumber.open(\\\"dummy.pdf\\\") as pdf:\\n    full_text
+        = \\\"\\\\n\\\".join(page.extract_text() or \\\"\\\" for page in pdf.pages)\\n\\n#
+        2) If you have images of pages (or screenshots)\\nimg = Image.open(\\\"page1_screenshot.png\\\").convert(\\\"L\\\")\\ntext_from_img
+        = pytesseract.image_to_string(img, lang=\\\"eng\\\")\\n\\n# 3) Quick keyword
+        extraction (TF-IDF very roughly)\\nfrom sklearn.feature_extraction.text import
+        TfidfVectorizer\\nvec = TfidfVectorizer(stop_words=\\\"english\\\", max_features=20)\\nX
+        = vec.fit_transform([full_text])\\nprint(\\\"Top terms:\\\", vec.get_feature_names_out())\\n```\\n\\n\\u2014\\u2014\\u2014\\n\\nNext
+        steps:  \\n\\u2022 Supply the actual PDF (or higher-resolution page images)
+        if you want real content analyzed.  \\n\\u2022 Let me know whether you\\u2019re
+        most interested in raw text, summaries, code analysis or table extraction,
+        and I can tailor the pipeline further.\"\n        }\n      ],\n      \"role\":
+        \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\":
+        null,\n  \"prompt\": {\n    \"id\": \"pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0\",\n
+        \   \"variables\": {\n      \"user_message\": {\n        \"type\": \"input_text\",\n
+        \       \"text\": \"Analyze these images and document\"\n      },\n      \"user_image_1\":
+        {\n        \"type\": \"input_image\",\n        \"detail\": \"auto\",\n        \"file_id\":
+        null,\n        \"image_url\": \"https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\"\n
+        \     },\n      \"user_file\": {\n        \"type\": \"input_file\",\n        \"file_id\":
+        \"file-LXG16g7US1sG6MQM7KQY1i\"\n      },\n      \"user_image_2\": {\n        \"type\":
+        \"input_image\",\n        \"detail\": \"auto\",\n        \"file_id\": \"file-BCuhT1HQ24kmtsuuzF1mh2\",\n
+        \       \"image_url\": null\n      }\n    },\n    \"version\": \"2\"\n  },\n
+        \ \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": null,\n  \"reasoning\":
+        {\n    \"effort\": \"medium\",\n    \"summary\": null\n  },\n  \"safety_identifier\":
+        null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\":
+        1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n
+        \   \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\":
+        [],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n
+        \ \"usage\": {\n    \"input_tokens\": 2623,\n    \"input_tokens_details\":
+        {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 1697,\n    \"output_tokens_details\":
+        {\n      \"reasoning_tokens\": 640\n    },\n    \"total_tokens\": 4320\n  },\n
+        \ \"user\": null,\n  \"metadata\": {}\n}"
+    headers:
+      CF-RAY:
+      - 9a41bbce0f89c9ce-CDG
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 25 Nov 2025 14:11:31 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=iowUyLeLYaBgvJdClNj0HBCsWA8bP6bj0TvHepdkQkw-1764079891-1.0.1.1-fqPNYPzO0RUDHVkaJGDdxkgDY3RXfdDealpa9Lzs12yEuQXuIyfPTyAzhDuVcQZ5_g0_k1qh5WO0lSlOZMy5v3AAejX4jQXpALVkKS.DzSw;
+        path=/; expires=Tue, 25-Nov-25 14:41:31 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=UbYP1ViMzhsmQDU9cES_z_F6arOWbcvkaYntDtVuvg4-1764079891095-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '21431'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '21435'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149998470'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_63a5b6f0d6644275a9d6f1a6297d622f
+    status:
+      code: 200
+      message: OK
+version: 1

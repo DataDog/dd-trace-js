@@ -1,10 +1,10 @@
 'use strict'
 
 /**
- * Extracts chat templates from OpenAI response instructions by replacing text variable values with placeholders.
+ * Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders.
  *
  * Performs reverse templating: reconstructs the template by replacing actual values with {{variable_name}}.
- * Images and files always use generic [image] and [file] markers for deterministic templating.
+ * For images/files: uses {{variable_name}} when values are available, falls back to [image]/[file] when stripped.
  *
  * @param {Array<Object>} instructions - From Response.instructions (array of ResponseInputMessageItem)
  * @param {Object<string, string>} variables - Normalized variables (output of normalizePromptVariables)
@@ -15,11 +15,11 @@ function extractChatTemplateFromInstructions (instructions, variables) {
 
   const chatTemplate = []
 
-  // Build map of values to placeholders - only for text variables (exclude images/files for deterministic templates)
+  // Build map of values to placeholders - exclude fallback markers so they remain as-is
   const valueToPlaceholder = {}
   for (const [varName, varValue] of Object.entries(variables)) {
     const valueStr = varValue ? String(varValue) : ''
-    // Only include text variables - exclude image/file markers to ensure deterministic templates
+    // Exclude fallback markers - they should remain as [image]/[file] in the template
     if (valueStr && valueStr !== '[image]' && valueStr !== '[file]') {
       valueToPlaceholder[valueStr] = `{{${varName}}}`
     }
@@ -35,9 +35,9 @@ function extractChatTemplateFromInstructions (instructions, variables) {
     const contentItems = instruction.content
     if (!Array.isArray(contentItems)) continue
 
-    // Extract text from all content items (using generic markers for template)
+    // Extract text from all content items (uses actual values for images/files when available)
     const textParts = contentItems
-      .map(extractTextForTemplate)
+      .map(extractTextFromContentItem)
       .filter(Boolean)
 
     if (textParts.length === 0) continue
@@ -57,34 +57,13 @@ function extractChatTemplateFromInstructions (instructions, variables) {
 }
 
 /**
- * Extracts text content for chat template (uses generic markers for images/files).
+ * Extracts text content from a content item, using actual image_url/file_id values when available.
  *
- * @param {Object} contentItem - Content item from instruction.content
- * @returns {string|null} Text content, '[image]', '[file]', or null
- */
-function extractTextForTemplate (contentItem) {
-  // Extract text content
-  if (contentItem.text) {
-    return contentItem.text
-  }
-
-  // For image/file items, use generic markers for deterministic templates
-  if (contentItem.type === 'input_image') {
-    return '[image]'
-  }
-
-  if (contentItem.type === 'input_file') {
-    return '[file]'
-  }
-
-  return null
-}
-
-/**
- * Extracts text content for input messages (uses actual image_url/file_id values).
+ * Used for both input messages and chat template extraction. Falls back to [image]/[file] markers
+ * when the actual values are stripped (e.g., by OpenAI's default URL stripping behavior).
  *
- * @param {Object} contentItem - Content item from instruction.content
- * @returns {string|null} Text content with actual URLs/file references
+ * @param {Object} contentItem - Content item from Response.instructions[].content (ResponseInputContentItem)
+ * @returns {string|null} Text content, URL/file reference, or [image]/[file] fallback marker
  */
 function extractTextFromContentItem (contentItem) {
   // Extract text content
