@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const { promisify } = require('util')
 const { once } = require('node:events')
 const http = require('http')
@@ -73,7 +74,7 @@ const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 
-const onlyLatestIt = version === 'latest' ? it : it.skip
+const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 const moduleTypes = [
   {
@@ -1655,7 +1656,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      onlyLatestIt('does not retry new tests when testIsolation is false', async () => {
+      over12It('does not retry new tests when testIsolation is false', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -2034,7 +2035,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      onlyLatestIt('does not retry flaky tests when testIsolation is false', async () => {
+      over12It('does not retry flaky tests when testIsolation is false', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -2847,7 +2848,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      onlyLatestIt('does not retry attempt to fix tests when testIsolation is false', async () => {
+      over12It('does not retry attempt to fix tests when testIsolation is false', async () => {
         receiver.setSettings({
           test_management: { enabled: true }
         })
@@ -2884,8 +2885,8 @@ moduleTypes.forEach(({
             assert.equal(attemptToFixTests.length, 1)
 
             attemptToFixTests.forEach(test => {
-              assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
               // No retries should occur
+              assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
               assert.notProperty(test.meta, TEST_IS_RETRY)
               assert.notProperty(test.meta, TEST_RETRY_REASON)
             })
@@ -3279,7 +3280,7 @@ moduleTypes.forEach(({
         })
       })
 
-      onlyLatestIt('does not retry impacted tests when testIsolation is false', async () => {
+      over12It('does not retry impacted tests when testIsolation is false', async () => {
         receiver.setSettings({
           impacted_tests_enabled: true,
           early_flake_detection: {
