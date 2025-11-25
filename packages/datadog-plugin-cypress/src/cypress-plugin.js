@@ -978,6 +978,11 @@ class CypressPlugin {
           this.activeTestSpan.addTags(tags)
         }
         return null
+      },
+      'dd:log': (message) => {
+        // eslint-disable-next-line no-console
+        console.log(`[datadog] ${message}`)
+        return null
       }
     }
   }
