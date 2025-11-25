@@ -67,12 +67,17 @@ function wrapSmithySend (send) {
 
     if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
-    } else if (this.config?.protocol?.deserializeResponse) {
+    } else if (
+      this.config?.protocol?.deserializeResponse &&
+      !Object.hasOwn(this.config.protocol, Symbol.for('dd.wrapped'))
+    ) {
       shimmer.wrap(
         this.config.protocol,
         'deserializeResponse',
         deserializeResponse => wrapDeserialize(deserializeResponse, channelSuffix, 2)
       )
+
+      Object.defineProperty(this.config.protocol, Symbol.for('dd.wrapped'), { value: true })
     }
 
     const ctx = {
