@@ -211,6 +211,9 @@ describe('lambda', () => {
       // Set the desired handler to patch
       process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'lambda'
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+      // Reset ConfigEnvSources so lambda module picks up the env vars
+      const { resetConfigEnvSources } = require('../../src/config-env-sources')
+      resetConfigEnvSources()
       // Register hook for patching
       await loadAgent()
 
@@ -274,6 +277,9 @@ describe('lambda', () => {
       it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, () => {
         process.env[flushDeadlineEnvVar] = customDeadline
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
+        // Reset ConfigEnvSources so lambda handler picks up the env vars
+        const { resetConfigEnvSources } = require('../../src/config-env-sources')
+        resetConfigEnvSources()
 
         const _context = {
           getRemainingTimeInMillis: () => 25

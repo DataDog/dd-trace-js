@@ -396,6 +396,8 @@ describe('Plugin', () => {
           process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
           process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
           process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+          const { resetConfigEnvSources } = require('../../dd-trace/src/config-env-sources')
+          resetConfigEnvSources()
 
           return agent.load(['aws-sdk'])
         })
