@@ -53,7 +53,9 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
     tags.forEach(tag => {
-      clonedTest[tag] = true
+      if (tag) {
+        clonedTest[tag] = true
+      }
     })
     retriedTests.push(clonedTest)
   }
@@ -103,7 +105,11 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
       retriedTests = getRetriedTests(test, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
     } else if (isModified && isEarlyFlakeDetectionEnabled) {
       retryMessage = 'to detect flakes because it is modified'
-      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsModified', '_ddIsEfdRetry'])
+      retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
+        '_ddIsModified',
+        '_ddIsEfdRetry',
+        isKnownTestsEnabled && isNewTest(test) && '_ddIsNew'
+      ])
     } else if (isNew && isEarlyFlakeDetectionEnabled) {
       retryMessage = 'to detect flakes because it is new'
       retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
