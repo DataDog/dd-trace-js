@@ -37,21 +37,6 @@ function normalizeModuleName (name) {
   return builtinModules.has(stripped) ? stripped : name
 }
 
-function normalizeModulesList (modules) {
-  const normalized = []
-  const seen = new Set()
-
-  for (const mod of modules) {
-    const normalizedName = normalizeModuleName(mod)
-    if (typeof normalizedName !== 'string') continue
-    if (seen.has(normalizedName)) continue
-    seen.add(normalizedName)
-    normalized.push(normalizedName)
-  }
-
-  return normalized
-}
-
 /**
  * @overload
  * @param {string[]} modules list of modules to hook into
@@ -70,15 +55,15 @@ function Hook (modules, options, onrequire) {
     options = {}
   }
 
-  const normalizedModules = Array.isArray(modules) ? normalizeModulesList(modules) : []
   options ??= {}
+  modules ??= []
 
-  this.modules = normalizedModules
+  this.modules = modules
   this.options = options
   this.onrequire = onrequire
 
   if (Array.isArray(modules)) {
-    for (const mod of normalizedModules) {
+    for (const mod of modules) {
       const hooks = moduleHooks[mod]
 
       if (hooks) {
@@ -108,6 +93,7 @@ function Hook (modules, options, onrequire) {
 
     const builtin = isBuiltinModuleName(filename)
     const moduleId = builtin ? normalizeModuleName(filename) : filename
+
     let name, basedir, hooks
     // return known patched modules immediately
     if (cache[moduleId]) {
