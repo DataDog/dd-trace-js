@@ -5,8 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const visitor_1 = require("graphql/language/visitor");
-const printer_1 = require("graphql/language/printer");
+const visitor_1 = require("graphql/language");
+const printer_1 = require("graphql/language");
 const utilities_1 = require("graphql/utilities");
 const lodash_sortby_1 = __importDefault(require("lodash.sortby"));
 function hideLiterals(ast) {
