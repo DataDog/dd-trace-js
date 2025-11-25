@@ -167,6 +167,9 @@ describe('docker', () => {
 
   it('should support external env', () => {
     process.env.DD_EXTERNAL_ENV = 'test'
+    // Reset ConfigEnvSources to pick up the DD_EXTERNAL_ENV
+    const { resetConfigEnvSources } = require('../../../src/config-env-sources')
+    resetConfigEnvSources()
 
     docker = proxyquire('../../../src/exporters/common/docker', { fs })
     docker.inject(carrier)

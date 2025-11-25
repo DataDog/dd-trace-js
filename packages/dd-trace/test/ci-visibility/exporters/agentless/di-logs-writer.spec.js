@@ -14,6 +14,10 @@ describe('Test Visibility DI Writer', () => {
   beforeEach(() => {
     nock.cleanAll()
     process.env.DD_API_KEY = '1'
+    // Reset ConfigEnvSources so it picks up the DD_API_KEY
+    // di-logs-writer.js uses getResolvedEnv('DD_API_KEY')
+    const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
+    resetConfigEnvSources()
   })
 
   afterEach(() => {
@@ -64,6 +68,9 @@ describe('Test Visibility DI Writer', () => {
   context('agent based', () => {
     it('can send logs to the debugger endpoint in the agent', (done) => {
       delete process.env.DD_API_KEY
+      // Reset ConfigEnvSources to pick up the deleted DD_API_KEY
+      const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
+      resetConfigEnvSources()
 
       const scope = nock('http://www.example.com')
         .post('/debugger/v1/input', body => {
@@ -85,6 +92,9 @@ describe('Test Visibility DI Writer', () => {
 
     it('logs an error if the request fails', (done) => {
       delete process.env.DD_API_KEY
+      // Reset ConfigEnvSources to pick up the deleted DD_API_KEY
+      const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
+      resetConfigEnvSources()
 
       const logErrorSpy = sinon.spy(log, 'error')
 

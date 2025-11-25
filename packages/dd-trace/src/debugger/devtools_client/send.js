@@ -9,7 +9,7 @@ const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const log = require('./log')
 const { version } = require('../../../../../package.json')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getResolvedEnv } = require('../../config-env-sources')
 
 module.exports = send
 
@@ -22,8 +22,8 @@ const hostname = getHostname()
 const service = config.service
 
 const ddtags = [
-  ['env', getEnvironmentVariable('DD_ENV')],
-  ['version', getEnvironmentVariable('DD_VERSION')],
+  ['env', getResolvedEnv('DD_ENV')],
+  ['version', getResolvedEnv('DD_VERSION')],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],

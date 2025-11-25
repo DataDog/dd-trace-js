@@ -2,7 +2,7 @@
 
 const request = require('../../exporters/common/request')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getResolvedEnv } = require('../../config-env-sources')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -49,7 +49,7 @@ function getSkippableSuites ({
     options.path = `${evpProxyPrefix}/api/v2/ci/tests/skippable`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getEnvironmentVariable('DD_API_KEY')
+    const apiKey = getResolvedEnv('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Skippable suites were not fetched because Datadog API key is not defined.'))
     }

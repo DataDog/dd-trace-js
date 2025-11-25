@@ -21,11 +21,16 @@ describe('CI Visibility Exporter', () => {
     sinon.stub(cp, 'execFileSync').returns('false')
     sinon.stub(fs, 'readFileSync').returns('')
     process.env.DD_API_KEY = '1'
+    // Reset ConfigEnvSources so it picks up the DD_API_KEY we just set
+    // CI visibility code uses getResolvedEnv('DD_API_KEY') in multiple places
+    const { resetConfigEnvSources } = require('../../../src/config-env-sources')
+    resetConfigEnvSources()
     nock.cleanAll()
   })
 
   afterEach(() => {
     sinon.restore()
+    delete process.env.DD_API_KEY
   })
 
   describe('sendGitMetadata', () => {

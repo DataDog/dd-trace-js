@@ -104,6 +104,10 @@ describe('git_metadata', () => {
 
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
     process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
+    // Reset ConfigEnvSources to pick up the env var change since git_metadata uses getResolvedEnv()
+    const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
+    resetConfigEnvSources()
+
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
@@ -117,6 +121,7 @@ describe('git_metadata', () => {
       expect(unshallowRepositoryStub).not.to.have.been.called
       expect(err).to.be.null
       expect(scope.isDone()).to.be.true
+      delete process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED
       done()
     })
   })

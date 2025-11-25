@@ -4,7 +4,7 @@ const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
-const { getEnvironmentVariable } = require('./config-helper')
+const { getResolvedEnv } = require('./config-env-sources')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -83,7 +83,7 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    if (getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
+    if (getResolvedEnv('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
       const started = new Set()
       const startedIds = new Set()
       const finished = new Set()
