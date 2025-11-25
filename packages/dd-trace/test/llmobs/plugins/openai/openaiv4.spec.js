@@ -888,20 +888,19 @@ describe('integrations', () => {
         ])
       })
 
-      it('submits a response span with prompt tracking - mixed input types', async function () {
+      it('submits a response span with prompt tracking - mixed input types (url stripped)', async function () {
         if (semifies(realVersion, '<4.87.0')) {
           this.skip()
         }
 
         await openai.responses.create({
-          include: ['message.input_image.image_url'],
           prompt: {
             id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
             version: '2',
             variables: {
               user_message: { type: 'input_text', text: 'Analyze these images and document' },
               user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
-              user_file: { type: 'input_file', file_id: 'file-LXG16g7US1sG6MQM7KQY1i' },
+              user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
               user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
             }
           }
@@ -915,7 +914,61 @@ describe('integrations', () => {
           variables: {
             user_message: 'Analyze these images and document',
             user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
-            user_file: 'file-LXG16g7US1sG6MQM7KQY1i',
+            user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
+            user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
+          },
+          chat_template: [
+            {
+              role: 'user',
+              content: 'Analyze the following content from the user:\n\n' +
+                'Text message: {{user_message}}\n' +
+                'Image reference 1: [image]\n' +
+                'Document reference: {{user_file}}\n' +
+                'Image reference 2: {{user_image_2}}\n\n' +
+                'Please provide a comprehensive analysis.'
+            }
+          ]
+        }, [
+          {
+            role: 'user',
+            content: 'Analyze the following content from the user:\n\n' +
+              'Text message: Analyze these images and document\n' +
+              'Image reference 1: [image]\n' +
+              'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
+              'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
+              'Please provide a comprehensive analysis.'
+          }
+        ])
+      })
+
+      it('submits a response span with prompt tracking - mixed input types (url preserved)', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          include: ['message.input_image.image_url'],
+          prompt: {
+            id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+            version: '2',
+            variables: {
+              user_message: { type: 'input_text', text: 'Analyze these images and document' },
+              user_image_1: { type: 'input_image', image_url: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png', detail: 'auto' },
+              user_file: { type: 'input_file', file_url: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf' },
+              user_image_2: { type: 'input_image', file_id: 'file-BCuhT1HQ24kmtsuuzF1mh2', detail: 'auto' }
+            }
+          }
+        })
+
+        const { llmobsSpans } = await getEvents()
+
+        assertPromptTracking(llmobsSpans[0], {
+          id: 'pmpt_69201db75c4c81959c01ea6987ab023c070192cd2843dec0',
+          version: '2',
+          variables: {
+            user_message: 'Analyze these images and document',
+            user_image_1: 'https://raw.githubusercontent.com/github/explore/main/topics/python/python.png',
+            user_file: 'https://www.berkshirehathaway.com/letters/2024ltr.pdf',
             user_image_2: 'file-BCuhT1HQ24kmtsuuzF1mh2'
           },
           chat_template: [
@@ -935,7 +988,7 @@ describe('integrations', () => {
             content: 'Analyze the following content from the user:\n\n' +
               'Text message: Analyze these images and document\n' +
               'Image reference 1: https://raw.githubusercontent.com/github/explore/main/topics/python/python.png\n' +
-              'Document reference: file-LXG16g7US1sG6MQM7KQY1i\n' +
+              'Document reference: https://www.berkshirehathaway.com/letters/2024ltr.pdf\n' +
               'Image reference 2: file-BCuhT1HQ24kmtsuuzF1mh2\n\n' +
               'Please provide a comprehensive analysis.'
           }
