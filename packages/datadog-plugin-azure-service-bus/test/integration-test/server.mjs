@@ -54,14 +54,14 @@ await sender1.scheduleMessages(amqpMessages, scheduledEnqueueTimeUtc)
 
 // queue batching
 const batch1 = await sender1.createMessageBatch()
-await batch1.tryAddMessage(messages[0])
-await batch1.tryAddMessage(messages[1])
+batch1.tryAddMessage(messages[0])
+batch1.tryAddMessage(messages[1])
 await sender1.sendMessages(batch1)
 
 // topic batching
 const batch2 = await sender2.createMessageBatch()
-await batch2.tryAddMessage(messages[0])
-await batch2.tryAddMessage(messages[1])
+batch2.tryAddMessage(messages[0])
+batch2.tryAddMessage(messages[1])
 await sender2.sendMessages(batch2)
 
 await sender1.close()
