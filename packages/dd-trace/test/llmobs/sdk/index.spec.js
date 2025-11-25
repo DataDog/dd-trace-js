@@ -126,14 +126,14 @@ describe('sdk', () => {
     })
 
     it('does not enable llmobs if env var conflicts', () => {
-      const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub()
       }
 
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       process.env.DD_LLMOBS_ENABLED = 'false'
+      const config = getConfigFresh({}) // getConfigFresh resets ConfigEnvSources
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
 
       disabledLLMObs.enable({})
 
