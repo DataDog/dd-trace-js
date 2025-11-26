@@ -85,7 +85,8 @@ async function runAndCheckWithTelemetry (filename, expectedOut, expectedTelemetr
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
-    assert.strictEqual(msgs.length, 0, `Expected no telemetry, but got:\n${msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
+    assert.strictEqual(
+      msgs.length, 0, `Expected no telemetry, but got:\n${msgs.map(msg => JSON.stringify(msg[1].points)).join('\n')
       }`)
   } else {
     assertTelemetryPoints(pid, msgs, expectedTelemetryPoints)
