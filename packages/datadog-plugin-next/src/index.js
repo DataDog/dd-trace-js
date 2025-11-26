@@ -14,18 +14,24 @@ class NextPlugin extends ServerPlugin {
   constructor (...args) {
     super(...args)
     this._requests = new WeakMap()
-    this.addSub('apm:next:page:load', message => this.pageLoad(message))
+    this.page = null
+    this.span = null
+    this.addSub('apm:next:page:load', (message ) => {
+      this.page = message.page
+      this.pageLoad(message)
+    })
   }
 
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan(this.operationName(), {
+    const resourceName = this.page ? `${req.method} ${this.page}`.trim() : req.method
+    this.span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
         'service.name': this.config.service || this.serviceName(),
-        'resource.name': req.method,
+        'resource.name': resourceName,
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method
@@ -33,11 +39,11 @@ class NextPlugin extends ServerPlugin {
       integrationName: this.constructor.id
     })
 
-    analyticsSampler.sample(span, this.config.measured, true)
+    analyticsSampler.sample(this.span, this.config.measured, true)
 
-    this._requests.set(span, req)
+    this._requests.set(this.span, req)
 
-    return { ...store, span }
+    return { ...store, span: this.span }
   }
 
   error ({ span, error }) {
@@ -114,7 +120,7 @@ class NextPlugin extends ServerPlugin {
         : '/public/*'
     }
 
-    span.addTags({
+    this.span.addTags({
       [COMPONENT]: this.constructor.id,
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page
