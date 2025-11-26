@@ -35,8 +35,10 @@ else
     echo "     --no-scancode-strategy \\"
     echo "     --no-github-sbom-strategy \\"
     echo "     https://github.com/datadog/dd-trace-js > LICENSE-3rdparty.csv"
-    echo "3. Commit the updated LICENSE-3rdparty.csv file"
-    echo "4. Push your changes"
+    echo "3. Append vendored dependencies:"
+    echo "   cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv"
+    echo "4. Commit the updated LICENSE-3rdparty.csv file"
+    echo "5. Push your changes"
     echo ""
     echo "This helps keep the 3rd-party license information accurate."
     exit 1

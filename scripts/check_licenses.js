@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 'use strict'
 
-const { createReadStream } = require('node:fs')
+const { createReadStream, existsSync } = require('node:fs')
 const { join } = require('node:path')
 const readline = require('node:readline')
 const { execSync } = require('node:child_process')
@@ -55,6 +55,9 @@ function getProdDeps () {
     }
   }
 
+  // Add vendored dependencies
+  addVendoredDeps(deps)
+
   return deps
 }
 
@@ -68,6 +71,29 @@ function collectFromTrees (trees, deps) {
     if (Array.isArray(node.children) && node.children.length) {
       collectFromTrees(node.children, deps)
     }
+  }
+}
+
+function addVendoredDeps (deps) {
+  const vendoredDepsPath = join(__dirname, '..', '.github', 'vendored-dependencies.csv')
+
+  // If the vendored dependencies file doesn't exist, skip
+  if (!existsSync(vendoredDepsPath)) {
+    return
+  }
+
+  const fs = require('node:fs')
+  const content = fs.readFileSync(vendoredDepsPath, 'utf8')
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue // Skip empty lines
+
+    const columns = line.split(',')
+    const component = columns[0]
+
+    // Strip quotes from the component name and add to deps
+    deps.add(component.replaceAll(/^"|"$/g, ''))
   }
 }
 

@@ -70,4 +70,5 @@
 "ttl-set","https://github.com/watson/ttl-set","['MIT']","['Thomas Watson']"
 "undici-types","https://github.com/nodejs/undici","['MIT']","['nodejs']"
 "yocto-queue","https://github.com/sindresorhus/yocto-queue","['MIT']","['Sindre Sorhus']"
-
+"aws-lambda-nodejs-runtime-interface-client","https://github.com/aws/aws-lambda-nodejs-runtime-interface-client/blob/v2.1.0/src/utils/UserFunction.ts","['Apache-2.0']","['Amazon.com Inc. or its affiliates']"
+"is-git-url","https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87","['MIT']","['Jon Schlinkert']"

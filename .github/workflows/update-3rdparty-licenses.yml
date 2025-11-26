@@ -73,6 +73,10 @@ jobs:
             --no-github-sbom-strategy \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
+      - name: Append vendored dependencies
+        run: |
+          cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv
+
       - name: Run LICENSE-3rdparty.csv update check
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
