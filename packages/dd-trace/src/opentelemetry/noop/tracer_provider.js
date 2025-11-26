@@ -27,7 +27,6 @@ class NoopTracerProvider {
   constructor (config = {}) {
     this.config = config
     this.resource = config.resource
-    this._processors = []
   }
 
   getTracer () {

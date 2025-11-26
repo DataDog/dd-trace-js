@@ -47,7 +47,7 @@ describe('NoopTracerProvider', () => {
     const provider = new NoopTracerProvider()
     const processor = { onStart: () => {}, onEnd: () => {} }
     provider.addSpanProcessor(processor)
-    assert.strictEqual(provider._processors.length, 0)
+    assert.notStrictEqual(provider.getActiveSpanProcessor(), processor)
   })
 
   it('should return undefined from register', () => {
