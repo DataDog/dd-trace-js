@@ -13,7 +13,7 @@ variables:
     - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
       when: never
     - when: on_success
-  tags: ["runner:apm-k8s-m7i-metal"]
+  tags: [ "runner:apm-k8s-m8g-metal" ]
   image: $MICROBENCHMARKS_CI_IMAGE
   rules:
     - if: $CI_COMMIT_BRANCH == 'master'
@@ -37,6 +37,9 @@ variables:
       - runner_system_failure
       - scheduler_failure
       - api_failure
+  variables:
+    KUBERNETES_CPU_REQUEST: "48"
+    KUBERNETES_CPU_LIMIT: "48"
 
 benchmarks-pr-comment:
   stage: benchmarks-pr-comment
@@ -73,36 +76,20 @@ benchmark:
         GROUP: 1
       - MAJOR_VERSION: 18
         GROUP: 2
-      - MAJOR_VERSION: 18
-        GROUP: 3
-      - MAJOR_VERSION: 18
-        GROUP: 4
       - MAJOR_VERSION: 20
         GROUP: 1
       - MAJOR_VERSION: 20
         GROUP: 2
-      - MAJOR_VERSION: 20
-        GROUP: 3
-      - MAJOR_VERSION: 20
-        GROUP: 4
       - MAJOR_VERSION: 22
         GROUP: 1
       - MAJOR_VERSION: 22
         GROUP: 2
-      - MAJOR_VERSION: 22
-        GROUP: 3
-      - MAJOR_VERSION: 22
-        GROUP: 4
       - MAJOR_VERSION: 24
         GROUP: 1
       - MAJOR_VERSION: 24
         GROUP: 2
-      - MAJOR_VERSION: 24
-        GROUP: 3
-      - MAJOR_VERSION: 24
-        GROUP: 4
   variables:
-    SPLITS: 4
+    SPLITS: 2
 
 benchmark-serverless:
   stage: benchmarks
