@@ -51,16 +51,12 @@ exports.tracingChannel = function (name) {
  * @param {import('./instrumentations').Hook} hook
  */
 exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
-  if (typeof name === 'string') {
-    name = [name]
+  if (name && typeof name === 'object') process._rawDebug('Hellow World')
+  if (!instrumentations[name]) {
+    instrumentations[name] = []
   }
 
-  for (const val of name) {
-    if (!instrumentations[val]) {
-      instrumentations[val] = []
-    }
-    instrumentations[val].push({ name: val, versions, file, filePattern, hook, patchDefault })
-  }
+  instrumentations[name].push({ name, versions, file, filePattern, hook, patchDefault })
 }
 
 exports.AsyncResource = AsyncResource
