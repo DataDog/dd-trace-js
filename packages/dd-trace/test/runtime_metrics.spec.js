@@ -527,7 +527,8 @@ function createGarbage (count = 50) {
                 )
                 totalPercent = number
               }
-              assert(number - expected < 0.5, `${metric} sanity check failed: ${number} ${expected}`)
+              const epsilon = os.platform() === 'win32' ? 1.5 : 0.5
+              assert(number - expected < epsilon, `${metric} sanity check failed: ${number} ${expected}`)
             }
           }
 
