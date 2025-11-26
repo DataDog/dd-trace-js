@@ -111,7 +111,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       } else if (tokenUsage.prompt_tokens_details) {
         // Chat/Completions API - only include if > 0
         const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
-        if (cacheReadTokens != null) {
+        if (cacheReadTokens) {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
