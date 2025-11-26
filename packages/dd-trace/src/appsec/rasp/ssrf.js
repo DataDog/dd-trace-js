@@ -10,6 +10,7 @@ const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 const downstream = require('../downstream_requests')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 let config
 
@@ -52,11 +53,6 @@ function analyzeSsrf (ctx) {
   handleResult(result, req, store?.res, ctx.abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
-
-  // Track body analysis count if we're sampling the response body
-  if (ctx.shouldCollectBody) {
-    downstream.incrementBodyAnalysisCount(req)
-  }
 }
 
 /**
@@ -74,9 +70,9 @@ function handleResponseFinish ({ ctx, res, body }) {
   const req = store?.req
   if (!req) return
 
-  const { isRedirect } = downstream.handleRedirectResponse(req, res, ctx.shouldCollectBody)
+  const evaluateBody = ctx.shouldCollectBody && downstream.handleRedirectResponse(req, res)
 
-  if (isRedirect) {
+  if (evaluateBody) {
     // Skip body analysis for redirect responses
     runResponseEvaluation(res, req, null)
   } else {
@@ -101,7 +97,7 @@ function runResponseEvaluation (res, req, responseBody) {
   const ruleTriggered = !!result?.events?.length
 
   if (ruleTriggered) {
-    downstream.handleResponseTracing(req, raspRule)
+    updateRaspRuleMatchMetricTags(req, raspRule, false, false)
   }
 }
 

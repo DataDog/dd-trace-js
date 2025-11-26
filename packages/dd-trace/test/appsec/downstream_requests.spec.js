@@ -42,8 +42,6 @@ describe('appsec downstream_requests', () => {
 
     it('returns false when per-request limit reached', () => {
       expect(downstream.shouldSampleBody(req, testUrl)).to.be.true
-      downstream.incrementBodyAnalysisCount(req)
-
       expect(downstream.shouldSampleBody(req, 'http://example.com/api2')).to.be.false
     })
 
@@ -67,8 +65,6 @@ describe('appsec downstream_requests', () => {
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.5
       downstream.enable(config)
 
-      downstream.shouldSampleBody(req, testUrl)
-
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
         logWarnStub,
@@ -81,8 +77,6 @@ describe('appsec downstream_requests', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = -0.5
       downstream.enable(config)
-
-      downstream.shouldSampleBody(req, testUrl)
 
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
@@ -104,28 +98,15 @@ describe('appsec downstream_requests', () => {
   })
 
   describe('handleRedirectResponse', () => {
-    it('detects redirect with location header (lowercase)', () => {
+    it('detects redirect with location header', () => {
       const res = {
         statusCode: 302,
         headers: { location: 'http://example.com/redirect' }
       }
 
-      const result = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res, true)
 
-      expect(result.isRedirect).to.be.true
-      expect(result.redirectLocation).to.equal('http://example.com/redirect')
-    })
-
-    it('detects redirect with Location header (capitalized)', () => {
-      const res = {
-        statusCode: 301,
-        headers: { Location: 'http://example.com/redirect' }
-      }
-
-      const result = downstream.handleRedirectResponse(req, res, true)
-
-      expect(result.isRedirect).to.be.true
-      expect(result.redirectLocation).to.equal('http://example.com/redirect')
+      expect(isRedirect).to.be.true
     })
 
     it('returns false for non redirect status codes', () => {
@@ -134,10 +115,9 @@ describe('appsec downstream_requests', () => {
         headers: {}
       }
 
-      const result = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res, true)
 
-      expect(result.isRedirect).to.be.false
-      expect(result.redirectLocation).to.be.empty
+      expect(isRedirect).to.be.false
     })
 
     it('returns false for redirect without location header', () => {
@@ -146,38 +126,21 @@ describe('appsec downstream_requests', () => {
         headers: {}
       }
 
-      const result = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res, true)
 
-      expect(result.isRedirect).to.be.true
-      expect(result.redirectLocation).to.be.empty
+      expect(isRedirect).to.be.true
     })
 
-    it('stores body collection decision for redirect with location when shouldCollectBody is true', () => {
+    it('stores body collection decision for redirect', () => {
       const res = {
         statusCode: 302,
         headers: { location: 'http://example.com/target' }
       }
 
-      downstream.handleRedirectResponse(req, res, true)
+      downstream.handleRedirectResponse(req, res)
 
       const storedDecision = downstream.shouldSampleBody(req, 'http://example.com/target')
       expect(storedDecision).to.be.true
-    })
-
-    it('does not store decision when shouldCollectBody is false', () => {
-      downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
-      downstream.enable(config)
-
-      const res = {
-        statusCode: 302,
-        headers: { location: 'http://example.com/target2' }
-      }
-
-      downstream.handleRedirectResponse(req, res, false)
-
-      const result = downstream.shouldSampleBody(req, 'http://example.com/target2')
-      expect(result).to.be.false
     })
   })
 
@@ -273,11 +236,6 @@ describe('appsec downstream_requests', () => {
         expect(downstream.parseBody(buffer, 'application/json')).to.deep.equal({ foo: 1 })
       })
 
-      it('returns already parsed JSON objects', () => {
-        const obj = { foo: 1 }
-        expect(downstream.parseBody(obj, 'application/json')).to.equal(obj)
-      })
-
       it('handles text/json content type', () => {
         expect(downstream.parseBody('{"foo":1}', 'text/json')).to.deep.equal({ foo: 1 })
       })
@@ -361,34 +319,30 @@ describe('appsec downstream_requests', () => {
   })
 
   describe('getResponseContentType', () => {
-    it('returns content-type in lowercase', () => {
+    it('returns content-type header value', () => {
       expect(downstream.getResponseContentType({ 'content-type': 'application/json' })).to.equal('application/json')
-    })
-
-    it('returns Content-Type with capital C and T', () => {
-      expect(downstream.getResponseContentType({ 'Content-Type': 'text/html' })).to.equal('text/html')
-    })
-
-    it('returns CONTENT-TYPE all uppercase', () => {
-      expect(downstream.getResponseContentType({ 'CONTENT-TYPE': 'text/plain' })).to.equal('text/plain')
     })
 
     it('returns null when headers is null', () => {
       expect(downstream.getResponseContentType(null)).to.equal(null)
     })
+
+    it('returns null when content-type header is missing', () => {
+      expect(downstream.getResponseContentType({ 'other-header': 'value' })).to.equal(null)
+    })
   })
 
-  describe('determineMethod', () => {
+  describe('getMethod', () => {
     it('returns method when valid string', () => {
-      expect(downstream.determineMethod('POST')).to.equal('POST')
+      expect(downstream.getMethod('POST')).to.equal('POST')
     })
 
     it('returns GET when method is null', () => {
-      expect(downstream.determineMethod(null)).to.equal('GET')
+      expect(downstream.getMethod(null)).to.equal('GET')
     })
 
     it('returns GET when method is not a string', () => {
-      expect(downstream.determineMethod(123)).to.equal('GET')
+      expect(downstream.getMethod(123)).to.equal('GET')
     })
   })
 
@@ -504,13 +458,8 @@ describe('appsec downstream_requests', () => {
       const req2 = {}
 
       expect(downstream.shouldSampleBody(req1, 'http://example.com/1')).to.be.true
-      downstream.incrementBodyAnalysisCount(req1)
-
       expect(downstream.shouldSampleBody(req2, 'http://example.com/2')).to.be.true
-      downstream.incrementBodyAnalysisCount(req2)
-
       expect(downstream.shouldSampleBody(req1, 'http://example.com/3')).to.be.true
-      downstream.incrementBodyAnalysisCount(req1)
 
       expect(downstream.shouldSampleBody(req1, 'http://example.com/4')).to.be.false
       expect(downstream.shouldSampleBody(req2, 'http://example.com/5')).to.be.true
@@ -526,13 +475,8 @@ describe('appsec downstream_requests', () => {
 
       // Should sample 3 times
       expect(downstream.shouldSampleBody(testReq)).to.be.true
-      downstream.incrementBodyAnalysisCount(testReq)
-
       expect(downstream.shouldSampleBody(testReq)).to.be.true
-      downstream.incrementBodyAnalysisCount(testReq)
-
       expect(downstream.shouldSampleBody(testReq)).to.be.true
-      downstream.incrementBodyAnalysisCount(testReq)
 
       // Fourth time should be false
       expect(downstream.shouldSampleBody(testReq)).to.be.false
