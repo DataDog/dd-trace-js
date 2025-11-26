@@ -62,6 +62,7 @@ jobs:
       - run: rm -rf *
       - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd)
       - run: yarn --prod --ignore-optional
+      - run: ls -lisa
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@e2af4ff3a88e5fe507bd2de1943b015ba2ddda66 # v1.0.0
         with:
