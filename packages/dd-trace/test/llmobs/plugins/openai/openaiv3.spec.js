@@ -112,7 +112,6 @@ describe('integrations', () => {
             { role: 'assistant', content: MOCK_STRING }
           ],
           metrics: {
-            cache_read_input_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -203,7 +202,6 @@ describe('integrations', () => {
           metadata: { function_call: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
-            cache_read_input_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER

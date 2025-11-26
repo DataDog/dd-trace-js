@@ -126,7 +126,6 @@ describe('integrations', () => {
             { role: 'assistant', content: MOCK_STRING }
           ],
           metrics: {
-            cache_read_input_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -218,7 +217,6 @@ describe('integrations', () => {
           metadata: { tool_choice: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
-            cache_read_input_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -327,7 +325,6 @@ describe('integrations', () => {
               { role: 'assistant', content: 'Hello! How can I assist you today?' }
             ],
             metrics: {
-              cache_read_input_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -411,7 +408,6 @@ describe('integrations', () => {
             },
             tags: { ml_app: 'test', integration: 'openai' },
             metrics: {
-              cache_read_input_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -597,7 +593,6 @@ describe('integrations', () => {
             { role: 'assistant', content: MOCK_STRING }
           ],
           metrics: {
-            cache_read_input_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321
@@ -688,7 +683,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: MOCK_NUMBER
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -738,7 +733,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: MOCK_NUMBER
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
