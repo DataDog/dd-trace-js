@@ -238,6 +238,63 @@ function wrapAsEscapedRegex (expr) {
     ".replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'))"
 }
 
+// -------- Helpers to format long assert lines (wrap args if >120 chars) --------
+function splitTopLevelArgs (s) {
+  const out = []
+  let buf = ''
+  let p = 0; let b = 0; let c = 0
+  let inS = false; let inD = false; let inT = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    const prev = i > 0 ? s[i - 1] : ''
+    if (inS) { buf += ch; if (ch === '\'' && prev !== '\\') inS = false; continue }
+    if (inD) { buf += ch; if (ch === '"' && prev !== '\\') inD = false; continue }
+    if (inT) {
+      buf += ch
+      if (ch === '`' && prev !== '\\') inT = false
+      else if (ch === '{' && prev === '$') c++
+      else if (ch === '}' && c > 0) c--
+      continue
+    }
+    if (ch === '\'') { inS = true; buf += ch; continue }
+    if (ch === '"') { inD = true; buf += ch; continue }
+    if (ch === '`') { inT = true; buf += ch; continue }
+    if (ch === '(') { p++; buf += ch; continue }
+    if (ch === ')') { p--; buf += ch; continue }
+    if (ch === '[') { b++; buf += ch; continue }
+    if (ch === ']') { b--; buf += ch; continue }
+    if (ch === '{') { c++; buf += ch; continue }
+    if (ch === '}') { c--; buf += ch; continue }
+    if (ch === ',' && p === 0 && b === 0 && c === 0) { out.push(buf.trim()); buf = ''; continue }
+    buf += ch
+  }
+  if (buf.trim()) out.push(buf.trim())
+  return out
+}
+
+function formatLongAssertCalls (code) {
+  const lines = code.split('\n')
+  // keep indexable form for potential future use
+  const out = []
+  for (const line of lines) {
+    if (line.length <= 120) { out.push(line); continue }
+    const m = line.match(/^(\s*)(assert\.\w+)\((.*)\)\s*;?\s*$/)
+    if (!m) { out.push(line); continue }
+    const indent = m[1] || ''
+    const head = m[2]
+    const inner = m[3] || ''
+    const args = splitTopLevelArgs(inner)
+    if (args.length === 0) { out.push(line); continue }
+    if (args.length === 1) {
+      out.push(`${indent}${head}(\n${indent}  ${args[0]}\n${indent})`)
+    } else {
+      const formatted = args.map(a => `${indent}  ${a}`).join(',\n')
+      out.push(`${indent}${head}(\n${formatted}\n${indent})`)
+    }
+  }
+  return out.join('\n')
+}
+
 // Build a safe accessor using dot notation for identifier keys, or bracket for others.
 // keyLiteral includes quotes (e.g., 'name' or "name"). For non-literals, fallback to bracket.
 function buildAccessor (objExpr, keyLiteral) {
@@ -266,10 +323,49 @@ function hasChaiImport (code) {
   return false
 }
 
-function isCiVisibilityPath (file) {
-  const p = file.replace(/\\/g, '/')
-  return p.includes('/integration-tests/ci-visibility/')
+// Skip files that import/require an 'expect' symbol from a non-chai module
+function usesNonChaiExpect (code) {
+  // import { expect } from 'x'
+  const reNamed = /^\s*import\s*\{([^}]*\bexpect\b[^}]*)\}\s*from\s*['"]([^'"]+)['"]\s*;?/mg
+  let m
+  while ((m = reNamed.exec(code)) !== null) {
+    const mod = m[2]
+    if (!/^chai(?:\/|$)?/.test(mod)) return true
+  }
+  // import expect from 'x'
+  const reDef = /^\s*import\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?/mg
+  while ((m = reDef.exec(code)) !== null) {
+    const name = m[1]; const mod = m[2]
+    if (name === 'expect' && !/^chai(?:\/|$)?/.test(mod)) return true
+  }
+  // import * as expect from 'x'
+  const reNs = /^\s*import\s+\*\s+as\s+(\w+)\s+from\s*['"]([^'"]+)['"]\s*;?/mg
+  while ((m = reNs.exec(code)) !== null) {
+    const name = m[1]; const mod = m[2]
+    if (name === 'expect' && !/^chai(?:\/|$)?/.test(mod)) return true
+  }
+  // const { expect } = require('x')
+  const reReqNamed = /^\s*(?:const|let|var)\s*\{([^}]*\bexpect\b[^}]*)\}\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)\s*;?/mg
+  while ((m = reReqNamed.exec(code)) !== null) {
+    const mod = m[2]
+    if (!/^chai(?:\/|$)?/.test(mod)) return true
+  }
+  // const expect = require('x')
+  const reReqDef = /^\s*(?:const|let|var)\s*(\w+)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)\s*;?/mg
+  while ((m = reReqDef.exec(code)) !== null) {
+    const name = m[1]; const mod = m[2]
+    if (name === 'expect' && !/^chai(?:\/|$)?/.test(mod)) return true
+  }
+  // const expect = require('x').something  (non-chai)
+  const reReqProp = /^\s*(?:const|let|var)\s*(\w+)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)\.\s*([A-Za-z_$][\w$]*)/mg
+  while ((m = reReqProp.exec(code)) !== null) {
+    const name = m[1]; const mod = m[2]; const prop = m[3]
+    if (name === 'expect' && !(/^chai(?:\/|$)?/.test(mod) && prop === 'expect')) return true
+  }
+  return false
 }
+
+// isCiVisibilityPath removed – not needed after chai-only guard
 
 function pruneUnusedChaiNamedImports (code) {
   // Build a version without any chai import/require lines to check identifier usage
@@ -319,8 +415,12 @@ function transform (code, file) {
 
   // Skip files that import expect from Playwright
   if (usesPlaywrightExpect(code)) return code
-  // Skip ci-visibility files unless they use chai
-  if (isCiVisibilityPath(file) && !hasChaiImport(code)) return code
+  // Skip files that import/require an 'expect' symbol from a non-chai module
+  if (usesNonChaiExpect(code)) return code
+  // Only process files that import/require chai, OR that contain assert.* helpers we can convert, OR expect() usage
+  const hasAssertHelpers = /\bassert\.(?:exists|notExists|hasAllKeys|isTrue|isFalse|isUndefined|isDefined|isNull|isNotNull|isArray|isObject|isString|isNumber|isBoolean|isBigInt|isFunction|isBelow|isAbove|isAtLeast|isAtMost|instanceOf|notInstanceOf|istanceOf|lengthOf|notLengthOf|property|notProperty|propertyVal|notPropertyVal|include|notInclude|deepInclude|match|notMatch|sameMembers|sameDeepMembers|isEmpty|isNotEmpty)\(/.test(code)
+  const hasExpect = /(?:^|[^\w$])expect\s*(\(|\.)/.test(code)
+  if (!hasChaiImport(code) && !hasAssertHelpers && !hasExpect) return code
 
   // Track assert usage/import state before transformation
   const beforeNonChaiAssertCount = (code.match(/(^|[^.\w$])assert\./g) || []).length
@@ -671,6 +771,8 @@ function transform (code, file) {
   // 24) Prune unused named chai imports/requires (destructuring)
   out = pruneUnusedChaiNamedImports(out)
 
+  // Format long assert lines to multiple lines when > 120 chars
+  out = formatLongAssertCalls(out)
   return out
 }
 
@@ -687,9 +789,15 @@ function main () {
   const files = patterns.flatMap((pat) => glob.sync(path.join(ROOT, pat), { nodir: true }))
   let changed = 0
   const reverted = []
+  const ignored = []
   for (const file of files) {
     if (isBrowserCypress(file)) continue
     const before = read(file)
+    // Early skip if the file imports an 'expect' symbol from a non-chai module
+    if (usesNonChaiExpect(before)) {
+      ignored.push(file)
+      continue
+    }
     let after = transform(before, file)
 
     // If assertObjectContains is used, inject proper import path
@@ -721,6 +829,12 @@ function main () {
   }
   // eslint-disable-next-line no-console
   console.log('chai-to-assert: updated', changed, 'files')
+  if (ignored.length) {
+    // eslint-disable-next-line no-console
+    console.log('chai-to-assert: ignored files due to non-chai expect imports:')
+    // eslint-disable-next-line no-console
+    for (const f of ignored) console.log(' - ' + f)
+  }
   if (reverted.length) {
     // eslint-disable-next-line no-console
     console.log('chai-to-assert: reverted due to syntax errors in:')
