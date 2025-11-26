@@ -683,7 +683,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: MOCK_NUMBER
+            cache_read_input_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -733,7 +733,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: MOCK_NUMBER
+            cache_read_input_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
