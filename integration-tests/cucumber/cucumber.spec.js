@@ -179,7 +179,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
           const resourceNames = testSpans.map(span => span.resource)
 
-          assert.includeMembers(resourceNames, [
+          assertObjectContains(resourceNames, [
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.pass scenario',
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.fail scenario',
             'ci-visibility/cucumber-plugin-tests/features/simple.feature.skip scenario',
@@ -204,7 +204,11 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(testSpan.meta[TEST_FRAMEWORK_VERSION] != null)
             assert.strictEqual(testSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
             assert.strictEqual(testSpan.meta[TEST_SUITE], 'ci-visibility/cucumber-plugin-tests/features/simple.feature')
-            assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE], 'ci-visibility/cucumber-plugin-tests/features/simple.feature')
+            assert.strictEqual(
+              testSpan.meta[TEST_SOURCE_FILE],
+              'ci-visibility/cucumber-plugin-tests/features/simple.feature',
+              'Test source file should be the simple feature'
+            )
             assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
             assert.strictEqual(testSpan.type, 'test')
             assert.strictEqual(testSpan.name, 'cucumber.test')
@@ -229,18 +233,18 @@ describe(`cucumber@${version} commonJS`, () => {
             if (testName === 'fail scenario') {
               assert.strictEqual(testSpan.meta[ERROR_TYPE], 'Error')
               const errorMessage = testSpan.meta[ERROR_MESSAGE]
-              assert.ok(errorMessage.includes('AssertionError'))
-              assert.ok(errorMessage.includes('datadog'))
-              assert.ok(errorMessage.includes('godatad'))
+              assert.match(errorMessage, /AssertionError/)
+              assert.match(errorMessage, /datadog/)
+              assert.match(errorMessage, /godatad/)
               assert.ok(testSpan.meta[ERROR_STACK] != null)
             }
 
             if (testName === 'hooks fail') {
               assert.strictEqual(testSpan.meta[ERROR_TYPE], 'Error')
               const errorMessage = testSpan.meta[ERROR_MESSAGE]
-              assert.ok(errorMessage.includes('TypeError: Cannot set'))
-              assert.ok(errorMessage.includes('of undefined'))
-              assert.ok(errorMessage.includes('boom'))
+              assert.match(errorMessage, /TypeError: Cannot set/)
+              assert.match(errorMessage, /of undefined/)
+              assert.match(errorMessage, /boom/)
               assert.ok(testSpan.meta[ERROR_STACK] != null)
             }
 
@@ -336,13 +340,16 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.ok(testModuleEventContent.meta[TEST_MODULE] != null)
               assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
               assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
-              assert.strictEqual(testModuleEventContent.test_session_id.toString(10), testSessionEventContent.test_session_id.toString(10))
+              assert.strictEqual(
+                testModuleEventContent.test_session_id.toString(10),
+                testSessionEventContent.test_session_id.toString(10)
+              )
 
-              assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+              assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
                 `test_suite.${featuresPath}farewell.feature`,
                 `test_suite.${featuresPath}greetings.feature`
               ])
-              assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+              assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
                 'pass',
                 'fail'
               ])
@@ -366,19 +373,21 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
               })
 
-              assert.includeMembers(testEvents.map(test => test.content.resource), [
+              assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(), [
                 `${featuresPath}farewell.feature.Say farewell`,
+                `${featuresPath}farewell.feature.Say whatever`,
                 `${featuresPath}greetings.feature.Say greetings`,
+                `${featuresPath}greetings.feature.Say skip`,
                 `${featuresPath}greetings.feature.Say yeah`,
                 `${featuresPath}greetings.feature.Say yo`,
-                `${featuresPath}greetings.feature.Say skip`
               ])
-              assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-                'pass',
-                'pass',
-                'pass',
+              assert.deepStrictEqual(testEvents.map(test => test.content.meta[TEST_STATUS]).sort(), [
                 'fail',
-                'skip'
+                'pass',
+                'pass',
+                'pass',
+                'pass',
+                'skip',
               ])
 
               testEvents.forEach(({
@@ -457,12 +466,12 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(searchCommitRequest.headers['dd-api-key'], '1')
               assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
             } else {
-              assert.ok(!Object.hasOwn(searchCommitRequest.headers, 'dd-api-key'))
-              assert.ok(!Object.hasOwn(packfileRequest.headers, 'dd-api-key'))
+              assert.ok(!('dd-api-key' in searchCommitRequest.headers))
+              assert.ok(!('dd-api-key' in packfileRequest.headers))
             }
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -498,28 +507,34 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
               assert.strictEqual(codeCovRequest.headers['dd-api-key'], '1')
             } else {
-              assert.ok(!Object.hasOwn(libraryConfigRequest.headers, 'dd-api-key'))
-              assert.ok(!Object.hasOwn(codeCovRequest.headers, 'dd-api-key'))
+              assert.ok(!('dd-api-key' in libraryConfigRequest.headers))
+              assert.ok(!('dd-api-key' in codeCovRequest.headers))
             }
 
-            assert.strictEqual(coveragePayload.name, 'coverage1')
-            assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-            assert.strictEqual(coveragePayload.type, 'application/msgpack')
-            assert.ok(coveragePayload.content.includes({
-              version: 2
-            }))
+            assertObjectContains(coveragePayload, {
+              name: 'coverage1',
+              filename: 'coverage1.msgpack',
+              type: 'application/msgpack',
+              content: {
+                version: 2
+              }
+            })
             const allCoverageFiles = codeCovRequest.payload
               .flatMap(coverage => coverage.content.coverages)
               .flatMap(file => file.files)
               .map(file => file.filename)
 
-            assert.includeMembers(allCoverageFiles, [
+            assertObjectContains(allCoverageFiles, [
               `${featuresPath}support/steps.${fileExtension}`,
               `${featuresPath}farewell.feature`,
               `${featuresPath}greetings.feature`
             ])
             // steps is twice because there are two suites using it
-            assert.strictEqual(allCoverageFiles.filter(file => file === `${featuresPath}support/steps.${fileExtension}`).length, 2)
+            assert.strictEqual(
+              allCoverageFiles.filter(file => file === `${featuresPath}support/steps.${fileExtension}`).length,
+              2,
+              'Steps should be covered twice'
+            )
             assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
             assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
 
@@ -531,7 +546,7 @@ describe(`cucumber@${version} commonJS`, () => {
             assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
 
             const eventTypes = eventsRequest.payload.events.map(event => event.type)
-            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -554,7 +569,7 @@ describe(`cucumber@${version} commonJS`, () => {
           })
           childProcess.on('exit', () => {
             // check that reported coverage is still the same
-            assert.ok(testOutput.includes('Lines        : 100%'))
+            assert.match(testOutput, /Lines {8}: 100%/)
             done()
           })
         })
@@ -573,7 +588,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
-            assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
             const testSession = payload.events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -620,9 +635,9 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
                 assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
               } else {
-                assert.ok(!Object.hasOwn(skippableRequest.headers, 'dd-api-key'))
-                assert.ok(!Object.hasOwn(coverageRequest.headers, 'dd-api-key'))
-                assert.ok(!Object.hasOwn(eventsRequest.headers, 'dd-api-key'))
+                assert.ok(!('dd-api-key' in skippableRequest.headers))
+                assert.ok(!('dd-api-key' in coverageRequest.headers))
+                assert.ok(!('dd-api-key' in eventsRequest.headers))
               }
               assert.strictEqual(coveragePayload.name, 'coverage1')
               assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
@@ -636,7 +651,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
               assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-              assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+              assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
               const numSuites = eventTypes.reduce(
                 (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
               )
@@ -687,7 +702,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -734,7 +749,7 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.assertPayloadReceived(({ payload }) => {
             const eventTypes = payload.events.map(event => event.type)
             // because they are not skipped
-            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
             const numSuites = eventTypes.reduce(
               (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
             )
@@ -796,8 +811,8 @@ describe(`cucumber@${version} commonJS`, () => {
               ).content
 
               assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
-              assert.ok(!Object.hasOwn(skippedSuite.meta, TEST_ITR_UNSKIPPABLE))
-              assert.ok(!Object.hasOwn(skippedSuite.meta, TEST_ITR_FORCED_RUN))
+              assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.meta))
+              assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.meta))
 
               assert.strictEqual(forcedToRunSuite.meta[TEST_STATUS], 'fail')
               assert.strictEqual(forcedToRunSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
@@ -847,9 +862,9 @@ describe(`cucumber@${version} commonJS`, () => {
               const testModule = events.find(event => event.type === 'test_session_end').content
 
               assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_ITR_FORCED_RUN))
+              assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
               assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
-              assert.ok(!Object.hasOwn(testModule.meta, TEST_ITR_FORCED_RUN))
+              assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
 
               const skippedSuite = suites.find(
                 event => event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
@@ -859,12 +874,12 @@ describe(`cucumber@${version} commonJS`, () => {
               )
 
               assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
-              assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-              assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_FORCED_RUN))
+              assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.content.meta))
+              assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.content.meta))
 
               assert.strictEqual(failedSuite.content.meta[TEST_STATUS], 'fail')
               assert.strictEqual(failedSuite.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
-              assert.ok(!Object.hasOwn(failedSuite.content.meta, TEST_ITR_FORCED_RUN))
+              assert.ok(!('TEST_ITR_FORCED_RUN' in failedSuite.content.meta))
             }, 25000)
 
           childProcess = exec(
@@ -946,7 +961,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 const testSpans = payload.flatMap(trace => trace)
                 const resourceNames = testSpans.map(span => span.resource)
 
-                assert.includeMembers(resourceNames,
+                assertObjectContains(resourceNames,
                   [
                     `${featuresPath}farewell.feature.Say farewell`,
                     `${featuresPath}greetings.feature.Say greetings`,
@@ -1011,7 +1026,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 .flatMap(({ files }) => files)
                 .map(({ filename }) => filename)
 
-              assert.includeMembers(coveredFiles, [
+              assertObjectContains(coveredFiles, [
                 'ci-visibility/subproject/features/support/steps.js',
                 'ci-visibility/subproject/features/greetings.feature'
               ])
@@ -1114,7 +1129,7 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
@@ -1277,7 +1292,7 @@ describe(`cucumber@${version} commonJS`, () => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               assert.strictEqual(tests.length, 6)
@@ -1324,7 +1339,7 @@ describe(`cucumber@${version} commonJS`, () => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
               assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -1377,7 +1392,7 @@ describe(`cucumber@${version} commonJS`, () => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               // no new tests detected
@@ -1555,7 +1570,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
 
                 const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+                assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
                 assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
                 assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
 
@@ -1660,7 +1675,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
 
                 const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+                assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
                 assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
                 assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
 
@@ -1980,7 +1995,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 level: 'error'
               })
               assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-              assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
+              assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
                 a: {
                   type: 'number',
                   value: '11'
@@ -2227,7 +2242,7 @@ describe(`cucumber@${version} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
           // new tests detected but not retried
@@ -2320,7 +2335,7 @@ describe(`cucumber@${version} commonJS`, () => {
             if (isAttemptToFix) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const retriedTests = tests.filter(
@@ -2339,15 +2354,18 @@ describe(`cucumber@${version} commonJS`, () => {
               const isLastAttempt = i === retriedTests.length - 1
               const test = retriedTests[i]
 
-              assert.strictEqual(test.resource, 'ci-visibility/features-test-management/attempt-to-fix.feature.Say attempt to fix')
+              assert.strictEqual(
+                test.resource,
+                'ci-visibility/features-test-management/attempt-to-fix.feature.Say attempt to fix'
+              )
 
               if (isDisabled) {
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
               } else if (isQuarantined) {
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_DISABLED))
-                assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+                assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in test.meta))
+                assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in test.meta))
               }
 
               if (isAttemptToFix) {
@@ -2359,7 +2377,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 if (isLastAttempt) {
                   if (shouldFailSometimes) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                    assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                    assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                   } else if (shouldAlwaysPass) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
                   } else {
@@ -2368,9 +2386,9 @@ describe(`cucumber@${version} commonJS`, () => {
                   }
                 }
               } else {
-                assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX))
-                assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
+                assert.ok(!('TEST_IS_RETRY' in test.meta))
+                assert.ok(!('TEST_RETRY_REASON' in test.meta))
               }
             }
           })
@@ -2412,7 +2430,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
         childProcess.on('exit', exitCode => {
           testAssertions.then(() => {
-            assert.ok(stdout.includes('I am running'))
+            assert.match(stdout, /I am running/)
             if (isQuarantined || isDisabled || shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {
@@ -2536,7 +2554,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
               assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
               assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             }
 
@@ -2547,7 +2565,7 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(tests.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             } else {
               assert.strictEqual(tests.meta[TEST_STATUS], 'fail')
-              assert.ok(!Object.hasOwn(tests.meta, TEST_MANAGEMENT_IS_DISABLED))
+              assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in tests.meta))
             }
           })
 
@@ -2574,10 +2592,10 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
-              assert.ok(!stdout.includes('I am running'))
+              assert.doesNotMatch(stdout, /I am running/)
               assert.strictEqual(exitCode, 0)
             } else {
-              assert.ok(stdout.includes('I am running'))
+              assert.match(stdout, /I am running/)
               assert.strictEqual(exitCode, 1)
             }
             done()
@@ -2633,16 +2651,19 @@ describe(`cucumber@${version} commonJS`, () => {
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
-            assert.strictEqual(failedTest.resource, 'ci-visibility/features-test-management/quarantine.feature.Say quarantine')
+            assert.strictEqual(
+              failedTest.resource,
+              'ci-visibility/features-test-management/quarantine.feature.Say quarantine'
+            )
 
             assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
             if (isQuarantining) {
               assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+              assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
             }
           })
 
@@ -2668,7 +2689,7 @@ describe(`cucumber@${version} commonJS`, () => {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             // Regardless of whether the test is quarantined or not, it will be run
-            assert.ok(stdout.includes('I am running as quarantine'))
+            assert.match(stdout, /I am running as quarantine/)
             if (isQuarantining) {
               // even though a test fails, the exit code is 1 because the test is quarantined
               assert.strictEqual(exitCode, 0)
@@ -2711,7 +2732,7 @@ describe(`cucumber@${version} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+          assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
@@ -2742,7 +2763,7 @@ describe(`cucumber@${version} commonJS`, () => {
         once(childProcess.stderr, 'end'),
         eventsPromise
       ])
-      assert.ok(testOutput.includes('Test management tests could not be fetched'))
+      assert.match(testOutput, /Test management tests could not be fetched/)
     })
   })
 
@@ -2844,21 +2865,22 @@ describe(`cucumber@${version} commonJS`, () => {
           if (isEfd) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }
 
           const resourceNames = tests.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
+          // TODO: This is a duplication of the code below. We should refactor this.
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test'
             ]
           )
 
           if (isParallel) {
-            assert.includeMembers(resourceNames, [
+            assert.deepStrictEqual(resourceNames, [
+              'ci-visibility/features-impacted-test/impacted-test-2.feature.Say impacted test 2',
               'ci-visibility/features-impacted-test/impacted-test.feature.Say impacted test',
-              'ci-visibility/features-impacted-test/impacted-test-2.feature.Say impacted test 2'
             ])
           }
 
@@ -2877,12 +2899,12 @@ describe(`cucumber@${version} commonJS`, () => {
             if (isModified) {
               assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_MODIFIED))
+              assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
             }
             if (isNew) {
               assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_NEW))
+              assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
             }
           }
 

@@ -225,9 +225,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         assert.strictEqual(metrics.series[0].metric, 'waf.init')
         assert.strictEqual(metrics.series[0].points.length, 1)
         assert.strictEqual(metrics.series[0].points[0][1], 3)
-        assertObjectContains(metrics.series[0].tags, 'waf_version:0.0.1')
-        assertObjectContains(metrics.series[0].tags, 'event_rules_version:0.0.2')
-        assertObjectContains(metrics.series[0].tags, 'success:true')
+        assertObjectContains(
+          metrics.series[0].tags,
+          ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'success:true']
+        )
       })
 
       it('should increment waf.init and waf.config_errors on failed init', () => {
@@ -238,14 +239,16 @@ describe('Appsec Waf Telemetry metrics', () => {
         const { metrics } = appsecNamespace.toJSON()
         assert.strictEqual(metrics.series.length, 2)
         assert.strictEqual(metrics.series[0].metric, 'waf.init')
-        assertObjectContains(metrics.series[0].tags, 'waf_version:0.0.1')
-        assertObjectContains(metrics.series[0].tags, 'event_rules_version:0.0.2')
-        assertObjectContains(metrics.series[0].tags, 'success:false')
+        assertObjectContains(
+          metrics.series[0].tags,
+          ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'success:false']
+        )
 
         assert.strictEqual(metrics.series[1].metric, 'waf.config_errors')
-        assertObjectContains(metrics.series[1].tags, 'waf_version:0.0.1')
-        assertObjectContains(metrics.series[1].tags, 'event_rules_version:0.0.2')
-        assertObjectContains(metrics.series[1].tags, 'action:init')
+        assertObjectContains(
+          metrics.series[1].tags,
+          ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'action:init']
+        )
       })
     })
 
@@ -273,9 +276,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         assert.strictEqual(metrics.series[0].metric, 'waf.updates')
         assert.strictEqual(metrics.series[0].points.length, 1)
         assert.strictEqual(metrics.series[0].points[0][1], 3)
-        assertObjectContains(metrics.series[0].tags, 'waf_version:0.0.1')
-        assertObjectContains(metrics.series[0].tags, 'event_rules_version:0.0.2')
-        assertObjectContains(metrics.series[0].tags, 'success:true')
+        assertObjectContains(
+          metrics.series[0].tags,
+          ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'success:true']
+        )
       })
     })
 
@@ -303,9 +307,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         assert.strictEqual(metrics.series[0].metric, 'waf.config_errors')
         assert.strictEqual(metrics.series[0].points.length, 1)
         assert.strictEqual(metrics.series[0].points[0][1], 3)
-        assertObjectContains(metrics.series[0].tags, 'waf_version:0.0.1')
-        assertObjectContains(metrics.series[0].tags, 'event_rules_version:0.0.2')
-        assertObjectContains(metrics.series[0].tags, 'action:update')
+        assertObjectContains(
+          metrics.series[0].tags,
+          ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'action:update']
+        )
       })
     })
 

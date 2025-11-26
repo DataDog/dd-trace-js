@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('attempt to fix tests 2', () => {
   it('can attempt to fix a test', () => {
     // eslint-disable-next-line no-console

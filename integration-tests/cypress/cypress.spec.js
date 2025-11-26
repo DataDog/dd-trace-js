@@ -6,14 +6,14 @@ const { once } = require('node:events')
 const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
-const { promisify } = require('node:util')
 
 const semver = require('semver')
 const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
+  assertObjectContains
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
@@ -66,8 +66,6 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
-
-const execPromise = promisify(exec)
 
 const RECEIVER_STOP_TIMEOUT = 20000
 const version = process.env.CYPRESS_VERSION
@@ -234,7 +232,7 @@ moduleTypes.forEach(({
           assert.strictEqual(passedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
           assert.strictEqual(passedTestSpan.meta[TEST_TYPE], 'browser')
           assert.ok(passedTestSpan.meta[TEST_SOURCE_FILE] != null)
-          assert.ok(passedTestSpan.meta[TEST_SOURCE_FILE].includes('cypress/e2e/basic-pass.js'))
+          assert.match(passedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-pass\.js/)
           assert.ok(passedTestSpan.meta[TEST_FRAMEWORK_VERSION] != null)
           assert.ok(passedTestSpan.meta[COMPONENT] != null)
           assert.ok(passedTestSpan.metrics[TEST_SOURCE_START] != null)
@@ -253,11 +251,11 @@ moduleTypes.forEach(({
           assert.strictEqual(failedTestSpan.meta[TEST_FRAMEWORK], 'cypress')
           assert.strictEqual(failedTestSpan.meta[TEST_TYPE], 'browser')
           assert.ok(failedTestSpan.meta[TEST_SOURCE_FILE] != null)
-          assert.ok(failedTestSpan.meta[TEST_SOURCE_FILE].includes('cypress/e2e/basic-fail.js'))
+          assert.match(failedTestSpan.meta[TEST_SOURCE_FILE], /cypress\/e2e\/basic-fail\.js/)
           assert.ok(failedTestSpan.meta[TEST_FRAMEWORK_VERSION] != null)
           assert.ok(failedTestSpan.meta[COMPONENT] != null)
           assert.ok(failedTestSpan.meta[ERROR_MESSAGE] != null)
-          assert.ok(failedTestSpan.meta[ERROR_MESSAGE].includes('expected'))
+          assert.match(failedTestSpan.meta[ERROR_MESSAGE], /expected/)
           assert.ok(failedTestSpan.meta[ERROR_TYPE] != null)
           assert.ok(failedTestSpan.metrics[TEST_SOURCE_START] != null)
           assert.strictEqual(passedTestSpan.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
@@ -265,7 +263,7 @@ moduleTypes.forEach(({
           assert.strictEqual(failedTestSpan.meta.addTagsBeforeEach, 'customBeforeEach')
           assert.strictEqual(failedTestSpan.meta.addTagsAfterEach, 'customAfterEach')
           // Tags added after failure should not be present because test failed
-          assert.ok(!Object.hasOwn(failedTestSpan.meta, 'addTagsAfterFailure'))
+          assert.ok(!('addTagsAfterFailure' in failedTestSpan.meta))
         }, 60000)
 
       const {
@@ -328,8 +326,10 @@ moduleTypes.forEach(({
           once(childProcess, 'exit'),
           once(childProcess.stdout, 'end')
         ])
-        assert.ok(stdout.includes('WARNING: dd-trace support for Cypress<10.2.0 is deprecated' +
-          ' and will not be supported in future versions of dd-trace.'))
+        assert.match(
+          stdout,
+          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated and will not be supported in future versions of dd-trace./
+        )
       })
     }
 
@@ -378,8 +378,8 @@ moduleTypes.forEach(({
       assert.strictEqual(hasReceivedEvents, false)
       // TODO: remove try/catch once we find the source of flakiness
       try {
-        assert.ok(!testOutput.includes('TypeError'))
-        assert.ok(testOutput.includes('1 of 1 failed'))
+        assert.doesNotMatch(testOutput, /TypeError/)
+        assert.match(testOutput, /1 of 1 failed/)
       } catch (e) {
         // eslint-disable-next-line no-console
         console.log('---- Actual test output -----')
@@ -413,10 +413,10 @@ moduleTypes.forEach(({
           )
           assert.strictEqual(passedTest.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
-          assert.ok(failedTest.content.meta[ERROR_MESSAGE].includes('error in after each hook'))
+          assert.match(failedTest.content.meta[ERROR_MESSAGE], /error in after each hook/)
           assert.strictEqual(skippedTest.content.meta[TEST_STATUS], 'skip')
           assert.strictEqual(testHookSuite.content.meta[TEST_STATUS], 'fail')
-          assert.ok(testHookSuite.content.meta[ERROR_MESSAGE].includes('error in after each hook'))
+          assert.match(testHookSuite.content.meta[ERROR_MESSAGE], /error in after each hook/)
 
           // describe level hooks
           const describeHookSuite = events.find(
@@ -433,10 +433,10 @@ moduleTypes.forEach(({
           )
           assert.strictEqual(passedTestDescribe.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(failedTestDescribe.content.meta[TEST_STATUS], 'fail')
-          assert.ok(failedTestDescribe.content.meta[ERROR_MESSAGE].includes('error in after hook'))
+          assert.match(failedTestDescribe.content.meta[ERROR_MESSAGE], /error in after hook/)
           assert.strictEqual(skippedTestDescribe.content.meta[TEST_STATUS], 'skip')
           assert.strictEqual(describeHookSuite.content.meta[TEST_STATUS], 'fail')
-          assert.ok(describeHookSuite.content.meta[ERROR_MESSAGE].includes('error in after hook'))
+          assert.match(describeHookSuite.content.meta[ERROR_MESSAGE], /error in after hook/)
         }, 25000)
 
       const {
@@ -494,15 +494,18 @@ moduleTypes.forEach(({
           assert.ok(testModuleEventContent.meta[TEST_MODULE] != null)
           assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
           assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(testModuleEventContent.test_session_id.toString(10), testSessionEventContent.test_session_id.toString(10))
+          assert.strictEqual(
+            testModuleEventContent.test_session_id.toString(10),
+            testSessionEventContent.test_session_id.toString(10)
+          )
           assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION] != null)
 
-          assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+          assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
             'test_suite.cypress/e2e/other.cy.js',
             'test_suite.cypress/e2e/spec.cy.js'
           ])
 
-          assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+          assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
             'pass',
             'fail'
           ])
@@ -526,13 +529,13 @@ moduleTypes.forEach(({
             assert.ok(metrics[DD_HOST_CPU_COUNT] != null)
           })
 
-          assert.includeMembers(testEvents.map(test => test.content.resource), [
+          assertObjectContains(testEvents.map(test => test.content.resource), [
             'cypress/e2e/other.cy.js.context passes',
             'cypress/e2e/spec.cy.js.context passes',
             'cypress/e2e/spec.cy.js.other context fails'
           ])
 
-          assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+          assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
             'pass',
             'pass',
             'fail'
@@ -610,7 +613,7 @@ moduleTypes.forEach(({
           .flatMap(coverageAttachment => coverageAttachment.files)
           .map(file => file.filename)
 
-        assert.includeMembers(fileNames, Object.keys(coverageFixture))
+        assertObjectContains(fileNames, Object.keys(coverageFixture))
       }, 25000)
 
       childProcess = exec(
@@ -687,7 +690,7 @@ moduleTypes.forEach(({
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const eventTypes = events.map(event => event.type)
-            assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
           }, 25000)
 
         const {
@@ -734,7 +737,7 @@ moduleTypes.forEach(({
             assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
             assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-            assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+            assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
@@ -897,7 +900,7 @@ moduleTypes.forEach(({
             assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
             // This was not going to be skipped
-            assert.ok(!Object.hasOwn(unskippableFailedTest.content.meta, TEST_ITR_FORCED_RUN))
+            assert.ok(!('TEST_ITR_FORCED_RUN' in unskippableFailedTest.content.meta))
           }, 25000)
 
         const {
@@ -952,9 +955,9 @@ moduleTypes.forEach(({
             const testModule = events.find(event => event.type === 'test_session_end').content
 
             assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_ITR_FORCED_RUN))
+            assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
             assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
-            assert.ok(!Object.hasOwn(testModule.meta, TEST_ITR_FORCED_RUN))
+            assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
 
             const unskippablePassedTest = events.find(event =>
               event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
@@ -965,12 +968,12 @@ moduleTypes.forEach(({
             assert.strictEqual(unskippablePassedTest.content.meta[TEST_STATUS], 'pass')
             assert.strictEqual(unskippablePassedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
             // This was not going to be skipped
-            assert.ok(!Object.hasOwn(unskippablePassedTest.content.meta, TEST_ITR_FORCED_RUN))
+            assert.ok(!('TEST_ITR_FORCED_RUN' in unskippablePassedTest.content.meta))
 
             assert.strictEqual(unskippableFailedTest.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(unskippableFailedTest.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
             // This was not going to be skipped
-            assert.ok(!Object.hasOwn(unskippableFailedTest.content.meta, TEST_ITR_FORCED_RUN))
+            assert.ok(!('TEST_ITR_FORCED_RUN' in unskippableFailedTest.content.meta))
           }, 25000)
 
         const {
@@ -1125,7 +1128,7 @@ moduleTypes.forEach(({
               .flatMap(({ files }) => files)
               .map(({ filename }) => filename)
 
-            assert.includeMembers(coveredFiles, [
+            assertObjectContains(coveredFiles, [
               'ci-visibility/subproject/src/utils.tsx',
               'ci-visibility/subproject/src/App.tsx',
               'ci-visibility/subproject/src/index.tsx',
@@ -1387,7 +1390,7 @@ moduleTypes.forEach(({
             assert.strictEqual(retriedTests.length, 0)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -1493,7 +1496,7 @@ moduleTypes.forEach(({
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 2)
@@ -1562,7 +1565,7 @@ moduleTypes.forEach(({
             assert.strictEqual(retriedTests.length, 0)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -1624,7 +1627,7 @@ moduleTypes.forEach(({
             assert.strictEqual(retriedTests.length, 0)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -1687,7 +1690,9 @@ moduleTypes.forEach(({
             })
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+            })
           }, 25000)
 
         const {
@@ -1760,28 +1765,18 @@ moduleTypes.forEach(({
             // 4. "other context fails" (retry 2)
             // 5. "other context fails" (retry 3)
 
-            assert.equal(testExecutionOrder[0].name, 'context passes')
-            assert.equal(testExecutionOrder[0].isRetry, false)
-            assert.equal(testExecutionOrder[0].isNew, false)
-
-            assert.equal(testExecutionOrder[1].name, 'other context fails')
-            assert.equal(testExecutionOrder[1].isRetry, false)
-            assert.equal(testExecutionOrder[1].isNew, true)
-
-            assert.equal(testExecutionOrder[2].name, 'other context fails')
-            assert.equal(testExecutionOrder[2].isRetry, true)
-            assert.equal(testExecutionOrder[2].isNew, true)
-
-            assert.equal(testExecutionOrder[3].name, 'other context fails')
-            assert.equal(testExecutionOrder[3].isRetry, true)
-            assert.equal(testExecutionOrder[3].isNew, true)
-
-            assert.equal(testExecutionOrder[4].name, 'other context fails')
-            assert.equal(testExecutionOrder[4].isRetry, true)
-            assert.equal(testExecutionOrder[4].isNew, true)
+            assertObjectContains(testExecutionOrder, [
+              { name: 'context passes', isRetry: false, isNew: false },
+              { name: 'other context fails', isRetry: false, isNew: true },
+              { name: 'other context fails', isRetry: true, isNew: true },
+              { name: 'other context fails', isRetry: true, isNew: true },
+              { name: 'other context fails', isRetry: true, isNew: true }
+            ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+            })
           }, 25000)
 
         const {
@@ -1817,7 +1812,7 @@ moduleTypes.forEach(({
           once(childProcess.stderr, 'end'),
           receiverPromise
         ])
-        assert.include(testOutput, 'Retrying "other context fails" to detect flakes because it is new')
+        assert.match(testOutput, /Retrying "other context fails" to detect flakes because it is new/)
       })
     })
 
@@ -1843,7 +1838,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 10)
 
-            assert.includeMembers(tests.map(test => test.resource), [
+            assertObjectContains(tests.map(test => test.resource), [
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               // passes at the second retry
@@ -1933,12 +1928,12 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 3)
 
-            assert.includeMembers(tests.map(test => test.resource), [
+            assertObjectContains(tests.map(test => test.resource), [
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
-            assert.strictEqual(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
+            assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
           }, 25000)
 
         const {
@@ -1989,7 +1984,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 5)
 
-            assert.includeMembers(tests.map(test => test.resource), [
+            assertObjectContains(tests.map(test => test.resource), [
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
               'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
@@ -1997,7 +1992,10 @@ moduleTypes.forEach(({
               'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
             ])
 
-            assert.strictEqual(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
+            assert.strictEqual(
+              tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length,
+              2
+            )
           }, 25000)
 
         const {
@@ -2235,7 +2233,7 @@ moduleTypes.forEach(({
             assert.strictEqual(retriedTests.length, 0)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }, 25000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -2391,12 +2389,12 @@ moduleTypes.forEach(({
               if (isAttemptToFix) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
               }
 
               const resourceNames = tests.map(span => span.resource)
 
-              assert.includeMembers(resourceNames,
+              assertObjectContains(resourceNames,
                 [
                   'cypress/e2e/attempt-to-fix.js.attempt to fix is attempt to fix'
                 ]
@@ -2415,9 +2413,9 @@ moduleTypes.forEach(({
               for (let i = attemptToFixTests.length - 1; i >= 0; i--) {
                 const test = attemptToFixTests[i]
                 if (!isAttemptToFix) {
-                  assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX))
-                  assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                  assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                  assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
+                  assert.ok(!('TEST_IS_RETRY' in test.meta))
+                  assert.ok(!('TEST_RETRY_REASON' in test.meta))
                   continue
                 }
                 if (isQuarantined) {
@@ -2433,19 +2431,19 @@ moduleTypes.forEach(({
                 const isFirstAttempt = i === 0
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
                 if (isFirstAttempt) {
-                  assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                  assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                  assert.ok(!('TEST_IS_RETRY' in test.meta))
+                  assert.ok(!('TEST_RETRY_REASON' in test.meta))
                 } else {
                   assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                   assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
                 }
                 if (isLastAttempt) {
                   if (shouldFailSometimes) {
-                    assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                    assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                   } else if (shouldAlwaysPass) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                    assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                    assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                   } else {
                     assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
@@ -2628,7 +2626,7 @@ moduleTypes.forEach(({
               if (isDisabling) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
               }
 
               assert.strictEqual(failedTest.resource, 'cypress/e2e/disable.js.disable is disabled')
@@ -2638,7 +2636,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
               } else {
                 assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!Object.hasOwn(failedTest.meta, TEST_MANAGEMENT_IS_DISABLED))
+                assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in failedTest.meta))
               }
             }, 25000)
 
@@ -2726,7 +2724,7 @@ moduleTypes.forEach(({
               if (isQuarantining) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
               }
 
               assert.strictEqual(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
@@ -2737,7 +2735,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
               } else {
                 assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!Object.hasOwn(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+                assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
               }
             }, 25000)
 
@@ -2807,7 +2805,7 @@ moduleTypes.forEach(({
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+            assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.strictEqual(tests.length, 1)
@@ -2867,7 +2865,9 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
 
-            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_MANAGEMENT_ENABLED]: 'true'
+            })
 
             const attemptToFixTests = tests.filter(
               test => test.meta[TEST_NAME] === 'attempt to fix is attempt to fix'
@@ -2878,9 +2878,9 @@ moduleTypes.forEach(({
 
             attemptToFixTests.forEach(test => {
               // No retries should occur
-              assert.notProperty(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX)
-              assert.notProperty(test.meta, TEST_IS_RETRY)
-              assert.notProperty(test.meta, TEST_RETRY_REASON)
+              assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+              assert.ok(!(TEST_IS_RETRY in test.meta))
+              assert.ok(!(TEST_RETRY_REASON in test.meta))
             })
           }, 25000)
 
@@ -2961,32 +2961,19 @@ moduleTypes.forEach(({
             // 5. "second test" (retry 3)
             // 6. "third test" (original, no retries)
 
-            assert.equal(testExecutionOrder[0].name, 'attempt to fix order first test')
-            assert.equal(testExecutionOrder[0].isRetry, false)
-            assert.equal(testExecutionOrder[0].isAttemptToFix, false)
-
-            assert.equal(testExecutionOrder[1].name, 'attempt to fix order second test')
-            assert.equal(testExecutionOrder[1].isRetry, false)
-            assert.equal(testExecutionOrder[1].isAttemptToFix, true)
-
-            assert.equal(testExecutionOrder[2].name, 'attempt to fix order second test')
-            assert.equal(testExecutionOrder[2].isRetry, true)
-            assert.equal(testExecutionOrder[2].isAttemptToFix, true)
-
-            assert.equal(testExecutionOrder[3].name, 'attempt to fix order second test')
-            assert.equal(testExecutionOrder[3].isRetry, true)
-            assert.equal(testExecutionOrder[3].isAttemptToFix, true)
-
-            assert.equal(testExecutionOrder[4].name, 'attempt to fix order second test')
-            assert.equal(testExecutionOrder[4].isRetry, true)
-            assert.equal(testExecutionOrder[4].isAttemptToFix, true)
-
-            assert.equal(testExecutionOrder[5].name, 'attempt to fix order third test')
-            assert.equal(testExecutionOrder[5].isRetry, false)
-            assert.equal(testExecutionOrder[5].isAttemptToFix, false)
+            assertObjectContains(testExecutionOrder, [
+              { name: 'attempt to fix order first test', isRetry: false, isAttemptToFix: false },
+              { name: 'attempt to fix order second test', isRetry: false, isAttemptToFix: true },
+              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+              { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
+              { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false }
+            ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_MANAGEMENT_ENABLED]: 'true'
+            })
           }, 25000)
 
         const {
@@ -3023,7 +3010,7 @@ moduleTypes.forEach(({
           receiverPromise
         ])
 
-        assert.include(testOutput, 'Retrying "attempt to fix order second test" because it is an attempt to fix')
+        assert.match(testOutput, /Retrying "attempt to fix order second test" because it is an attempt to fix/)
       })
     })
 
@@ -3131,12 +3118,12 @@ moduleTypes.forEach(({
             if (isEfd) {
               assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'cypress/e2e/impacted-test.js.impacted test is impacted test'
               ]
@@ -3156,12 +3143,12 @@ moduleTypes.forEach(({
               if (isModified) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_MODIFIED))
+                assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
               }
               if (isNew) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
               } else {
-                assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_NEW))
+                assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
               }
             }
 
@@ -3287,7 +3274,9 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const testSession = events.find(event => event.type === 'test_session_end').content
 
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+            })
 
             const impactedTests = tests.filter(test =>
               test.meta[TEST_SOURCE_FILE] === 'cypress/e2e/impacted-test.js' &&
@@ -3297,7 +3286,9 @@ moduleTypes.forEach(({
             assert.equal(impactedTests.length, 1)
 
             for (const impactedTest of impactedTests) {
-              assert.propertyVal(impactedTest.meta, TEST_IS_MODIFIED, 'true')
+              assertObjectContains(impactedTest.meta, {
+                [TEST_IS_MODIFIED]: 'true'
+              })
             }
 
             // No retries should occur when testIsolation is false
@@ -3387,26 +3378,19 @@ moduleTypes.forEach(({
             // 5. "second test" (retry 1)
             // 6. "second test" (retry 2)
 
-            assert.equal(testExecutionOrder[0].name, 'impacted test order first test')
-            assert.equal(testExecutionOrder[0].isRetry, false)
-
-            assert.equal(testExecutionOrder[1].name, 'impacted test order first test')
-            assert.equal(testExecutionOrder[1].isRetry, true)
-
-            assert.equal(testExecutionOrder[2].name, 'impacted test order first test')
-            assert.equal(testExecutionOrder[2].isRetry, true)
-
-            assert.equal(testExecutionOrder[3].name, 'impacted test order second test')
-            assert.equal(testExecutionOrder[3].isRetry, false)
-
-            assert.equal(testExecutionOrder[4].name, 'impacted test order second test')
-            assert.equal(testExecutionOrder[4].isRetry, true)
-
-            assert.equal(testExecutionOrder[5].name, 'impacted test order second test')
-            assert.equal(testExecutionOrder[5].isRetry, true)
+            assertObjectContains(testExecutionOrder, [
+              { name: 'impacted test order first test', isRetry: false },
+              { name: 'impacted test order first test', isRetry: true },
+              { name: 'impacted test order first test', isRetry: true },
+              { name: 'impacted test order second test', isRetry: false },
+              { name: 'impacted test order second test', isRetry: true },
+              { name: 'impacted test order second test', isRetry: true }
+            ])
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+            assertObjectContains(testSession.meta, {
+              [TEST_EARLY_FLAKE_ENABLED]: 'true'
+            })
           }, 25000)
 
         const {
@@ -3444,8 +3428,8 @@ moduleTypes.forEach(({
           receiverPromise
         ])
 
-        assert.include(testOutput, 'Retrying "impacted test order first test" to detect flakes because it is modified')
-        assert.include(testOutput, 'Retrying "impacted test order second test" to detect flakes because it is modified')
+        assert.match(testOutput, /Retrying "impacted test order first test" to detect flakes because it is modified/)
+        assert.match(testOutput, /Retrying "impacted test order second test" to detect flakes because it is modified/)
       })
     })
   })

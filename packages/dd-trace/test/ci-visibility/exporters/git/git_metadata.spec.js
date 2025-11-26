@@ -150,7 +150,7 @@ describe('git_metadata', () => {
       assert.strictEqual(err, null)
       // to check that it is not called
       assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), 'POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -166,7 +166,7 @@ describe('git_metadata', () => {
       assertObjectContains(err.message, 'Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
       assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), 'POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -182,7 +182,7 @@ describe('git_metadata', () => {
       assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
       assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), 'POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -198,7 +198,7 @@ describe('git_metadata', () => {
       assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit format")
       // to check that it is not called
       assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), 'POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -211,7 +211,7 @@ describe('git_metadata', () => {
       .reply(502)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'Could not upload packfiles: status code 502')
+      assert.match(err.message, /Could not upload packfiles: status code 502/)
       assert.strictEqual(scope.isDone(), true)
       done()
     })
@@ -225,7 +225,7 @@ describe('git_metadata', () => {
       .reply(200, JSON.stringify({ data: [] }))
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'git rev-list failed')
+      assert.match(err.message, /git rev-list failed/)
       assert.strictEqual(scope.isDone(), true)
       done()
     })
@@ -327,7 +327,7 @@ describe('git_metadata', () => {
     ])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'Could not read "not-there"')
+      assert.match(err.message, /Could not read "not-there"/)
       assert.strictEqual(scope.isDone(), false)
       done()
     })
@@ -343,7 +343,7 @@ describe('git_metadata', () => {
     generatePackFilesForCommitsStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'Failed to generate packfiles')
+      assert.match(err.message, /Failed to generate packfiles/)
       assert.strictEqual(scope.isDone(), false)
       done()
     })
@@ -361,7 +361,7 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'Git is not available')
+      assert.match(err.message, /Git is not available/)
       assert.strictEqual(scope.isDone(), false)
       process.env.PATH = oldPath
       done()

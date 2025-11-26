@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const { Given, When, Then } = require('@cucumber/cucumber')
 const tracer = require('dd-trace')

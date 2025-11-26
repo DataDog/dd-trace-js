@@ -57,8 +57,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           cwd,
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
-            DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
+            DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
           }
         })
       })
@@ -153,8 +153,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           cwd,
           env: {
             DD_TRACE_AGENT_PORT: agent.port,
-            DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
+            DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+            DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
           }
         })
       })
@@ -188,11 +188,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
               assert.strictEqual(stringEvents.length, 3)
 
               // Verify different users
-              const userIds = [...new Set(exposureEvents.map(e => e.subject.id))]
-              assert.strictEqual(userIds.length, 3)
-              assert.ok(userIds.includes('user-1'))
-              assert.ok(userIds.includes('user-2'))
-              assert.ok(userIds.includes('user-3'))
+              const userIds = new Set(exposureEvents.map(e => e.subject.id))
+              assert.deepStrictEqual(userIds, new Set(['user-1', 'user-2', 'user-3']))
 
               done()
             } catch (error) {
@@ -236,8 +233,8 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: 0.1,
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true
+          DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true'
         }
       })
     })
@@ -260,7 +257,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
           assert.strictEqual(id, configId)
           assert.strictEqual(version, 1)
           assert.strictEqual(state, ACKNOWLEDGED)
-          assert.notOk(error) // falsy check since error will be an empty string, but that's an implementation detail
+          assert.ok(!error) // falsy check since error will be an empty string, but that's an implementation detail
 
           receivedAckUpdate = true
           endIfDone()
@@ -298,7 +295,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'false'
         }
       })
     })

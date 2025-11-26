@@ -54,8 +54,10 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('should have expected number of elements in state', function () {
-          assert.strictEqual(Object.keys(state).length, ((Array.isArray(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']) ? ['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'] : [['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']])).length)
-          assert.ok(((Array.isArray(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']) ? ['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'] : [['arr', 'map', 'set', 'wmap', 'wset', 'typedArray']])).every(k => Object.hasOwn(state, k)))
+          assert.deepStrictEqual(
+            Object.keys(state).sort(),
+            ['LARGE_SIZE', 'arr', 'map', 'set', 'typedArray', 'wmap', 'wset']
+          )
         })
 
         it('Array', function () {

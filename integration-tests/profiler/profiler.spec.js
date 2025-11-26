@@ -4,6 +4,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
+  assertObjectContains,
 } = require('../helpers')
 const childProcess = require('child_process')
 const { fork } = childProcess
@@ -39,18 +40,26 @@ function expectProfileMessagePromise (agent, timeout,
   return agent.assertMessageReceived(({ headers, _, files }) => {
     let event
     try {
-      assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-      assert.propertyVal(files[0], 'originalname', 'event.json')
+      assertObjectContains(headers, {
+        host: `127.0.0.1:${agent.port}`
+      })
+      assertObjectContains(files[0], {
+        originalname: 'event.json'
+      })
       event = JSON.parse(files[0].buffer.toString())
-      assert.propertyVal(event, 'family', 'node')
-      assert.isString(event.info.profiler.activation)
-      assert.isString(event.info.profiler.ssi.mechanism)
+      assertObjectContains(event, {
+        family: 'node'
+      })
+      assert.strictEqual(typeof event.info.profiler.activation, 'string')
+      assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
       const attachments = event.attachments
-      assert.isArray(attachments)
+      assert.ok(Array.isArray(attachments))
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
       assert.sameMembers(attachments, fileNames)
       for (const [index, fileName] of attachments.entries()) {
-        assert.propertyVal(files[index + 1], 'originalname', fileName)
+        assertObjectContains(files[index + 1], {
+          originalname: fileName
+        })
       }
       if (expectSeq) {
         assert(event.tags_profiler.indexOf(',profile_seq:') !== -1)
@@ -94,7 +103,7 @@ async function readLatestFile (cwd, pattern) {
   const dirEntries = await fs.readdir(cwd)
   // Get the latest file matching the pattern
   const pprofEntries = dirEntries.filter(name => pattern.test(name))
-  assert.isTrue(pprofEntries.length > 0, `No file matching pattern ${pattern} found in ${cwd}`)
+  assert.ok(pprofEntries.length > 0, `No file matching pattern ${pattern} found in ${cwd}`)
   const pprofEntry = pprofEntries
     .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
     .reduce((a, b) => a.modified > b.modified ? a : b)
@@ -148,7 +157,7 @@ class NetworkEventProcessor extends TimelineEventProcessor {
 
   decorateEvent (ev, pl) {
     // Exactly one of these is defined
-    assert.isTrue(!!pl.address !== !!pl.host, this.encoded)
+    assert.ok(!!pl.address !== !!pl.host, this.encoded)
     if (pl.address) {
       ev.address = this.strings.strings[pl.address]
     } else {
@@ -259,19 +268,20 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
       }
     }
     // Timestamp must be defined and be between process start and end time
-    assert.isDefined(ts, encoded)
-    assert.isTrue(ts <= procEnd, encoded)
-    assert.isTrue(ts >= procStart, encoded)
+    assert.notStrictEqual(ts, undefined, encoded)
+    assert.strictEqual(typeof ts, 'bigint', encoded)
+    assert.ok(ts <= procEnd, encoded)
+    assert.ok(ts >= procStart, encoded)
     // Gather only tested events
     if (event === eventValue) {
       if (process.platform !== 'win32') {
-        assert.isDefined(spanId, encoded)
-        assert.isDefined(localRootSpanId, encoded)
+        assert.notStrictEqual(spanId, undefined, encoded)
+        assert.notStrictEqual(localRootSpanId, undefined, encoded)
       } else {
-        assert.isUndefined(spanId, encoded)
-        assert.isUndefined(localRootSpanId, encoded)
+        assert.strictEqual(spanId, undefined, encoded)
+        assert.strictEqual(localRootSpanId, undefined, encoded)
       }
-      assert.isDefined(operation, encoded)
+      assert.notStrictEqual(operation, undefined, encoded)
       if (unexpectedLabels.length > 0) {
         const labelsStr = JSON.stringify(unexpectedLabels)
         const labelsStrStr = unexpectedLabels.map(k => strings.strings[k]).join(',')
@@ -412,11 +422,11 @@ describe('profiler', () => {
         }
         if (threadName !== nonJSThreadNameValue) {
           // Timestamp must be defined and be between process start and end time
-          assert.isDefined(ts, encoded)
-          assert.isNumber(osThreadId, encoded)
+          assert.notStrictEqual(ts, undefined, encoded)
+          assert.strictEqual(typeof osThreadId, 'number', encoded)
           assert.equal(threadId, strings.dedup('0'), encoded)
-          assert.isTrue(ts <= procEnd, encoded)
-          assert.isTrue(ts >= procStart, encoded)
+          assert.ok(ts <= procEnd, encoded)
+          assert.ok(ts >= procStart, encoded)
           // Thread name must be defined and exactly equal "Main Event Loop"
           assert.equal(threadName, threadNameValue, encoded)
         } else {
@@ -429,8 +439,8 @@ describe('profiler', () => {
           continue
         }
         if (spanId || rootSpanId) {
-          assert.isDefined(spanId, encoded)
-          assert.isDefined(rootSpanId, encoded)
+          assert.notStrictEqual(spanId, undefined, encoded)
+          assert.notStrictEqual(rootSpanId, undefined, encoded)
 
           rootSpans.add(rootSpanId)
           if (spanId === rootSpanId) {
@@ -695,12 +705,12 @@ describe('profiler', () => {
         // There's a race between metrics and on-shutdown profile, so metric
         // value will be between 1 and 3
         requestCount = requests.points[0][1]
-        assert.isAtLeast(requestCount, 1)
-        assert.isAtMost(requestCount, 3)
+        assert.ok(requestCount >= 1)
+        assert.ok(requestCount <= 3)
 
         const responses = series.find(s => s.metric === 'profile_api.responses')
         assert.equal(responses.type, 'count')
-        assert.include(responses.tags, 'status_code:200')
+        assert.match(responses.tags, /status_code:200/)
 
         // Same number of requests and responses
         assert.equal(responses.points[0][1], requestCount)
@@ -710,7 +720,7 @@ describe('profiler', () => {
         const pp = payload.payload
         assert.equal(pp.namespace, 'profilers')
         const series = pp.series
-        assert.lengthOf(series, 2)
+        assert.strictEqual(series.length, 2)
         assert.equal(series[0].metric, 'profile_api.bytes')
         assert.equal(series[1].metric, 'profile_api.ms')
 
@@ -752,9 +762,9 @@ describe('profiler', () => {
         assert.equal(pp.namespace, 'profilers');
         ['live', 'used'].forEach(metricName => {
           const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
-          assert.isDefined(sampleContexts)
+          assert.notStrictEqual(sampleContexts, undefined)
           assert.equal(sampleContexts.type, 'gauge')
-          assert.isAtLeast(sampleContexts.points[0][1], 1)
+          assert.ok(sampleContexts.points[0][1] >= 1)
         })
       }, 'generate-metrics', timeout)
 

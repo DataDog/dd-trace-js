@@ -31,7 +31,7 @@ describe('Standalone ASM', () => {
   }
 
   function assertDrop ({ meta, metrics }) {
-    assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
+    assert.ok(!('_dd.p.ts' in meta))
 
     assert.strictEqual(metrics._sampling_priority_v1, AUTO_REJECT)
     assert.strictEqual(metrics['_dd.apm.enabled'], 0)
@@ -96,8 +96,8 @@ describe('Standalone ASM', () => {
           assert.strictEqual(fifthReq.length, 3)
 
           const { meta, metrics } = fifthReq[0]
-          assert.ok(!Object.hasOwn(meta, 'manual.keep'))
-          assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
+          assert.ok(!('manual.keep' in meta))
+          assert.ok(!('_dd.p.ts' in meta))
 
           assert.strictEqual(metrics._sampling_priority_v1, AUTO_KEEP)
           assert.strictEqual(metrics['_dd.apm.enabled'], 0)
@@ -232,7 +232,7 @@ describe('Standalone ASM', () => {
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
           assert.notStrictEqual(innerReq, undefined)
-          assert.ok(!Object.hasOwn(innerReq[0].meta, '_dd.p.other'))
+          assert.ok(!('_dd.p.other' in innerReq[0].meta))
         }, undefined, undefined, true)
       })
 
@@ -323,7 +323,7 @@ describe('Standalone ASM', () => {
     it('should not add standalone related tags in iast events', () => {
       const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.ok(!Object.hasOwn(headers, 'datadog-client-computed-stats'))
+        assert.ok(!('datadog-client-computed-stats' in headers))
         assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
@@ -334,8 +334,8 @@ describe('Standalone ASM', () => {
         const { meta, metrics } = payload[0][0]
         assert.ok(Object.hasOwn(meta, '_dd.iast.json')) // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
 
-        assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
-        assert.ok(!Object.hasOwn(metrics, '_dd.apm.enabled'))
+        assert.ok(!('_dd.p.ts' in meta))
+        assert.ok(!('_dd.apm.enabled' in metrics))
       })
     })
 
@@ -343,7 +343,7 @@ describe('Standalone ASM', () => {
       const urlAttack = proc.url + '?query=1 or 1=1'
 
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
-        assert.ok(!Object.hasOwn(headers, 'datadog-client-computed-stats'))
+        assert.ok(!('datadog-client-computed-stats' in headers))
         assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
@@ -354,8 +354,8 @@ describe('Standalone ASM', () => {
         const { meta, metrics } = payload[0][0]
         assert.ok(Object.hasOwn(meta, '_dd.appsec.json')) // crs-942-100 triggered
 
-        assert.ok(!Object.hasOwn(meta, '_dd.p.ts'))
-        assert.ok(!Object.hasOwn(metrics, '_dd.apm.enabled'))
+        assert.ok(!('_dd.p.ts' in meta))
+        assert.ok(!('_dd.apm.enabled' in metrics))
       })
     })
   })

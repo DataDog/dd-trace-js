@@ -131,6 +131,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   context('older versions of the agent (APM protocol)', () => {
     let oldApmProtocolEnvVars = {}
+
     beforeEach(() => {
       receiver.setInfoResponse({ endpoints: [] })
       oldApmProtocolEnvVars = {
@@ -142,36 +143,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
       }
     })
-    it('can run tests and report tests', (done) => {
-      receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
-        const testSpans = payload.flatMap(trace => trace)
-        const resourceNames = testSpans.map(span => span.resource)
 
-        assert.includeMembers(resourceNames,
-          [
-            'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-            'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-          ]
-        )
-
-        const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
-        assert.strictEqual(areAllTestSpans, true)
-
-        assert.ok(testOutput.includes(expectedStdout))
-
-        // Can read DD_TAGS
-        testSpans.forEach(testSpan => {
-          assert.strictEqual(testSpan.meta['test.customtag'], 'customvalue')
-          assert.strictEqual(testSpan.meta['test.customtag2'], 'customvalue2')
-        })
-
-        testSpans.forEach(testSpan => {
-          assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
-        })
-
-        done()
-      })
+    it('can run tests and report tests', async () => {
+      const payloadPromise = receiver.payloadReceived(({ url }) => url === '/v0.4/traces')
 
       childProcess = fork(startupTestFile, {
         cwd,
@@ -188,6 +162,36 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
+      })
+
+      const { payload } = await payloadPromise
+
+      const testSpans = payload.flatMap(trace => trace)
+      const resourceNames = testSpans.map(span => span.resource)
+
+      assertObjectContains(resourceNames,
+        [
+          'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
+          'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+        ]
+      )
+
+      const areAllTestSpans = testSpans.every(span => span.name === 'jest.test')
+      assert.strictEqual(areAllTestSpans, true)
+
+      assert.match(testOutput, new RegExp(expectedStdout))
+
+      // Can read DD_TAGS
+      testSpans.forEach(testSpan => {
+        assertObjectContains(testSpan.meta, {
+          'test.customtag': 'customvalue',
+          'test.customtag2': 'customvalue2'
+        })
+      })
+
+      testSpans.forEach(testSpan => {
+        assert.strictEqual(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+        assert.ok(testSpan.metrics[TEST_SOURCE_START] != null)
       })
     })
 
@@ -251,7 +255,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(test.meta[JEST_TEST_RUNNER], 'jest-circus')
             assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
             assert.strictEqual(test.meta[COMPONENT], 'jest')
-            assert.ok(test.meta[TEST_CODE_OWNERS].includes('@datadog-dd-trace-js'))
+            assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
             assert.strictEqual(test.type, 'test')
             assert.strictEqual(test.name, 'jest.test')
@@ -268,14 +272,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             }
 
             if (error) {
-              assert.ok(test.meta[ERROR_MESSAGE].includes(error))
+              assert.match(test.meta[ERROR_MESSAGE], new RegExp(error))
             }
 
             // TODO: why did this work in jsdom before?
             if (name === 'jest-test-suite can do integration http') {
               const httpSpan = spans.find(span => span.name === 'http.request')
               assert.strictEqual(httpSpan.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-              assert.ok(httpSpan.meta['http.url'].includes('/info'))
+              assert.match(httpSpan.meta['http.url'], /\/info/)
               assert.strictEqual(httpSpan.parent_id.toString(), test.span_id.toString())
             }
           })
@@ -446,52 +450,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         if (reportingOption === 'evp proxy') {
           receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
         }
+
         receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
-          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+          try {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
-          metadataDicts.forEach(metadata => {
-            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-            }
-          })
+            metadataDicts.forEach(metadata => {
+              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+              }
+            })
 
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-          const moduleEventContent = events.find(event => event.type === 'test_module_end').content
-          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+            const moduleEventContent = events.find(event => event.type === 'test_module_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-          const resourceNames = tests.map(span => span.resource)
+            const resourceNames = tests.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
-            [
-              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
-            ]
-          )
-          assert.strictEqual(suites.length, 2)
-          assert.ok(sessionEventContent != null)
-          assert.ok(moduleEventContent != null)
+            assertObjectContains(resourceNames,
+              [
+                'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
+                'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+              ]
+            )
+            assert.strictEqual(suites.length, 2)
+            assert.ok(sessionEventContent != null)
+            assert.ok(moduleEventContent != null)
 
-          assert.ok(testOutput.includes(expectedStdout))
+            assert.match(testOutput, new RegExp(expectedStdout))
 
-          tests.forEach(testEvent => {
-            assert.strictEqual(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-            assert.ok(testEvent.metrics[TEST_SOURCE_START] != null)
-            assert.strictEqual(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-            // Can read DD_TAGS
-            assert.strictEqual(testEvent.meta['test.customtag'], 'customvalue')
-            assert.strictEqual(testEvent.meta['test.customtag2'], 'customvalue2')
-            assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT] != null)
-          })
+            tests.forEach(testEvent => {
+              assert.strictEqual(
+                testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
+                true
+              )
+              assert.ok(testEvent.metrics[TEST_SOURCE_START] != null)
+              assert.strictEqual(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+              // Can read DD_TAGS
+              assert.strictEqual(testEvent.meta['test.customtag'], 'customvalue')
+              assert.strictEqual(testEvent.meta['test.customtag2'], 'customvalue2')
+              assert.ok(testEvent.metrics[DD_HOST_CPU_COUNT] != null)
+            })
 
-          suites.forEach(testSuite => {
-            assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-            assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
-            assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT] != null)
-          })
-
-          done()
+            suites.forEach(testSuite => {
+              assert.strictEqual(
+                testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
+                true
+              )
+              assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
+              assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT] != null)
+            })
+            done()
+          } catch (error) {
+            done(error)
+          }
         })
 
         childProcess = fork(startupTestFile, {
@@ -607,7 +621,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
-          assert.ok(testOutput.includes(expectedStdout))
+          assert.match(testOutput, new RegExp(expectedStdout))
           done()
         })
       })
@@ -631,9 +645,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
-        assert.ok(!testOutput.includes('TypeError'))
-        assert.ok(!testOutput.includes('Uncaught error outside test suite'))
-        assert.ok(testOutput.includes(expectedStdout))
+        assert.doesNotMatch(testOutput, /TypeError/)
+        assert.doesNotMatch(testOutput, /Uncaught error outside test suite/)
+        assert.match(testOutput, new RegExp(expectedStdout))
         done()
       })
     })
@@ -681,7 +695,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(testSuiteEvents.length, 3)
       const testSuites = testSuiteEvents.map(span => span.content.meta[TEST_SUITE])
 
-      assert.includeMembers(testSuites,
+      assertObjectContains(testSuites,
         [
           'ci-visibility/sharding-test/sharding-test-5.js',
           'ci-visibility/sharding-test/sharding-test-4.js',
@@ -772,8 +786,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.ok(!testOutput.includes('TypeError'))
-      assert.ok(testOutput.includes(expectedStdout))
+      assert.doesNotMatch(testOutput, /TypeError/)
+      assert.match(testOutput, new RegExp(expectedStdout))
       done()
     })
   })
@@ -796,7 +810,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.ok(!testOutput.includes('TypeError'))
+      assert.doesNotMatch(testOutput, /TypeError/)
       done()
     })
   })
@@ -818,8 +832,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
         assert.strictEqual(testSpans.length, 2)
         const spanTypes = testSpans.map(span => span.type)
-        assert.includeMembers(spanTypes, ['test'])
-        assert.ok(!spanTypes.includes(['test_session_end', 'test_suite_end', 'test_module_end']))
+        assertObjectContains(spanTypes, ['test'])
+        assert.ok(!spanTypes.some(type => ['test_session_end', 'test_suite_end', 'test_module_end'].includes(type)))
         receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
         done()
       }).catch(done)
@@ -849,7 +863,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
         const eventTypes = events.map(event => event.type)
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
 
         done()
       }).catch(done)
@@ -871,7 +885,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .flatMap(({ events }) => events)
             .map(event => event.type)
 
-          assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
           done()
         }).catch(done)
     })
@@ -909,7 +923,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
 
-          assert.ok(!Object.hasOwn(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED))
+          assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
         })
 
       const logsPromise = receiver
@@ -982,13 +996,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const resourceNames = suites.map(suite => suite.content.resource)
 
-        assert.includeMembers(resourceNames, [
+        assertObjectContains(resourceNames, [
           'test_suite.ci-visibility/test-parsing-error/parsing-error-2.js',
           'test_suite.ci-visibility/test-parsing-error/parsing-error.js'
         ])
         suites.forEach(suite => {
           assert.strictEqual(suite.content.meta[TEST_STATUS], 'fail')
-          assert.ok(suite.content.meta[ERROR_MESSAGE].includes('chao'))
+          assert.match(suite.content.meta[ERROR_MESSAGE], /chao/)
         })
       })
     childProcess = fork(testFile, {
@@ -1021,7 +1035,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const [failedTestSuite] = failedTestSuites
 
           assert.strictEqual(failedTestSuite.content.meta[TEST_STATUS], 'fail')
-          assert.ok(failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code'))
+          assert.ok(
+            failedTestSuite.content.meta[ERROR_MESSAGE].includes('a file outside of the scope of the test code')
+          )
           assert.strictEqual(failedTestSuite.content.meta[ERROR_TYPE], 'Error')
 
           const passedTestSuites = suites.filter(
@@ -1063,12 +1079,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // jest still reports the test suite as passing
           assert.strictEqual(badImportTestSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(badImportTestSuite.content.meta[ERROR_MESSAGE].includes('a file after the Jest environment has been torn down'))
-          assert.ok(badImportTestSuite.content.meta[ERROR_MESSAGE].includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js'))
+          assert.ok(
+            badImportTestSuite.content.meta[ERROR_MESSAGE]
+              .includes('a file after the Jest environment has been torn down')
+          )
+          assert.ok(
+            badImportTestSuite.content.meta[ERROR_MESSAGE]
+              .includes('From ci-visibility/jest-bad-import-torn-down/jest-bad-import-test.js')
+          )
           // This is the error message that jest should show. We check that we don't mess it up.
-          assert.ok(badImportTestSuite.content.meta[ERROR_MESSAGE].includes('off-timing-import'))
-          assert.ok(badImportTestSuite.content.meta[ERROR_MESSAGE].includes('afterAll'))
-          assert.ok(badImportTestSuite.content.meta[ERROR_MESSAGE].includes('nextTick'))
+          assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /off-timing-import/)
+          assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /afterAll/)
+          assert.match(badImportTestSuite.content.meta[ERROR_MESSAGE], /nextTick/)
 
           const passedTestSuites = suites.filter(
             suite => suite.content.meta[TEST_STATUS] === 'pass'
@@ -1102,7 +1124,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(!Object.hasOwn(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT))
+      assert.ok(!('TEST_CODE_COVERAGE_LINES_PCT' in testSession.metrics))
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
@@ -1140,7 +1162,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   it('works with --forceExit and logs a warning', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-        assert.ok(testOutput.includes("Jest's '--forceExit' flag has been passed"))
+        assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const testSession = events.find(event => event.type === 'test_session_end')
@@ -1195,13 +1217,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         stdio: 'inherit'
       }
     )
-    const EXPECTED_FORCE_EXIT_LOG_MESSAGE = "Jest's '--forceExit' flag has been passed"
-    const EXPECTED_TIMEOUT_LOG_MESSAGE = 'Timeout waiting for the tracer to flush'
     childProcess.on('exit', () => {
-      assert.ok(testOutput.includes(EXPECTED_FORCE_EXIT_LOG_MESSAGE,
-        `"${EXPECTED_FORCE_EXIT_LOG_MESSAGE}" log message is not in test output: ${testOutput}`))
-      assert.ok(testOutput.includes(EXPECTED_TIMEOUT_LOG_MESSAGE,
-        `"${EXPECTED_TIMEOUT_LOG_MESSAGE}" log message is not in the test output: ${testOutput}`))
+      assert.match(testOutput, /Jest's '--forceExit' flag has been passed/)
+      assert.match(testOutput, /Timeout waiting for the tracer to flush/)
       done()
     })
     childProcess.stdout.on('data', (chunk) => {
@@ -1254,8 +1272,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testSession = events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
-        const errorMessage = 'Failed test suites: 1. Failed tests: 1'
-        assert.ok(testSession.meta[ERROR_MESSAGE].includes(errorMessage))
+        assert.match(testSession.meta[ERROR_MESSAGE], /Failed test suites: 1. Failed tests: 1/)
       })
 
     childProcess = exec(
@@ -1296,10 +1313,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.ok(testOutput.includes(expectedStdout))
-      assert.ok(testOutput.includes('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, ' +
-        'but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, ' +
-        'so dd-trace will not be initialized.'))
+      assert.match(testOutput, new RegExp(expectedStdout))
+      assert.match(
+        testOutput,
+        /DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, so dd-trace will not be initialized./
+      )
       done()
     })
   })
@@ -1320,7 +1338,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
 
       const eventTypes = eventsRequest.payload.events.map(event => event.type)
-      assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+      assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
       const numSuites = eventTypes.reduce(
         (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
       )
@@ -1362,10 +1380,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const testSpans = payload.flatMap(trace => trace)
           const resourceNames = testSpans.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
+              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2',
               'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
-              'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
             ]
           )
         }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
@@ -1392,21 +1410,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
         assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
 
-        const [coveragePayload] = codeCovRequest.payload
-        assert.strictEqual(codeCovRequest.headers['dd-api-key'], '1')
-
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
-        assert.ok(coveragePayload.content.includes({
-          version: 2
-        }))
+        assertObjectContains(codeCovRequest, {
+          headers: {
+            'dd-api-key': '1'
+          },
+          payload: [{
+            name: 'coverage1',
+            filename: 'coverage1.msgpack',
+            type: 'application/msgpack',
+            content: {
+              version: 2
+            }
+          }]
+        })
         const allCoverageFiles = codeCovRequest.payload
           .flatMap(coverage => coverage.content.coverages)
           .flatMap(file => file.files)
           .map(file => file.filename)
 
-        assert.includeMembers(allCoverageFiles, expectedCoverageFiles)
+        assertObjectContains(allCoverageFiles.sort(), expectedCoverageFiles.sort())
+
+        const [coveragePayload] = codeCovRequest.payload
         assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
         assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
 
@@ -1414,7 +1438,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1453,7 +1477,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       receiver.assertPayloadReceived(({ headers, payload }) => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
-        assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const testSession = payload.events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -1510,7 +1534,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
         assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1598,7 +1622,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1646,7 +1670,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1704,12 +1728,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           )
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
-          assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.content.meta))
 
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
@@ -1754,9 +1778,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-          assert.ok(!Object.hasOwn(testModule.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
           assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
 
           const passedSuite = suites.find(
@@ -1771,15 +1795,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
 
           assert.strictEqual(nonSkippedSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(nonSkippedSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
           // it was not forced to run because it wasn't going to be skipped
-          assert.ok(!Object.hasOwn(nonSkippedSuite.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in nonSkippedSuite.meta))
         }, 25000)
 
       childProcess = exec(
@@ -1970,7 +1994,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             .flatMap(({ files }) => files)
             .map(({ filename }) => filename)
 
-          assert.includeMembers(coveredFiles, [
+          assertObjectContains(coveredFiles, [
             'ci-visibility/subproject/dependency.js',
             'ci-visibility/subproject/subproject-test.js'
           ])
@@ -2008,7 +2032,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           .flatMap(file => file.files)
           .map(file => file.filename)
 
-        assert.includeMembers(allCoverageFiles, [
+        assertObjectContains(allCoverageFiles, [
           'ci-visibility/test/sum.js',
           'ci-visibility/jest/mocked-test.js'
         ])
@@ -2065,7 +2089,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2150,9 +2174,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(testsForFirstParameter.length, testsForSecondParameter.length)
 
           // all but one have been retried
-          assert.strictEqual(testsForFirstParameter.length - 1, testsForFirstParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length)
+          assert.strictEqual(
+            testsForFirstParameter.length - 1,
+            testsForFirstParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
+          )
 
-          assert.strictEqual(testsForSecondParameter.length - 1, testsForSecondParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length)
+          assert.strictEqual(
+            testsForSecondParameter.length - 1,
+            testsForSecondParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
+          )
         })
 
       childProcess = exec(
@@ -2193,7 +2223,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const newTests = tests.filter(test =>
@@ -2317,13 +2347,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
           )
           assert.strictEqual(newSkippedTests.length, 1)
-          assert.ok(!Object.hasOwn(newSkippedTests[0].meta, TEST_IS_RETRY))
+          assert.ok(!('TEST_IS_RETRY' in newSkippedTests[0].meta))
 
           const newTodoTests = tests.filter(
             test => test.meta[TEST_NAME] === 'ci visibility todo will not be retried'
           )
           assert.strictEqual(newTodoTests.length, 1)
-          assert.ok(!Object.hasOwn(newTodoTests[0].meta, TEST_IS_RETRY))
+          assert.ok(!('TEST_IS_RETRY' in newTodoTests[0].meta))
         })
 
       childProcess = exec(
@@ -2376,7 +2406,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const resourceNames = tests.map(test => test.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/test-early-flake-detection/weird-test-names.js.no describe can do stuff',
               'ci-visibility/test-early-flake-detection/weird-test-names.js.describe  trailing space '
@@ -2429,7 +2459,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2519,7 +2549,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
 
       childProcess.on('exit', (exitCode) => {
-        assert.ok(testOutput.includes('2 failed, 2 passed'))
+        assert.match(testOutput, /2 failed, 2 passed/)
         assert.strictEqual(exitCode, 0)
         eventsPromise.then(() => {
           done()
@@ -2734,7 +2764,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2806,7 +2836,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2869,7 +2899,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2877,14 +2907,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
           newTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
@@ -2932,7 +2962,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/jest/failing-test.js'
           )
           newTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(newTests.length, 2)
 
@@ -3005,7 +3035,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               test.meta[TEST_SUITE] !== 'ci-visibility/test/efd-parallel/ci-visibility-test-4.js'
             )
             oldTests.forEach(test => {
-              assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+              assert.ok(!('TEST_IS_NEW' in test.meta))
             })
 
             assert.strictEqual(oldTests.length, 3)
@@ -3068,7 +3098,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -3193,13 +3223,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
           assert.strictEqual(tests.length, 10)
-          assert.includeMembers(tests.map(test => test.resource), [
+          assertObjectContains(tests.map(test => test.resource), [
+            // retries twice and passes
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
             // does not retry
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
             // retries twice and passes
-            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
@@ -3283,10 +3314,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
           assert.strictEqual(tests.length, 3)
-          assert.includeMembers(tests.map(test => test.resource), [
+          assertObjectContains(tests.map(test => test.resource), [
             // does not retry anything
-            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
           ])
 
@@ -3332,13 +3363,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
-          assert.strictEqual(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
+          assert.strictEqual(
+            tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length,
+            2
+          )
 
           assert.strictEqual(tests.length, 5)
           // only one retry
-          assert.includeMembers(tests.map(test => test.resource), [
-            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+          assertObjectContains(tests.map(test => test.resource), [
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
@@ -3493,7 +3527,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
 
-          assert.ok(!Object.hasOwn(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED))
+          assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
         })
 
       const logsPromise = receiver
@@ -3504,7 +3538,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             level: 'error'
           })
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
+          assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -3577,7 +3611,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
 
-          assert.ok(!Object.hasOwn(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED))
+          assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
         })
 
       const logsPromise = receiver
@@ -3590,7 +3624,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.ok(diLog.ddtags.includes('git.repository_url:'))
           assert.ok(diLog.ddtags.includes('git.commit.sha:'))
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
+          assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -3780,7 +3814,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -3789,7 +3823,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -3888,12 +3922,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isAttemptToFix) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test'
               ]
@@ -3905,7 +3939,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               // so we can be sure that parallel mode is on
               const parallelTestName = 'ci-visibility/test-management/test-attempt-to-fix-2.js.' +
                 'attempt to fix tests 2 can attempt to fix a test'
-              assert.includeMembers(resourceNames, [parallelTestName])
+              assertObjectContains(resourceNames, [parallelTestName])
             }
 
             const retriedTests = tests.filter(
@@ -3915,9 +3949,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             for (let i = 0; i < retriedTests.length; i++) {
               const test = retriedTests[i]
               if (!isAttemptToFix) {
-                assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX))
-                assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
+                assert.ok(!('TEST_IS_RETRY' in test.meta))
+                assert.ok(!('TEST_RETRY_REASON' in test.meta))
                 continue
               }
 
@@ -3934,8 +3968,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
 
               if (isFirstAttempt) {
-                assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                assert.ok(!('TEST_IS_RETRY' in test.meta))
+                assert.ok(!('TEST_RETRY_REASON' in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
@@ -3945,7 +3979,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 if (shouldAlwaysPass) {
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
                 } else if (shouldFailSometimes) {
-                  assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 } else {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
@@ -4000,7 +4034,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
-            assert.ok(stdout.includes('I am running when attempt to fix'))
+            assert.match(stdout, /I am running when attempt to fix/)
             if (isQuarantined || shouldAlwaysPass || isDisabled) {
               // even though a test fails, the exit code is 0 because the test is quarantined
               assert.strictEqual(exitCode, 0)
@@ -4383,12 +4417,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-disabled-1.js.disable tests can disable a test'
               ]
@@ -4398,7 +4432,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               // Parallel mode in jest requires more than a single test suite
               // Here we check that the second test suite is actually running,
               // so we can be sure that parallel mode is on
-              assert.includeMembers(resourceNames, [
+              assertObjectContains(resourceNames, [
                 'ci-visibility/test-management/test-disabled-2.js.disable tests 2 can disable a test'
               ])
             }
@@ -4412,7 +4446,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             } else {
               assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
-              assert.ok(!Object.hasOwn(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED))
+              assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTest.meta))
             }
           })
 
@@ -4442,11 +4476,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
-              assert.ok(!stdout.includes('I am running'))
+              assert.doesNotMatch(stdout, /I am running/)
               // even though a test fails, the exit code is 0 because the test is disabled
               assert.strictEqual(exitCode, 0)
             } else {
-              assert.ok(stdout.includes('I am running'))
+              assert.match(stdout, /I am running/)
               assert.strictEqual(exitCode, 1)
             }
             done()
@@ -4517,12 +4551,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
                 'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally'
@@ -4533,7 +4567,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               // Parallel mode in jest requires more than a single test suite
               // Here we check that the second test suite is actually running,
               // so we can be sure that parallel mode is on
-              assert.includeMembers(resourceNames, [
+              assertObjectContains(resourceNames, [
                 'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can quarantine a test',
                 'ci-visibility/test-management/test-quarantine-2.js.quarantine tests 2 can pass normally'
               ])
@@ -4547,7 +4581,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isQuarantining) {
               assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+              assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
             }
           })
 
@@ -4577,7 +4611,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
             // it runs regardless of quarantine status
-            assert.ok(stdout.includes('I am running when quarantined'))
+            assert.match(stdout, /I am running when quarantined/)
             if (isQuarantining) {
               // even though a test fails, the exit code is 0 because the test is quarantined
               assert.strictEqual(exitCode, 0)
@@ -4635,7 +4669,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+          assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
@@ -4664,7 +4698,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         once(childProcess.stderr, 'end'),
         eventsPromise
       ])
-      assert.ok(testOutput.includes('Test management tests could not be fetched'))
+      assert.match(testOutput, /Test management tests could not be fetched/)
     })
   })
 
@@ -4716,10 +4750,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const test = events.find(event => event.type === 'test').content
 
-          assert.ok(test.meta.length > 0)
-          assert.strictEqual(test.meta['custom_tag.beforeEach'], 'true')
-          assert.strictEqual(test.meta['custom_tag.it'], 'true')
-          assert.strictEqual(test.meta['custom_tag.afterEach'], 'true')
+          assertObjectContains(test, {
+            meta: {
+              'custom_tag.beforeEach': 'true',
+              'custom_tag.it': 'true',
+              'custom_tag.afterEach': 'true'
+            }
+          })
         })
 
       childProcess = exec(
@@ -4794,12 +4831,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           if (isEfd) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }
 
           const resourceNames = tests.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
               'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
@@ -4810,7 +4847,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             // Parallel mode in jest requires more than a single test suite
             // Here we check that the second test suite is actually running,
             // so we can be sure that parallel mode is on
-            assert.includeMembers(resourceNames, [
+            assertObjectContains(resourceNames, [
               'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
               'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
             ])
@@ -4830,12 +4867,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             if (isModified) {
               assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_MODIFIED))
+              assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
             }
             if (isNew) {
               assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_NEW))
+              assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
             }
           }
 
@@ -5048,7 +5085,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(tests.every(test => test.meta[TEST_STATUS] === 'pass'), true)
         })
     ])
-    assert.ok(!testOutput.includes('Cannot find module'))
-    assert.ok(testOutput.includes('6 passed'))
+    assert.doesNotMatch(testOutput, /Cannot find module/)
+    assert.match(testOutput, /6 passed/)
   })
 })

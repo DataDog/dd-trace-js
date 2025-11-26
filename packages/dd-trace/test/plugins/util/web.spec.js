@@ -243,7 +243,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          assert.ok(!Object.hasOwn(tags, HTTP_CLIENT_IP))
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -258,7 +258,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          assert.ok(!Object.hasOwn(tags, HTTP_CLIENT_IP))
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -288,7 +288,7 @@ describe('plugins/util/web', () => {
 
           res.end()
 
-          assert.ok(!Object.hasOwn(tags, HTTP_CLIENT_IP))
+          assert.ok(!(HTTP_CLIENT_IP in tags))
         })
       })
 
@@ -684,7 +684,7 @@ describe('plugins/util/web', () => {
       res.end()
 
       assert.strictEqual(tags[RESOURCE_NAME], 'GET')
-      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.ok(!(HTTP_ROUTE in tags))
     })
   })
 
@@ -866,7 +866,7 @@ describe('plugins/util/web', () => {
 
       web.addStatusError(req, 500)
 
-      assert.ok(!Object.hasOwn(tags, ERROR))
+      assert.ok(!(ERROR in tags))
     })
   })
 

@@ -9,7 +9,6 @@ const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const ChildProcessPlugin = require('../src')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function noop () {}
 
@@ -419,7 +418,7 @@ describe('Child process plugin', () => {
 
       const result = await execFileAsync('echo', ['bluebird-test'])
       assert.ok(result != null)
-      assertObjectContains(result.stdout, 'bluebird-test')
+      assert.strictEqual(result.stdout, 'bluebird-test\n')
 
       return expectedPromise
     })
@@ -432,7 +431,7 @@ describe('Child process plugin', () => {
         promises.push(
           execFileAsync('echo', [`concurrent-test-${i}`])
             .then(result => {
-              assertObjectContains(result.stdout, `concurrent-test-${i}`)
+              assert.strictEqual(result.stdout, `concurrent-test-${i}\n`)
               return result
             })
         )
@@ -480,7 +479,7 @@ describe('Child process plugin', () => {
       assert.ok(promise.constructor.version != null)
 
       const result = await promise
-      assertObjectContains(result.stdout, 'util-promisify-test')
+      assert.strictEqual(result.stdout, 'util-promisify-test\n')
     })
   })
 

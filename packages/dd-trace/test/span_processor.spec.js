@@ -200,15 +200,15 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        expect(value).to.equal('test')
+        assert.strictEqual(value, 'test')
         foundATag = true
       })
-      expect(foundATag).to.be.true
+      assert.ok(foundATag)
     }
 
-    expect(spanFormat.getCall(0)).to.have.been.calledWith(finishedSpan, true, processor._processTags)
-    expect(spanFormat.getCall(1)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
-    expect(spanFormat.getCall(2)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
-    expect(spanFormat.getCall(3)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(0), finishedSpan, true, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(1), finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
+    sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 })

@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const { describe, it } = require('tap').mocha
 const sinon = require('sinon')
@@ -32,9 +31,9 @@ describe('AgentInfoExporter', () => {
 
     const agentInfoExporter = new AgentInfoExporter({ port })
     assert.notStrictEqual(scope.isDone(), true)
-    agentInfoExporter.getAgentInfo((err, { endpoints }) => {
+    agentInfoExporter.getAgentInfo((err, response) => {
       assert.strictEqual(err, null)
-      assertObjectContains(endpoints, '/evp_proxy/v2')
+      assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v2'])
       assert.strictEqual(scope.isDone(), true)
       done()
     })
@@ -51,10 +50,10 @@ describe('AgentInfoExporter', () => {
 
     agentInfoExporter.export(trace)
 
-    assertObjectContains(agentInfoExporter.getUncodedTraces(), trace)
+    assert.deepStrictEqual(agentInfoExporter.getUncodedTraces(), [trace])
 
     agentInfoExporter.getAgentInfo(() => {
-      assertObjectContains(agentInfoExporter.getUncodedTraces(), trace)
+      assert.deepStrictEqual(agentInfoExporter.getUncodedTraces(), [trace])
       done()
     })
   })

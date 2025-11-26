@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')

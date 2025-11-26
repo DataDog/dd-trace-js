@@ -511,7 +511,7 @@ describe('tagger', () => {
           tagger.tagLLMIO(span, messages, undefined)
 
           const messageTags = Tagger.tagMap.get(span)['_ml_obs.meta.input.messages']
-          assert.ok(!Object.hasOwn(messageTags[0], 'tool_id'))
+          assert.ok(!('tool_id' in messageTags[0]))
 
           sinon.assert.calledOnce(logger.warn)
         })

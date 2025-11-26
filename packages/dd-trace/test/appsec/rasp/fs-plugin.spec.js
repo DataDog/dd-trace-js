@@ -110,7 +110,7 @@ describe('AppsecFsPlugin', () => {
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
       assert.strictEqual(store, origStore)
-      assert.ok(!Object.hasOwn(store, 'fs'))
+      assert.ok(!('fs' in store))
     })
 
     it('should mark fs children', () => {
@@ -163,7 +163,7 @@ describe('AppsecFsPlugin', () => {
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
       assert.strictEqual(store, origStore)
-      assert.ok(!Object.hasOwn(store, 'fs'))
+      assert.ok(!('fs' in store))
     })
   })
 

@@ -1,12 +1,13 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const { exec } = require('child_process')
 const {
   sandboxCwd,
   useSandbox,
-  getCiVisAgentlessConfig
+  getCiVisAgentlessConfig,
+  assertObjectContains
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -36,18 +37,18 @@ describe('test-api-manual', () => {
       const events = payloads.flatMap(({ payload }) => payload.events)
 
       const testEvents = events.filter(event => event.type === 'test')
-      assert.includeMembers(testEvents.map(test => test.content.resource), [
+      assertObjectContains(testEvents.map(test => test.content.resource), [
         'ci-visibility/test-api-manual/test.fake.js.second test will fail',
         'ci-visibility/test-api-manual/test.fake.js.first test will pass',
         'ci-visibility/test-api-manual/test.fake.js.async test will pass',
         'ci-visibility/test-api-manual/test.fake.js.integration test'
       ])
 
-      assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+      assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+        'fail',
         'pass',
         'pass',
         'pass',
-        'fail'
       ])
 
       const passedTest = testEvents.find(

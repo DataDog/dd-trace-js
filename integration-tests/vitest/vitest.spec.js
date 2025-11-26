@@ -159,49 +159,50 @@ versions.forEach((version) => {
             )
             assert.strictEqual(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
 
-            assert.includeMembers(testEvents.map(test => test.content.resource),
+            assert.deepStrictEqual(testEvents.map(test => test.content.resource).sort(),
               [
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
                 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
                 '.test-visibility-failed-suite-first-describe can report failed test',
                 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
                 '.test-visibility-failed-suite-first-describe can report more',
                 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-                '.test-visibility-failed-suite-second-describe can report passed test',
-                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
                 '.test-visibility-failed-suite-second-describe can report more',
-                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-second-describe can report passed test',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
-                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
-                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
-                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
-                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
-                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
               ]
             )
 
             const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
 
-            assert.includeMembers(
-              failedTests.map(test => test.content.resource),
+            assertObjectContains(
+              failedTests.map(test => test.content.resource).sort(),
               [
-                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-                '.test-visibility-failed-suite-first-describe can report failed test',
                 'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
                 'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
                 'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-                'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
+                'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+                '.test-visibility-failed-suite-first-describe can report failed test',
               ]
             )
 
             const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
 
-            assert.includeMembers(
+            assertObjectContains(
               skippedTests.map(test => test.content.resource),
               [
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
@@ -226,7 +227,10 @@ versions.forEach((version) => {
                 assert.strictEqual(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
               assert.strictEqual(testSuite.content.meta[TEST_COMMAND], 'vitest run')
-              assert.strictEqual(testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility'), true)
+              assert.strictEqual(
+                testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility'),
+                true
+              )
               assert.strictEqual(testSuite.content.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuite.content.metrics[DD_HOST_CPU_COUNT] != null)
             })
@@ -252,17 +256,17 @@ versions.forEach((version) => {
 
           const testEvents = events.filter(event => event.type === 'test')
           assert.strictEqual(testEvents.length, 11)
-          assert.includeMembers(testEvents.map(test => test.content.resource), [
+          assertObjectContains(testEvents.map(test => test.content.resource), [
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             // passes at the third retry
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             // never passes
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             // passes on the first try
@@ -275,7 +279,10 @@ versions.forEach((version) => {
           assert.strictEqual(eventuallyPassingTest.length, 4)
           assert.strictEqual(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 3)
           assert.strictEqual(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 1)
-          assert.strictEqual(eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 3)
+          assert.strictEqual(
+            eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length,
+            3
+          )
           assert.strictEqual(eventuallyPassingTest.filter(test =>
             test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
           ).length, 3)
@@ -323,7 +330,7 @@ versions.forEach((version) => {
 
           const testEvents = events.filter(event => event.type === 'test')
           assert.strictEqual(testEvents.length, 3)
-          assert.includeMembers(testEvents.map(test => test.content.resource), [
+          assertObjectContains(testEvents.map(test => test.content.resource), [
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
@@ -364,10 +371,10 @@ versions.forEach((version) => {
 
           const testEvents = events.filter(event => event.type === 'test')
           assert.strictEqual(testEvents.length, 5)
-          assert.includeMembers(testEvents.map(test => test.content.resource), [
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+          assertObjectContains(testEvents.map(test => test.content.resource), [
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
           ])
@@ -564,21 +571,21 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 14)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually pass',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that eventually fail',
-              'early flake detection can retry tests that eventually fail',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
+              'early flake detection can retry tests that eventually fail',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             // 4 executions of the 3 new tests + 1 new skipped test (not retried)
@@ -652,14 +659,14 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 10)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
-              'early flake detection can retry tests that eventually pass',
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
               'early flake detection does not retry if the test is skipped'
@@ -786,7 +793,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 4)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
@@ -850,7 +857,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 4)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
@@ -919,7 +926,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests[0].meta[TEST_SUITE], 'ci-visibility/subproject/vitest-test.mjs')
             // it's not considered new
-            assert.ok(!Object.hasOwn(tests[0].meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in tests[0].meta))
           })
 
         childProcess = exec(
@@ -971,12 +978,12 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 8)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that eventually pass',
+              'early flake detection can retry tests that always pass',
+              'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that eventually pass', // repeated twice
-              'early flake detection can retry tests that always pass',
-              'early flake detection can retry tests that always pass',
               'early flake detection can retry tests that always pass', // repeated twice
               'early flake detection does not retry if it is not new',
               'early flake detection does not retry if the test is skipped'
@@ -995,7 +1002,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!Object.hasOwn(testSessionEvent.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1050,7 +1057,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 4)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
@@ -1278,7 +1285,7 @@ versions.forEach((version) => {
 
               const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
 
-              assert.ok(!Object.hasOwn(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED))
+              assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
             })
 
           const logsPromise = receiver
@@ -1288,10 +1295,10 @@ versions.forEach((version) => {
                 ddsource: 'dd_debugger',
                 level: 'error'
               })
-              assert.ok(diLog.ddtags.includes('git.repository_url:'))
-              assert.ok(diLog.ddtags.includes('git.commit.sha:'))
+              assert.match(diLog.ddtags, /git.repository_url:/)
+              assert.match(diLog.ddtags, /git.commit.sha:/)
               assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-              assert.deepInclude(diLog.debugger.snapshot.captures.lines['4'].locals, {
+              assertObjectContains(diLog.debugger.snapshot.captures.lines['4'].locals, {
                 a: {
                   type: 'number',
                   value: '11'
@@ -1414,7 +1421,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests.length, 4)
 
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), [
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
@@ -1432,7 +1439,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!Object.hasOwn(testSessionEvent.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1527,12 +1534,12 @@ versions.forEach((version) => {
                 if (isAttemptingToFix) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
 
-                assert.includeMembers(resourceNames,
+                assertObjectContains(resourceNames,
                   [
                     'ci-visibility/vitest-tests/test-attempt-to-fix.mjs.attempt to fix tests can attempt to fix a test'
                   ]
@@ -1555,8 +1562,8 @@ versions.forEach((version) => {
                   if (isAttemptingToFix) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
                     if (isFirstAttempt) {
-                      assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                      assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                      assert.ok(!('TEST_IS_RETRY' in test.meta))
+                      assert.ok(!('TEST_RETRY_REASON' in test.meta))
                       continue
                     }
                     assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
@@ -1566,16 +1573,16 @@ versions.forEach((version) => {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
                       } else if (shouldFailSometimes) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                        assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                        assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                       } else {
                         assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                       }
                     }
                   } else {
-                    assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX))
-                    assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                    assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                    assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
+                    assert.ok(!('TEST_IS_RETRY' in test.meta))
+                    assert.ok(!('TEST_RETRY_REASON' in test.meta))
                   }
                 }
               })
@@ -1618,7 +1625,7 @@ versions.forEach((version) => {
 
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
-                assert.ok(stdout.includes('I am running'))
+                assert.match(stdout, /I am running/)
                 if (shouldAlwaysPass || (isAttemptingToFix && isQuarantining) || (isAttemptingToFix && isDisabling)) {
                   assert.strictEqual(exitCode, 0)
                 } else {
@@ -1735,12 +1742,12 @@ versions.forEach((version) => {
                 if (isDisabling) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
 
-                assert.includeMembers(resourceNames,
+                assertObjectContains(resourceNames,
                   [
                     'ci-visibility/vitest-tests/test-disabled.mjs.disable tests can disable a test'
                   ]
@@ -1755,7 +1762,7 @@ versions.forEach((version) => {
                   assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                 } else {
                   assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!Object.hasOwn(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED))
+                  assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTest.meta))
                 }
               })
 
@@ -1784,10 +1791,10 @@ versions.forEach((version) => {
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 if (isDisabling) {
-                  assert.ok(!stdout.includes('I am running'))
+                  assert.doesNotMatch(stdout, /I am running/)
                   assert.strictEqual(exitCode, 0)
                 } else {
-                  assert.ok(stdout.includes('I am running'))
+                  assert.match(stdout, /I am running/)
                   assert.strictEqual(exitCode, 1)
                 }
                 done()
@@ -1845,12 +1852,12 @@ versions.forEach((version) => {
                 if (isQuarantining) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
 
-                assert.includeMembers(resourceNames,
+                assertObjectContains(resourceNames,
                   [
                     'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
                     'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally'
@@ -1867,7 +1874,7 @@ versions.forEach((version) => {
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!Object.hasOwn(quarantinedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+                  assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in quarantinedTest.meta))
                 }
               })
 
@@ -1896,7 +1903,7 @@ versions.forEach((version) => {
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 // it runs regardless of the quarantine status
-                assert.ok(stdout.includes('I am running when quarantined'))
+                assert.match(stdout, /I am running when quarantined/)
                 if (isQuarantining) {
                   // exit code 0 even though one of the tests failed
                   assert.strictEqual(exitCode, 0)
@@ -1939,7 +1946,7 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               // it is not retried
               assert.strictEqual(tests.length, 1)
@@ -1972,7 +1979,7 @@ versions.forEach((version) => {
             once(childProcess.stderr, 'end'),
             eventsPromise
           ])
-          assert.ok(testOutput.includes('Test management tests could not be fetched'))
+          assert.match(testOutput, /Test management tests could not be fetched/)
         })
       })
     }
@@ -2061,12 +2068,12 @@ versions.forEach((version) => {
             if (isEfd) {
               assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/vitest-tests/impacted-test.mjs.impacted test can impacted test'
               ]
@@ -2086,12 +2093,12 @@ versions.forEach((version) => {
               if (isModified) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
               } else {
-                assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_MODIFIED))
+                assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
               }
               if (isNew) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
               } else {
-                assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_NEW))
+                assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
               }
             }
 
@@ -2197,7 +2204,7 @@ versions.forEach((version) => {
         testOutput += chunk.toString()
       })
       childProcess.on('exit', (code) => {
-        assert.ok(testOutput.includes('result 10'))
+        assert.match(testOutput, /result 10/)
         assert.strictEqual(code, 0)
         done()
       })

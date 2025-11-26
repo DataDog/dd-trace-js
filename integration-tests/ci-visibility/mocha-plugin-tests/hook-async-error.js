@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('mocha-fail-before-all', function () {
   before((done) => {
     done(new Error('this should not stop execution'))

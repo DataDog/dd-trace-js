@@ -50,7 +50,7 @@ describe('RASP - sql_injection - integration', () => {
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-        assert.ok(payload[0][0].meta['_dd.appsec.json'].includes('"rasp-sqli-rule-id-2"'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 
@@ -68,7 +68,7 @@ describe('RASP - sql_injection - integration', () => {
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-        assert.ok(payload[0][0].meta['_dd.appsec.json'].includes('"rasp-sqli-rule-id-2"'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 
@@ -86,7 +86,7 @@ describe('RASP - sql_injection - integration', () => {
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-        assert.ok(payload[0][0].meta['_dd.appsec.json'].includes('"rasp-sqli-rule-id-2"'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-sqli-rule-id-2"/)
       })
     }
 

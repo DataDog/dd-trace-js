@@ -353,7 +353,10 @@ describe('TextMapPropagator', () => {
       assert.ok('traceparent' in carrier)
       assert.strictEqual(carrier.traceparent, '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
       assert.ok('tracestate' in carrier)
-      assert.strictEqual(carrier.tracestate, 'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh')
+      assert.strictEqual(
+        carrier.tracestate,
+        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;p:5555eeee6666ffff;s:2;o:foo_bar~;t.dm:-4,other=bleh'
+      )
     })
 
     it('should skip injection of B3 headers without the feature flag', () => {
@@ -1054,8 +1057,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
       })
@@ -1067,8 +1072,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
       })
@@ -1080,8 +1087,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
       })
@@ -1169,8 +1178,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
       })
@@ -1182,8 +1193,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
       })
@@ -1195,8 +1208,10 @@ describe('TextMapPropagator', () => {
         const spanContext = propagator.extract(carrier)
         const idExpr = /^[0-9a-f]{16}$/
 
-        assert.match(spanContext._traceId, idExpr)
-        assert.notStrictEqual(spanContext._traceId.toString(), '0000000000000000')
+        const traceId = spanContext._traceId
+        assert.strictEqual(typeof traceId, 'object')
+        assert.match(traceId.toString(), idExpr)
+        assert.notStrictEqual(traceId.toString(), '0000000000000000')
         assert.strictEqual(spanContext._spanId, null)
         assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
       })
@@ -1251,7 +1266,10 @@ describe('TextMapPropagator', () => {
         propagator.extract(textMap)
 
         sinon.assert.called(log.debug)
-        assert.strictEqual(log.debug.firstCall.args[0](), `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`)
+        assert.strictEqual(
+          log.debug.firstCall.args[0](),
+          `Extract from carrier (b3 single header): {"b3":"${textMap.b3}"}.`
+        )
       })
     })
 
@@ -1321,7 +1339,7 @@ describe('TextMapPropagator', () => {
         propagator.inject(spanContext, carrier)
 
         assert.match(carrier.traceparent, /^01/)
-        assertObjectContains(carrier['x-datadog-tags'], '_dd.p.dm=-4')
+        assert.match(carrier['x-datadog-tags'], /_dd.p.dm=-4/)
         assert.deepStrictEqual(spanContext._trace.tags['_dd.p.dm'], '-4')
       })
 
@@ -1335,7 +1353,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(spanContext, carrier)
 
-        assertObjectContains(carrier.tracestate, 'other=bleh')
+        assert.match(carrier.tracestate, /other=bleh/)
       })
 
       it('should propagate last datadog id', () => {
@@ -1350,7 +1368,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(spanContext, carrier)
 
-        assertObjectContains(carrier.tracestate, 'p:4444eeee6666aaaa')
+        assert.match(carrier.tracestate, /p:4444eeee6666aaaa/)
       })
 
       it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
@@ -1363,7 +1381,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(spanContext, carrier)
 
-        assertObjectContains(carrier['x-datadog-tags'], '_dd.p.dm=-4')
+        assert.match(carrier['x-datadog-tags'], /_dd.p.dm=-4/)
         assert.deepStrictEqual(spanContext._trace.tags['_dd.p.dm'], '-4')
       })
 
@@ -1377,7 +1395,7 @@ describe('TextMapPropagator', () => {
 
         propagator.inject(spanContext, carrier)
 
-        assertObjectContains(carrier['x-datadog-tags'], '_dd.p.dm=-0')
+        assert.match(carrier['x-datadog-tags'], /_dd.p.dm=-0/)
         assert.deepStrictEqual(spanContext._trace.tags['_dd.p.dm'], '-0')
       })
 

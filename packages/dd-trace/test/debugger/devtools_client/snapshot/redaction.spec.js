@@ -16,8 +16,17 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     // Non-default configuration is tested in the integration tests
     it('should replace PII in keys/properties/variables with expected notCapturedReason', function (done) {
       assertOnBreakpoint(done, (state) => {
-        assert.strictEqual(Object.keys(state).length, (['nonNormalizedSecretToken', 'foo', 'secret', 'Se_cret_$', 'weakMapKey', 'obj']).length)
-        assert.ok((['nonNormalizedSecretToken', 'foo', 'secret', 'Se_cret_$', 'weakMapKey', 'obj']).every(k => Object.hasOwn(state, k)))
+        assert.deepStrictEqual(
+          Object.keys(state).sort(),
+          [
+            'Se_cret_$',
+            'foo',
+            'nonNormalizedSecretToken',
+            'obj',
+            'secret',
+            'weakMapKey'
+          ]
+        )
 
         assert.ok('foo' in state)
         assert.deepStrictEqual(state.foo, { type: 'string', value: 'bar' })
@@ -34,8 +43,21 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.strictEqual(state.obj.type, 'Object')
 
         const { fields } = state.obj
-        assert.strictEqual(Object.keys(fields).length, (['foo', 'secret', '@Se-cret_$_', 'nested', 'arr', 'map', 'weakmap', 'password', 'Symbol(secret)', 'Symbol(@Se-cret_$_)']).length)
-        assert.ok((['foo', 'secret', '@Se-cret_$_', 'nested', 'arr', 'map', 'weakmap', 'password', 'Symbol(secret)', 'Symbol(@Se-cret_$_)']).every(k => Object.hasOwn(fields, k)))
+        assert.deepStrictEqual(
+          Object.keys(fields),
+          [
+            'foo',
+            'secret',
+            '@Se-cret_$_',
+            'nested',
+            'arr',
+            'map',
+            'weakmap',
+            'password',
+            'Symbol(secret)',
+            'Symbol(@Se-cret_$_)',
+          ]
+        )
 
         assert.ok('foo' in fields)
         assert.deepStrictEqual(fields.foo, { type: 'string', value: 'bar' })

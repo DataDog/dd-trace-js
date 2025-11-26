@@ -197,11 +197,11 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(rcConfigsForNonAsmProducts)
 
       assert.strictEqual(rcConfigsForNonAsmProducts.toUnapply[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toUnapply[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toUnapply[0]))
       assert.strictEqual(rcConfigsForNonAsmProducts.toModify[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toModify[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toModify[0]))
       assert.strictEqual(rcConfigsForNonAsmProducts.toApply[0].apply_state, UNACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigsForNonAsmProducts.toApply[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigsForNonAsmProducts.toApply[0]))
 
       sinon.assert.notCalled(waf.updateConfig)
       sinon.assert.notCalled(waf.removeConfig)
@@ -249,11 +249,11 @@ describe('AppSec Rule Manager', () => {
       RuleManager.updateWafFromRC(rcConfigs)
 
       assert.strictEqual(rcConfigs.toUnapply[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigs.toUnapply[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigs.toUnapply[0]))
       assert.strictEqual(rcConfigs.toModify[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigs.toModify[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigs.toModify[0]))
       assert.strictEqual(rcConfigs.toApply[0].apply_state, ACKNOWLEDGED)
-      assert.ok(!Object.hasOwn(rcConfigs.toApply[0], 'apply_error'))
+      assert.ok(!('apply_error' in rcConfigs.toApply[0]))
     })
 
     it('should update apply_state and apply_error on failed config remove', () => {

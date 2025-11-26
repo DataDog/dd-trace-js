@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const { When, Then, Before, After } = require('@cucumber/cucumber')
 const { By, Builder } = require('selenium-webdriver')

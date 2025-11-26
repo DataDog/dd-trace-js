@@ -280,7 +280,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
-                assert.ok(!Object.hasOwn(spans[0].meta, 'http.client_ip'))
+                assert.ok(!('http.client_ip' in spans[0].meta))
               })
               .then(done)
               .catch(done)

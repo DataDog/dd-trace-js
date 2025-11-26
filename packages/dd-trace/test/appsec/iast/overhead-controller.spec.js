@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 
 const axios = require('axios')
+const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -49,7 +50,7 @@ describe('Overhead controller', () => {
         it('should populate request context', () => {
           const iastContext = {}
           overheadController.initializeRequestContext(iastContext)
-          assert.ok(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY in iastContext)
+          expect(iastContext).to.have.nested.property(overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY)
         })
       })
     })
@@ -229,15 +230,16 @@ describe('Overhead controller', () => {
           })
 
           it('should populate initial context with available tokens', () => {
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], OPERATION.initialTokenBucketSize())
+            assert.strictEqual(
+              iastContext[oceContextKey].tokens[OPERATION.name],
+              OPERATION.initialTokenBucketSize()
+            )
           })
 
           it('should allow when available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 1)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
           })
 
           it('should detect the first vulnerability of the type ' +
@@ -246,8 +248,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
@@ -267,8 +268,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Ignoring the first SSRF in the next request
             iastContext = { req }
@@ -286,8 +286,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -307,8 +306,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -323,8 +321,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // Detecting the first CODE_INJECTION in the next request
             req.method = 'POST'
@@ -340,8 +337,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 2
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 1)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 1)
 
             // Detecting the first CODE_INJECTION in the next request
             iastContext = { req }
@@ -355,8 +351,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
             overheadController.consolidateVulnerabilities(iastContext)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
 
             // second request using the whole budget
             iastContext = { req }
@@ -364,8 +359,7 @@ describe('Overhead controller', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 1
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), false)
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext, vulnerabilities.SSRF), true)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
             overheadController.consolidateVulnerabilities(iastContext)
 
             // third request detecting only the third SSRF
@@ -380,8 +374,7 @@ describe('Overhead controller', () => {
           it('should not allow when no available tokens', () => {
             iastContext[overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY].tokens[OPERATION.name] = 0
             assert.strictEqual(overheadController.hasQuota(OPERATION, iastContext), false)
-            assert.ok(`tokens.${OPERATION.name}` in iastContext[oceContextKey])
-            assert.strictEqual(iastContext[oceContextKey][`tokens.${OPERATION.name}`], 0)
+            assert.strictEqual(iastContext[oceContextKey].tokens[OPERATION.name], 0)
           })
         })
 

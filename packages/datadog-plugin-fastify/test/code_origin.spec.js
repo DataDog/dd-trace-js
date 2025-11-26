@@ -50,7 +50,7 @@ describe('Plugin', () => {
                 agent.assertSomeTraces(traces => {
                   const spans = traces[0]
                   const tagNames = Object.keys(spans[0].meta)
-                  assert.doesNotMatch(tagNames, /code_origin/)
+                  assert.doesNotMatch(tagNames.join(','), /code_origin/)
                 }),
                 axios.get(`http://localhost:${app.server.address().port}/user`)
               ])

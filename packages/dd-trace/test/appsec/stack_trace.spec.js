@@ -233,7 +233,7 @@ describe('Stack trace reporter', () => {
       const stackId = 'test_stack_id'
       reportStackTrace(rootSpan, stackId, undefined)
       assert.ok(Object.hasOwn(rootSpan.meta_struct, 'another_tag'))
-      assert.ok(!Object.hasOwn(rootSpan.meta_struct, '_dd.stack'))
+      assert.ok(!('_dd.stack' in rootSpan.meta_struct))
     })
   })
 

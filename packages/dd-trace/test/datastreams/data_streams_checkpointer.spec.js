@@ -2,9 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
 const { describe, it, before, after } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -88,7 +85,7 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    assertObjectContains(calledTags, 'manual_checkpoint:true')
+    assert.deepStrictEqual(calledTags, ['type:kinesis', 'topic:stream-123', 'direction:in', 'manual_checkpoint:true'])
   })
 
   it('should set an automatic checkpoint when setConsumeCheckpoint is called with manualCheckpoint:false', function () {
@@ -99,6 +96,6 @@ describe('data streams checkpointer manual api', () => {
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('kinesis', 'stream-123', headers, false)
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
-    expect(calledTags).to.not.include('manual_checkpoint:true')
+    assert.ok(!calledTags.includes('manual_checkpoint:true'))
   })
 })

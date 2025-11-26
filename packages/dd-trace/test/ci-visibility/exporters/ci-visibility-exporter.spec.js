@@ -63,7 +63,7 @@ describe('CI Visibility Exporter', () => {
       const ciVisibilityExporter = new CiVisibilityExporter({ url: urlObj, isGitUploadEnabled: true })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
-        assertObjectContains(err.message, 'Error fetching commits to exclude')
+        assert.match(err.message, /Error fetching commits to exclude/)
         assert.strictEqual(scope.isDone(), true)
         done()
       })
@@ -601,7 +601,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
+        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -619,7 +619,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter.export(trace)
-        expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
+        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
     })
@@ -638,7 +638,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
         ciVisibilityExporter.export(trace)
-        expect(ciVisibilityExporter._traceBuffer).not.to.include(trace)
+        assert.ok(!ciVisibilityExporter._traceBuffer.includes(trace))
         sinon.assert.called(ciVisibilityExporter._writer.append)
       })
     })
@@ -651,7 +651,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
         ciVisibilityExporter.exportCoverage(coverage)
         ciVisibilityExporter._export = sinon.spy()
-        assertObjectContains(ciVisibilityExporter._coverageBuffer, coverage)
+        assertObjectContains(ciVisibilityExporter._coverageBuffer, [coverage])
         sinon.assert.notCalled(ciVisibilityExporter._export)
       })
     })
@@ -667,7 +667,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._coverageWriter = writer
         ciVisibilityExporter.exportCoverage(coverage)
-        expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)
+        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
         sinon.assert.notCalled(ciVisibilityExporter._coverageWriter.append)
       })
     })
@@ -689,7 +689,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._canUseCiVisProtocol = true
 
         ciVisibilityExporter.exportCoverage(coverage)
-        expect(ciVisibilityExporter._coverageBuffer).not.to.include(coverage)
+        assert.ok(!ciVisibilityExporter._coverageBuffer.includes(coverage))
         sinon.assert.called(ciVisibilityExporter._coverageWriter.append)
       })
     })

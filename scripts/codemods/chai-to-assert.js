@@ -22,7 +22,10 @@ function read (file) {
   return fs.readFileSync(file, 'utf8')
 }
 
-/** @param {string} file @param {string} content */
+/**
+ * @param {string} file
+ * @param {string} content
+ */
 function write (file, content) {
   fs.writeFileSync(file, content)
 }

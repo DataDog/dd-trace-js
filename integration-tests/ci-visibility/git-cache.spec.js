@@ -2,12 +2,11 @@
 
 const { execSync } = require('child_process')
 const fs = require('fs')
-const assert = require('node:assert/strict')
+const assert = require('assert')
 const os = require('os')
 const path = require('path')
 
 const { sandboxCwd, useSandbox } = require('../helpers')
-const { assertObjectContains } = require('../helpers')
 
 const FIXED_COMMIT_MESSAGE = 'Test commit message for caching'
 const GET_COMMIT_MESSAGE_COMMAND_ARGS = ['log', '-1', '--pretty=format:%s']
@@ -105,7 +104,7 @@ describe('git-cache integration tests', () => {
     }
     assert.ok(secondError instanceof Error)
     assert.strictEqual(secondError.code, 'ENOENT')
-    assertObjectContains(secondError.message, 'git')
+    assert.match(secondError.message, /git/)
   })
 
   it('should cache git command failures and throw the same error on subsequent calls', function () {
@@ -122,10 +121,9 @@ describe('git-cache integration tests', () => {
 
     const cacheKey = gitCache.getCacheKey('git', gitArgs)
     const cacheFilePath = gitCache.getCacheFilePath(cacheKey)
-    assert.strictEqual(fs.existsSync(cacheFilePath), true)
-
     const cachedData = fs.readFileSync(cacheFilePath, 'utf8')
-    assertObjectContains(cachedData, '__GIT_COMMAND_FAILED__')
+
+    assert.match(cachedData, /__GIT_COMMAND_FAILED__/)
 
     removeGitFromPath()
 
@@ -169,7 +167,7 @@ describe('git-cache integration tests', () => {
 
     assert.ok(secondError instanceof Error)
     assert.strictEqual(secondError.code, 'ENOENT')
-    assertObjectContains(secondError.message, 'git')
+    assert.match(secondError.message, /git/)
   })
 
   context('invalid DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR', () => {
@@ -198,7 +196,7 @@ describe('git-cache integration tests', () => {
 
       assert.ok(secondError instanceof Error)
       assert.strictEqual(secondError.code, 'ENOENT')
-      assertObjectContains(secondError.message, 'git')
+      assert.match(secondError.message, /git/)
     }
 
     it('set to a file', () => {

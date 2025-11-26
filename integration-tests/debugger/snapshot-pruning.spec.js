@@ -12,8 +12,8 @@ describe('Dynamic Instrumentation', function () {
 
       it('should prune snapshot if payload is too large', function (done) {
         t.agent.on('debugger-input', ({ payload: [payload] }) => {
-          assert.isBelow(Buffer.byteLength(JSON.stringify(payload)), 1024 * 1024) // 1MB
-          assert.ok(!Object.hasOwn(payload.debugger.snapshot, 'captures'))
+          assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 1024 * 1024) // 1MB
+          assert.ok(!('captures' in payload.debugger.snapshot))
           assert.strictEqual(
             payload.debugger.snapshot.captureError,
             'Snapshot was too large (max allowed size is 1 MiB). ' +

@@ -56,11 +56,18 @@ describe('llm utils', () => {
 
     describe('with sampling rate 0.6', () => {
       it('should not sample prompt completion', () => {
-        assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) })), false)
+        assert.strictEqual(
+          utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) })),
+          false,
+          'should not sample prompt completion'
+        )
       })
 
       it('should sample prompt completion', () => {
-        assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) })), true)
+        assert.strictEqual(
+          utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) })), true,
+          'should sample prompt completion'
+        )
       })
     })
   })

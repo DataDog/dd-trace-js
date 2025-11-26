@@ -6,8 +6,8 @@ const { getWebSpan } = require('../utils')
 function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
   return agent.assertSomeTraces((traces) => {
     const span = getWebSpan(traces)
-    assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.json'))
-    assert.ok(!Object.hasOwn(span.meta_struct || {}, '_dd.stack'))
+    assert.ok(!('_dd.appsec.json' in span.meta))
+    assert.ok(!span.meta_struct || !('_dd.stack' in span.meta_struct))
     if (checkRuleEval) {
       assert.strictEqual(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }

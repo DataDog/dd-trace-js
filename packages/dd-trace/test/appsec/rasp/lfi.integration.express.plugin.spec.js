@@ -48,7 +48,7 @@ describe('RASP - lfi - integration - sync', () => {
       assert.strictEqual(e.response.status, 403)
       return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-        assert.ok(payload[0][0].meta['_dd.appsec.json'].includes('"rasp-lfi-rule-id-1"'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], /"rasp-lfi-rule-id-1"/)
       })
     }
 

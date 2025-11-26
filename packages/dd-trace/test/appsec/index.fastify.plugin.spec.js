@@ -735,7 +735,7 @@ describe('Api Security - Fastify', () => {
       const res = await axios.get('/')
 
       await agent.assertFirstTraceSpan(span => {
-        assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+        assert.ok(!('_dd.appsec.s.res.body' in span.meta))
       })
 
       assert.strictEqual(res.status, 200)
@@ -747,7 +747,7 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
@@ -760,7 +760,7 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
@@ -772,7 +772,7 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
         }
       })
 
