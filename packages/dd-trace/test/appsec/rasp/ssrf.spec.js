@@ -191,7 +191,8 @@ describe('RASP - ssrf.js', () => {
 
       sinon.assert.calledWith(downstream.extractResponseData, response, body)
       sinon.assert.calledOnceWithExactly(downstream.incrementDownstreamAnalysisCount, req)
-      sinon.assert.calledWith(telemetry.updateRaspRuleMatchMetricTags, req, { type: 'ssrf', variant: 'response' }, false, false)
+      sinon.assert.calledWith(
+        telemetry.updateRaspRuleMatchMetricTags, req, { type: 'ssrf', variant: 'response' }, false, false)
       sinon.assert.calledTwice(waf.run)
     })
 
