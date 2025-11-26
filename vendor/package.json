@@ -13,6 +13,7 @@
     "escape-string-regexp": "^5.0.0",
     "graphql": "^16.12.0",
     "ignore": "^7.0.5",
+    "import-in-the-middle": "^1.14.2",
     "istanbul-lib-coverage": "^3.2.2",
     "jest-docblock": "^29.7.0",
     "jsonpath-plus": "^10.3.0",

@@ -1,5 +1,5 @@
 import regexpEscape from './packages/node_modules/escape-string-regexp/index.js'
-import * as iitm from 'import-in-the-middle/hook.mjs'
+import * as iitm from './packages/node_modules/import-in-the-middle/hook.mjs'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config-helper.js'
 
@@ -49,4 +49,4 @@ function addExclusions (data) {
 }
 
 export { initialize }
-export { load, getFormat, resolve, getSource } from 'import-in-the-middle/hook.mjs'
+export { load, getFormat, resolve, getSource } from './packages/node_modules/import-in-the-middle/hook.mjs'

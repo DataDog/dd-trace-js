@@ -20,7 +20,7 @@ import {
   load as origLoad,
   resolve as origResolve,
   getSource as origGetSource,
-} from 'import-in-the-middle/hook.mjs'
+} from './packages/node_modules/import-in-the-middle/hook.mjs'
 
 let hasInsertedInit = false
 function insertInit (result) {
@@ -66,4 +66,4 @@ if (isMainThread) {
   }
 }
 
-export { getFormat } from 'import-in-the-middle/hook.mjs'
+export { getFormat } from './packages/node_modules/import-in-the-middle/hook.mjs'
