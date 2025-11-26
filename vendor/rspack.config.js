@@ -7,14 +7,12 @@ const { dependencies } = require('./package.json')
 
 const include = new Set([
   ...Object.keys(dependencies),
-  'graphql/language',
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
   'source-map/lib/util'
 ])
 
 const exclude = new Set([
-  'graphql', // we only use some internals to interact with the AST
   'mutexify' // we only ever use `mutexify/promise`
 ])
 
