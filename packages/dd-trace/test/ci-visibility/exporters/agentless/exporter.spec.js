@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 const { describe, it, beforeEach, afterEach, before, after, context } = require('tap').mocha
 const sinon = require('sinon')
@@ -171,7 +170,11 @@ describe('CI Visibility Agentless Exporter', () => {
 
       agentlessExporter.getLibraryConfiguration({}, (err) => {
         assert.notStrictEqual(scope.isDone(), true)
-        assertObjectContains(err.message, 'Request to settings endpoint was not done because Datadog API key is not defined')
+        assert.ok(
+          err.message.includes(
+            'Request to settings endpoint was not done because Datadog API key is not defined'
+          )
+        )
         assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), false)
         process.env.DD_API_KEY = '1'
         done()

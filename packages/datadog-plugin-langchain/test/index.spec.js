@@ -537,7 +537,7 @@ describe('Plugin', () => {
 
                 const span = traces[0][0]
 
-                assert.ok(!Object.hasOwn(span.meta, 'langchain.response.outputs.embedding_length'))
+                assert.ok(!('langchain.response.outputs.embedding_length' in span.meta))
 
                 assert.ok(Object.hasOwn(span.meta, 'error.message'))
                 assert.ok(Object.hasOwn(span.meta, 'error.type'))

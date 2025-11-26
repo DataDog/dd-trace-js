@@ -84,7 +84,7 @@ describe('Plugin', () => {
                 assert.strictEqual(span.name, expectedSchema.send.opName)
                 assert.strictEqual(span.service, expectedSchema.send.serviceName)
                 assert.strictEqual(span.resource, 'send amq.topic')
-                assert.ok(!Object.hasOwn(span, 'type'))
+                assert.ok(!('type' in span))
                 assert.strictEqual(span.meta['span.kind'], 'producer')
                 assert.strictEqual(span.meta['out.host'], 'localhost')
                 assert.strictEqual(span.meta['amqp.connection.host'], 'localhost')

@@ -94,12 +94,15 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
     rewriter.disable()
   })
   it(`should detect ${vulnerability} vulnerability out of request`, function (done) {
-    if (timeout) {
-      this.timeout(timeout)
-    }
+    this.timeout(timeout || 10000)
     agent
       .assertSomeTraces(traces => {
-        assertObjectContains(traces[0][0].meta['_dd.iast.json'], `"${vulnerability}"`)
+        assert.ok(traces[0][0].meta['_dd.iast.json'])
+        require('util').inspect.defaultOptions.depth = null
+        assertObjectContains(
+          JSON.parse(traces[0][0].meta['_dd.iast.json']),
+          { vulnerabilities: [{ type: vulnerability }] }
+        )
         assert.strictEqual(traces[0][0].metrics['_dd.iast.enabled'], 1)
       }, { timeoutMs: 10000 })
       .then(done)

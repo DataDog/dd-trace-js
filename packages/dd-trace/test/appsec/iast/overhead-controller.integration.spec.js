@@ -73,7 +73,7 @@ describe('IAST - overhead-controller - integration', () => {
       await agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.ok(!Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+        assert.ok(!('_dd.iast.json' in payload[0][0].meta))
       }, 1000, 1, true)
     }
 

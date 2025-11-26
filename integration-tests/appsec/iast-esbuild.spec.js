@@ -54,7 +54,7 @@ describe('esbuild support for IAST', () => {
     return agent.assertMessageReceived(({ payload }) => {
       const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
       spans.forEach(span => {
-        assert.ok(!Object.hasOwn(span.meta, '_dd.iast.json'))
+        assert.ok(!('_dd.iast.json' in span.meta))
       })
     }, null, 1, true)
   }

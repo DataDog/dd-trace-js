@@ -108,7 +108,10 @@ describe('Plugin', () => {
             assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
-            assert.ok(((Number(traces[0][0].meta['http.status_code'])) >= (200) && (Number(traces[0][0].meta['http.status_code'])) <= (299)))
+            assert.ok(
+              Number(traces[0][0].meta['http.status_code']) >= 200 &&
+              Number(traces[0][0].meta['http.status_code']) <= 299
+            )
           })
           .then(done)
           .catch(done)

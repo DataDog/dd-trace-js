@@ -167,8 +167,7 @@ describe('endpoints telemetry', () => {
       sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      assertObjectContains(resources, 'GET /test')
-      assertObjectContains(resources, 'HEAD /test')
+      assert.deepStrictEqual(resources, ['GET /test', 'HEAD /test'])
     })
 
     it('should record express wildcard and ignore subsequent specific methods for same path', () => {
@@ -192,8 +191,7 @@ describe('endpoints telemetry', () => {
       sinon.assert.calledOnce(sendData)
       const payload = sendData.firstCall.args[4]
       const resources = payload.endpoints.map(e => e.resource_name)
-      assertObjectContains(resources, 'GET /router-test')
-      assertObjectContains(resources, 'HEAD /router-test')
+      assert.deepStrictEqual(resources, ['GET /router-test', 'HEAD /router-test'])
     })
 
     describe('on failed request', () => {

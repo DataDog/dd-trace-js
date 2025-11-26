@@ -18,7 +18,7 @@ describe('Disabled APM Tracing or Standalone - Tracesource propagation tag', () 
 
   describe('addTraceSourceTag', () => {
     it('should not fail', () => {
-      assert.ok(!Object.hasOwn(addTraceSourceTag(tags), TRACE_SOURCE_PROPAGATION_KEY))
+      assert.ok(!(TRACE_SOURCE_PROPAGATION_KEY in addTraceSourceTag(tags)))
     })
 
     it('should not modify original tag value', () => {

@@ -178,7 +178,13 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    assert.deepStrictEqual(globalConfig.testEnvironmentOptions._ddUnskippable, JSON.stringify({ 'fixtures/test-unskippable.js': true }))
-    assert.deepStrictEqual(globalConfig.testEnvironmentOptions._ddForcedToRun, JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddUnskippable,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
+    assert.deepStrictEqual(
+      globalConfig.testEnvironmentOptions._ddForcedToRun,
+      JSON.stringify({ 'fixtures/test-unskippable.js': true })
+    )
   })
 })

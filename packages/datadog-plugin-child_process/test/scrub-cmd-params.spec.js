@@ -37,9 +37,15 @@ describe('scrub cmds', () => {
   it('Should scrub secret values', () => {
     assert.deepStrictEqual(scrubCmdParams('cmd --pass abc --token=def'), ['cmd', '--pass', '?', '--token=?'])
 
-    assert.deepStrictEqual(scrubCmdParams('mysqladmin -u root password very_secret'), ['mysqladmin', '-u', 'root', 'password', '?'])
+    assert.deepStrictEqual(
+      scrubCmdParams('mysqladmin -u root password very_secret'),
+      ['mysqladmin', '-u', 'root', 'password', '?']
+    )
 
-    assert.deepStrictEqual(scrubCmdParams('test -password very_secret -api_key 1234'), ['test', '-password', '?', '-api_key', '?'])
+    assert.deepStrictEqual(
+      scrubCmdParams('test -password very_secret -api_key 1234'),
+      ['test', '-password', '?', '-api_key', '?']
+    )
 
     assert.deepStrictEqual(scrubCmdParams('test --address https://some.address.com --email testing@to.es --api-key 1234'), ['test', '--address', '?', '--email', '?', '--api-key', '?'])
   })

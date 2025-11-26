@@ -502,7 +502,10 @@ describe('Plugin', () => {
 
             assert.strictEqual(traces[0][0].metrics['openai.response.deleted'], 1)
             assert.ok('openai.response.id' in traces[0][0].meta)
-            assert.strictEqual(traces[0][0].meta['openai.response.id'], 'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh')
+            assert.strictEqual(
+              traces[0][0].meta['openai.response.id'],
+              'ft:gpt-4.1-mini-2025-04-14:datadog-staging::BkaILRSh'
+            )
           })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {

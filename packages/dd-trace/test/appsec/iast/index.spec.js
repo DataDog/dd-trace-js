@@ -70,7 +70,10 @@ describe('IAST Index', () => {
         it('should detect vulnerability', (done) => {
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
             })
             .then(done)
             .catch(done)
@@ -82,7 +85,10 @@ describe('IAST Index', () => {
           iastContextFunctions.cleanIastContext = mockedCleanIastContext
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
               sinon.assert.calledOnce(mockedCleanIastContext)
             })
             .then(done)
@@ -95,7 +101,10 @@ describe('IAST Index', () => {
           overheadController.releaseRequest = releaseRequest
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"WEAK_HASH"')
+              assertObjectContains(
+                JSON.parse(traces[0][0].meta['_dd.iast.json']),
+                { vulnerabilities: [{ type: 'WEAK_HASH' }] }
+              )
               sinon.assert.calledOnce(releaseRequest)
             })
             .then(done)

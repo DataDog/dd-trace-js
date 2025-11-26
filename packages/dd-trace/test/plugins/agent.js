@@ -322,6 +322,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
 function runCallbackAgainstTraces (callback, options = {}, handlers) {
+  /** @type {Error[]} */
   const errors = []
   let resolve
   let reject
@@ -332,11 +333,14 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   const rejectionTimeout = setTimeout(() => {
     if (errors.length) {
-      const error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
-      // Mark errors enumerable for older Node.js versions to be visible.
-      Object.defineProperty(error, 'errors', {
-        enumerable: true
-      })
+      let error = errors[0]
+      if (errors.length > 1) {
+        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+        // Mark errors enumerable for older Node.js versions to be visible.
+        Object.defineProperty(error, 'errors', {
+          enumerable: true
+        })
+      }
       // Hack for the information to be fully visible.
       error.message = util.inspect(error)
       reject(error)

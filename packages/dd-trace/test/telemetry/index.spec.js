@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
 const sinon = require('sinon')
@@ -215,7 +213,7 @@ describe('telemetry', () => {
     telemetry.stop()
 
     const server = http.createServer(() => {
-      expect.fail('server should not be called')
+      assert.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
         telemetry: { enabled: false, heartbeatInterval: 60000 },
@@ -859,12 +857,13 @@ describe('Telemetry retry', () => {
     // Skip forward a day
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
-    expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
-    assertObjectContains(extendedHeartbeatPayload.integrations, {
-      integrations: [
-        { name: 'foo2', enabled: true, auto_enabled: true },
-        { name: 'bar2', enabled: false, auto_enabled: true }
-      ]
+    assertObjectContains(extendedHeartbeatPayload, {
+      integrations: [{
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      }]
     })
   })
 })

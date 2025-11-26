@@ -49,13 +49,13 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
     it('should detect correct stack trace in unnamed function', async () => {
       const response = await axios.get('/rewritten/stack-trace-from-unnamed-function')
 
-      assert.ok(response.data.includes('/rewritten-routes.ts:7:13'))
+      assert.match(response.data, /\/rewritten-routes\.ts:7:13/)
     })
 
     it('should detect correct stack trace in named function', async () => {
       const response = await axios.get('/rewritten/stack-trace-from-named-function')
 
-      assert.ok(response.data.includes('/rewritten-routes.ts:11:13'))
+      assert.match(response.data, /\/rewritten-routes\.ts:11:13/)
     })
 
     it('should detect vulnerability in the correct location', async () => {
@@ -81,13 +81,13 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
     it('should detect correct stack trace in unnamed function', async () => {
       const response = await axios.get('/not-rewritten/stack-trace-from-unnamed-function')
 
-      assert.ok(response.data.includes('/not-rewritten-routes.ts:7:13'))
+      assert.match(response.data, /\/not-rewritten-routes\.ts:7:13/)
     })
 
     it('should detect correct stack trace in named function', async () => {
       const response = await axios.get('/not-rewritten/stack-trace-from-named-function')
 
-      assert.ok(response.data.includes('/not-rewritten-routes.ts:11:13'))
+      assert.match(response.data, /\/not-rewritten-routes\.ts:11:13/)
     })
 
     it('should detect vulnerability in the correct location', async () => {

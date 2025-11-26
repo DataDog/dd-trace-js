@@ -12,6 +12,13 @@ require('../setup/core')
 
 const id = require('../../src/id')
 
+/**
+ * @typedef {{
+ *   version: number,
+ *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
+ * } CoverageObject
+ */
+
 describe('coverage-ci-visibility', () => {
   let encoder
   let logger
@@ -50,10 +57,16 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assertObjectContains(form._data[1], 'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"')
-    assertObjectContains(form._data[2], 'Content-Type: application/msgpack')
-
-    const decodedCoverages = msgpack.decode(form._data[3])
+    assert.ok(form._data[0].startsWith('--'))
+    assertObjectContains(
+      form._data,
+      [
+        'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
+        // TODO: The double line breaks seem to be a mistake
+        'Content-Type: application/msgpack\r\n\r\n'
+      ]
+    )
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
 
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 2)
@@ -87,14 +100,14 @@ describe('coverage-ci-visibility', () => {
     let form, decodedCoverages
     encoder.encode(formattedCoverage)
     form = encoder.makePayload()
-    decodedCoverages = msgpack.decode(form._data[3])
+    decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 1)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 1, test_suite_id: 2 })
 
     encoder.encode(formattedCoverage2)
     form = encoder.makePayload()
-    decodedCoverages = msgpack.decode(form._data[3])
+    decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 1)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 3, test_suite_id: 4 })
@@ -105,10 +118,16 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assertObjectContains(form._data[1], 'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"')
-    assertObjectContains(form._data[2], 'Content-Type: application/msgpack')
+    assert.ok(form._data[0].startsWith('--'))
+    assertObjectContains(
+      form._data,
+      [
+        'Content-Disposition: form-data; name="coverage1"; filename="coverage1.msgpack"\r\n',
+        'Content-Type: application/msgpack\r\n\r\n'
+      ]
+    )
 
-    const decodedCoverages = msgpack.decode(form._data[3])
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
 
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 1)

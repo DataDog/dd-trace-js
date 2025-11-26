@@ -816,7 +816,7 @@ describe('reporter', () => {
 
       sinon.assert.calledOnceWithExactly(web.root, req)
       sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
-      assert.strictEqual(Reporter.metricsQueue.length, 0)
+      assert.strictEqual(Reporter.metricsQueue.size, 0)
     })
 
     it('should only add mandatory headers when no attack or event was previously found', () => {

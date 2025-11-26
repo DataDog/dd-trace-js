@@ -148,9 +148,10 @@ describe('IAST Plugin', () => {
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
+        })
         sinon.assert.calledOnce(logError)
       })
 
@@ -356,9 +357,10 @@ describe('IAST Plugin', () => {
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
+        })
         sinon.assert.calledOnce(logError)
       })
 

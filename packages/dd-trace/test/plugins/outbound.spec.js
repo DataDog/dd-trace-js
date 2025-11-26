@@ -209,7 +209,7 @@ describe('OuboundPlugin', () => {
         assert.strictEqual(args.length, 1)
         const tags = parseTags(args[0])
 
-        assertObjectContains(tags, { '_dd.code_origin.type': 'exit' })
+        assertObjectContains(tags, { _dd: { code_origin: { type: 'exit' } } })
         assert.ok(Array.isArray(tags._dd.code_origin.frames))
         assert.ok(tags._dd.code_origin.frames.length > 0)
 

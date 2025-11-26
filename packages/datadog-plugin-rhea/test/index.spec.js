@@ -174,8 +174,7 @@ describe('Plugin', () => {
             it('should inject span context', (done) => {
               container.once('message', msg => {
                 const keys = Object.keys(msg.message.delivery_annotations)
-                assertObjectContains(keys, 'x-datadog-trace-id')
-                assertObjectContains(keys, 'x-datadog-parent-id')
+                assertObjectContains(keys, ['x-datadog-trace-id', 'x-datadog-parent-id'])
                 done()
               })
               context.sender.send({ body: 'Hello World!' })
@@ -184,8 +183,7 @@ describe('Plugin', () => {
             it('should inject span context with encoded messages', (done) => {
               container.once('message', msg => {
                 const keys = Object.keys(msg.message.delivery_annotations)
-                assertObjectContains(keys, 'x-datadog-trace-id')
-                assertObjectContains(keys, 'x-datadog-parent-id')
+                assertObjectContains(keys, ['x-datadog-trace-id', 'x-datadog-parent-id'])
                 done()
               })
               tracer.trace('web.request', () => {

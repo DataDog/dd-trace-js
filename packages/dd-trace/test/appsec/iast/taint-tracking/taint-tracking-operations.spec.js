@@ -13,6 +13,7 @@ const iastTelemetry = require('../../../../src/appsec/iast/telemetry')
 const { EXECUTED_PROPAGATION, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { Verbosity } = require('../../../../src/appsec/iast/telemetry/verbosity')
 function getExpectedMethods () {
+  /** @type {Set<string>} */
   const set = new Set()
   for (const definition of csiMethods) {
     if (definition.dst) {
@@ -565,16 +566,15 @@ describe('IAST TaintTracking Operations', () => {
       const tt = taintTrackingImpl.getTaintTrackingImpl()
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
-      assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).length)
-      assert.ok(((Array.isArray(Object.keys(tt)) ? Object.keys(tt) : [Object.keys(tt)])).every(k => Object.hasOwn(noop, k)))
+      assert.deepStrictEqual(Object.keys(noop).sort(), Object.keys(tt).sort())
     })
 
     it('should have the same properties as TaintTrackingDebug', () => {
       const ttDebug = taintTrackingImpl.getTaintTrackingImpl(Verbosity.DEBUG)
       const noop = taintTrackingImpl.getTaintTrackingNoop()
 
-      assert.strictEqual(Object.keys(noop).length, ((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).length)
-      assert.ok(((Array.isArray(Object.keys(ttDebug)) ? Object.keys(ttDebug) : [Object.keys(ttDebug)])).every(k => Object.hasOwn(noop, k)))
+      // TODO: Do we want the order to be identical? That is likely not needed.
+      assert.deepStrictEqual(Object.keys(noop).sort(), Object.keys(ttDebug).sort())
     })
 
     it('should have the same properties as csiMethods', () => {
@@ -582,8 +582,8 @@ describe('IAST TaintTracking Operations', () => {
 
       const csiExpectedMethods = getExpectedMethods()
 
-      assert.strictEqual(Object.keys(tt).length, ((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).length)
-      assert.ok(((Array.isArray(csiExpectedMethods) ? csiExpectedMethods : [csiExpectedMethods])).every(k => Object.hasOwn(tt, k)))
+      // TODO: Do we want the order to be identical? That is likely not needed.
+      assert.deepStrictEqual(Object.keys(tt).sort(), csiExpectedMethods.sort())
     })
   })
 })

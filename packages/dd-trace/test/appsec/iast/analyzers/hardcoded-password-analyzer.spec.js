@@ -1,20 +1,18 @@
-const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
-
 /* eslint-disable @stylistic/max-len */
 'use strict'
+
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const path = require('node:path')
-const fs = require('node:fs')
-const os = require('node:os')
-
 const agent = require('../../../plugins/agent')
 const { getConfigFresh } = require('../../../helpers/config')
-
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -154,8 +152,12 @@ describe('Hardcoded Password Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"HARDCODED_PASSWORD"')
-            assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"evidence":{"value":"pswd"}')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              {
+                vulnerabilities: [{ evidence: { value: 'pswd' }, type: 'HARDCODED_PASSWORD' }],
+              }
+            )
           })
           .then(done)
           .catch(done)

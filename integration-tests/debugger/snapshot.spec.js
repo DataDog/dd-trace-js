@@ -98,7 +98,7 @@ describe('Dynamic Instrumentation', function () {
           // from closure scope
           // There's no reason to test the `fastify` object 100%, instead just check its fingerprint
           assert.strictEqual(fastify.type, 'Object')
-          assert.strictEqual(typeof fastify.fields, 'Object')
+          assert.strictEqual(typeof fastify.fields, 'object')
 
           assert.deepStrictEqual(getUndefined, {
             type: 'Function',

@@ -60,7 +60,10 @@ describe('util', () => {
       })
 
       it('should capture spread arguments', () => {
-        assert.deepStrictEqual(getFunctionArguments((foo, bar, ...args) => {}, ['foo', 'bar', 1, 2, 3]), { foo: 'foo', bar: 'bar', args: [1, 2, 3] })
+        assert.deepStrictEqual(
+          getFunctionArguments((foo, bar, ...args) => {}, ['foo', 'bar', 1, 2, 3]),
+          { foo: 'foo', bar: 'bar', args: [1, 2, 3] }
+        )
       })
     })
 

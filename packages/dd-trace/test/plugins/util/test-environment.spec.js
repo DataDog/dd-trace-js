@@ -97,14 +97,16 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        assertObjectContains(restOfTags, restOfExpectedTags)
-        // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
+        const msg = testCaseName ?? `${testCaseName} Failed`
+
+        assertObjectContains(restOfTags, restOfExpectedTags, msg)
+        // `CI_ENV_VARS` key contains a dictionary
         if (envVars && expectedEnvVars) {
-          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars))
+          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars), msg)
         }
-        // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
+        // `CI_NODE_LABELS` key contains an array
         if (nodeLabels && expectedNodeLabels) {
-          assertObjectContains(JSON.parse(nodeLabels), JSON.parse(expectedNodeLabels))
+          assertObjectContains(JSON.parse(nodeLabels).sort(), JSON.parse(expectedNodeLabels).sort(), msg)
         }
       })
     })

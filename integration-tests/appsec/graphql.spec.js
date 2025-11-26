@@ -45,8 +45,8 @@ describe('graphql', () => {
       assert.strictEqual(payload[1][0].name, 'web.request')
       assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
       assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
-      assert.ok(!Object.hasOwn(payload[1][0].meta, '_dd.appsec.event'))
-      assert.ok(!Object.hasOwn(payload[1][0].meta, '_dd.appsec.json'))
+      assert.ok(!('_dd.appsec.event' in payload[1][0].meta))
+      assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
 
     await axios({

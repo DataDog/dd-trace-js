@@ -126,7 +126,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       const testSpans = payload.flatMap(trace => trace)
       const resourceNames = testSpans.map(span => span.resource)
 
-      assert.includeMembers(resourceNames,
+      assertObjectContains(resourceNames,
         [
           'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
           'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
@@ -136,10 +136,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       const areAllTestSpans = testSpans.every(span => span.name === 'mocha.test')
       assert.strictEqual(areAllTestSpans, true)
 
-      assert.ok(testOutput.includes(expectedStdout))
+      assert.match(testOutput, new RegExp(expectedStdout))
 
       if (extraStdout) {
-        assert.ok(testOutput.includes(extraStdout))
+        assert.match(testOutput, new RegExp(extraStdout))
       }
       // Can read DD_TAGS
       testSpans.forEach(testSpan => {
@@ -205,7 +205,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
                 'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
@@ -216,7 +216,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.ok(moduleEventContent != null)
 
             tests.forEach(testEvent => {
-              assert.strictEqual(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+              assert.strictEqual(
+                testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
+                true
+              )
               assert.ok(testEvent.metrics[TEST_SOURCE_START] != null)
               assert.strictEqual(testEvent.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
               // Can read DD_TAGS
@@ -226,7 +229,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             })
 
             suites.forEach(testSuite => {
-              assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+              assert.strictEqual(
+                testSuite.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'),
+                true
+              )
               assert.strictEqual(testSuite.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuite.metrics[DD_HOST_CPU_COUNT] != null)
             })
@@ -256,8 +262,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           once(childProcess.stderr, 'end'),
           once(childProcess, 'exit')
         ])
-        assert.ok(testOutput.includes(expectedStdout))
-        assert.ok(testOutput.includes(extraStdout))
+        assert.match(testOutput, new RegExp(expectedStdout))
+        assert.match(testOutput, new RegExp(extraStdout))
       })
 
       it('passing tests', async () => {
@@ -273,7 +279,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
             assert.strictEqual(tests.length, 4)
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), testNames)
 
             tests.forEach(test => {
               assert.strictEqual(test.parent_id.toString(), '0')
@@ -317,7 +323,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/failing.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/failing.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected true to equal false')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.metrics[TEST_SOURCE_START] != null)
             assert.ok(test.meta[ERROR_STACK] != null)
             assert.strictEqual(test.parent_id.toString(), '0')
@@ -353,7 +359,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 4)
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), testNames)
 
             tests.forEach(test => {
               assert.strictEqual(test.parent_id.toString(), '0')
@@ -428,7 +434,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/done-fail.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/done-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected true to equal false')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -493,7 +499,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/promise-fail.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/promise-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected true to equal false')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -558,7 +564,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/async-fail.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/async-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected true to equal false')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -592,7 +598,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/timeout-fail.js')
             assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/timeout-fail.js')
             assert.strictEqual(test.meta[ERROR_TYPE], 'Error')
-            assert.ok(test.meta[ERROR_MESSAGE].includes('Timeout'))
+            assert.match(test.meta[ERROR_MESSAGE], /Timeout/)
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -736,8 +742,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[COMPONENT], 'mocha')
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[ERROR_TYPE], 'TypeError')
-            assert.ok(test.meta[ERROR_MESSAGE].includes('mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":'))
-            assert.ok(test.meta[ERROR_MESSAGE].includes('Cannot set '))
+            assert.ok(
+              test.meta[ERROR_MESSAGE]
+                .includes('mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed":')
+            )
+            assert.match(test.meta[ERROR_MESSAGE], /Cannot set /)
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -766,7 +775,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 2)
-            assert.includeMembers(tests.map(test => test.meta[TEST_NAME]), testNames)
+            assertObjectContains(tests.map(test => test.meta[TEST_NAME]), testNames)
 
             tests.forEach(test => {
               assert.strictEqual(test.meta[TEST_STATUS], 'pass')
@@ -862,7 +871,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(test.meta[TEST_NAME], 'mocha-test-done-fail can do badly setup failed tests with done')
             assert.strictEqual(test.meta[TEST_STATUS], 'fail')
             assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'expected true to equal false')
+            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.meta[ERROR_STACK] != null)
           })
 
@@ -1000,7 +1009,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'fail')
 
             // Check that all suites have the same session ID
-            assert.isTrue(
+            assert.ok(
               testSuiteEvents.every(
                 suite => suite.test_session_id.toString() === testSessionEvent.test_session_id.toString()
               ),
@@ -1008,7 +1017,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             )
 
             // Check that all suites have the same module ID
-            assert.isTrue(
+            assert.ok(
               testSuiteEvents.every(
                 suite => suite.test_module_id.toString() === testModuleEvent.test_module_id.toString()
               ),
@@ -1016,11 +1025,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             )
 
             // Check that all suites have a test_suite_id
-            assert.strictEqual(testSuiteEvents.every(suite => suite.test_suite_id !== undefined),
-              'All suites should have a test_suite_id', true)
+            assert.strictEqual(
+              testSuiteEvents.every(suite => suite.test_suite_id !== undefined),
+              true,
+              'All suites should have a test_suite_id'
+            )
 
             // Check that all suites match expected suite names
-            assert.isTrue(
+            assert.ok(
               testSuiteEvents.every(suite => suites.includes(suite.meta[TEST_SUITE])),
               'All suites should match expected suite names'
             )
@@ -1030,8 +1042,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             assert.strictEqual(passedSuites.length, 1, 'Should have 1 passing suite')
             assert.strictEqual(failedSuites.length, 3, 'Should have 3 failing suites')
-            assert.strictEqual(failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined),
-              'All failed suites should have an error message', true)
+            assert.ok(
+              failedSuites.every(suite => suite.meta[ERROR_MESSAGE] !== undefined),
+              'All failed suites should have an error message'
+            )
           })
 
         childProcess = exec(
@@ -1077,7 +1091,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
-          assert.ok(testOutput.includes(expectedStdout))
+          assert.match(testOutput, new RegExp(expectedStdout))
           done()
         })
       })
@@ -1091,10 +1105,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const test = events.find(event => event.type === 'test').content
 
-          assert.ok(test.meta.length > 0)
-          assert.strictEqual(test.meta['custom_tag.beforeEach'], 'true')
-          assert.strictEqual(test.meta['custom_tag.it'], 'true')
-          assert.strictEqual(test.meta['custom_tag.afterEach'], 'true')
+          assertObjectContains(test, {
+            meta: {
+              'custom_tag.beforeEach': 'true',
+              'custom_tag.it': 'true',
+              'custom_tag.afterEach': 'true'
+            }
+          })
         })
 
       childProcess = exec(
@@ -1136,9 +1153,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         testOutput += chunk.toString()
       })
       childProcess.on('message', () => {
-        assert.ok(!testOutput.includes('TypeError'))
-        assert.ok(!testOutput.includes('Uncaught error outside test suite'))
-        assert.ok(testOutput.includes(expectedStdout))
+        assert.doesNotMatch(testOutput, /TypeError/)
+        assert.doesNotMatch(testOutput, /Uncaught error outside test suite/)
+        assert.match(testOutput, new RegExp(expectedStdout))
         done()
       })
     })
@@ -1203,8 +1220,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', () => {
-      assert.ok(testOutput.includes('Invalid URL'))
-      assert.ok(testOutput.includes('1 passing')) // we only run one file here
+      assert.match(testOutput, /Invalid URL/)
+      assert.match(testOutput, /1 passing/) // we only run one file here
       done()
     })
   })
@@ -1227,7 +1244,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
         assert.strictEqual(sessionEventContent.meta[MOCHA_IS_PARALLEL], 'true')
-        assert.strictEqual(sessionEventContent.test_session_id.toString(10), moduleEventContent.test_session_id.toString(10))
+        assert.strictEqual(
+          sessionEventContent.test_session_id.toString(10),
+          moduleEventContent.test_session_id.toString(10)
+        )
         suites.forEach(({
           meta,
           test_suite_id: testSuiteId,
@@ -1277,7 +1297,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
     childProcess.on('message', () => {
       eventsPromise.then(() => {
-        assert.ok(!testOutput.includes('TypeError'))
+        assert.doesNotMatch(testOutput, /TypeError/)
         done()
       }).catch(done)
     })
@@ -1310,7 +1330,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
     childProcess.on('exit', () => {
       eventsPromise.then(() => {
-        assert.ok(!testOutput.includes('TypeError'))
+        assert.doesNotMatch(testOutput, /TypeError/)
         done()
       }).catch(done)
     })
@@ -1329,7 +1349,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       testOutput += chunk.toString()
     })
     childProcess.on('exit', (code) => {
-      assert.ok(testOutput.includes('result 7'))
+      assert.match(testOutput, /result 7/)
       assert.strictEqual(code, 0)
       done()
     })
@@ -1342,7 +1362,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const testSession = events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
         const errorMessage = 'Failed tests: 1'
-        assert.ok(testSession.meta[ERROR_MESSAGE].includes(errorMessage))
+        assert.match(testSession.meta[ERROR_MESSAGE], new RegExp(errorMessage))
       })
 
     childProcess = exec(
@@ -1385,10 +1405,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       testOutput += chunk.toString()
     })
     childProcess.on('message', () => {
-      assert.ok(testOutput.includes(expectedStdout))
-      assert.ok(testOutput.includes('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, ' +
-        'but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, ' +
-        'so dd-trace will not be initialized.'))
+      assert.match(testOutput, new RegExp(expectedStdout))
+      assert.match(
+        testOutput,
+        /DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, so dd-trace will not be initialized./
+      )
       done()
     })
   })
@@ -1409,7 +1430,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       assert.strictEqual(packfileRequest.headers['dd-api-key'], '1')
 
       const eventTypes = eventsRequest.payload.events.map(event => event.type)
-      assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+      assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
       const numSuites = eventTypes.reduce(
         (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
       )
@@ -1451,7 +1472,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const testSpans = payload.flatMap(trace => trace)
           const resourceNames = testSpans.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
               'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
@@ -1482,27 +1503,34 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
         assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
 
-        const [coveragePayload] = codeCovRequest.payload
-        assert.strictEqual(codeCovRequest.headers['dd-api-key'], '1')
+        assertObjectContains(codeCovRequest, {
+          headers: {
+            'dd-api-key': '1'
+          },
+          payload: [{
+            name: 'coverage1',
+            filename: 'coverage1.msgpack',
+            type: 'application/msgpack',
+            content: {
+              version: 2
+            }
+          }]
+        })
 
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
-        assert.ok(coveragePayload.content.includes({
-          version: 2
-        }))
         const allCoverageFiles = codeCovRequest.payload
           .flatMap(coverage => coverage.content.coverages)
           .flatMap(file => file.files)
           .map(file => file.filename)
 
-        assert.includeMembers(allCoverageFiles,
+        assertObjectContains(allCoverageFiles,
           [
             'ci-visibility/test/sum.js',
             'ci-visibility/test/ci-visibility-test.js',
             'ci-visibility/test/ci-visibility-test-2.js'
           ]
         )
+
+        const [coveragePayload] = codeCovRequest.payload
         assert.ok(coveragePayload.content.coverages[0].test_session_id != null)
         assert.ok(coveragePayload.content.coverages[0].test_suite_id != null)
 
@@ -1510,7 +1538,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT] != null)
 
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1530,7 +1558,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
       childProcess.on('exit', () => {
         // coverage report
-        assert.ok(testOutput.includes('Lines        '))
+        assert.match(testOutput, /Lines {7}/)
         done()
       })
     })
@@ -1550,7 +1578,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.assertPayloadReceived(({ headers, payload }) => {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
-        assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const testSession = payload.events.find(event => event.type === 'test_session_end').content
         assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
         assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
@@ -1604,7 +1632,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
         assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
 
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1692,7 +1720,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1740,7 +1768,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(headers['dd-api-key'], '1')
         const eventTypes = payload.events.map(event => event.type)
         // because they are not skipped
-        assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
         const numSuites = eventTypes.reduce(
           (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
         )
@@ -1798,12 +1826,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           )
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
-          assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(skippedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.content.meta))
 
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
@@ -1852,9 +1880,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-          assert.ok(!Object.hasOwn(testModule.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
           assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
 
           const passedSuite = suites.find(
@@ -1869,15 +1897,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE))
-          assert.ok(!Object.hasOwn(passedSuite.content.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
 
           assert.strictEqual(nonSkippedSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(nonSkippedSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
           // it was not forced to run because it wasn't going to be skipped
-          assert.ok(!Object.hasOwn(nonSkippedSuite.meta, TEST_ITR_FORCED_RUN))
+          assert.ok(!('TEST_ITR_FORCED_RUN' in nonSkippedSuite.meta))
         }, 25000)
 
       childProcess = exec(
@@ -1979,7 +2007,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             .flatMap(({ files }) => files)
             .map(({ filename }) => filename)
 
-          assert.includeMembers(coveredFiles, [
+          assertObjectContains(coveredFiles, [
             'ci-visibility/subproject/dependency.js',
             'ci-visibility/subproject/subproject-test.js'
           ])
@@ -2037,7 +2065,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2126,9 +2154,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(testsForFirstParameter.length, testsForSecondParameter.length)
 
           // all but one have been retried
-          assert.strictEqual(testsForFirstParameter.length - 1, testsForFirstParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length)
+          assert.strictEqual(
+            testsForFirstParameter.length - 1,
+            testsForFirstParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
+          )
 
-          assert.strictEqual(testsForSecondParameter.length - 1, testsForSecondParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length)
+          assert.strictEqual(
+            testsForSecondParameter.length - 1,
+            testsForSecondParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
+          )
         })
 
       childProcess = exec(
@@ -2174,7 +2208,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const newTests = tests.filter(test =>
@@ -2308,7 +2342,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
           )
           assert.strictEqual(newSkippedTests.length, 1)
-          assert.ok(!Object.hasOwn(newSkippedTests[0].meta, TEST_IS_RETRY))
+          assert.ok(!('TEST_IS_RETRY' in newSkippedTests[0].meta))
         })
 
       childProcess = exec(
@@ -2362,7 +2396,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const resourceNames = tests.map(test => test.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/test-early-flake-detection/weird-test-names.js.no describe can do stuff',
               'ci-visibility/test-early-flake-detection/weird-test-names.js.describe  trailing space '
@@ -2416,7 +2450,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2510,8 +2544,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
 
       childProcess.on('exit', (exitCode) => {
-        assert.ok(testOutput.includes('2 passing'))
-        assert.ok(testOutput.includes('2 failing'))
+        assert.match(testOutput, /2 passing/)
+        assert.match(testOutput, /2 failing/)
         assert.strictEqual(exitCode, 0)
         eventsPromise.then(() => {
           done()
@@ -2544,7 +2578,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2734,7 +2768,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2794,7 +2828,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2850,7 +2884,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2858,14 +2892,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
           newTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
@@ -2932,7 +2966,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(failedAttempts.length, 2)
 
           failedAttempts.forEach((failedTest, index) => {
-            assert.ok(failedTest.meta[ERROR_MESSAGE].includes(`expected ${index + 1} to equal 3`))
+            assert.match(
+              failedTest.meta[ERROR_MESSAGE],
+              new RegExp(`Expected values to be strictly equal:\n\n${index + 1} !== 3`)
+            )
           })
 
           // The first attempt is not marked as a retry
@@ -3273,7 +3310,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const notRetriedTest = tests.find(test => test.meta[TEST_NAME].includes('is not retried'))
 
-          assert.ok(!Object.hasOwn(notRetriedTest.meta, DI_ERROR_DEBUG_INFO_CAPTURED))
+          assert.ok(!('DI_ERROR_DEBUG_INFO_CAPTURED' in notRetriedTest.meta))
         })
 
       const logsPromise = receiver
@@ -3284,7 +3321,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             level: 'error'
           })
           assert.strictEqual(diLog.debugger.snapshot.language, 'javascript')
-          assert.deepInclude(diLog.debugger.snapshot.captures.lines['6'].locals, {
+          assertObjectContains(diLog.debugger.snapshot.captures.lines['6'].locals, {
             a: {
               type: 'number',
               value: '11'
@@ -3402,7 +3439,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -3411,7 +3448,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!Object.hasOwn(test.meta, TEST_IS_NEW))
+            assert.ok(!('TEST_IS_NEW' in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -3519,12 +3556,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isAttemptToFix) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-attempt-to-fix-1.js.attempt to fix tests can attempt to fix a test'
               ]
@@ -3539,16 +3576,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               const isFirstAttempt = i === 0
               const isLastAttempt = i === retriedTests.length - 1
               if (!isAttemptToFix) {
-                assert.ok(!Object.hasOwn(test.meta, TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX))
-                assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
+                assert.ok(!('TEST_IS_RETRY' in test.meta))
+                assert.ok(!('TEST_RETRY_REASON' in test.meta))
                 continue
               }
 
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
               if (isFirstAttempt) {
-                assert.ok(!Object.hasOwn(test.meta, TEST_IS_RETRY))
-                assert.ok(!Object.hasOwn(test.meta, TEST_RETRY_REASON))
+                assert.ok(!('TEST_IS_RETRY' in test.meta))
+                assert.ok(!('TEST_RETRY_REASON' in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
@@ -3565,9 +3602,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               if (isLastAttempt) {
                 if (shouldAlwaysPass) {
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                  assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                 } else if (shouldFailSometimes) {
-                  assert.ok(!Object.hasOwn(test.meta, TEST_HAS_FAILED_ALL_RETRIES))
+                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 } else {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
@@ -3618,7 +3655,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         childProcess.on('exit', exitCode => {
           testAssertionsPromise.then(() => {
-            assert.ok(stdout.includes('I am running when attempt to fix'))
+            assert.match(stdout, /I am running when attempt to fix/)
             if (shouldAlwaysPass || isQuarantined || isDisabled) {
               // even though a test fails, the exit code is 0 because the test is quarantined or disabled
               assert.strictEqual(exitCode, 0)
@@ -3734,12 +3771,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-disabled-1.js.disable tests can disable a test'
               ]
@@ -3754,7 +3791,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(skippedTests.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             } else {
               assert.strictEqual(skippedTests.meta[TEST_STATUS], 'fail')
-              assert.ok(!Object.hasOwn(skippedTests.meta, TEST_MANAGEMENT_IS_DISABLED))
+              assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTests.meta))
             }
           })
 
@@ -3785,10 +3822,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             if (isDisabling) {
-              assert.ok(!stdout.includes('I am running'))
+              assert.doesNotMatch(stdout, /I am running/)
               assert.strictEqual(exitCode, 0)
             } else {
-              assert.ok(stdout.includes('I am running'))
+              assert.match(stdout, /I am running/)
               assert.strictEqual(exitCode, 1)
             }
             done()
@@ -3858,12 +3895,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
-            assert.includeMembers(resourceNames,
+            assertObjectContains(resourceNames,
               [
                 'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can quarantine a test',
                 'ci-visibility/test-management/test-quarantine-1.js.quarantine tests can pass normally'
@@ -3879,7 +3916,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED))
+              assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
             }
           })
 
@@ -3910,7 +3947,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         childProcess.on('exit', (exitCode) => {
           testAssertionsPromise.then(() => {
             // it runs regardless of the quarantine status
-            assert.ok(stdout.includes('I am running when quarantined'))
+            assert.match(stdout, /I am running when quarantined/)
             if (isQuarantining) {
               assert.strictEqual(exitCode, 0)
             } else {
@@ -3966,7 +4003,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!Object.hasOwn(testSession.meta, TEST_MANAGEMENT_ENABLED))
+          assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
@@ -4000,7 +4037,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         once(childProcess.stderr, 'end'),
         eventsPromise
       ])
-      assert.ok(testOutput.includes('Test management tests could not be fetched'))
+      assert.match(testOutput, /Test management tests could not be fetched/)
     })
   })
 
@@ -4068,14 +4105,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         assert.strictEqual(tests.length, 2)
 
-        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+        assertObjectContains(tests.map(test => test.meta[TEST_STATUS]), [
           'pass',
           'pass'
         ])
 
-        assert.includeMembers(tests.map(test => test.resource), [
+        assertObjectContains(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested',
           'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
-          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
         ])
       })
 
@@ -4103,11 +4140,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         eventsPromise
       ])
 
-      assert.ok(stdout.includes('beforeEach'))
-      assert.ok(stdout.includes('beforeEach in context'))
-      assert.ok(stdout.includes('test'))
-      assert.ok(stdout.includes('afterEach'))
-      assert.ok(stdout.includes('afterEach in context'))
+      assert.match(stdout, /beforeEach/)
+      assert.match(stdout, /beforeEach in context/)
+      assert.match(stdout, /test/)
+      assert.match(stdout, /afterEach/)
+      assert.match(stdout, /afterEach in context/)
     })
 
     onlyLatestIt('works when tests are retried', async () => {
@@ -4118,15 +4155,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         assert.strictEqual(tests.length, 3)
 
-        assert.includeMembers(tests.map(test => test.meta[TEST_STATUS]), [
+        assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), [
           'fail',
           'pass',
           'pass'
         ])
 
-        assert.includeMembers(tests.map(test => test.resource), [
+        assert.deepStrictEqual(tests.map(test => test.resource), [
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested',
+          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested',
           'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe context nested test with retries',
-          'ci-visibility/test-nested-hooks/test-nested-hooks.js.describe is not nested'
         ])
 
         const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
@@ -4169,11 +4207,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         eventsPromise
       ])
 
-      assert.ok(stdout.includes('beforeEach'))
-      assert.ok(stdout.includes('beforeEach in context'))
-      assert.ok(stdout.includes('test'))
-      assert.ok(stdout.includes('afterEach'))
-      assert.ok(stdout.includes('afterEach in context'))
+      assert.match(stdout, /beforeEach/)
+      assert.match(stdout, /beforeEach in context/)
+      assert.match(stdout, /test/)
+      assert.match(stdout, /afterEach/)
+      assert.match(stdout, /afterEach in context/)
     })
   })
 
@@ -4225,12 +4263,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           if (isEfd) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
-            assert.ok(!Object.hasOwn(testSession.meta, TEST_EARLY_FLAKE_ENABLED))
+            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
           }
 
           const resourceNames = tests.map(span => span.resource)
 
-          assert.includeMembers(resourceNames,
+          assertObjectContains(resourceNames,
             [
               'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can pass normally',
               'ci-visibility/test-impacted-test/test-impacted-1.js.impacted tests can fail'
@@ -4241,7 +4279,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             // Parallel mode in mocha requires more than a single test suite
             // Here we check that the second test suite is actually running,
             // so we can be sure that parallel mode is on
-            assert.includeMembers(resourceNames, [
+            assertObjectContains(resourceNames, [
               'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can pass normally',
               'ci-visibility/test-impacted-test/test-impacted-2.js.impacted tests 2 can fail'
             ])
@@ -4261,12 +4299,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isModified) {
               assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_MODIFIED))
+              assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
             }
             if (isNew) {
               assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
             } else {
-              assert.ok(!Object.hasOwn(impactedTest.meta, TEST_IS_NEW))
+              assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
             }
           }
 

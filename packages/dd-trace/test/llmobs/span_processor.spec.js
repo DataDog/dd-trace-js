@@ -255,7 +255,7 @@ describe('span processor', () => {
       assert.strictEqual(payload.meta['error.stack'], 'error stack')
       assert.strictEqual(payload.status, 'error')
 
-      assertObjectContains(payload.tags, 'error_type:error type')
+      assertObjectContains(payload.tags, ['error_type:error type'])
     })
 
     it('uses the error itself if the span does not have specific error fields', () => {
@@ -283,7 +283,7 @@ describe('span processor', () => {
       assert.ok(payload.meta['error.stack'] != null)
       assert.strictEqual(payload.status, 'error')
 
-      assertObjectContains(payload.tags, 'error_type:Error')
+      assertObjectContains(payload.tags, ['error_type:Error'])
     })
 
     it('uses the span name from the tag if provided', () => {
@@ -329,7 +329,7 @@ describe('span processor', () => {
       const payload = writer.append.getCall(0).firstArg
 
       assert.strictEqual(payload.session_id, '1234')
-      assertObjectContains(payload.tags, 'session_id:1234')
+      assertObjectContains(payload.tags, ['session_id:1234'])
     })
 
     it('sets span tags appropriately', () => {
@@ -351,9 +351,7 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      assertObjectContains(payload.tags, 'foo:bar')
-      assertObjectContains(payload.tags, 'source:mySource')
-      assertObjectContains(payload.tags, 'hostname:localhost')
+      assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
     })
   })
 })

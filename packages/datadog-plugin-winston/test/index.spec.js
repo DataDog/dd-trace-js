@@ -386,8 +386,7 @@ describe('Plugin', () => {
 
                 assert.ok('stack' in loggedInfo)
                 assert.strictEqual(typeof loggedInfo.stack, 'string')
-                assertObjectContains(loggedInfo.stack, 'test error with stack')
-                assertObjectContains(loggedInfo.stack, 'Error:')
+                assert.match(loggedInfo.stack, /^Error: test error with stack\n/)
 
                 assert.strictEqual(loggedInfo.message, 'test error with stack')
 

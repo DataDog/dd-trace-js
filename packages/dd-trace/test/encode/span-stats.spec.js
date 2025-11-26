@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
@@ -127,7 +126,7 @@ describe('span-stats-encode', () => {
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer)
 
-    expect(decoded)
+    assert.ok(decoded)
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.Type.length, MAX_TYPE_LENGTH)
     assert.strictEqual(decodedStat.Name.length, MAX_NAME_LENGTH)
@@ -156,10 +155,10 @@ describe('span-stats-encode', () => {
 
     const buffer = encoder.makePayload()
     const decodedStats = msgpack.decode(buffer)
-    expect(decodedStats)
+    assert.ok(decodedStats)
 
     const decodedStat = decodedStats.Stats[0].Stats[0]
-    expect(decodedStat)
+    assert.ok(decodedStat)
     assert.strictEqual(decodedStat.Service, DEFAULT_SERVICE_NAME)
     assert.strictEqual(decodedStat.Name, DEFAULT_SPAN_NAME)
   })

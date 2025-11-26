@@ -6,7 +6,6 @@ const { ProviderEvents } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 require('../setup/mocha')
 
@@ -146,8 +145,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     sinon.assert.calledOnce(setErrorSpy)
     const errorArg = setErrorSpy.firstCall.args[0]
     assert.ok(errorArg instanceof Error)
-    assertObjectContains(errorArg.message, 'Initialization timeout')
-    assertObjectContains(errorArg.message, '30000ms')
+    assert.strictEqual(errorArg.message, 'Initialization timeout after 30000ms')
   })
 
   it('should allow recovery if configuration is set after timeout', async () => {
@@ -254,8 +252,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       sinon.assert.calledOnce(setErrorSpy)
       const errorArg = setErrorSpy.firstCall.args[0]
       assert.ok(errorArg instanceof Error)
-      assertObjectContains(errorArg.message, 'Initialization timeout')
-      assertObjectContains(errorArg.message, '10000ms')
+      assert.strictEqual(errorArg.message, 'Initialization timeout after 10000ms')
     })
   })
 })

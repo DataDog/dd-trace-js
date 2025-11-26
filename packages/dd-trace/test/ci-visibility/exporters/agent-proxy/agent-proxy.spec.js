@@ -56,8 +56,8 @@ describe('AgentProxyCiVisibilityExporter', () => {
     agentProxyCiVisibilityExporter.export(trace)
     agentProxyCiVisibilityExporter.exportCoverage(coverage)
 
-    assertObjectContains(agentProxyCiVisibilityExporter.getUncodedTraces(), trace)
-    assertObjectContains(agentProxyCiVisibilityExporter._coverageBuffer, coverage)
+    assertObjectContains(agentProxyCiVisibilityExporter.getUncodedTraces(), [trace])
+    assertObjectContains(agentProxyCiVisibilityExporter._coverageBuffer, [coverage])
 
     agentProxyCiVisibilityExporter.export = sinon.spy()
     agentProxyCiVisibilityExporter.exportCoverage = sinon.spy()

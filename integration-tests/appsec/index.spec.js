@@ -51,7 +51,7 @@ describe('RASP', () => {
   async function assertExploitDetected () {
     await agent.assertMessageReceived(({ headers, payload }) => {
       assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-      assert.ok(payload[0][0].meta['_dd.appsec.json'].includes('"test-rule-id-2"'))
+      assert.match(payload[0][0].meta['_dd.appsec.json'], /"test-rule-id-2"/)
     })
   }
 
@@ -400,7 +400,7 @@ describe('RASP', () => {
           }
 
           await agent.assertMessageReceived(({ headers, payload }) => {
-            assert.ok(!Object.hasOwn(payload[0][0].meta_struct, 'http.request.body'))
+            assert.ok(!('http.request.body' in payload[0][0].meta_struct))
           })
         }
       })

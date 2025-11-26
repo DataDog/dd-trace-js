@@ -92,8 +92,7 @@ describe('encode 0.5', () => {
     const decoded = msgpack.decode(buffer, { useBigInt64: true })
     const stringMap = decoded[0]
     const trace = decoded[1][0]
-    assertObjectContains(stringMap, 'events')
-    assertObjectContains(stringMap, encodedLink)
+    assertObjectContains(stringMap, ['events', encodedLink])
     assertObjectContains(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
@@ -124,8 +123,7 @@ describe('encode 0.5', () => {
     assert.strictEqual(stringMap[trace[0][0]], data[0].service)
     assert.strictEqual(stringMap[trace[0][1]], data[0].name)
     assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
-    assertObjectContains(stringMap, '_dd.span_links')
-    assertObjectContains(stringMap, encodedLink)
+    assertObjectContains(stringMap, ['_dd.span_links', encodedLink])
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
@@ -158,8 +156,7 @@ describe('encode 0.5', () => {
     assert.strictEqual(stringMap[trace[0][0]], data[0].service)
     assert.strictEqual(stringMap[trace[0][1]], data[0].name)
     assert.strictEqual(stringMap[trace[0][2]], data[0].resource)
-    assertObjectContains(stringMap, '_dd.span_links')
-    assertObjectContains(stringMap, encodedLink)
+    assertObjectContains(stringMap, ['_dd.span_links', encodedLink])
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
@@ -249,6 +246,7 @@ describe('encode 0.5', () => {
     assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
-    assert.strictEqual(trace[0][12], undefined) // Everything works the same as without meta_struct, and nothing else is added
+    // Everything works the same as without meta_struct, and nothing else is added
+    assert.strictEqual(trace[0][12], undefined)
   })
 })

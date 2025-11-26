@@ -1,12 +1,12 @@
 'use strict'
 
+const assert = require('node:assert')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const Axios = require('axios')
-const { assert } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-
-const path = require('node:path')
-const fs = require('node:fs')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
@@ -128,14 +128,14 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 200)
-    assert.hasAllKeys(cloneHeaders(res.headers), [
+    assert.ok([
       'a',
       'b',
       'bad3',
       'date',
       'connection',
       'transfer-encoding'
-    ])
+    ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
     assert.deepEqual(res.data, 'end')
   })
 
@@ -221,7 +221,7 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 201)
-    assert.hasAllKeys(cloneHeaders(res.headers), [
+    assert.ok([
       'a',
       'b',
       'c',
@@ -230,7 +230,7 @@ describe('HTTP Response Blocking', () => {
       'date',
       'connection',
       'transfer-encoding'
-    ])
+    ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
     assert.deepEqual(res.data, 'writefileend')
   })
 
@@ -264,12 +264,12 @@ function cloneHeaders (headers) {
 
 function assertBlocked (res) {
   assert.equal(res.status, 403)
-  assert.hasAllKeys(cloneHeaders(res.headers), [
+  assert.ok([
     'content-type',
     'content-length',
     'date',
     'connection'
-  ])
+  ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
   assert.deepEqual(res.data, blockingResponse)
 
   sinon.assert.callCount(WafContext.prototype.run, 2)

@@ -1376,7 +1376,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].resource, 'GET')
               assert.strictEqual(spans[0].meta['http.status_code'], '404')
               assert.strictEqual(spans[0].meta.component, 'express')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'http.route'))
+              assert.ok(!('http.route' in spans[0].meta))
             }).then(done).catch(done)
 
             axios

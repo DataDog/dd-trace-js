@@ -88,9 +88,9 @@ describe('Plugin', () => {
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                assertObjectContains(record, 'trace_id')
-                assertObjectContains(record, 'span_id')
-                assertObjectContains(record, 'message')
+                assert.match(record, new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
+                assert.match(record, new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
+                assert.match(record, /message/)
               })
             })
           }
@@ -228,7 +228,7 @@ describe('Plugin', () => {
                 assert.match(record, new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
                 assert.match(record, new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
 
-                assertObjectContains(record, 'message')
+                assert.match(record, /message/)
               })
             })
           }

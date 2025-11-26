@@ -248,7 +248,8 @@ describe('PrioritySampler', () => {
         }
       })
 
-      expect(prioritySampler.sample(context)).to.not.throw
+      // Should not throw
+      prioritySampler.sample(context)
       assert.strictEqual(context._sampling.priority, USER_REJECT)
     })
 
@@ -257,7 +258,8 @@ describe('PrioritySampler', () => {
         rules: 5
       })
 
-      expect(prioritySampler.sample(context)).to.not.throw
+      // Should not throw
+      prioritySampler.sample(context)
       assert.strictEqual(context._sampling.priority, AUTO_KEEP)
     })
 
@@ -355,7 +357,7 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span)
 
       assert.strictEqual(context._trace['_dd.rule_psr'], 0)
-      assert.ok(!Object.hasOwn(context._trace, '_dd.limit_psr'))
+      assert.ok(!('_dd.limit_psr' in context._trace))
     })
 
     it('should add metrics for rate limiter sample rate', () => {

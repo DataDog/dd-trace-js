@@ -122,7 +122,10 @@ describe('Hardcoded Secret Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            assertObjectContains(traces[0][0].meta['_dd.iast.json'], '"HARDCODED_SECRET"')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              { vulnerabilities: [{ type: 'HARDCODED_SECRET' }] }
+            )
           })
           .then(done)
           .catch(done)

@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const logger = require('./logger')
 const sum = require('./sum')

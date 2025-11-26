@@ -695,7 +695,7 @@ describe('RemoteConfigManager', () => {
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
       sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
-      assert.strictEqual(rc.appliedConfigs.length, 0)
+      assert.strictEqual(rc.appliedConfigs.size, 0)
     })
   })
 })

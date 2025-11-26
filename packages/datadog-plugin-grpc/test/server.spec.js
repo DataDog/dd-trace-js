@@ -240,7 +240,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].error, 1)
               assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
               assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'grpc.status.code'))
+              assert.ok(!('grpc.status.code' in traces[0][0].meta))
             })
         })
 

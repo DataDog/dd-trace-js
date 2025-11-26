@@ -91,14 +91,14 @@ describe('Tracer', () => {
         tracer.trace('name', {}, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!Object.hasOwn(trace.meta, BASE_SERVICE))
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!Object.hasOwn(trace.meta, BASE_SERVICE))
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
     })
 

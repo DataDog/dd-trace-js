@@ -58,7 +58,7 @@ describe('RASP - command_injection - integration', () => {
 
       const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
-        assert.ok(payload[0][0].meta['_dd.appsec.json'].includes(`"rasp-command_injection-rule-id-${ruleId}"`))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
       })
 
       const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
