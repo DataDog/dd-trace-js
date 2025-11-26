@@ -60,7 +60,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: rm -rf *
-      - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) package
+      - run: tar -zxf /tmp/dd-trace.tgz package -C $(pwd)
       - run: yarn --prod --ignore-optional
       - run: ls -lisa
       - name: Compute module size tree and report
