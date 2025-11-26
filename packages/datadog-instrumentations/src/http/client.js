@@ -55,12 +55,10 @@ function setupResponseInstrumentation (ctx, res) {
     return null
   }
 
-  let dataHandler = null
-  let onNewListener = null
+  let userConsumingBody = false
   let finishCalled = false
-  let readWrapped = false
   let originalRead = null
-  let cleaned = false
+  let dataListenerAdded = false
 
   const { shouldCollectBody } = ctx
   const bodyChunks = shouldCollectBody ? [] : null
@@ -78,95 +76,66 @@ function setupResponseInstrumentation (ctx, res) {
     }
   }
 
-  // Wrapping read() only taps what the customer already pulled,
-  // so back pressure stays unchanged.
-  const wrapRead = () => {
-    if (readWrapped) return
-    if (typeof res.read !== 'function') return
+  // Listen for user adding consumption listeners
+  const onNewListener = (eventName) => {
+    if (eventName === 'data' || eventName === 'readable') {
+      userConsumingBody = true
 
-    readWrapped = true
-    originalRead = res.read
-
-    res.read = function wrappedRead () {
-      const chunk = originalRead.apply(this, arguments)
-
-      if (chunk !== undefined && chunk !== null) {
-        collectChunk(chunk)
+      // For 'data' events, add our own listener to collect chunks
+      if (eventName === 'data' && !dataListenerAdded) {
+        dataListenerAdded = true
+        res.on('data', collectChunk)
       }
 
-      return chunk
-    }
-  }
-
-  onNewListener = (eventName) => {
-    if (eventName === 'data' && !dataHandler) {
-      dataHandler = (chunk) => {
-        collectChunk(chunk)
+      // For 'readable' events, wrap the read() method
+      if (eventName === 'readable' && !originalRead && typeof res.read === 'function') {
+        originalRead = res.read
+        res.read = function () {
+          const chunk = originalRead.apply(this, arguments)
+          collectChunk(chunk)
+          return chunk
+        }
       }
-      res.on('data', dataHandler)
-    }
-
-    if (eventName === 'readable') {
-      wrapRead()
     }
   }
 
   res.on('newListener', onNewListener)
 
-  // Remove every wrapper/listener we added so the response goes back to normal.
+  // Cleanup function to restore original behavior
   const cleanup = () => {
-    if (cleaned) return
-    cleaned = true
+    res.off('newListener', onNewListener)
+    res.off('data', collectChunk)
 
-    if (dataHandler) {
-      res.off('data', dataHandler)
-      dataHandler = null
-    }
-
-    if (onNewListener) {
-      res.off('newListener', onNewListener)
-      onNewListener = null
-    }
-
-    if (readWrapped && originalRead) {
+    if (originalRead) {
       res.read = originalRead
       originalRead = null
-      readWrapped = false
     }
   }
 
-  let notifyFinish = null
+  const notifyFinish = () => {
+    if (finishCalled) return
+    finishCalled = true
 
-  if (shouldInstrumentFinish) {
-    notifyFinish = () => {
-      if (finishCalled) return
-      finishCalled = true
-
-      // Combine collected chunks into a single body (or null if no chunks)
-      let body = null
-      if (bodyChunks?.length) {
-        const firstChunk = bodyChunks[0]
-        body = typeof firstChunk === 'string'
-          ? bodyChunks.join('')
-          : Buffer.concat(bodyChunks)
-      }
-
-      responseFinishChannel.publish({ ctx, res, body })
-      cleanup()
+    // Combine collected chunks into a single body (or null if no chunks)
+    let body = null
+    if (bodyChunks?.length) {
+      const firstChunk = bodyChunks[0]
+      body = typeof firstChunk === 'string'
+        ? bodyChunks.join('')
+        : Buffer.concat(bodyChunks)
     }
 
-    res.once('end', notifyFinish)
-    res.once('close', notifyFinish)
-  } else {
-    res.once('end', cleanup)
-    res.once('close', cleanup)
+    responseFinishChannel.publish({ ctx, res, body })
+    cleanup()
   }
+
+  res.once('end', notifyFinish)
+  res.once('close', notifyFinish)
 
   return {
     finalizeIfNeeded () {
-      if (notifyFinish && shouldAutoFinishResponse(res)) {
-        // Drain ignored bodies so we can still observe downstream responses without
-        // altering behaviour for customers that actually consume the stream.
+      if (!userConsumingBody) {
+        // User didn't add any listeners, auto-drain to complete the response
         notifyFinish()
         autoDrainResponse(res)
       }
@@ -174,28 +143,6 @@ function setupResponseInstrumentation (ctx, res) {
   }
 }
 
-/**
- * Determines whether we should auto drain a downstream response because the
- * customer never consumed the body.
- *
- * @param {import('http').IncomingMessage} res - The downstream response stream.
- * @returns {boolean} True when no listeners are present and draining is safe.
- */
-function shouldAutoFinishResponse (res) {
-  if (!res || typeof res.listenerCount !== 'function') {
-    return false
-  }
-
-  if (res.destroyed) return false
-  if (typeof res.readableEnded === 'boolean' && res.readableEnded) return false
-  if (typeof res.complete === 'boolean' && res.complete) return false
-  if (res.readableFlowing) return false
-
-  if (res.listenerCount('data') > 0) return false
-  if (res.listenerCount('readable') > 0) return false
-
-  return true
-}
 
 /**
  * Resume switches the stream into flowing mode and drains the socket buffers.
