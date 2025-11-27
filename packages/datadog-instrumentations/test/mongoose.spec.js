@@ -25,9 +25,7 @@ describe('mongoose instrumentations', () => {
         let Test, dbName, id, mongoose
 
         function connect () {
-          const connectOptions = {
-            bufferCommands: false
-          }
+          const connectOptions = {}
 
           // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
           if (semver.lt(specificVersion, '5.0.0')) {
