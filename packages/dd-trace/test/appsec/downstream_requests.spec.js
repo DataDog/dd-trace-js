@@ -74,10 +74,8 @@ describe('appsec downstream_requests', () => {
 
     it('returns stored decision even after limit reached', () => {
       assert.strictEqual(downstream.shouldSampleBody(req, 'http://example.com/first'), true)
-      
       // limit reached
       assert.strictEqual(downstream.shouldSampleBody(req, 'http://example.com/second'), false)
-
       // stored decision should still work
       const redirectUrl = 'http://example.com/redirect-target'
       downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
