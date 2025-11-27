@@ -20,14 +20,20 @@ describe('Plugin', () => {
       // This needs to be called synchronously right before each test to make
       // sure a connection is not already established and the request is added
       // to the queue.
-      function connect () {
+      function connect (mongooseVersion) {
+        const connectOptions = {
+          bufferCommands: false
+        }
+
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
+        if (semver.lt(mongooseVersion, '5.0.0')) {
+          connectOptions.useNewUrlParser = true
+          connectOptions.useUnifiedTopology = true
+        }
+
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
         // actually the first part of the path is the dbName and not the collection
-        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
-          bufferCommands: false,
-          useNewUrlParser: true,
-          useUnifiedTopology: true
-        })
+        return mongoose.connect(`mongodb://localhost:27017/${dbName}`, connectOptions)
       }
 
       beforeEach(() => {
@@ -39,9 +45,11 @@ describe('Plugin', () => {
 
         mongoose = require(`../../../versions/mongoose@${version}`).get()
 
+        const mongooseVersion = require(`../../../versions/mongoose@${version}`).version()
+
         dbName = id().toString()
 
-        await connect()
+        await connect(mongooseVersion)
       })
 
       afterEach(async () => {
