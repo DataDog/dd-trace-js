@@ -72,8 +72,9 @@ function handleResponseFinish ({ ctx, res, body }) {
   if (!originatingRequest) return
 
   // Skip body analysis for redirect responses
-  const evaluateBody = ctx.shouldCollectBody && downstream.handleRedirectResponse(originatingRequest, res)
-  runResponseEvaluation(res, originatingRequest, evaluateBody ? null : body)
+  const evaluateBody = ctx.shouldCollectBody && !downstream.handleRedirectResponse(originatingRequest, res)
+  const responseBody = evaluateBody ? body : null
+  runResponseEvaluation(res, originatingRequest, responseBody)
 }
 
 /**

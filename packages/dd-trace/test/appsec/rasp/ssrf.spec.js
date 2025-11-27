@@ -286,5 +286,24 @@ describe('RASP - ssrf.js', () => {
 
       sinon.assert.notCalled(downstream.storeRedirectBodyCollectionDecision)
     })
+
+    it('passes null body when shouldCollectBody is false even for non-redirect', () => {
+      const ctx = makeCtx()
+      stubStore({}, {})
+
+      downstream.handleRedirectResponse.returns(false)
+      downstream.extractResponseData.returns({
+        [addresses.HTTP_OUTGOING_RESPONSE_STATUS]: '200'
+      })
+      waf.run.returns({ events: [] })
+
+      publishRequestStart({ ctx, includeBodies: false })
+
+      const response = createResponse({ statusCode: 200 })
+      const body = Buffer.from('{"data":"test"}')
+      httpClientResponseFinish.publish({ ctx, res: response, body })
+
+      sinon.assert.calledWith(downstream.extractResponseData, response, null)
+    })
   })
 })
