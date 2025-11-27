@@ -281,6 +281,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.sampleDelay', 30)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionEnabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.endpointCollectionMessageLimit', 300)
+    expect(config).to.have.nested.property('appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate', 0.5)
+    expect(config).to.have.nested.property('appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', 1)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)

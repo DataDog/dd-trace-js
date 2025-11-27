@@ -318,20 +318,6 @@ describe('appsec downstream_requests', () => {
     })
   })
 
-  describe('getResponseContentType', () => {
-    it('returns content-type header value', () => {
-      expect(downstream.getResponseContentType({ 'content-type': 'application/json' })).to.equal('application/json')
-    })
-
-    it('returns null when headers is null', () => {
-      expect(downstream.getResponseContentType(null)).to.equal(null)
-    })
-
-    it('returns null when content-type header is missing', () => {
-      expect(downstream.getResponseContentType({ 'other-header': 'value' })).to.equal(null)
-    })
-  })
-
   describe('getMethod', () => {
     it('returns method when valid string', () => {
       expect(downstream.getMethod('POST')).to.equal('POST')

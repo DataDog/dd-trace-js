@@ -64,26 +64,22 @@ function analyzeSsrf (ctx) {
  * }} payload event payload from the channel.
  */
 function handleResponseFinish ({ ctx, res, body }) {
+  // downstream response object
   if (!res) return
 
   const store = storage('legacy').getStore()
-  const req = store?.req
-  if (!req) return
+  const originatingRequest = store?.req
+  if (!originatingRequest) return
 
-  const evaluateBody = ctx.shouldCollectBody && downstream.handleRedirectResponse(req, res)
-
-  if (evaluateBody) {
-    // Skip body analysis for redirect responses
-    runResponseEvaluation(res, req, null)
-  } else {
-    runResponseEvaluation(res, req, body)
-  }
+  // Skip body analysis for redirect responses
+  const evaluateBody = ctx.shouldCollectBody && downstream.handleRedirectResponse(originatingRequest, res)
+  runResponseEvaluation(res, originatingRequest, evaluateBody ? null : body)
 }
 
 /**
  * Evaluates the downstream response and records telemetry.
  * @param {import('http').IncomingMessage} res outgoing response object.
- * @param {import('http').IncomingMessage} req originating inbound request.
+ * @param {import('http').IncomingMessage} req originating outgoing request.
  * @param {string|Buffer|null} responseBody collected downstream response body
  */
 function runResponseEvaluation (res, req, responseBody) {
@@ -94,6 +90,7 @@ function runResponseEvaluation (res, req, responseBody) {
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'response' }
   const result = waf.run({ ephemeral: responseAddresses }, req, raspRule)
 
+  // TODO: this should be done in the waf functions directly instead of calling it everywhere
   const ruleTriggered = !!result?.events?.length
 
   if (ruleTriggered) {

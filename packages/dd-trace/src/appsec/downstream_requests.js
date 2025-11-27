@@ -39,7 +39,7 @@ function enable (_config) {
 
 function disable () {
   config = null
-  globalRequestCounter = 0n
+  globalRequestCounter = null
   bodyAnalysisCount = null
   downstreamAnalysisCount = null
   redirectBodyCollectionDecisions = null
@@ -47,24 +47,20 @@ function disable () {
 
 /**
  * Check we have a stored redirect body collection decision for a given URL.
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  * @param {string} outgoingUrl the URL being requested.
  * @returns {boolean} the stored decision
  */
-function getRedirectBodyCollectionDecision (req, outgoingUrl) {
+function consumeRedirectBodyCollectionDecision (req, outgoingUrl) {
   const decisions = redirectBodyCollectionDecisions.get(req)
   if (!decisions) return false
 
-  const decision = decisions.has(outgoingUrl)
-  if (!decision) return false
-
-  decisions.delete(outgoingUrl)
-  return true
+  return decisions.delete(outgoingUrl)
 }
 
 /**
  * Stores a redirect body collection decision for a follow-up request.
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  * @param {string} redirectUrl the URL to redirect to.
  */
 function storeRedirectBodyCollectionDecision (req, redirectUrl) {
@@ -80,13 +76,13 @@ function storeRedirectBodyCollectionDecision (req, redirectUrl) {
 
 /**
  * Determines whether the current downstream request/responses bodies should be sampled for analysis.
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  * @param {string} outgoingUrl the URL being requested (to check for redirect decisions).
  * @returns {boolean} true when the downstream response body should be captured.
  */
 function shouldSampleBody (req, outgoingUrl) {
   // Check if there's a stored decision from a previous redirect
-  const storedDecision = getRedirectBodyCollectionDecision(req, outgoingUrl)
+  const storedDecision = consumeRedirectBodyCollectionDecision(req, outgoingUrl)
   if (storedDecision) return true
 
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
@@ -112,7 +108,7 @@ function shouldSampleBody (req, outgoingUrl) {
 
 /**
  * Increments the number of downstream body analyses performed for the given request.
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  */
 function incrementBodyAnalysisCount (req) {
   const currentCount = bodyAnalysisCount.get(req) || 0
@@ -141,7 +137,7 @@ function extractRequestData (ctx) {
 
 /**
  * Checks if a response is a redirect
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  * @param {import('http').IncomingMessage} res downstream response object.
  * @returns {boolean} is redirect.
  */
@@ -177,7 +173,7 @@ function extractResponseData (res, responseBody) {
 
   if (responseBody) {
     // Parse the body based on content-type
-    const contentType = getResponseContentType(res.headers)
+    const contentType = res.headers?.['content-type']
     const body = parseBody(responseBody, contentType)
 
     if (body) {
@@ -190,7 +186,7 @@ function extractResponseData (res, responseBody) {
 
 /**
  * Tracks how many downstream analyses were executed for a given request and updates tracing tags.
- * @param {import('http').IncomingMessage} req inbound request.
+ * @param {import('http').IncomingMessage} req outgoing request.
  */
 function incrementDownstreamAnalysisCount (req) {
   const currentCount = downstreamAnalysisCount.get(req) || 0
@@ -210,17 +206,6 @@ function incrementDownstreamAnalysisCount (req) {
  */
 function getMethod (method) {
   return typeof method === 'string' && method ? method : 'GET'
-}
-
-/**
- * Gets the content-type header value from response headers.
- * @param {import('http').IncomingHttpHeaders|object|null} headers response headers object.
- * @returns {string} content-type value
- */
-function getResponseContentType (headers) {
-  if (!headers) return null
-
-  return headers['content-type'] || null
 }
 
 /**
@@ -302,7 +287,6 @@ module.exports = {
   extractResponseData,
   // exports for tests
   parseBody,
-  getResponseContentType,
   getMethod,
   storeRedirectBodyCollectionDecision
 }
