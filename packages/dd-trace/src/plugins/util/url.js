@@ -8,7 +8,7 @@ const HTTP2_HEADER_PATH = ':path'
 
 const PATH_REGEX = /^(?:[a-z]+:\/\/(?:[^?/]+))?(?<path>\/[^?]*)(?:(\?).*)?$/
 
-const INT_SEGMENT = /^[1-9][0-9]+$/ // Integer of size at least 2
+const INT_SEGMENT = /^[1-9][0-9]+$/ // Integer of size at least 2 (>=10)
 const INT_ID_SEGMENT = /^(?=.*[0-9].*)[0-9._-]{3,}$/ // Mixed string with digits and delimiters
 const HEX_SEGMENT = /^(?=.*[0-9].*)[A-Fa-f0-9]{6,}$/ // Hexadecimal digits of size at least 6 with at least one decimal digit
 const HEX_ID_SEGMENT = /^(?=.*[0-9].*)[A-Fa-f0-9._-]{6,}$/ // Mixed string with hex digits and delimiters
