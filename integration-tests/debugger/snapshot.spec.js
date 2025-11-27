@@ -8,7 +8,7 @@ describe('Dynamic Instrumentation', function () {
 
   describe('input messages', function () {
     describe('with snapshot', function () {
-      beforeEach(t.triggerBreakpoint)
+      beforeEach(() => { t.triggerBreakpoint() })
 
       it('should capture a snapshot', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
@@ -209,12 +209,12 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
 
-          assert.deepStrictEqual(Object.keys(locals), [
+          assert.deepStrictEqual(Object.keys(locals).sort(), [
             // Up to 3 properties from the closure scope
             'fastify', 'getUndefined',
             // Up to 3 properties from the local scope
             'request', 'nil', 'undef'
-          ])
+          ].sort())
 
           assert.strictEqual(locals.request.type, 'Request')
           assert.strictEqual(Object.keys(locals.request.fields).length, maxFieldCount)

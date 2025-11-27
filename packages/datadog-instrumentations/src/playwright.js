@@ -481,6 +481,15 @@ function dispatcherRunWrapper (run) {
 
 function dispatcherRunWrapperNew (run) {
   return function (testGroups) {
+    // Filter out disabled tests from testGroups before they get scheduled
+    if (isTestManagementTestsEnabled) {
+      testGroups.forEach(group => {
+        group.tests = group.tests.filter(test => !test._ddIsDisabled)
+      })
+      // Remove empty groups
+      testGroups = testGroups.filter(group => group.tests.length > 0)
+    }
+
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
@@ -893,6 +902,9 @@ addHook({
         if (testProperties.disabled) {
           test._ddIsDisabled = true
           test.expectedStatus = 'skipped'
+          // setting test.expectedStatus to 'skipped' does not work for every case,
+          // so we need to filter out disabled tests in dispatcherRunWrapperNew,
+          // so they don't get to the workers
           continue
         }
         if (testProperties.quarantined) {
@@ -1270,6 +1282,10 @@ function generateSummaryWrapper (generateSummary) {
         const {
           _requireFile: testSuiteAbsolutePath,
           location: { line: testSourceLine },
+          _ddIsNew: isNew,
+          _ddIsDisabled: isDisabled,
+          _ddIsModified: isModified,
+          _ddIsQuarantined: isQuarantined
         } = test
         const browserName = getBrowserNameFromProjects(sessionProjects, test)
 
@@ -1278,6 +1294,10 @@ function generateSummaryWrapper (generateSummary) {
           testSuiteAbsolutePath,
           testSourceLine,
           browserName,
+          isNew,
+          isDisabled,
+          isModified,
+          isQuarantined
         })
       }
     }
