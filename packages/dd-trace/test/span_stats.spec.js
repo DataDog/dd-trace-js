@@ -136,7 +136,8 @@ describe('SpanAggKey', () => {
       }
     }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
