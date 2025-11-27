@@ -52,6 +52,7 @@ module.exports = {
   'dd-trace-api': () => require('../dd-trace-api'),
   dns: () => require('../dns'),
   elasticsearch: () => require('../elasticsearch'),
+  electron: () => require('../electron'),
   express: () => require('../express'),
   'express-mongo-sanitize': () => require('../express-mongo-sanitize'),
   'express-session': () => require('../express-session'),
