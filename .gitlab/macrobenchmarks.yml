@@ -115,5 +115,6 @@ notify-slo-breaches:
   stage: macrobenchmarks-notify
   needs:
     - check-slo-breaches
+  when: always
   variables:
     CHANNEL: "notifications-apm-js"
