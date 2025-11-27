@@ -79,9 +79,9 @@ function handleResponseFinish ({ ctx, res, body }) {
 
 /**
  * Evaluates the downstream response and records telemetry.
- * @param {import('http').IncomingMessage} res outgoing response object.
- * @param {import('http').IncomingMessage} req originating outgoing request.
- * @param {string|Buffer|null} responseBody collected downstream response body
+ * @param {import('http').IncomingMessage} res incoming response from downstream service.
+ * @param {import('http').IncomingMessage} req originating request.
+ * @param {string|Buffer|null} responseBody collected downstream response body.
  */
 function runResponseEvaluation (res, req, responseBody) {
   const responseAddresses = downstream.extractResponseData(res, responseBody)
