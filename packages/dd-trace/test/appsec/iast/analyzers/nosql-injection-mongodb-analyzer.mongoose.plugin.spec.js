@@ -26,10 +26,15 @@ describe('nosql injection detection in mongodb - whole feature', () => {
         const dbName = id().toString()
         mongoose = require(`../../../../../../versions/mongoose@${mongooseVersion}`).get()
 
-        await mongoose.connect(`mongodb://localhost:27017/${dbName}`, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true
-        })
+        const connectOptions = {}
+
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        if (semver.lt(version, '6.0.0')) {
+          connectOptions.useNewUrlParser = true
+          connectOptions.useUnifiedTopology = true
+        }
+
+        await mongoose.connect(`mongodb://localhost:27017/${dbName}`)
 
         if (mongoose.models.Test) {
           delete mongoose.models?.Test
