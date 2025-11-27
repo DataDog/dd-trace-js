@@ -98,7 +98,6 @@ export default [
       promise: eslintPluginPromise,
     },
     rules: {
-      'no-unused-expressions': 'error',
       '@stylistic/array-bracket-spacing': ['error', 'never'],
       '@stylistic/arrow-spacing': ['error', { before: true, after: true }],
       '@stylistic/block-spacing': ['error', 'always'],
@@ -417,6 +416,7 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'no-unused-expressions': 'error',
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
