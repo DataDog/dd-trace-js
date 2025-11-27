@@ -55,7 +55,7 @@ function setupResponseInstrumentation (ctx, res) {
     return null
   }
 
-  let userConsumingBody = false
+  let bodyConsumed = false
   let finishCalled = false
   let originalRead = null
   let dataListenerAdded = false
@@ -76,10 +76,10 @@ function setupResponseInstrumentation (ctx, res) {
     }
   }
 
-  // Listen for user adding consumption listeners
+  // Listen for body consumption
   const onNewListener = (eventName) => {
     if (eventName === 'data' || eventName === 'readable') {
-      userConsumingBody = true
+      bodyConsumed = true
 
       // For 'data' events, add our own listener to collect chunks
       if (eventName === 'data' && !dataListenerAdded) {
@@ -116,7 +116,7 @@ function setupResponseInstrumentation (ctx, res) {
     if (finishCalled) return
     finishCalled = true
 
-    // Combine collected chunks into a single body (or null if no chunks)
+    // Combine collected chunks into a single body
     let body = null
     if (bodyChunks?.length) {
       const firstChunk = bodyChunks[0]
@@ -134,24 +134,21 @@ function setupResponseInstrumentation (ctx, res) {
 
   return {
     finalizeIfNeeded () {
-      if (!userConsumingBody) {
-        // User didn't add any listeners, auto-drain to complete the response
+      if (!bodyConsumed) {
+        // Body not consumed, resume to complete the response
         notifyFinish()
-        autoDrainResponse(res)
+        resumeResponse(res)
       }
     }
   }
 }
 
-
 /**
- * Resume switches the stream into flowing mode and drains the socket buffers.
- * Node.js keeps queued data available via read() afterwards, so customer code can
- * still consume the body later.
+ * Resumes the response stream to drain unconsumed data.
  *
  * @param {import('http').IncomingMessage} res
  */
-function autoDrainResponse (res) {
+function resumeResponse (res) {
   if (!res) return
   if (typeof res.resume !== 'function') return
   if (res.destroyed) return
