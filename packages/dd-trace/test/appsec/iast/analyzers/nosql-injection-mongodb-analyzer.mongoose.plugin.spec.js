@@ -30,7 +30,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
         const connectOptions = {}
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
         if (semver.lt(loadedMongooseVersion, '5.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true

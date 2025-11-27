@@ -25,7 +25,7 @@ describe('Plugin', () => {
           bufferCommands: false
         }
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
         if (semver.lt(mongooseVersion, '5.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
