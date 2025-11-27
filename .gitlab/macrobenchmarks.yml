@@ -109,6 +109,10 @@ check-slo-breaches:
     paths:
       - platform/artifacts/
     expire_in: 3 months
+  variables:
+    DDOCTOSTS_POLICY: "self.gitlab.read"
+    ARTIFACTS_DIR: "platform/artifacts"
+    SLO_FILE: ".gitlab/benchmarks/bp-runner.fail-on-breach.yml"
 
 notify-slo-breaches:
   extends: .notify-slo-breaches
