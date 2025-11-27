@@ -115,10 +115,6 @@ check-slo-breaches:
       - platform/artifacts/
     expire_in: 3 months
   variables:
-    # TODO: Revert, used for testing
-    # Won't affect the SLO change history since dd-trace-js uses "master"
-    CI_COMMIT_REF_NAME: "main"
-
     DDOCTOSTS_POLICY: "self.gitlab.read"
     ARTIFACTS_DIR: "platform/artifacts"
     SLO_FILE: ".gitlab/benchmarks/bp-runner.fail-on-breach.yml"
