@@ -32,6 +32,7 @@ module.exports = {
   HTTP_OUTGOING_RESPONSE_STATUS: 'server.io.net.response.status',
   HTTP_OUTGOING_RESPONSE_HEADERS: 'server.io.net.response.headers',
   HTTP_OUTGOING_RESPONSE_BODY: 'server.io.net.response.body',
+
   FS_OPERATION_PATH: 'server.io.fs.file',
 
   DB_STATEMENT: 'server.db.statement',
