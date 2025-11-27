@@ -60,6 +60,30 @@ describe('appsec downstream_requests', () => {
       expect(downstream.shouldSampleBody(req, redirectUrl)).to.be.true
     })
 
+    it('returns stored decision even when sample rate is zero', () => {
+      downstream.disable()
+      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
+      config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 0
+      downstream.enable(config)
+
+      const redirectUrl = 'http://example.com/redirect-target'
+      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
+
+      expect(downstream.shouldSampleBody(req, redirectUrl)).to.be.true
+    })
+
+    it('returns stored decision even after limit reached', () => {
+      expect(downstream.shouldSampleBody(req, 'http://example.com/first')).to.be.true
+      
+      // limit reached
+      expect(downstream.shouldSampleBody(req, 'http://example.com/second')).to.be.false
+
+      // stored decision should still work
+      const redirectUrl = 'http://example.com/redirect-target'
+      downstream.storeRedirectBodyCollectionDecision(req, redirectUrl)
+      expect(downstream.shouldSampleBody(req, redirectUrl)).to.be.true
+    })
+
     it('logs warning and clamps value when sample rate is above 1', () => {
       downstream.disable()
       config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.5
