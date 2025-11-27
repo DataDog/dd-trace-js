@@ -94,6 +94,7 @@ export default [
       promise: eslintPluginPromise
     },
     rules: {
+      'no-unused-expressions': 'error',
       '@stylistic/array-bracket-spacing': ['error', 'never'],
       '@stylistic/arrow-spacing': ['error', { before: true, after: true }],
       '@stylistic/block-spacing': ['error', 'always'],
