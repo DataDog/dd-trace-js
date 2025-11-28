@@ -7,6 +7,7 @@ require('dd-trace/init')
 const Fastify = require('fastify')
 const {
   LARGE_OBJECT_SKIP_THRESHOLD
+  // @ts-expect-error This code is running in a sandbox where dd-trace is available
 } = require('dd-trace/packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
 
 const fastify = Fastify({ logger: { level: 'error' } })

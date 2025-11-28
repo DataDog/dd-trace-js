@@ -41,7 +41,7 @@ const pollInterval = 0.1
  *
  * @typedef {BreakpointInfo & {
  *   rcConfig: object|null,
- *   triggerBreakpoint: (url: string) => Promise<import('axios').AxiosResponse<unknown>>,
+ *   triggerBreakpoint: () => Promise<import('axios').AxiosResponse<unknown>>,
  *   generateRemoteConfig: (overrides?: object) => object,
  *   generateProbeConfig: BoundGenerateProbeConfigFn
  * }} EnrichedBreakpoint
@@ -66,6 +66,7 @@ const pollInterval = 0.1
  *   once installed.
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
  * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
+ * @property {() => Promise<object>} snapshotReceived - Waits for a snapshot to be received from the test app.
  */
 
 module.exports = {
@@ -132,7 +133,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0]),
 
     snapshotReceived () {
-      return new Promise((/** @type {(value?: object) => void} */ resolve) => {
+      return new Promise((/** @type {(value: object) => void} */ resolve) => {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
           resolve(snapshot)
         })

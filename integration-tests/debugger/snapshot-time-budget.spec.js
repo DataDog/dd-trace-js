@@ -66,7 +66,8 @@ describe('Dynamic Instrumentation', function () {
             }))
 
             // Trigger once; this run is expected to be slow and mark fields with "timeout"
-            const result1 = await breakpoint.triggerBreakpoint()
+            const result1 = /** @type {import('axios').AxiosResponse<{ paused: number }>} */
+              (await breakpoint.triggerBreakpoint())
             assert.ok(
               result1.data.paused >= 1_000,
               `expected thread to be paused for at least 1 second, but was paused for ~${result1.data.paused}ms`
