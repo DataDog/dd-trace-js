@@ -21,6 +21,7 @@ try {
   console.log(`${LOG_PREFIX} PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
+
 console.log(`${LOG_PREFIX} Creating diagnostic channels`)
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
