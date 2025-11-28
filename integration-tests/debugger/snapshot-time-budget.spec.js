@@ -38,36 +38,25 @@ describe('Dynamic Instrumentation', function () {
           'should timeout first, then disable subsequent snapshots and emit error diagnostics',
           async function () {
             const breakpoint = t.breakpoints[1]
+            const expectedEvaluationErrors = [{
+              expr: '',
+              message: 'An object with 1000000 properties was detected while collecting a snapshot. This exceeds ' +
+                `the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. Future snapshots for ` +
+                'existing probes in this location will be skipped until the Node.js process is restarted'
+            }]
 
             // Listen for the first snapshot payload (should contain notCapturedReason: "timeout")
-            const firstPayloadReceived = new Promise((resolve) => {
-              t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
-                const { locals } = captures.lines[breakpoint.line]
-                resolve(locals)
+            const firstPayloadReceived = new Promise(/** @type {() => void} */ (resolve) => {
+              t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+                const { locals } = snapshot.captures.lines[breakpoint.line]
+                assert.strictEqual(
+                  containsTimeBudget(locals),
+                  true,
+                  'expected at least one field/element to be marked with notCapturedReason: "timeout"'
+                )
+                assert.deepStrictEqual(snapshot.evaluationErrors, expectedEvaluationErrors)
+                resolve()
               })
-            })
-
-            // Prepare to assert that an ERROR diagnostics event with exception details is emitted
-            const errorDiagnosticsReceived = new Promise((/** @type {(value?: unknown) => void} */ resolve, reject) => {
-              const handler = ({ payload }) => {
-                payload.forEach(({ debugger: { diagnostics } }) => {
-                  if (diagnostics.status !== 'ERROR') return
-                  try {
-                    assert.strictEqual(
-                      diagnostics.exception.message,
-                      'An object with 1000000 properties was detected while collecting a snapshot. This exceeds the ' +
-                      'maximum number of allowed properties of 500. Future snapshots for existing probes in this ' +
-                      'location will be skipped until the Node.js process is restarted'
-                    )
-                    resolve()
-                  } catch (e) {
-                    reject(e)
-                  } finally {
-                    t.agent.off('debugger-diagnostics', handler)
-                  }
-                })
-              }
-              t.agent.on('debugger-diagnostics', handler)
             })
 
             // Install probe with snapshot capture enabled
@@ -82,18 +71,14 @@ describe('Dynamic Instrumentation', function () {
               result1.data.paused >= 1_000,
               `expected thread to be paused for at least 1 second, but was paused for ~${result1.data.paused}ms`
             )
-            const locals = await firstPayloadReceived
-            assert.strictEqual(
-              containsTimeBudget(locals),
-              true,
-              'expected at least one field/element to be marked with notCapturedReason: "timeout"'
-            )
-            await errorDiagnosticsReceived
+
+            await firstPayloadReceived
 
             // Prepare to assert that no snapshot is produced on a subsequent trigger
-            const noSnapshotAfterSecondTrigger = new Promise((/** @type {(value?: unknown) => void} */ resolve) => {
-              t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
-                assert.strictEqual(captures, undefined)
+            const secondPayloadReceived = new Promise(/** @type {() => void} */ (resolve) => {
+              t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+                assert.ok(!Object.hasOwn(snapshot, 'captures'))
+                assert.deepStrictEqual(snapshot.evaluationErrors, expectedEvaluationErrors)
                 resolve()
               })
             })
@@ -105,7 +90,7 @@ describe('Dynamic Instrumentation', function () {
               `expected thread to be paused <=5ms, but was paused for ~${result2.data.paused}ms`
             )
 
-            await noSnapshotAfterSecondTrigger
+            await secondPayloadReceived
           }
         )
       })

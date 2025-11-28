@@ -6,7 +6,7 @@ const session = require('./session')
 const { getLocalStateForCallFrame } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
-const { ackEmitting, ackError } = require('./status')
+const { ackEmitting } = require('./status')
 const config = require('./config')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
@@ -219,13 +219,18 @@ session.on('Debugger.paused', async ({ params }) => {
       if (captureErrors.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
         probe.captureSnapshot = false
-        for (const error of captureErrors) {
-          ackError(error, probe)
-        }
+        probe.permanentEvaluationErrors = captureErrors.map(error => ({
+          expr: '',
+          message: error.message
+        }))
       }
       snapshot.captures = {
         lines: { [probe.location.lines[0]]: { locals: processLocalState() } }
       }
+    }
+
+    if (probe.permanentEvaluationErrors !== undefined) {
+      snapshot.evaluationErrors = [...probe.permanentEvaluationErrors]
     }
 
     let message = ''
