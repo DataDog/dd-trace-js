@@ -48,21 +48,11 @@ describe('Plugin', () => {
       let expectedConsumerHash
 
       describe('without configuration', () => {
-        beforeEach(async () => {
-          const msg = `[DD-PUBSUB-TEST] ======================================== Loading google-cloud-pubsub plugin at ${new Date().toISOString()} ========================================`
-          console.log(msg)
-          process.stdout.write(msg + '\n')
-          
-          // CRITICAL: Load instrumentation BEFORE requiring @google-cloud/pubsub
-          // This ensures addHook() wrappers attach before the module is cached
-          // flushMinSpans: 1 forces the processor to export partial traces (critical for tests!)
-          await agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushInterval: 0, flushMinSpans: 1 })
-          
-          const initMsg = `[DD-PUBSUB-TEST] Initializing test environment for version: ${version}`
-          console.log(initMsg)
-          process.stdout.write(initMsg + '\n')
-          
-          // NOW require the library - hooks will attach
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
+        })
+
+        beforeEach(() => {
           tracer = require('../../dd-trace')
           gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
@@ -71,10 +61,6 @@ describe('Plugin', () => {
           resource = `projects/${project}/topics/${topicName}`
           v1 = lib.v1
           pubsub = new lib.PubSub({ projectId: project })
-          
-          const readyMsg = `[DD-PUBSUB-TEST] Test environment ready - project: ${project}, topic: ${topicName}`
-          console.log(readyMsg)
-          process.stdout.write(readyMsg + '\n')
         })
 
         describe('createTopic', () => {
@@ -198,92 +184,54 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
-
-            // Set up listener - wait for ack AND remove/finish to complete
-            const messagePromise = new Promise((resolve) => {
-              sub.on('message', msg => {
-                msg.ack()
-                // Wait 1000ms to ensure both producer and consumer spans reach test agent
-                setTimeout(resolve, 1000)
-              })
-            })
-
-            await publish(topic, { data: Buffer.from('hello') })
-            await messagePromise
-
-            // NOW expect the span AFTER message processing completes
-            return expectSpanWithDefaults({
+            const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
               type: 'worker',
               meta: {
                 component: 'google-cloud-pubsub',
-                'span.kind': 'consumer'
+                'span.kind': 'consumer',
+                'pubsub.topic': resource
               },
               metrics: {
                 'pubsub.ack': 1
               }
             })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            sub.on('message', msg => msg.ack())
+            await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
           })
 
           it('should give the current span a parentId from the sender', async () => {
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
-            
-            const messagePromise = new Promise((resolve) => {
-            sub.on('message', msg => {
-                const activeSpan = tracer.scope().active()
-                if (activeSpan) {
-                  const receiverSpanContext = activeSpan._spanContext
-                  expect(receiverSpanContext._parentId).to.be.an('object')
-                }
-              msg.ack()
-                // Wait 1000ms for remove() -> bindFinish() -> flush to complete
-                setTimeout(resolve, 1000)
-              })
-            })
-            
-            await publish(topic, { data: Buffer.from('hello') })
-            await messagePromise
-
-            // NOW expect the span AFTER message processing completes
-            return expectSpanWithDefaults({
+            const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
               type: 'worker',
               meta: {
                 component: 'google-cloud-pubsub',
-                'span.kind': 'consumer'
+                'span.kind': 'consumer',
+                'pubsub.topic': resource
               }
             })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            sub.on('message', msg => {
+              const activeSpan = tracer.scope().active()
+              if (activeSpan) {
+                const receiverSpanContext = activeSpan._spanContext
+                expect(receiverSpanContext._parentId).to.be.an('object')
+              }
+              msg.ack()
+            })
+            await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
           })
 
           it('should be instrumented w/ error', async () => {
             const error = new Error('bad')
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
-
-            const messagePromise = new Promise((resolve) => {
-              sub.on('message', msg => {
-                try {
-                  throw error
-                } catch (err) {
-                  // Error is caught and traced, but we don't rethrow
-                } finally {
-                  msg.ack()
-                  // Wait 1000ms for remove() -> bindFinish() -> flush to complete
-                  setTimeout(resolve, 1000)
-                }
-              })
-            })
-
-            await publish(topic, { data: Buffer.from('hello') })
-            await messagePromise
-
-            // NOW expect the span AFTER message processing completes
-            return expectSpanWithDefaults({
+            const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
               type: 'worker',
@@ -293,30 +241,43 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: error.name,
                 [ERROR_STACK]: error.stack,
                 component: 'google-cloud-pubsub',
-                'span.kind': 'consumer'
-                }
+                'span.kind': 'consumer',
+                'pubsub.topic': resource
+              }
             })
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            const emit = sub.emit
+            sub.emit = function emitWrapped (name) {
+              let err
+
+              try {
+                return emit.apply(this, arguments)
+              } catch (e) {
+                err = e
+              } finally {
+                if (name === 'message') {
+                  expect(err).to.equal(error)
+                }
+              }
+            }
+            sub.on('message', msg => {
+              try {
+                throw error
+              } finally {
+                msg.ack()
+              }
+            })
+            await publish(topic, { data: Buffer.from('hello') })
+            return expectedSpanPromise
           })
 
           withNamingSchema(
             async (config) => {
               const [topic] = await pubsub.createTopic(topicName)
               const [sub] = await topic.createSubscription('foo')
-
-              // Set up message handler
-              const messagePromise = new Promise((resolve) => {
-              sub.on('message', msg => {
-                msg.ack()
-                  // Wait 1000ms for remove() -> bindFinish() -> flush to complete
-                  setTimeout(resolve, 1000)
-                })
-              })
-
-              // Publish message with trace context
+              sub.on('message', msg => msg.ack())
               await publish(topic, { data: Buffer.from('hello') })
-              
-              // Wait for message processing and flush
-              await messagePromise
             },
             rawExpectedSchema.receive,
             {
@@ -374,14 +335,14 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        beforeEach(async () => {
-          // Load instrumentation BEFORE requiring the library
-          await agent.load('google-cloud-pubsub', {
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', {
             service: 'a_test_service',
             dsmEnabled: false
           })
-          
-          // NOW require the library - hooks will attach
+        })
+
+        beforeEach(() => {
           tracer = require('../../dd-trace')
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
@@ -408,56 +369,18 @@ describe('Plugin', () => {
         let sub
         let consume
 
-        before(async () => {
-          // Load instrumentation BEFORE requiring the library with DSM ENABLED
-          await agent.load('google-cloud-pubsub', {
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', {
             dsmEnabled: true
-          }, {
-            // Also enable DSM on the tracer itself
-            dsmEnabled: true,
-            flushInterval: 0
           })
-          
-          // NOW require the library - hooks will attach
-          tracer = require('../../dd-trace')
-          
-          // CRITICAL: Manually enable DSM on the existing tracer processor
-          // The tracer was initialized in a previous suite with DSM disabled
-          if (!tracer._dataStreamsProcessor) {
-            // If processor doesn't exist, create it
-            const DataStreamsProcessor = require('../../dd-trace/src/datastreams/processor').DataStreamsProcessor
-            const DataStreamsManager = require('../../dd-trace/src/datastreams/manager').DataStreamsManager
-            const DataStreamsCheckpointer = require('../../dd-trace/src/datastreams/checkpointer').DataStreamsCheckpointer
-            tracer._dataStreamsProcessor = new DataStreamsProcessor({
-              dsmEnabled: true,
-              hostname: '127.0.0.1',
-              port: tracer._tracer?._port || 8126,
-              url: tracer._tracer?._url,
-              env: 'tester',
-              service: 'test',
-              flushInterval: 5000
-            })
-            tracer._dataStreamsManager = new DataStreamsManager(tracer._dataStreamsProcessor)
-            tracer.dataStreamsCheckpointer = new DataStreamsCheckpointer(tracer)
-          } else {
-            // If it exists but is disabled, enable it
-            tracer._dataStreamsProcessor.enabled = true
-            if (!tracer._dataStreamsProcessor.timer) {
-              tracer._dataStreamsProcessor.timer = setInterval(
-                tracer._dataStreamsProcessor.onInterval.bind(tracer._dataStreamsProcessor),
-                tracer._dataStreamsProcessor.flushInterval || 5000
-              )
-              tracer._dataStreamsProcessor.timer.unref()
-            }
-          }
-          
-          // Force enable DSM on the plugin
-          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
-          
+        })
+
+        before(async () => {
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           resource = `projects/${project}/topics/${dsmTopicName}`
           pubsub = new PubSub({ projectId: project })
+          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
 
           dsmTopic = await pubsub.createTopic(dsmTopicName)
           dsmTopic = dsmTopic[0]
@@ -485,7 +408,6 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
-            console.log('[TEST DSM] Testing produce checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
 
             agent.expectPipelineStats(dsmStats => {
@@ -504,11 +426,8 @@ describe('Plugin', () => {
           })
 
           it('on consume', async () => {
-            console.log('[TEST DSM] Testing consume checkpoint')
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            console.log('[TEST DSM] Message published, setting up consumer')
             await consume(async () => {
-              console.log('[TEST DSM] Message consumed')
               agent.expectPipelineStats(dsmStats => {
                 let statsPointsReceived = 0
                 // we should have 2 dsm stats points
@@ -536,8 +455,8 @@ describe('Plugin', () => {
           // For publish operations, use the new format: "publish to Topic <topic-name>"
           prefixedResource = `${method} to Topic ${topicName}`
         } else if (spanKind === 'consumer') {
-          // For consumer operations, use the new format: "Message from <topic-name>"
-          prefixedResource = `Message from ${topicName}`
+          // For consumer operations, use the FULL topic path (not the formatted name)
+          prefixedResource = resource
         } else if (method) {
           // For other operations, use the old format: "<method> <full-resource-path>"
           prefixedResource = `${method} ${resource}`
@@ -567,7 +486,7 @@ describe('Plugin', () => {
           }
         }, expected)
         
-        return expectSomeSpan(agent, expected, { timeoutMs: TIMEOUT })
+        return expectSomeSpan(agent, expected, TIMEOUT)
       }
     })
   })

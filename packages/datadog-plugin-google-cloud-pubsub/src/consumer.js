@@ -8,12 +8,10 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   static operation = 'receive'
 
   bindStart (ctx) {
-    console.log('[CONSUMER-PLUGIN] bindStart called, message:', ctx.message?.id)
     const { message } = ctx
     const subscription = message._subscriber._subscription
     const topic = subscription.metadata && subscription.metadata.topic
     const childOf = this.tracer.extract('text_map', message.attributes) || null
-    console.log('[CONSUMER-PLUGIN] topic:', topic, 'childOf:', !!childOf)
 
     const span = this.startSpan({
       childOf,
@@ -27,7 +25,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         'pubsub.ack': 0
       }
     }, ctx)
-    console.log('[CONSUMER-PLUGIN] Span created:', span?.context()?._spanId?.toString(16))
 
     if (this.config.dsmEnabled && message?.attributes) {
       const payloadSize = getMessageSize(message)
@@ -40,18 +37,16 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
   }
 
   bindFinish (ctx) {
-    console.log('[CONSUMER-PLUGIN] bindFinish called, message:', ctx.message?.id)
     const { message } = ctx
-    const span = ctx.currentStore.span
-    console.log('[CONSUMER-PLUGIN] span from ctx:', span?.context()?._spanId?.toString(16))
+    const span = ctx.currentStore?.span
+
+    if (!span) return ctx.parentStore
 
     if (message?._handled) {
       span.setTag('pubsub.ack', 1)
-      console.log('[CONSUMER-PLUGIN] Set pubsub.ack = 1')
     }
 
     super.finish()
-    console.log('[CONSUMER-PLUGIN] super.finish() called, span should be finished')
 
     return ctx.parentStore
   }
