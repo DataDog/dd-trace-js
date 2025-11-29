@@ -94,7 +94,7 @@ async function traverseGetPropertiesResult (props, opts, depth) {
     // Iterate over the work in chunks of 2. The closer to 1, the less we'll overshoot the deadline, but the longer it
     // takes to complete. `2` seems to be the best compromise.
     // Anecdotally, on my machine, with no deadline, a concurrency of `1` takes twice as long as a concurrency of `2`.
-    // From thereon, there's no real measureable savings with a higher concurrency.
+    // From thereon, there's no real measurable savings with a higher concurrency.
     for (let i = 0; i < work.length; i += 2) {
       if (overBudget(opts)) {
         for (let j = i; j < work.length; j++) {

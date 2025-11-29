@@ -34,7 +34,7 @@ describe('onPause', function () {
    */
   /** @type {MockSession} */
   let session
-  /** @type {Function} */
+  /** @type {sinon.SinonSpy} */
   let send
   /** @type {Function} */
   let onPaused
