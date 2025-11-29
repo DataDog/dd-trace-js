@@ -454,8 +454,8 @@ describe('Plugin', () => {
           // For publish operations, use the new format: "publish to Topic <topic-name>"
           prefixedResource = `${method} to Topic ${topicName}`
         } else if (spanKind === 'consumer') {
-          // For consumer operations, use the FULL topic path (not the formatted name)
-          prefixedResource = resource
+          // For consumer operations, use the new format: "Message from <topic-name>"
+          prefixedResource = `Message from ${topicName}`
         } else if (method) {
           // For other operations, use the old format: "<method> <full-resource-path>"
           prefixedResource = `${method} ${resource}`
