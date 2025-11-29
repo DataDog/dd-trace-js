@@ -28,7 +28,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       const maxCollectionSize = config?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE
       const postfix = config === undefined ? 'not set' : `set to ${config.maxCollectionSize}`
 
-      describe(`shold respect the default maxCollectionSize if ${postfix}`, function () {
+      describe(`should respect the default maxCollectionSize if ${postfix}`, function () {
         let state
 
         const expectedElements = []

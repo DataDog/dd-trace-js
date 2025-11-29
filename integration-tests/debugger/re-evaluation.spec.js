@@ -21,7 +21,7 @@ const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/d
 // breakpoint is never exercised during the test, and the tracer therefore never emits the `EMITTING` event.
 //
 // This is only really an issue if Node.js is using the ESM loader, as this is really slow. If the application is
-// purely a CommonJS application, this race condtion will probably never be triggered.
+// purely a CommonJS application, this race condition will probably never be triggered.
 //
 // This test tries to trigger the race condition. However, it doesn't always happen, so it runs multiple times.
 describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
