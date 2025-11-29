@@ -8,8 +8,26 @@ const sinon = require('sinon')
 require('../../setup/mocha')
 
 describe('breakpoints', function () {
+  /** @type {typeof import('../../../src/debugger/devtools_client/breakpoints')} */
   let breakpoints
+  /**
+   * @type {{
+   *   post: sinon.SinonStub;
+   *   on: Function;
+   *   '@noCallThru': boolean;
+   * }}
+   */
   let sessionMock
+  /**
+   * @type {{
+   *   findScriptFromPartialPath: sinon.SinonStub;
+   *   clearState: sinon.SinonStub;
+   *   locationToBreakpoint: Map<any, any>;
+   *   breakpointToProbes: Map<any, any>;
+   *   probeToLocation: Map<any, any>;
+   *   '@noCallThru': boolean;
+   * }}
+   */
   let stateMock
 
   beforeEach(function () {
@@ -322,7 +340,7 @@ describe('breakpoints', function () {
         sinon.assert.calledTwice(sessionMock.post)
       })
 
-      it('mixed: removed probe with condtion', async function () {
+      it('mixed: removed probe with condition', async function () {
         await addProbe({
           when: {
             json: { eq: [{ ref: 'foo' }, 42] },
