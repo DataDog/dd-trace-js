@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -12,7 +11,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -485,7 +484,7 @@ describe('Plugin', () => {
             'gcloud.project_id': project
           }
         }, expected)
-        
+
         return expectSomeSpan(agent, expected, TIMEOUT)
       }
     })
