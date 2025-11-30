@@ -116,7 +116,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   _createDeliverySpan (messageData, parentContext, linkContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
     const subscriptionName = subscription.split('/').pop() || subscription
-
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 

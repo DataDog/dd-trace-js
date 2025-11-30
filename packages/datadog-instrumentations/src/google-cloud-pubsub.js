@@ -7,11 +7,12 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
 
+// Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
 } catch {
-  // PushSubscriptionPlugin not loaded
+  // Push subscription plugin is optional
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -195,7 +196,6 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   return obj
 })
 
-// Hook Message.ack to store span context for acknowledge operations
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
   const Message = obj.Message
 
@@ -219,24 +219,15 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
   return obj
 })
 
-// Hook LeaseManager to create consumer spans
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
-
   if (!LeaseManager) {
     return obj
   }
 
-  // Use a WeakMap keyed by message object (not message.id)
-  // This ensures we retrieve the exact same context object that was mutated by runStores
   const messageContexts = new WeakMap()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
-    // ALWAYS create context and publish events, even if no subscribers yet
-    // The consumer plugin might subscribe later, and we don't want to lose this message
-
-    // Use WeakMap keyed by message object instead of Map keyed by message.id
-    // This ensures we get the exact same context object back in remove()
     const ctx = { message }
     messageContexts.set(message, ctx)
 
@@ -244,19 +235,13 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/le
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
-    // Retrieve the SAME context object from _dispense using message object as key
     const ctx = messageContexts.get(message) || { message }
-
-    // Clean up the WeakMap entry
     messageContexts.delete(message)
 
-    // CRITICAL: Use runStores to preserve async context chain for span finishing
     return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
-    // DON'T publish finish events here - remove() will be called for each message later
-    // and will handle finishing the spans properly with the preserved context
     return clear.apply(this, arguments)
   })
 

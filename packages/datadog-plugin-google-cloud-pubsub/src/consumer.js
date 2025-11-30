@@ -59,18 +59,16 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
 
     const topicName = topic ? topic.split('/').pop() : subscription.name.split('/').pop()
-
-    // Use the public serviceName() method which generates the correct service name
-    // like "base-service-pubsub" using the tracer's nomenclature system
     const serviceName = this.config.service || this.serviceName()
-
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
       'span.kind': 'consumer',
       'pubsub.delivery_method': 'pull',
       'pubsub.span_type': 'message_processing',
-      'messaging.operation': 'receive'
+      'messaging.operation': 'receive',
+      '_dd.base_service': this.tracer._service,
+      '_dd.serviceoverride.type': 'custom'
     }
 
     if (batchRequestTraceId) {
@@ -108,7 +106,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     const span = this.startSpan({
       childOf,
-      resource: `Message from ${topicName}`, // More descriptive resource name
+      resource: `Message from ${topicName}`,
       type: 'worker',
       service: serviceName,
       meta,
