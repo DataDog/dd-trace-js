@@ -181,6 +181,7 @@ interface Tracer extends opentracing.Tracer {
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
+  "ai": tracer.plugins.ai;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "anthropic": tracer.plugins.anthropic;
@@ -653,6 +654,13 @@ declare namespace tracer {
          * @default false
          */
         enabled?: boolean
+        /**
+         * Timeout in milliseconds for OpenFeature provider initialization.
+         * If configuration is not received within this time, initialization fails.
+         *
+         * @default 30000
+         */
+        initializationTimeoutMs?: number
       }
     };
 
@@ -1641,6 +1649,12 @@ declare namespace tracer {
      * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
      */
     interface aerospike extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
+     */
+    interface ai extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -2815,7 +2829,10 @@ declare namespace tracer {
     redactionValuePattern?: string,
 
     /**
-     * Allows to enable security controls.
+     * Allows to enable security controls. This option is not supported when
+     * using ESM.
+     * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * environment variable instead.
      */
     securityControlsConfiguration?: string,
 
@@ -3001,15 +3018,15 @@ declare namespace tracer {
       label: string,
 
       /**
-       * The type of evaluation metric, one of 'categorical' or 'score'
+       * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score',
+      metricType: 'categorical' | 'score' | 'boolean',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics and number for 'score' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
        */
-      value: string | number,
+      value: string | number | boolean,
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.

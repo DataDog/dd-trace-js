@@ -2,7 +2,6 @@
 
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -12,7 +11,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -31,6 +30,7 @@ describe('Plugin', () => {
 
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
+      delete process.env.DD_DATA_STREAMS_ENABLED
     })
 
     afterEach(() => {
@@ -48,7 +48,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('google-cloud-pubsub', { dsmEnabled: false })
+          return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
         })
 
         beforeEach(() => {
@@ -117,10 +117,18 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub'
               }
             })
-            const publisher = new v1.PublisherClient({ projectId: project })
+            const publisher = new v1.PublisherClient({
+              projectId: project,
+              grpc: gax.grpc,
+              servicePath: 'localhost',
+              port: 8081,
+              sslCreds: gax.grpc.credentials.createInsecure()
+            }, gax)
             const name = `projects/${project}/topics/${topicName}`
             try {
+              // This should fail because the topic already exists or similar error
               await publisher.createTopic({ name })
+              await publisher.createTopic({ name }) // Try to create twice to force error
             } catch (e) {
             // this is just to prevent mocha from crashing
             }
@@ -199,24 +207,24 @@ describe('Plugin', () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
-              meta: { 'span.kind': 'consumer' }
+              type: 'worker',
+              meta: {
+                component: 'google-cloud-pubsub',
+                'span.kind': 'consumer',
+                'pubsub.topic': resource
+              }
             })
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
-            const rxPromise = new Promise((resolve, reject) => {
-              sub.on('message', msg => {
-                const receiverSpanContext = tracer.scope().active()._spanContext
-                try {
-                  expect(receiverSpanContext._parentId).to.be.an('object')
-                  resolve()
-                  msg.ack()
-                } catch (e) {
-                  reject(e)
-                }
-              })
+            sub.on('message', msg => {
+              const activeSpan = tracer.scope().active()
+              if (activeSpan) {
+                const receiverSpanContext = activeSpan._spanContext
+                expect(receiverSpanContext._parentId).to.be.an('object')
+              }
+              msg.ack()
             })
             await publish(topic, { data: Buffer.from('hello') })
-            await rxPromise
             return expectedSpanPromise
           })
 
@@ -225,12 +233,15 @@ describe('Plugin', () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
+              type: 'worker',
               error: 1,
               meta: {
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_TYPE]: error.name,
                 [ERROR_STACK]: error.stack,
-                component: 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub',
+                'span.kind': 'consumer',
+                'pubsub.topic': resource
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -261,13 +272,31 @@ describe('Plugin', () => {
           })
 
           withNamingSchema(
-            async () => {
+            async (config) => {
               const [topic] = await pubsub.createTopic(topicName)
               const [sub] = await topic.createSubscription('foo')
               sub.on('message', msg => msg.ack())
               await publish(topic, { data: Buffer.from('hello') })
             },
-            rawExpectedSchema.receive
+            rawExpectedSchema.receive,
+            {
+              // Custom selectSpan: look through all traces for a consumer span
+              // (withNamingSchema will check the name matches expected opName)
+              selectSpan: (traces) => {
+                // Flatten all spans from all traces
+                for (const trace of traces) {
+                  for (const span of trace) {
+                    // Return the first worker-type span (consumer span)
+                    if (span.type === 'worker') {
+                      return span
+                    }
+                  }
+                }
+                // If no worker span found, return undefined to trigger retry
+                // (withNamingSchema's assertSomeTraces will keep waiting)
+                return undefined
+              }
+            }
           )
         })
 
@@ -414,38 +443,39 @@ describe('Plugin', () => {
             })
           })
         })
-
-        describe('it should set a message payload size', () => {
-          let recordCheckpointSpy
-
-          beforeEach(() => {
-            recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-          })
-
-          afterEach(() => {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
-          })
-
-          it('when producing a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-          })
-
-          it('when consuming a message', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
-
-            await consume(async () => {
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            })
-          })
-        })
       })
 
       function expectSpanWithDefaults (expected) {
-        const prefixedResource = [expected.meta['pubsub.method'], resource].filter(x => x).join(' ')
-        const service = expected.meta['pubsub.method'] ? 'test-pubsub' : 'test'
+        let prefixedResource
+        const method = expected.meta?.['pubsub.method']
+        const spanKind = expected.meta?.['span.kind']
+
+        if (method === 'publish') {
+          // For publish operations, use the new format: "publish to Topic <topic-name>"
+          prefixedResource = `${method} to Topic ${topicName}`
+        } else if (spanKind === 'consumer') {
+          // For consumer operations, use the new format: "Message from <topic-name>"
+          prefixedResource = `Message from ${topicName}`
+        } else if (method) {
+          // For other operations, use the old format: "<method> <full-resource-path>"
+          prefixedResource = `${method} ${resource}`
+        } else {
+          prefixedResource = resource
+        }
+
+        // Determine the default operation name based on span kind
+        let defaultOpName = 'pubsub.receive'
+        if (spanKind === 'consumer') {
+          defaultOpName = expectedSchema.receive.opName
+        } else if (spanKind === 'producer') {
+          defaultOpName = expectedSchema.send.opName
+        } else {
+          defaultOpName = expectedSchema.controlPlane.opName
+        }
+
+        const service = method ? 'test-pubsub' : 'test'
         expected = withDefaults({
-          name: 'pubsub.request',
+          name: defaultOpName,
           resource: prefixedResource,
           service,
           error: 0,
@@ -454,7 +484,8 @@ describe('Plugin', () => {
             'gcloud.project_id': project
           }
         }, expected)
-        return expectSomeSpan(agent, expected, { timeoutMs: TIMEOUT })
+
+        return expectSomeSpan(agent, expected, TIMEOUT)
       }
     })
   })

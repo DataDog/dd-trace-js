@@ -1,26 +1,22 @@
 'use strict'
 
 const {
-  createSandbox, varySandbox,
+  sandboxCwd, useSandbox, varySandbox,
   FakeAgent, spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const axios = require('axios')
+
 withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {
-    let sandbox, variants, proc, agent
+    let variants, proc, agent
 
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'express-mongo-sanitize@${version}'`, 'express@<=4.0.0'], false,
-        ['./packages/datadog-plugin-express-mongo-sanitize/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'expressMongoSanitize', undefined, 'express-mongo-sanitize')
-    })
+    useSandbox([`'express-mongo-sanitize@${version}'`, 'express@<=4.0.0'], false,
+      ['./packages/datadog-plugin-express-mongo-sanitize/test/integration-test/*'])
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
+    before(function () {
+      variants = varySandbox('server.mjs', 'expressMongoSanitize', undefined, 'express-mongo-sanitize')
     })
 
     beforeEach(async () => {
@@ -34,7 +30,7 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        const proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        const proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.get(`${proc.url}/?param=paramvalue`)
         assert.equal(response.headers['x-counter'], '1')
       })

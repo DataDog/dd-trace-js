@@ -7,6 +7,8 @@ const {
   BRANCH,
   CI,
   DAYS = '1',
+  GITHUB_REPOSITORY,
+  GITHUB_RUN_ID,
   MERGE = 'true',
   OCCURRENCES = '1',
   UNTIL
@@ -146,10 +148,9 @@ if (Object.keys(flaky).length === 0) {
       if (urls.length < OCCURRENCES) continue
       // Padding is needed because Slack doesn't show single digits as links.
       const markdownLinks = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
-      const slackLinks = urls.map((url, idx) => `<${url}|${String(idx + 1).padStart(2, '0')}>`)
       const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
       markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
-      slack += `         ○   ${job} (${slackLinks.join(', ')})${runsBadge}\\n`
+      slack += `         ○   ${job} (${urls.length})${runsBadge}\\n`
     }
   }
 
@@ -159,6 +160,13 @@ if (Object.keys(flaky).length === 0) {
   markdown += `* Flaky runs: ${flakeCount}\n`
   markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
   markdown += `* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+
+  if (GITHUB_REPOSITORY && GITHUB_RUN_ID) {
+    const link = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
+
+    slack += '\\n'
+    slack += `View full report with links to failures on <${link}|GitHub>.`
+  }
 
   slack += '\\n'
   slack += '*Flakiness stats*\\n'

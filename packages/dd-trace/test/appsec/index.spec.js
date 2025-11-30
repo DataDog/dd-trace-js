@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('node:fs')
+
 const axios = require('axios')
 const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -29,11 +30,11 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const Config = require('../../src/config')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { getConfigFresh } = require('../helpers/config')
 
 const resultActions = {
   actions: {
@@ -1252,7 +1253,7 @@ describe('AppSec Index', function () {
 
       appsecNamespace.reset()
 
-      config = new Config({
+      config = getConfigFresh({
         appsec: {
           enabled: true
         }
@@ -1275,9 +1276,8 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(2)
-      expect(metrics.series[0].metric).to.equal('enabled')
-      expect(metrics.series[1].metric).to.equal('waf.init')
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
@@ -1350,7 +1350,7 @@ describe('IP blocking', function () {
   })
 
   beforeEach(() => {
-    appsec.enable(new Config({
+    appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
         rasp: {

@@ -27,10 +27,7 @@ describe('nosql injection detection with mquery', () => {
         dbName = id().toString()
         const mongo = require(`../../../../../../versions/mongodb@${mongodbVersion}`).get()
 
-        client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true
-        })
+        client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`)
         await client.connect()
 
         testCollection = client.db().collection('Test')

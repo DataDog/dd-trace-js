@@ -276,13 +276,9 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  // Extract the parent span from the headers and start a new span as its child
   startChildSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-
-    // Check async storage first - if there's a delivery span, use it as parent
-    // This ensures pubsub.delivery spans properly parent HTTP spans
     const { storage } = require('../../../../datadog-core')
     const store = storage('legacy').getStore()
     const deliverySpan = store?.span?._name === 'pubsub.delivery' ? store.span : null
@@ -584,13 +580,17 @@ function getHeadersToRecord (config) {
   return []
 }
 
+function isNot500ErrorCode (code) {
+  return code < 500
+}
+
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 500
+  return isNot500ErrorCode
 }
 
 const noop = () => {}

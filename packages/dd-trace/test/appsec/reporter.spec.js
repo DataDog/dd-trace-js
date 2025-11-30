@@ -10,6 +10,11 @@ const zlib = require('node:zlib')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { USER_KEEP } = require('../../../../ext/priority')
+const { getConfigFresh } = require('../helpers/config')
+
+function getAppSecConfig (options) {
+  return getConfigFresh({ appsec: options }).appsec
+}
 
 describe('reporter', () => {
   let Reporter
@@ -69,7 +74,7 @@ describe('reporter', () => {
 
   afterEach(() => {
     sinon.restore()
-    Reporter.init(defaultReporterConfig)
+    Reporter.init(getAppSecConfig(defaultReporterConfig))
     Reporter.metricsQueue.clear()
   })
 
@@ -499,19 +504,18 @@ describe('reporter', () => {
       })
 
       it('should report request body in meta struct on rasp event when enabled', () => {
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50
-            },
-            rasp: {
-              bodyCollection: true
-            }
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: true,
+            maxHeaders: 50
+          },
+          rasp: {
+            bodyCollection: true
           }
-        )
+        })
+        Reporter.init(config)
 
         Reporter.reportAttack({
           events: [
@@ -530,19 +534,18 @@ describe('reporter', () => {
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50
-            },
-            rasp: {
-              bodyCollection: false
-            }
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: true,
+            maxHeaders: 50
+          },
+          rasp: {
+            bodyCollection: false
           }
-        )
+        })
+        Reporter.init(config)
 
         Reporter.reportAttack({
           events: [
@@ -612,19 +615,18 @@ describe('reporter', () => {
         })
 
         it('should set request body size exceeded when reporter request body has been truncated', () => {
-          Reporter.init(
-            {
-              rateLimit: 100,
-              extendedHeadersCollection: {
-                enabled: false,
-                redaction: true,
-                maxHeaders: 50
-              },
-              rasp: {
-                bodyCollection: true
-              }
+          const config = getAppSecConfig({
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50
+            },
+            rasp: {
+              bodyCollection: true
             }
-          )
+          })
+          Reporter.init(config)
 
           req.body = requestBody
 
@@ -645,19 +647,18 @@ describe('reporter', () => {
         })
 
         it('should set request body size exceeded metric for old and new approaches when both events happen', () => {
-          Reporter.init(
-            {
-              rateLimit: 100,
-              extendedHeadersCollection: {
-                enabled: false,
-                redaction: true,
-                maxHeaders: 50
-              },
-              rasp: {
-                bodyCollection: true
-              }
+          const config = getAppSecConfig({
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50
+            },
+            rasp: {
+              bodyCollection: true
             }
-          )
+          })
+          Reporter.init(config)
 
           req.body = requestBody
 
@@ -1100,7 +1101,7 @@ describe('reporter', () => {
         }))
 
       after(() => {
-        Reporter.init(defaultReporterConfig)
+        Reporter.init(getAppSecConfig(defaultReporterConfig))
       })
 
       it('should collect extended headers on appsec event', () => {
@@ -1118,7 +1119,7 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.init({
+        const config = getAppSecConfig({
           rateLimit: 100,
           extendedHeadersCollection: {
             enabled: true,
@@ -1129,6 +1130,7 @@ describe('reporter', () => {
             bodyCollection: false
           }
         })
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
@@ -1161,19 +1163,19 @@ describe('reporter', () => {
         const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
         const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
 
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: true,
-              redaction: false,
-              maxHeaders
-            },
-            rasp: {
-              bodyCollection: false
-            }
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: true,
+            redaction: false,
+            maxHeaders
+          },
+          rasp: {
+            bodyCollection: false
           }
-        )
+        })
+
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
@@ -1207,7 +1209,7 @@ describe('reporter', () => {
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.init({
+        const config = getAppSecConfig({
           rateLimit: 100,
           extendedHeadersCollection: {
             enabled: true,
@@ -1218,6 +1220,8 @@ describe('reporter', () => {
             bodyCollection: false
           }
         })
+
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {

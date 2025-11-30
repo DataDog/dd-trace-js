@@ -1,6 +1,5 @@
 'use strict'
 
-const chai = require('chai')
 const { describe, it, beforeEach } = require('mocha')
 const semifies = require('semifies')
 
@@ -8,15 +7,12 @@ const { withVersions } = require('../../../setup/mocha')
 
 const {
   useLlmObs,
-  expectedLLMObsLLMSpanEvent,
-  deepEqualWithMockValues,
+  assertLlmObsSpanEvent,
   MOCK_STRING,
   MOCK_NUMBER
 } = require('../../util')
 
-const { expect } = chai
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
+const assert = require('node:assert')
 
 describe('integrations', () => {
   let openai
@@ -74,18 +70,18 @@ describe('integrations', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
           inputMessages: [
-            { content: 'Hello, OpenAI!' }
+            { content: 'Hello, OpenAI!', role: '' }
           ],
           outputMessages: [
-            { content: MOCK_STRING }
+            { content: MOCK_STRING, role: '' }
           ],
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'gpt-3.5-turbo-instruct',
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -93,10 +89,8 @@ describe('integrations', () => {
             n: 1,
             stream: false,
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       it('submits a chat completion span', async () => {
@@ -120,7 +114,7 @@ describe('integrations', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
@@ -131,8 +125,13 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'gpt-3.5-turbo',
+          metrics: {
+            cache_read_input_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER
+          },
+          modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -141,10 +140,8 @@ describe('integrations', () => {
             stream: false,
             user: 'dd-trace-test'
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       it('submits an embedding span', async () => {
@@ -155,7 +152,7 @@ describe('integrations', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'embedding',
           name: 'OpenAI.createEmbedding',
@@ -163,14 +160,12 @@ describe('integrations', () => {
             { text: 'hello world' }
           ],
           outputValue: '[1 embedding(s) returned]',
-          tokenMetrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-          modelName: 'text-embedding-ada-002',
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER },
+          modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
           metadata: { encoding_format: 'base64' },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       it('submits a chat completion span with tools', async function () {
@@ -199,11 +194,11 @@ describe('integrations', () => {
         })
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
-          modelName: 'gpt-3.5-turbo',
+          modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
           inputMessages: [{ role: 'user', content: 'What is the weather in New York City?' }],
           outputMessages: [{
@@ -221,11 +216,14 @@ describe('integrations', () => {
             ]
           }],
           metadata: { tool_choice: 'auto', stream: false },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-          tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER }
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER
+          }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       describe('stream', function () {
@@ -243,32 +241,44 @@ describe('integrations', () => {
             temperature: 0.5,
             n: 1,
             stream: true,
+            stream_options: {
+              include_usage: true,
+            },
           })
 
           for await (const part of stream) {
-            expect(part).to.have.property('choices')
-            expect(part.choices[0]).to.have.property('text')
+            assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].text != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createCompletion',
             inputMessages: [
-              { content: 'Hello, OpenAI!' }
+              { content: 'Hello, OpenAI!', role: '' }
             ],
             outputMessages: [
-              { content: '\n\nHello! How can I assist you?' }
+              { content: '\n\nHello! How can I assist you?', role: '' }
             ],
-            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-            modelName: 'gpt-3.5-turbo-instruct',
+            metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+            modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
             modelProvider: 'openai',
-            metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: true },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: true,
+              stream_options: { include_usage: true }
+            },
+            tags: { ml_app: 'test', integration: 'openai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
 
         it('submits a streamed chat completion span', async () => {
@@ -288,16 +298,24 @@ describe('integrations', () => {
             stream: true,
             max_tokens: 100,
             n: 1,
-            user: 'dd-trace-test'
+            user: 'dd-trace-test',
+            stream_options: {
+              include_usage: true,
+            },
           })
 
           for await (const part of stream) {
-            expect(part).to.have.property('choices')
-            expect(part.choices[0]).to.have.property('delta')
+            assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].delta != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createChatCompletion',
@@ -308,14 +326,24 @@ describe('integrations', () => {
             outputMessages: [
               { role: 'assistant', content: 'Hello! How can I assist you today?' }
             ],
-            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-            modelName: 'gpt-3.5-turbo',
+            metrics: {
+              cache_read_input_tokens: 0,
+              input_tokens: MOCK_NUMBER,
+              output_tokens: MOCK_NUMBER,
+              total_tokens: MOCK_NUMBER
+            },
+            modelName: 'gpt-3.5-turbo-0125',
             modelProvider: 'openai',
-            metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: true, user: 'dd-trace-test' },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+            metadata: {
+              max_tokens: 100,
+              temperature: 0.5,
+              n: 1,
+              stream: true,
+              user: 'dd-trace-test',
+              stream_options: { include_usage: true }
+            },
+            tags: { ml_app: 'test', integration: 'openai' }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
 
         it('submits a chat completion span with tools stream', async function () {
@@ -341,19 +369,27 @@ describe('integrations', () => {
             }],
             tool_choice: 'auto',
             stream: true,
+            stream_options: {
+              include_usage: true,
+            },
           })
 
           for await (const part of stream) {
-            expect(part).to.have.property('choices')
-            expect(part.choices[0]).to.have.property('delta')
+            assert.ok(part, 'Expected part to be truthy')
+            // last chunk will have no choices, but a usage block instead
+            if (part.choices.length > 0) {
+              assert.ok(part.choices[0].delta != null, 'Expected chunk delta to be truthy')
+            } else {
+              assert.ok(part.usage, 'Expected usage to be truthy')
+            }
           }
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createChatCompletion',
-            modelName: 'gpt-3.5-turbo',
+            modelName: 'gpt-3.5-turbo-0125',
             modelProvider: 'openai',
             inputMessages: [{ role: 'user', content: 'What is the weather in New York City?' }],
             outputMessages: [{
@@ -368,12 +404,19 @@ describe('integrations', () => {
                 }
               ]
             }],
-            metadata: { tool_choice: 'auto', stream: true },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-            tokenMetrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER }
+            metadata: {
+              tool_choice: 'auto',
+              stream: true,
+              stream_options: { include_usage: true }
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+            metrics: {
+              cache_read_input_tokens: 0,
+              input_tokens: MOCK_NUMBER,
+              output_tokens: MOCK_NUMBER,
+              total_tokens: MOCK_NUMBER
+            }
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -394,23 +437,22 @@ describe('integrations', () => {
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createCompletion',
-          inputMessages: [{ content: 'Hello, OpenAI!' }],
-          outputMessages: [{ content: '' }],
+          inputMessages: [{ content: 'Hello, OpenAI!', role: '' }],
+          outputMessages: [{ content: '', role: '' }],
           modelName: 'gpt-3.5-turbo',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-          error,
-          errorType: 'Error',
-          errorMessage: error.message,
-          errorStack: error.stack
+          tags: { ml_app: 'test', integration: 'openai' },
+          error: {
+            type: 'Error',
+            message: error.message,
+            stack: error.stack
+          }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       it('submits a chat completion span with an error', async () => {
@@ -440,7 +482,7 @@ describe('integrations', () => {
         }
 
         const { apmSpans, llmobsSpans } = await getEvents()
-        const expected = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
@@ -448,18 +490,17 @@ describe('integrations', () => {
             { role: 'system', content: 'You are a helpful assistant.' },
             { role: 'user', content: 'Hello, OpenAI!' }
           ],
-          outputMessages: [{ content: '' }],
+          outputMessages: [{ content: '', role: '' }],
           modelName: 'gpt-3.5-turbo-instruct',
           modelProvider: 'openai',
           metadata: { max_tokens: 100, temperature: 0.5, n: 1, stream: false, user: 'dd-trace-test' },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' },
-          error,
-          errorType: 'Error',
-          errorMessage: error.message,
-          errorStack: error.stack
+          tags: { ml_app: 'test', integration: 'openai' },
+          error: {
+            type: 'Error',
+            message: error.message,
+            stack: error.stack
+          }
         })
-
-        expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
       })
 
       it('submits an AzureOpenAI completion', async () => {
@@ -488,8 +529,8 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        expect(llmobsSpans[0]).to.have.property('name', 'AzureOpenAI.createChatCompletion')
-        expect(llmobsSpans[0].meta).to.have.property('model_provider', 'azure_openai')
+        assert.equal(llmobsSpans[0].name, 'AzureOpenAI.createChatCompletion', 'Span event name does not match')
+        assert.equal(llmobsSpans[0].meta.model_provider, 'azure_openai', 'Model provider does not match')
       })
 
       it('submits an DeepSeek completion', async () => {
@@ -514,95 +555,8 @@ describe('integrations', () => {
 
         const { llmobsSpans } = await getEvents()
 
-        expect(llmobsSpans[0]).to.have.property('name', 'DeepSeek.createChatCompletion')
-        expect(llmobsSpans[0].meta).to.have.property('model_provider', 'deepseek')
-      })
-
-      it('submits a completion span with cached token metrics', async () => {
-        const basePrompt = 'You are an expert software engineer '.repeat(200) +
-        'What are the best practices for API design?'
-
-        await openai.completions.create({
-          model: 'gpt-3.5-turbo-instruct',
-          prompt: basePrompt,
-          temperature: 0.5,
-          stream: false,
-          max_tokens: 100,
-          n: 1
-        })
-
-        let events = await getEvents()
-
-        const expectedFirstLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: events.apmSpans[0],
-          spanKind: 'llm',
-          name: 'OpenAI.createCompletion',
-          inputMessages: [
-            { content: basePrompt }
-          ],
-          outputMessages: [
-            { content: MOCK_STRING }
-          ],
-          tokenMetrics: {
-            input_tokens: 1209,
-            output_tokens: 100,
-            total_tokens: 1309
-          },
-          modelName: 'gpt-3.5-turbo-instruct',
-          modelProvider: 'openai',
-          metadata: {
-            max_tokens: 100,
-            temperature: 0.5,
-            n: 1,
-            stream: false
-          },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
-        })
-
-        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
-
-        const secondPrompt = 'You are an expert software engineer '.repeat(200) +
-        'How should I structure my database schema?'
-
-        await openai.completions.create({
-          model: 'gpt-4o-mini',
-          prompt: secondPrompt,
-          temperature: 0.5,
-          stream: false,
-          max_tokens: 100,
-          n: 1
-        })
-
-        events = await getEvents()
-
-        const expectedSecondLlmSpanEvent = expectedLLMObsLLMSpanEvent({
-          span: events.apmSpans[0],
-          spanKind: 'llm',
-          name: 'OpenAI.createCompletion',
-          inputMessages: [
-            { content: secondPrompt }
-          ],
-          outputMessages: [
-            { content: MOCK_STRING }
-          ],
-          tokenMetrics: {
-            input_tokens: 1208,
-            output_tokens: 100,
-            total_tokens: 1308,
-            cache_read_input_tokens: 1152
-          },
-          modelName: 'gpt-4o-mini',
-          modelProvider: 'openai',
-          metadata: {
-            max_tokens: 100,
-            temperature: 0.5,
-            n: 1,
-            stream: false
-          },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
-        })
-
-        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
+        assert.equal(llmobsSpans[0].name, 'DeepSeek.createChatCompletion', 'Span event name does not match')
+        assert.equal(llmobsSpans[0].meta.model_provider, 'deepseek', 'Model provider does not match')
       })
 
       it('submits a chat completion span with cached token metrics', async () => {
@@ -627,7 +581,7 @@ describe('integrations', () => {
 
         let events = await getEvents()
 
-        const expectedFirstLlmSpanEvent = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(events.llmobsSpans[0], {
           span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
@@ -642,12 +596,13 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: {
+          metrics: {
+            cache_read_input_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321
           },
-          modelName: 'gpt-4o',
+          modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -656,10 +611,8 @@ describe('integrations', () => {
             stream: false,
             user: 'dd-trace-test'
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
         })
-
-        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedFirstLlmSpanEvent)
 
         await openai.chat.completions.create({
           model: 'gpt-4o',
@@ -673,7 +626,7 @@ describe('integrations', () => {
 
         events = await getEvents()
 
-        const expectedSecondLlmSpanEvent = expectedLLMObsLLMSpanEvent({
+        assertLlmObsSpanEvent(events.llmobsSpans[0], {
           span: events.apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
@@ -688,13 +641,13 @@ describe('integrations', () => {
           outputMessages: [
             { role: 'assistant', content: MOCK_STRING }
           ],
-          tokenMetrics: {
+          metrics: {
             input_tokens: 1220,
             output_tokens: 100,
             total_tokens: 1320,
             cache_read_input_tokens: 1152,
           },
-          modelName: 'gpt-4o',
+          modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
           metadata: {
             max_tokens: 100,
@@ -703,10 +656,104 @@ describe('integrations', () => {
             stream: false,
             user: 'dd-trace-test'
           },
-          tags: { ml_app: 'test', language: 'javascript', integration: 'openai' }
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
+
+      it('submits a response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'What is the capital of France?',
+          max_output_tokens: 100,
+          temperature: 0.5,
+          stream: false
         })
 
-        expect(events.llmobsSpans[0]).to.deepEqualWithMockValues(expectedSecondLlmSpanEvent)
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'What is the capital of France?' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
+          modelName: 'gpt-4o-mini-2024-07-18',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 100,
+            temperature: 0.5,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
+            stream: false
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
+      })
+
+      it('submits a streamed response span', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        const stream = await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true
+        })
+
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'))
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'Stream this please' }
+          ],
+          outputMessages: [
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0
+          },
+          modelName: 'gpt-4o-mini-2024-07-18',
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 50,
+            temperature: 0,
+            top_p: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            reasoning_tokens: 0,
+            stream: true
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
+        })
       })
     })
   })

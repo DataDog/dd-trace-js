@@ -13,8 +13,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   constructor (...args) {
     super(...args)
 
-    // Subscribe to HTTP start channel to intercept PubSub requests
-    // We run BEFORE HTTP plugin to set delivery span as active parent
     const startCh = channel('apm:http:server:request:start')
     startCh.subscribe(({ req, res }) => {
       this._handlePubSubRequest({ req, res })
@@ -22,23 +20,26 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _handlePubSubRequest ({ req, res }) {
-    // Only check POST requests
-    if (req.method !== 'POST') return
+    const userAgent = req.headers['user-agent'] || ''
+    if (req.method !== 'POST' || !userAgent.includes('APIs-Google')) return
 
-    // Check for unwrapped Pub/Sub format (--push-no-wrapper-write-metadata)
-    // NOTE: Only unwrapped headers will work. Standard wrapped format requires
-    // body parsing which hasn't happened yet at this point in the request lifecycle.
     if (req.headers['x-goog-pubsub-message-id']) {
-      log.debug('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      log.warn('[PubSub] Detected unwrapped Pub/Sub format (push subscription)')
+      log.warn(`[PubSub] message-id: ${req.headers['x-goog-pubsub-message-id']}`)
       this._createDeliverySpanAndActivate({ req, res })
+      return
     }
+
+    log.warn(
+      '[PubSub] No x-goog-pubsub-* headers detected. pubsub.delivery spans will not be created. ' +
+      'Add --push-no-wrapper-write-metadata to your subscription.'
+    )
   }
 
   _createDeliverySpanAndActivate ({ req, res }) {
     const messageData = this._parseMessage(req)
-    if (!messageData) return // No valid message data
+    if (!messageData) return
 
-    // Get tracer lazily - it will be initialized by the time requests arrive
     const tracer = this.tracer || require('../../dd-trace')
     if (!tracer || !tracer._tracer) return
 
@@ -51,11 +52,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const deliverySpan = this._createDeliverySpan(
       messageData,
       isSameTrace ? pubsubRequestContext : originalContext,
-      !isSameTrace, // Add span link only if different trace
+      isSameTrace ? null : pubsubRequestContext,
       tracer
     )
 
-    // Finish delivery span when response completes
     const finishDelivery = () => {
       if (!deliverySpan.finished) {
         deliverySpan.finish()
@@ -69,16 +69,11 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       finishDelivery()
     })
 
-    // Set delivery span as active in async storage
-    // HTTP plugin will create http.request span as child automatically
     const store = storage('legacy').getStore()
     storage('legacy').enterWith({ ...store, span: deliverySpan, req, res })
   }
 
   _parseMessage (req) {
-    // ONLY check for unwrapped headers - body parsing happens later in middleware
-    // This runs at apm:http:server:request:start, BEFORE express.json/body-parser
-    // Requires --push-no-wrapper-write-metadata flag on the push subscription
     const subscription = req.headers['x-goog-pubsub-subscription-name']
     const message = {
       messageId: req.headers['x-goog-pubsub-message-id'],
@@ -90,8 +85,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _extractContext (messageData, tracer) {
-    // messageData.attrs is req.headers, so just extract from there
-    // Use the actual tracer instance (_tracer) for proper 128-bit trace ID extraction
     return tracer._tracer.extract('text_map', messageData.attrs) || undefined
   }
 
@@ -120,19 +113,15 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
   }
 
-  _createDeliverySpan (messageData, parentContext, addSpanLink, tracer) {
+  _createDeliverySpan (messageData, parentContext, linkContext, tracer) {
     const { message, subscription, topicName, attrs } = messageData
-
     const subscriptionName = subscription.split('/').pop() || subscription
-
-    // Extract publish time from custom header (set by producer after gRPC call completes)
-    // This ensures delivery span starts AFTER grpc.client and represents full delivery latency
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 
     const span = tracer._tracer.startSpan('pubsub.delivery', {
       childOf: parentContext,
-      startTime, // Start span at publish time (in milliseconds)
+      startTime,
       tags: {
         'span.kind': 'consumer',
         component: 'google-cloud-pubsub',
@@ -147,19 +136,15 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       }
     })
 
-    // Set resource name using setTag (raw tracer doesn't support resource in startSpan options)
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
-
-    // Add batch metadata if present
     this._addBatchMetadata(span, attrs)
 
-    // Add OpenTelemetry span link if needed
-    if (addSpanLink && parentContext) {
+    if (linkContext) {
       if (typeof span.addLink === 'function') {
-        span.addLink(parentContext, {})
+        span.addLink(linkContext, {})
       } else {
         span._links = span._links || []
-        span._links.push({ context: parentContext, attributes: {} })
+        span._links.push({ context: linkContext, attributes: {} })
       }
     }
 
@@ -178,7 +163,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       span.setTag('pubsub.batch.message_index', index)
       span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
 
-      // Add parent pubsub.request span correlation for batch tracing
       const requestTraceId = attrs['_dd.pubsub_request.trace_id']
       const requestSpanId = attrs['_dd.pubsub_request.span_id']
 
@@ -192,14 +176,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _extractProjectTopic (attrs, subscription) {
-    let projectId = attrs['gcloud.project_id']
     const topicName = attrs['pubsub.topic']
-
-    if (!projectId && subscription) {
-      const match = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
-      if (match) projectId = match[1]
-    }
-
+    const projectId = subscription.match(/projects\/([^\\/]+)\/subscriptions/)
     return {
       projectId,
       topicName: topicName || 'push-subscription-topic'

@@ -5,7 +5,8 @@ const { exec } = require('child_process')
 const { assert } = require('chai')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   getCiVisAgentlessConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -14,15 +15,12 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
-  let sandbox, cwd, receiver, childProcess
+  let cwd, receiver, childProcess
+
+  useSandbox([], true)
 
   before(async () => {
-    sandbox = await createSandbox([], true)
-    cwd = sandbox.folder
-  })
-
-  after(async () => {
-    await sandbox.remove()
+    cwd = sandboxCwd()
   })
 
   beforeEach(async function () {
