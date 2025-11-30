@@ -97,16 +97,23 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
+    let passes
+
     try {
       if (isDdTrace(filename)) {
         return compileMethod.apply(this, [content, filename])
       }
-      if (!isPrivateModule(filename) || !config.iast?.enabled) {
-        return compileMethod.apply(this, [content, filename])
+      if (isPrivateModule(filename)) {
+        // TODO error tracking needs to be added based on config
+        passes = ['error_tracking']
+        if (config.iast?.enabled) {
+          passes.push('iast')
+        }
+      } else {
+        passes = ['orchestrion']
       }
-      // TODO when we have CJS support for orchestrion and taint-tracking, add
-      // them here as appropriate
-      const rewritten = rewriter.rewrite(content, filename, ['iast'])
+
+      const rewritten = rewriter.rewrite(content, filename, passes)
 
       incrementTelemetryIfNeeded(rewritten.metrics)
 
@@ -166,14 +173,12 @@ function shimPrepareStackTrace () {
 
 function enableRewriter (telemetryVerbosity) {
   try {
-    if (config.iast?.enabled) {
-      const rewriter = getRewriter(telemetryVerbosity)
-      if (rewriter) {
-        shimPrepareStackTrace()
-        if (!globalThis.__DD_ESBUILD_IAST_WITH_SM && !globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
-          // Avoid rewriting twice when application has been bundled
-          shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
-        }
+    const rewriter = getRewriter(telemetryVerbosity)
+    if (rewriter) {
+      shimPrepareStackTrace()
+      if (!globalThis.__DD_ESBUILD_IAST_WITH_SM && !globalThis.__DD_ESBUILD_IAST_WITH_NO_SM) {
+        // Avoid rewriting twice when application has been bundled
+        shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
       }
     }
 
