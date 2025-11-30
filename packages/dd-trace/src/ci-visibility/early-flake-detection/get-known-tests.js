@@ -16,8 +16,9 @@ const {
 } = require('../../ci-visibility/telemetry')
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
+const { withCache } = require('../cache/request-cache')
 
-function getKnownTests ({
+function getKnownTestsUncached ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -107,5 +108,23 @@ function getKnownTests ({
     }
   })
 }
+
+// Wrap with cache - cache key based on service, env, repo, sha, and configurations
+const getKnownTests = withCache(
+  'known-tests',
+  getKnownTestsUncached,
+  (params) => ({
+    service: params.service,
+    env: params.env,
+    repositoryUrl: params.repositoryUrl,
+    sha: params.sha,
+    osVersion: params.osVersion,
+    osPlatform: params.osPlatform,
+    osArchitecture: params.osArchitecture,
+    runtimeName: params.runtimeName,
+    runtimeVersion: params.runtimeVersion,
+    custom: params.custom
+  })
+)
 
 module.exports = { getKnownTests }
