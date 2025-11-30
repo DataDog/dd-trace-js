@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 let numAttempts = 0
 
 describe('attempt to fix tests', () => {

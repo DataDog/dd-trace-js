@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const sum = require('./unused-dependency')
 describe('test-skipped', () => {

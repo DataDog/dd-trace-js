@@ -2,7 +2,7 @@
 
 const { execSync } = require('child_process')
 const fs = require('fs')
-const assert = require('node:assert/strict')
+const assert = require('assert')
 const os = require('os')
 const path = require('path')
 

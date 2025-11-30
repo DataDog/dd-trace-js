@@ -6,7 +6,7 @@
 /* Some other comment */
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 describe('test-unskippable', () => {
   it('can report tests', () => {

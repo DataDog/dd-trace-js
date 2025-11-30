@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('mocha-test-done-fail', () => {
   it('can do failed tests with done', (done) => {
     setTimeout(() => {

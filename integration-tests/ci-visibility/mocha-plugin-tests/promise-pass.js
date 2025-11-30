@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('mocha-test-promise-pass', () => {
   it('can do passed promise tests', () => {
     return new Promise((resolve) => {

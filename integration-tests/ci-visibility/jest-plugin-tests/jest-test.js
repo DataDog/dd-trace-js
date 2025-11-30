@@ -1,7 +1,7 @@
 'use strict'
 
 const http = require('http')
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 const tracer = require('dd-trace')
 

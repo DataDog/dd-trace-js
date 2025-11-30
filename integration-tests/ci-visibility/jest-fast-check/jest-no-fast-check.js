@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 describe('fast check with seed', () => {
   it('should include seed (with seed=12)', () => {

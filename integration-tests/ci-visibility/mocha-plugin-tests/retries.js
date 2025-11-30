@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 let attempt = 0
 
 describe('mocha-test-retries', function () {

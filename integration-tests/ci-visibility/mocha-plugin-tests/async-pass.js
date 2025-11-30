@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('mocha-test-async-pass', () => {
   it('can do passed async tests', async () => {
     await new Promise(resolve => {

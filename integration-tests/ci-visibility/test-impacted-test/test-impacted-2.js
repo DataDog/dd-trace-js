@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('impacted tests 2', () => {
   it('can pass normally', () => {
     assert.strictEqual(1 + 2, 3)

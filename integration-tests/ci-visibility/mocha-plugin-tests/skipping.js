@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('mocha-test-skip', () => {
   it.skip('can skip', () => {
     assert.strictEqual(true, false)

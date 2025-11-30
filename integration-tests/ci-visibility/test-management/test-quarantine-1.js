@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 describe('quarantine tests', () => {
   it('can quarantine a test', () => {
     // eslint-disable-next-line no-console

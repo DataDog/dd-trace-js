@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert')
 
 describe('test-flaky-test-retries', () => {
   it('can retry failed tests', () => {
