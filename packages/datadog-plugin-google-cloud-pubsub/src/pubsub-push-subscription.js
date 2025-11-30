@@ -12,7 +12,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   constructor (...args) {
     super(...args)
-
     const startCh = channel('apm:http:server:request:start')
     startCh.subscribe(({ req, res }) => {
       this._handlePubSubRequest({ req, res })

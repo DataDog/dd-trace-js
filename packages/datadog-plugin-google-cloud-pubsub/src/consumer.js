@@ -76,7 +76,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     }
     if (batchRequestSpanId) {
       meta['pubsub.batch.request_span_id'] = batchRequestSpanId
-      // Also add span link metadata
       meta['_dd.pubsub_request.trace_id'] = batchRequestTraceId
       meta['_dd.pubsub_request.span_id'] = batchRequestSpanId
       if (batchRequestTraceId && batchRequestSpanId) {
@@ -97,7 +96,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics['pubsub.batch.index'] = Number.parseInt(batchIndex, 10)
     }
 
-    // Add batch description
     if (batchSize && batchIndex !== undefined) {
       const index = Number.parseInt(batchIndex, 10)
       const size = Number.parseInt(batchSize, 10)
