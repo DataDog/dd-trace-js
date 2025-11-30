@@ -245,7 +245,7 @@ describe('Dynamic Instrumentation', function () {
 
               if (diagnostics.status === 'ERROR') {
                 assert.ok(Object.hasOwn(diagnostics, 'exception'))
-                assert.ok(['message', 'stacktrace'].every(key => Object.hasOwn(diagnostics.exception, key)))
+                assert.deepStrictEqual(['message', 'stacktrace'], Object.keys(diagnostics.exception).sort())
                 assert.strictEqual(typeof diagnostics.exception.message, 'string')
                 assert.strictEqual(typeof diagnostics.exception.stacktrace, 'string')
               }
@@ -831,7 +831,7 @@ function setupAssertionListeners (t, done, probe) {
 
     payload = payload[0]
     assert.ok(typeof payload.dd === 'object' && payload.dd !== null)
-    assert.ok(['trace_id', 'span_id'].every(key => Object.hasOwn(payload.dd, key)))
+    assert.deepStrictEqual(['span_id', 'trace_id'], Object.keys(payload.dd).sort())
     assert.strictEqual(typeof payload.dd.trace_id, 'string')
     assert.strictEqual(typeof payload.dd.span_id, 'string')
     assert.ok(payload.dd.trace_id.length > 0)
@@ -902,7 +902,7 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   assert.ok(payload.debugger.snapshot.stack.length > 0)
   for (const frame of payload.debugger.snapshot.stack) {
     assert.ok(typeof frame === 'object' && frame !== null)
-    assert.ok(['fileName', 'function', 'lineNumber', 'columnNumber'].every(key => Object.hasOwn(frame, key)))
+    assert.deepStrictEqual(['columnNumber', 'fileName', 'function', 'lineNumber'], Object.keys(frame).sort())
     assert.strictEqual(typeof frame.fileName, 'string')
     assert.strictEqual(typeof frame.function, 'string')
     assert.ok(frame.lineNumber > 0)

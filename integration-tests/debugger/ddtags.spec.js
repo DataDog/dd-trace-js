@@ -28,14 +28,14 @@ describe('Dynamic Instrumentation', function () {
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.ok([
-            'env',
-            'version',
+          assert.deepStrictEqual([
             'debugger_version',
-            'host_name',
+            'env',
             'git.commit.sha',
-            'git.repository_url'
-          ].every(key => Object.hasOwn(ddtags, key)))
+            'git.repository_url',
+            'host_name',
+            'version',
+          ], Object.keys(ddtags).sort())
 
           assert.strictEqual(ddtags.env, 'test-env')
           assert.strictEqual(ddtags.version, 'test-version')
@@ -62,7 +62,7 @@ describe('Dynamic Instrumentation', function () {
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.ok(['debugger_version', 'host_name'].every(key => Object.hasOwn(ddtags, key)))
+          assert.deepStrictEqual(['debugger_version', 'host_name'], Object.keys(ddtags).sort())
 
           done()
         })

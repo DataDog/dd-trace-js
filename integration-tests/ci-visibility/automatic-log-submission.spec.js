@@ -99,7 +99,7 @@ describe('test optimization automatic log submission', () => {
             logMessages.forEach(({ dd, level }) => {
               assert.equal(level, 'info')
               assert.equal(dd.service, 'my-service')
-              assert.ok(['trace_id', 'span_id', 'service'].every(key => Object.hasOwn(dd, key)))
+              assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
             })
 
             assertObjectContains(logMessages.map(({ message }) => message), [

@@ -128,14 +128,14 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 200)
-    assert.ok([
+    assert.deepStrictEqual([
       'a',
       'b',
       'bad3',
-      'date',
       'connection',
-      'transfer-encoding'
-    ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
+      'date',
+      'transfer-encoding',
+    ], Object.keys(cloneHeaders(res.headers)).sort())
     assert.deepEqual(res.data, 'end')
   })
 
@@ -221,16 +221,16 @@ describe('HTTP Response Blocking', () => {
     const res = await axios.get('/')
 
     assert.equal(res.status, 201)
-    assert.ok([
+    assert.deepStrictEqual([
       'a',
       'b',
       'c',
-      'd',
-      'e',
-      'date',
       'connection',
-      'transfer-encoding'
-    ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
+      'd',
+      'date',
+      'e',
+      'transfer-encoding',
+    ], Object.keys(cloneHeaders(res.headers)).sort())
     assert.deepEqual(res.data, 'writefileend')
   })
 
@@ -264,12 +264,12 @@ function cloneHeaders (headers) {
 
 function assertBlocked (res) {
   assert.equal(res.status, 403)
-  assert.ok([
-    'content-type',
+  assert.deepStrictEqual([
+    'connection',
     'content-length',
+    'content-type',
     'date',
-    'connection'
-  ].every(key => Object.hasOwn(cloneHeaders(res.headers), key)))
+  ], Object.keys(cloneHeaders(res.headers)).sort())
   assert.deepEqual(res.data, blockingResponse)
 
   sinon.assert.callCount(WafContext.prototype.run, 2)
