@@ -117,7 +117,7 @@ function extractTraceContext (tracer, ctx) {
     case 'Http':
       return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
     default:
-      null
+      return null
   }
 }
 
