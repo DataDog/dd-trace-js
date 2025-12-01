@@ -99,9 +99,10 @@ versions.forEach((version) => {
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
-      logTiming('Starting chromium installation...')
+      // This will use cached browsers if available, otherwise download
+      logTiming('Ensuring chromium is installed (will use cache if available)...')
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      logTiming('Chromium installation completed')
+      logTiming('Chromium ready')
 
       // Create fresh server instances to avoid issues with retries
       logTiming('Creating web app server instances...')
