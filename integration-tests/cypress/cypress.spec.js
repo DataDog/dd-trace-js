@@ -137,12 +137,22 @@ moduleTypes.forEach(({
     // cypress-fail-fast is required as an incompatible plugin
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
 
-    before(async () => {
+    before(async function () {
+      this.timeout(120000)
+      const startTime = Date.now()
+      const logTiming = (message) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        console.log(`[${elapsed}s] ${message}`)
+      }
+
       cwd = sandboxCwd()
 
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install cypress' browser before running the tests
+      // This will use cached binaries if available, otherwise download
+      logTiming('Starting Cypress binary installation (will use cache if available)...')
       await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
+      logTiming('Cypress binary ready')
     })
 
     after(async () => {
