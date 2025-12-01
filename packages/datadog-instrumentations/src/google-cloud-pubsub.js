@@ -5,6 +5,7 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { storage } = require('../../datadog-core')
 const log = require('../../dd-trace/src/log')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
@@ -23,6 +24,8 @@ const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
 const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
+
+const ackContextMap = new Map()
 
 const publisherMethods = [
   'createTopic',
@@ -74,7 +77,67 @@ function wrapMethod (method) {
   return function (request) {
     if (!requestStartCh.hasSubscribers) return method.apply(this, arguments)
 
+    // For acknowledge/modifyAckDeadline, try to restore span context from stored map
+    let restoredStore = null
+    const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
+    if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
+      // Try to find a stored context for any of these ack IDs
+      for (const ackId of request.ackIds) {
+        const storedContext = ackContextMap.get(ackId)
+        if (storedContext) {
+          restoredStore = storedContext
+          break
+        }
+      }
+
+      if (api === 'acknowledge') {
+        request.ackIds.forEach(ackId => {
+          if (ackContextMap.has(ackId)) {
+            ackContextMap.delete(ackId)
+          }
+        })
+      }
+    }
+
     const ctx = { request, api, projectId: this.auth._cachedProjectId }
+
+    if (restoredStore) {
+      const parentSpan = restoredStore.span
+      if (parentSpan) {
+        ctx.parentSpan = parentSpan
+      }
+      return storage('legacy').run(restoredStore, () => {
+        return requestStartCh.runStores(ctx, () => {
+          const cb = arguments[arguments.length - 1]
+
+          if (typeof cb === 'function') {
+            arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
+              if (error) {
+                ctx.error = error
+                requestErrorCh.publish(ctx)
+              }
+              return requestFinishCh.runStores(ctx, cb, this, ...arguments)
+            })
+            return method.apply(this, arguments)
+          }
+
+          return method.apply(this, arguments)
+            .then(
+              response => {
+                requestFinishCh.publish(ctx)
+                return response
+              },
+              error => {
+                ctx.error = error
+                requestErrorCh.publish(ctx)
+                requestFinishCh.publish(ctx)
+                throw error
+              }
+            )
+        })
+      })
+    }
+
     return requestStartCh.runStores(ctx, () => {
       const cb = arguments[arguments.length - 1]
 
@@ -120,7 +183,8 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   shimmer.wrap(Subscription.prototype, 'emit', emit => function (eventName, message) {
     if (eventName !== 'message' || !message) return emit.apply(this, arguments)
 
-    const ctx = {}
+    const store = storage('legacy').getStore()
+    const ctx = { message, store }
     try {
       return emit.apply(this, arguments)
     } catch (err) {
@@ -129,6 +193,29 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
       throw err
     }
   })
+
+  return obj
+})
+
+addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/subscriber.js' }, (obj) => {
+  const Message = obj.Message
+
+  if (Message && Message.prototype && Message.prototype.ack) {
+    shimmer.wrap(Message.prototype, 'ack', originalAck => function () {
+      const currentStore = storage('legacy').getStore()
+      const activeSpan = currentStore && currentStore.span
+
+      if (activeSpan) {
+        const storeWithSpanContext = { ...currentStore, span: activeSpan }
+
+        if (this.ackId) {
+          ackContextMap.set(this.ackId, storeWithSpanContext)
+        }
+      }
+
+      return originalAck.apply(this, arguments)
+    })
+  }
 
   return obj
 })
