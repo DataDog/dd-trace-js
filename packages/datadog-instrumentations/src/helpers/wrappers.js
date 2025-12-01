@@ -117,7 +117,7 @@ function createEventWrapper (channelName, finishEventName) {
  * @param {Array<string>} [options.wrapMethods] - Instance methods to wrap after construction
  * @param {number} [options.callbackIndex] - Index of callback argument in constructor
  * @param {string} [options.operator] - Operator for wrapping (default: 'tracePromise')
- * @returns {function} Constructor wrapper
+ * @returns {Function} Constructor wrapper
  *
  * @example
  * // Access pattern - wrap instance method that's not exported
