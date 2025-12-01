@@ -136,9 +136,9 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
 
     before(async function () {
-      cwd = sandboxCwd()
       // Note: Cypress binary is already installed during useSandbox() via the postinstall script
       // when the cypress npm package is installed, so no explicit install is needed here
+      cwd = sandboxCwd()
     })
 
     after(async () => {
@@ -208,7 +208,7 @@ moduleTypes.forEach(({
       await new Promise(resolve => setTimeout(resolve, 100))
     })
 
-    it.only('instruments tests with the APM protocol (old agents)', async () => {
+    it('instruments tests with the APM protocol (old agents)', async () => {
       receiver.setInfoResponse({ endpoints: [] })
 
       const receiverPromise = receiver
