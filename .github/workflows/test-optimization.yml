@@ -201,7 +201,7 @@ jobs:
         if: matrix.cypress-version != 'latest'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: /github/home/.cache/Cypress
+          path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress --ignore-engines
