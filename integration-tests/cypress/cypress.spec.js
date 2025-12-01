@@ -1,13 +1,11 @@
 'use strict'
 
 const semver = require('semver')
-const { promisify } = require('util')
 const { once } = require('node:events')
 const http = require('http')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
-const execPromise = promisify(exec)
 
 const { assert } = require('chai')
 
@@ -137,12 +135,10 @@ moduleTypes.forEach(({
     // cypress-fail-fast is required as an incompatible plugin
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
 
-    before(async () => {
+    before(async function () {
+      // Note: Cypress binary is already installed during useSandbox() via the postinstall script
+      // when the cypress npm package is installed, so no explicit install is needed here
       cwd = sandboxCwd()
-
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install cypress' browser before running the tests
-      await execPromise('npx cypress install', { cwd, env: restOfEnv, stdio: 'inherit' })
     })
 
     after(async () => {
