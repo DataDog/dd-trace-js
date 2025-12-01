@@ -3,6 +3,8 @@
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const patchedClientsForDeserialization = new WeakSet()
+
 function wrapRequest (send) {
   return function wrappedRequest (cb) {
     if (!this.service) return send.apply(this, arguments)
@@ -67,17 +69,14 @@ function wrapSmithySend (send) {
 
     if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
-    } else if (
-      this.config?.protocol?.deserializeResponse &&
-      !Object.hasOwn(this.config.protocol, Symbol.for('dd.wrapped'))
-    ) {
+    } else if (this.config?.protocol?.deserializeResponse && !patchedClientsForDeserialization.has(this)) {
       shimmer.wrap(
         this.config.protocol,
         'deserializeResponse',
         deserializeResponse => wrapDeserialize(deserializeResponse, channelSuffix, 2)
       )
 
-      Object.defineProperty(this.config.protocol, Symbol.for('dd.wrapped'), { value: true })
+      patchedClientsForDeserialization.add(this)
     }
 
     const ctx = {
