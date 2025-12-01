@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -76,9 +77,9 @@ describe('Plugin', () => {
 
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
-                expect(results).to.not.be.null
-                expect(fields).to.not.be.null
-                expect(tracer.scope().active()).to.equal(span)
+                assert.notStrictEqual(results, null)
+                assert.notStrictEqual(fields, null)
+                assert.strictEqual(tracer.scope().active(), span)
               } catch (e) {
                 done(e)
               }
@@ -89,7 +90,7 @@ describe('Plugin', () => {
 
         it('should run the callback in the parent context', done => {
           connection.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -98,7 +99,7 @@ describe('Plugin', () => {
           const query = connection.query('SELECT 1 + 1 AS solution')
 
           query.on('end', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -106,17 +107,17 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('db.name', 'db')
-              expect(traces[0][0].meta).to.have.property('db.user', 'root')
-              expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'mariadb')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'mariadb')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
+              assert.strictEqual(traces[0][0].type, 'sql')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['db.name'], 'db')
+              assert.strictEqual(traces[0][0].meta['db.user'], 'root')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'mariadb')
             })
             .then(done)
             .catch(done)
@@ -130,16 +131,16 @@ describe('Plugin', () => {
           it('should support prepared statement shorthand', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
-                expect(traces[0][0]).to.have.property('type', 'sql')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('db.name', 'db')
-                expect(traces[0][0].meta).to.have.property('db.user', 'root')
-                expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(traces[0][0].resource, 'SELECT ? + ? AS solution')
+                assert.strictEqual(traces[0][0].type, 'sql')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta['db.name'], 'db')
+                assert.strictEqual(traces[0][0].meta['db.user'], 'root')
+                assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta.component, 'mariadb')
               })
               .then(done)
               .catch(done)
@@ -152,16 +153,16 @@ describe('Plugin', () => {
           it('should support prepared statements', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-                expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(traces[0][0]).to.have.property('resource', 'SELECT ? + ? AS solution')
-                expect(traces[0][0]).to.have.property('type', 'sql')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('db.name', 'db')
-                expect(traces[0][0].meta).to.have.property('db.user', 'root')
-                expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+                assert.strictEqual(traces[0][0].resource, 'SELECT ? + ? AS solution')
+                assert.strictEqual(traces[0][0].type, 'sql')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta['db.name'], 'db')
+                assert.strictEqual(traces[0][0].meta['db.user'], 'root')
+                assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                assert.strictEqual(traces[0][0].meta.component, 'mariadb')
               })
               .then(done)
               .catch(done)
@@ -183,10 +184,10 @@ describe('Plugin', () => {
 
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
             })
             .then(done)
             .catch(done)
@@ -239,7 +240,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -309,7 +310,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('service', 'custom')
+            assert.strictEqual(traces[0][0].service, 'custom')
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
               user: 'root',
@@ -345,15 +346,15 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
-              expect(traces[0][0]).to.have.property('type', 'sql')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('db.user', 'root')
-              expect(traces[0][0].meta).to.have.property('db.type', 'mariadb')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('component', 'mariadb')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
+              assert.strictEqual(traces[0][0].type, 'sql')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['db.user'], 'root')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'mariadb')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta.component, 'mariadb')
             })
             .then(done)
             .catch(done)
@@ -363,7 +364,7 @@ describe('Plugin', () => {
 
         it('should run the callback in the parent context', done => {
           pool.query('SELECT 1 + 1 AS solution', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -375,10 +376,10 @@ describe('Plugin', () => {
           tracer.trace('test', () => {
             tracer.scope().activate(span1, () => {
               pool.query('SELECT 1 + 1 AS solution', () => {
-                expect(tracer.scope().active() === span1).to.eql(true)
+                assert.deepStrictEqual(tracer.scope().active() === span1, true)
                 tracer.scope().activate(span2, () => {
                   pool.query('SELECT 1 + 1 AS solution', () => {
-                    expect(tracer.scope().active() === span2).to.eql(true)
+                    assert.deepStrictEqual(tracer.scope().active() === span2, true)
                     done()
                   })
                 })
@@ -404,8 +405,8 @@ describe('Plugin', () => {
 
         it('should not instrument connections to avoid leaks from internal queue', done => {
           agent.assertSomeTraces((traces) => {
-            expect(traces).to.have.length(1)
-            expect(traces[0].find(span => span.name === 'tcp.connect')).to.be.undefined
+            assert.strictEqual(traces.length, 1)
+            assert.strictEqual(traces[0].find(span => span.name === 'tcp.connect'), undefined)
           }).then(done, done)
 
           const span = tracer.startSpan('test')

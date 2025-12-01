@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { channel } = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-
-const util = require('node:util')
+const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
+const util = require('node:util')
+
+const { expect } = require('chai')
+const { channel } = require('dc-polyfill')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const realFS = Object.assign({}, require('node:fs'))
 
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -675,7 +676,7 @@ describe('Plugin', () => {
             }
           })
           const stream = fs.createReadStream(__filename)
-          expect(stream.listenerCount('error')).to.equal(0)
+          assert.strictEqual(stream.listenerCount('error'), 0)
 
           stream.on('error', done).resume()
         })
@@ -1886,7 +1887,7 @@ describe('Plugin', () => {
               const span = {}
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
-                  expect(tracer.scope().active()).to.equal(span)
+                  assert.strictEqual(tracer.scope().active(), span)
                   if (err) {
                     if (withError) withError(err)
                     else done(err)
@@ -1906,7 +1907,7 @@ describe('Plugin', () => {
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {
-                    expect(tracer.scope().active()).to.equal(span)
+                    assert.strictEqual(tracer.scope().active(), span)
                   })
                   .catch((err) => {
                     if (withError) withError(err)

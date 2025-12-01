@@ -53,7 +53,6 @@ tracer.init({
   experimental: {
     iast: true,
     b3: true,
-    runtimeId: true,
     exporter: 'log'
   },
   hostname: 'agent',

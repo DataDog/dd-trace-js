@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.dev.json",
+  "include": [
+    "./benchmark/sirun/debugger/**/*.js",
+    "./benchmark/sirun/debugger/**/*.mjs",
+    "./integration-tests/debugger/**/*.js",
+    "./integration-tests/debugger/**/*.mjs",
+    "./packages/dd-trace/test/debugger/**/*.js",
+    "./packages/dd-trace/test/debugger/**/*.mjs",
+    "./packages/dd-trace/src/debugger/**/*.js",
+    "./packages/dd-trace/src/debugger/**/*.mjs"
+  ],
+  "exclude": [
+    "./integration-tests/debugger/target-app/source-map-support/typescript.js"
+  ]
+}

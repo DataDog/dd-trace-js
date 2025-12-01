@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
@@ -33,22 +34,22 @@ describe('LLMObsSpanWriter', () => {
   it('is initialized correctly', () => {
     writer = new LLMObsSpanWriter(config)
 
-    expect(writer._eventType).to.equal('span')
+    assert.strictEqual(writer._eventType, 'span')
   })
 
   it('creates an agentless writer', () => {
     writer = new LLMObsSpanWriter(config)
     writer.setAgentless(true)
-    expect(writer._agentless).to.equal(true)
-    expect(writer.url).to.equal('https://llmobs-intake.datadoghq.com/api/v2/llmobs')
+    assert.strictEqual(writer._agentless, true)
+    assert.strictEqual(writer.url, 'https://llmobs-intake.datadoghq.com/api/v2/llmobs')
   })
 
   it('creates an agent proxy writer', () => {
     writer = new LLMObsSpanWriter(config)
     writer.setAgentless(false)
 
-    expect(writer._agentless).to.equal(false)
-    expect(writer.url).to.equal('http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
+    assert.strictEqual(writer._agentless, false)
+    assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/v2/llmobs')
   })
 
   it('computes the number of bytes of the appended event', () => {
@@ -59,7 +60,7 @@ describe('LLMObsSpanWriter', () => {
 
     writer.append(event)
 
-    expect(writer._bufferSize).to.equal(eventSizeBytes)
+    assert.strictEqual(writer._bufferSize, eventSizeBytes)
   })
 
   it('truncates the event if it exceeds the size limit', () => {
@@ -76,7 +77,7 @@ describe('LLMObsSpanWriter', () => {
     writer.append(event)
 
     const bufferEvent = writer._buffer[0]
-    expect(bufferEvent).to.deep.equal({
+    assert.deepStrictEqual(bufferEvent, {
       name: 'test',
       meta: {
         input: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
@@ -96,8 +97,8 @@ describe('LLMObsSpanWriter', () => {
 
     writer.append(event)
 
-    expect(writer.flush).to.have.been.calledOnce
-    expect(logger.debug).to.have.been.calledWith(
+    sinon.assert.calledOnce(writer.flush)
+    sinon.assert.calledWith(logger.debug,
       'Flushing queue because queuing next event will exceed EvP payload limit'
     )
   })
@@ -111,8 +112,8 @@ describe('LLMObsSpanWriter', () => {
 
     const payload = writer.makePayload(events)
 
-    expect(payload[0]['_dd.stage']).to.equal('raw')
-    expect(payload[0].event_type).to.equal('span')
-    expect(payload[0].spans).to.deep.equal(events)
+    assert.strictEqual(payload[0]['_dd.stage'], 'raw')
+    assert.strictEqual(payload[0].event_type, 'span')
+    assert.deepStrictEqual(payload[0].spans, events)
   })
 })

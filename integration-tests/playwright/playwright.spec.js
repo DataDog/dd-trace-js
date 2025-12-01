@@ -15,8 +15,8 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('../ci-visibility/web-app-server')
-const webAppServerWithRedirect = require('../ci-visibility/web-app-server-with-redirect')
+const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
   TEST_STATUS,
   TEST_SOURCE_START,
@@ -77,20 +77,39 @@ versions.forEach((version) => {
     }
   }
 
-  describe(`playwright@${version}`, () => {
-    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
+  describe(`playwright@${version}`, function () {
+    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
+
+    this.retries(2)
+    this.timeout(80000)
 
     useSandbox([`@playwright/test@${version}`, 'typescript'], true)
 
     before(function (done) {
+      // Increase timeout for this hook specifically to account for slow chromium installation in CI
+      this.timeout(120000)
+
       cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
+      // This will use cached browsers if available, otherwise download
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      webAppServer.listen(0, () => {
+
+      // Create fresh server instances to avoid issues with retries
+      webAppServer = createWebAppServer()
+      webAppServerWithRedirect = createWebAppServerWithRedirect()
+
+      webAppServer.listen(0, (err) => {
+        if (err) {
+          return done(err)
+        }
         webAppPort = webAppServer.address().port
-        webAppServerWithRedirect.listen(0, () => {
+
+        webAppServerWithRedirect.listen(0, (err) => {
+          if (err) {
+            return done(err)
+          }
           webPortWithRedirect = webAppServerWithRedirect.address().port
           done()
         })
@@ -1352,11 +1371,22 @@ versions.forEach((version) => {
       })
 
       context('disabled', () => {
+        let testOutput = ''
         beforeEach(() => {
+          testOutput = ''
           receiver.setTestManagementTests({
             playwright: {
               suites: {
                 'disabled-test.js': {
+                  tests: {
+                    'disable should disable test': {
+                      properties: {
+                        disabled: true
+                      }
+                    }
+                  }
+                },
+                'disabled-2-test.js': {
                   tests: {
                     'disable should disable test': {
                       properties: {
@@ -1375,6 +1405,18 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
+              const resourceNames = events.filter(event => event.type === 'test').map(event => event.content.resource)
+              assert.includeMembers(resourceNames, [
+                'disabled-test.js.disable should disable test',
+                'disabled-test.js.not disabled should not disable test',
+                'disabled-test.js.not disabled 2 should not disable test 2',
+                'disabled-test.js.not disabled 3 should not disable test 3',
+                'disabled-2-test.js.disable should disable test',
+                'disabled-2-test.js.not disabled should not disable test',
+                'disabled-2-test.js.not disabled 2 should not disable test 2',
+                'disabled-2-test.js.not disabled 3 should not disable test 3',
+              ])
+
               const testSession = events.find(event => event.type === 'test_session_end').content
               if (isDisabling) {
                 assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
@@ -1382,22 +1424,28 @@ versions.forEach((version) => {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
               }
 
-              const skippedTest = events.find(event => event.type === 'test').content
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 8)
 
-              if (isDisabling) {
-                assert.equal(skippedTest.meta[TEST_STATUS], 'skip')
-                assert.propertyVal(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
-              } else {
-                assert.equal(skippedTest.meta[TEST_STATUS], 'fail')
-                assert.notProperty(skippedTest.meta, TEST_MANAGEMENT_IS_DISABLED)
-              }
+              const disabledTests = tests.filter(test => test.meta[TEST_NAME] === 'disable should disable test')
+              assert.equal(disabledTests.length, 2)
+
+              disabledTests.forEach(test => {
+                if (isDisabling) {
+                  assert.equal(test.meta[TEST_STATUS], 'skip')
+                  assert.propertyVal(test.meta, TEST_MANAGEMENT_IS_DISABLED, 'true')
+                } else {
+                  assert.equal(test.meta[TEST_STATUS], 'fail')
+                  assert.notProperty(test.meta, TEST_MANAGEMENT_IS_DISABLED)
+                }
+              })
             }, 25000)
 
         const runDisableTest = async (isDisabling, extraEnvVars) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
+            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js disabled-2-test.js',
             {
               cwd,
               env: {
@@ -1410,14 +1458,26 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
             testAssertionsPromise
           ])
 
+          // the testOutput checks whether the test is actually skipped
           if (isDisabling) {
+            assert.notInclude(testOutput, 'SHOULD NOT BE EXECUTED')
             assert.equal(exitCode, 0)
           } else {
+            assert.include(testOutput, 'SHOULD NOT BE EXECUTED')
             assert.equal(exitCode, 1)
           }
         }
@@ -1426,6 +1486,12 @@ versions.forEach((version) => {
           receiver.setSettings({ test_management: { enabled: true } })
 
           await runDisableTest(true)
+        })
+
+        it('can disable tests in fullyParallel mode', async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          await runDisableTest(true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
         })
 
         it('fails if disable is not enabled', async () => {

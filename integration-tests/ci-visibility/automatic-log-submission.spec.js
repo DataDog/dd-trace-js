@@ -33,7 +33,7 @@ describe('test optimization automatic log submission', () => {
     const { NODE_OPTIONS, ...restOfEnv } = process.env
     // Install chromium (configured in integration-tests/playwright.config.js)
     // *Be advised*: this means that we'll only be using chromium for this test suite
-    execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+    execSync('npx playwright install --with-deps chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
     webAppServer.listen(0, () => {
       webAppPort = webAppServer.address().port
       done()
