@@ -1,12 +1,35 @@
 'use strict'
 
-const { app, net } = require('electron')
+/* eslint-disable no-console */
 
-const { PORT } = process.env
+const { app, net } = require('electron')
 
 app.on('ready', () => {
   process.send('ready')
-  process.on('message', msg => msg === 'quit' && app.quit())
-
-  net.fetch(`http://127.0.0.1:${PORT}`)
+  process.on('message', msg => {
+    try {
+      switch (msg.name) {
+        case 'quit': return app.quit()
+        case 'fetch': return onFetch(msg)
+        case 'request': return onRequest(msg)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  })
 })
+
+function onFetch ({ url }) {
+  net.fetch(url)
+}
+
+function onRequest ({ options }) {
+  const req = net.request(options)
+
+  req.on('error', e => console.error(e))
+  req.on('response', res => {
+    res.on('data', () => {})
+  })
+
+  req.end()
+}
