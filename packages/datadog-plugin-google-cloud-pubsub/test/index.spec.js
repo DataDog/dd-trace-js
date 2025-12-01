@@ -1,20 +1,19 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
-const id = require('../../dd-trace/src/id')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
-
-// The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
+const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const TIMEOUT = 30000
 const dsmTopicName = 'dsm-topic'
 
@@ -132,7 +131,7 @@ describe('Plugin', () => {
             const firstSpan = tracer.scope().active()
             return pubsub.createTopic(topicName)
               .then(() => {
-                expect(tracer.scope().active()).to.equal(firstSpan)
+                assert.strictEqual(tracer.scope().active(), firstSpan)
               })
           })
         })
@@ -161,7 +160,7 @@ describe('Plugin', () => {
                 publish(topic, { data: Buffer.from('hello') })
               )
               .then(() => {
-                expect(tracer.scope().active()).to.equal(firstSpan)
+                assert.strictEqual(tracer.scope().active(), firstSpan)
               })
           })
 
@@ -208,7 +207,7 @@ describe('Plugin', () => {
               sub.on('message', msg => {
                 const receiverSpanContext = tracer.scope().active()._spanContext
                 try {
-                  expect(receiverSpanContext._parentId).to.be.an('object')
+                  assert.ok(typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null)
                   resolve()
                   msg.ack()
                 } catch (e) {
@@ -246,7 +245,7 @@ describe('Plugin', () => {
                 err = e
               } finally {
                 if (name === 'message') {
-                  expect(err).to.equal(error)
+                  assert.strictEqual(err, error)
                 }
               }
             }
@@ -391,7 +390,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived).to.be.at.least(1)
+              assert.ok(statsPointsReceived >= 1)
               expect(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString())).to.equal(true)
             }, { timeoutMs: TIMEOUT })
           })
@@ -409,7 +408,7 @@ describe('Plugin', () => {
                     })
                   }
                 })
-                expect(statsPointsReceived).to.be.at.least(2)
+                assert.ok(statsPointsReceived >= 2)
                 expect(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString())).to.equal(true)
               }, { timeoutMs: TIMEOUT })
             })
@@ -429,14 +428,14 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             })
           })
         })

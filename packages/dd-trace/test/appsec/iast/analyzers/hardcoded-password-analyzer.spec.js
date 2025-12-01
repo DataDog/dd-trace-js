@@ -61,7 +61,7 @@ describe('Hardcoded Password Analyzer', () => {
           }]
         })
 
-        expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId })
+        sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: ruleId })
       })
     })
 
@@ -79,7 +79,7 @@ describe('Hardcoded Password Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).not.to.have.been.called
+      sinon.assert.notCalled(report)
     })
 
     it('should use ident as evidence', () => {

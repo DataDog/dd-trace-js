@@ -1,21 +1,21 @@
 'use strict'
 
 const assert = require('assert')
-const util = require('util')
 const http = require('http')
-const bodyParser = require('body-parser')
-const msgpack = require('@msgpack/msgpack')
-const express = require('express')
 const path = require('path')
-const ritm = require('../../src/ritm')
-const { storage } = require('../../../datadog-core')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { expect } = require('chai')
+const util = require('util')
+
+const msgpack = require('@msgpack/msgpack')
+const bodyParser = require('body-parser')
+const express = require('express')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { storage } = require('../../../datadog-core')
+const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
-const llmobsHandlers = new Set()
+let llmobsSpanEventsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -273,7 +273,7 @@ function assertIntegrationName (traces) {
             // ignore everything that has no component (i.e. manual span)
             // ignore everything that has already the component == _dd.integration
             if (span?.meta?.component && span.meta.component !== span.meta['_dd.integration']) {
-              expect(span.meta['_dd.integration']).to.equal(
+              assert.strictEqual(span.meta['_dd.integration'],
                 currentIntegrationName,
                   `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
                   but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
@@ -299,7 +299,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * - rejectFirst: false
  * - spanResourceMatch: undefined
  *
- * @typedef {Object} RunCallbackAgainstTracesOptions
+ * @typedef {object} RunCallbackAgainstTracesOptions
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
@@ -317,12 +317,12 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * Otherwise, it will reject.
  *
  * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
- * @param {RunCallbackAgainstTracesOptions} options={} - An options object
+ * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
  * @param {Set} handlers - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
 function runCallbackAgainstTraces (callback, options = {}, handlers) {
-  let error
+  const errors = []
   let resolve
   let reject
   const promise = new Promise((_resolve, _reject) => {
@@ -331,7 +331,16 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   })
 
   const rejectionTimeout = setTimeout(() => {
-    if (error) reject(error)
+    if (errors.length) {
+      const error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+      // Mark errors enumerable for older Node.js versions to be visible.
+      Object.defineProperty(error, 'errors', {
+        enumerable: true
+      })
+      // Hack for the information to be fully visible.
+      error.message = util.inspect(error)
+      reject(error)
+    }
   }, options.timeoutMs || 1000)
 
   const handlerPayload = {
@@ -341,22 +350,23 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   /**
    * @type {TracesCallback | AgentlessCallback}
-  */
+   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
 
     try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
       const result = callback(...args)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
-    } catch (e) {
+    } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
-        reject(e)
+        reject(error)
       } else {
-        error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
+        errors.push(error)
       }
     }
   }
@@ -449,9 +459,7 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
-      llmobsHandlers.forEach(({ handler }) => {
-        handler(JSON.parse(req.body))
-      })
+      llmobsSpanEventsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
@@ -597,13 +605,17 @@ module.exports = {
   },
 
   /**
-   * Use a callback handler for LLM Observability traces.
-   * @param {RunCallbackAgainstTracesCallback} callback
-   * @param {RunCallbackAgainstTracesOptions} [options]
-   * @returns
+   * Get the LLM Observability span events requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<Object>} The LLM Observability span events requests.
    */
-  useLlmobsTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+  getLlmObsSpanEventsRequests (clear = false) {
+    const requests = llmobsSpanEventsRequests
+    if (clear) {
+      llmobsSpanEventsRequests = []
+    }
+
+    return requests
   },
 
   /**
@@ -612,7 +624,7 @@ module.exports = {
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
   },
 
   /**
@@ -641,7 +653,7 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }

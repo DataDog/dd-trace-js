@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 const sinon = require('sinon')
@@ -79,23 +81,23 @@ describe('RemoteConfigManager', () => {
   it('should instantiate RemoteConfigManager', () => {
     sinon.stub(rc, 'poll')
 
-    expect(Scheduler).to.have.been.calledOnce
+    sinon.assert.calledOnce(Scheduler)
     const [firstArg, secondArg] = Scheduler.firstCall.args
-    expect(firstArg).to.be.a('function')
-    expect(secondArg).to.equal(5e3)
+    assert.strictEqual(typeof firstArg, 'function')
+    assert.strictEqual(secondArg, 5e3)
 
     firstArg(noop)
     expect(rc.poll).to.have.calledOnceWithExactly(noop)
 
-    expect(rc.scheduler).to.equal(scheduler)
+    assert.strictEqual(rc.scheduler, scheduler)
 
-    expect(rc.url).to.deep.equal(config.url)
+    assert.deepStrictEqual(rc.url, config.url)
 
-    expect(tagger.add).to.have.been.calledOnceWithExactly(config.tags, {
+    sinon.assert.calledOnceWithExactly(tagger.add, config.tags, {
       '_dd.rc.client_id': '1234-5678'
     })
 
-    expect(rc.state).to.deep.equal({
+    assert.deepStrictEqual(rc.state, {
       client: {
         state: {
           root_version: 1,
@@ -133,7 +135,7 @@ describe('RemoteConfigManager', () => {
       commitSHA: '1234567890'
     }
     const rc = new RemoteConfigManager(configWithGit)
-    expect(rc.state.client.client_tracer.tags).to.deep.equal([
+    assert.deepStrictEqual(rc.state.client.client_tracer.tags, [
       'runtime-id:runtimeId',
       'git.repository_url:https://github.com/DataDog/dd-trace-js',
       'git.commit.sha:1234567890'
@@ -143,69 +145,69 @@ describe('RemoteConfigManager', () => {
   describe('updateCapabilities', () => {
     it('should set multiple capabilities to true', () => {
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, true)
-      expect(rc.state.client.capabilities).to.equal('Ag==')
+      assert.strictEqual(rc.state.client.capabilities, 'Ag==')
 
       rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, true)
-      expect(rc.state.client.capabilities).to.equal('Bg==')
+      assert.strictEqual(rc.state.client.capabilities, 'Bg==')
 
       rc.updateCapabilities(Capabilities.ASM_DD_RULES, true)
-      expect(rc.state.client.capabilities).to.equal('Dg==')
+      assert.strictEqual(rc.state.client.capabilities, 'Dg==')
 
       rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, true)
-      expect(rc.state.client.capabilities).to.equal('jg==')
+      assert.strictEqual(rc.state.client.capabilities, 'jg==')
     })
 
     it('should set multiple capabilities to false', () => {
       rc.state.client.capabilities = 'jg=='
 
       rc.updateCapabilities(Capabilities.ASM_USER_BLOCKING, false)
-      expect(rc.state.client.capabilities).to.equal('Dg==')
+      assert.strictEqual(rc.state.client.capabilities, 'Dg==')
 
       rc.updateCapabilities(Capabilities.ASM_ACTIVATION, false)
-      expect(rc.state.client.capabilities).to.equal('DA==')
+      assert.strictEqual(rc.state.client.capabilities, 'DA==')
 
       rc.updateCapabilities(Capabilities.ASM_IP_BLOCKING, false)
-      expect(rc.state.client.capabilities).to.equal('CA==')
+      assert.strictEqual(rc.state.client.capabilities, 'CA==')
 
       rc.updateCapabilities(Capabilities.ASM_DD_RULES, false)
-      expect(rc.state.client.capabilities).to.equal('AA==')
+      assert.strictEqual(rc.state.client.capabilities, 'AA==')
     })
 
     it('should set an arbitrary amount of capabilities', () => {
       rc.updateCapabilities(1n << 1n, true)
       rc.updateCapabilities(1n << 200n, true)
-      expect(rc.state.client.capabilities).to.equal('AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=')
+      assert.strictEqual(rc.state.client.capabilities, 'AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=')
 
       rc.updateCapabilities(1n << 200n, false)
-      expect(rc.state.client.capabilities).to.equal('Ag==')
+      assert.strictEqual(rc.state.client.capabilities, 'Ag==')
     })
   })
 
   describe('setProductHandler/removeProductHandler', () => {
     it('should update the product list and autostart or autostop', () => {
-      expect(rc.scheduler.start).to.not.have.been.called
+      sinon.assert.notCalled(rc.scheduler.start)
 
       rc.setProductHandler('ASM_FEATURES', noop)
 
-      expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES'])
-      expect(rc.scheduler.start).to.have.been.called
+      assert.deepStrictEqual(rc.state.client.products, ['ASM_FEATURES'])
+      sinon.assert.called(rc.scheduler.start)
 
       rc.setProductHandler('ASM_DATA', noop)
       rc.setProductHandler('ASM_DD', noop)
 
-      expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
+      assert.deepStrictEqual(rc.state.client.products, ['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
 
       rc.removeProductHandler('ASM_FEATURES')
 
-      expect(rc.state.client.products).to.deep.equal(['ASM_DATA', 'ASM_DD'])
+      assert.deepStrictEqual(rc.state.client.products, ['ASM_DATA', 'ASM_DD'])
 
       rc.removeProductHandler('ASM_DATA')
 
-      expect(rc.scheduler.stop).to.not.have.been.called
+      sinon.assert.notCalled(rc.scheduler.stop)
 
       rc.removeProductHandler('ASM_DD')
 
-      expect(rc.scheduler.stop).to.have.been.called
+      sinon.assert.called(rc.scheduler.stop)
       expect(rc.state.client.products).to.be.empty
     })
   })
@@ -229,9 +231,9 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.not.have.been.called
-        expect(rc.parseConfig).to.not.have.been.called
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(rc.parseConfig)
         cb()
       })
     })
@@ -243,8 +245,8 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(rc.parseConfig).to.not.have.been.called
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
+        sinon.assert.notCalled(rc.parseConfig)
         cb()
       })
     })
@@ -255,9 +257,9 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.not.have.been.called
-        expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
         cb()
       })
     })
@@ -272,21 +274,21 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
+        sinon.assert.calledOnceWithExactly(rc.parseConfig, { a: 'b' })
         expect(log.error).to.have.been
           .calledOnceWithExactly('[RC] Could not parse remote config response', error)
-        expect(rc.state.client.state.has_error).to.be.true
-        expect(rc.state.client.state.error).to.equal('Error: Unable to parse config')
+        assert.strictEqual(rc.state.client.state.has_error, true)
+        assert.strictEqual(rc.state.client.state.error, 'Error: Unable to parse config')
 
         const payload2 = JSON.stringify(rc.state)
 
         rc.poll(() => {
-          expect(request).to.have.been.calledTwice
-          expect(request.secondCall).to.have.been.calledWith(payload2, expectedPayload)
-          expect(rc.parseConfig).to.have.been.calledOnce
-          expect(log.error).to.have.been.calledOnce
-          expect(rc.state.client.state.has_error).to.be.false
+          sinon.assert.calledTwice(request)
+          sinon.assert.calledWith(request.secondCall, payload2, expectedPayload)
+          sinon.assert.calledOnce(rc.parseConfig)
+          sinon.assert.calledOnce(log.error)
+          assert.strictEqual(rc.state.client.state.has_error, false)
           expect(rc.state.client.state.error).to.be.empty
           cb()
         })
@@ -299,9 +301,9 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
-        expect(log.error).to.not.have.been.called
-        expect(rc.parseConfig).to.not.have.been.called
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.notCalled(rc.parseConfig)
         cb()
       })
     })
@@ -313,10 +315,10 @@ describe('RemoteConfigManager', () => {
 
       // getPayload includes the new extraServices that might be available
       const payload = rc.getPayload()
-      expect(JSON.parse(payload).client.client_tracer.extra_services).to.deep.equal(extraServices)
+      assert.deepStrictEqual(JSON.parse(payload).client.client_tracer.extra_services, extraServices)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
+        sinon.assert.calledOnceWithMatch(request, payload, expectedPayload)
         cb()
       })
     })
@@ -343,9 +345,9 @@ describe('RemoteConfigManager', () => {
     it('should do nothing if passed an empty payload', () => {
       payload = {}
 
-      expect(func).to.not.throw()
-      expect(rc.dispatch).to.not.have.been.called
-      expect(rc.state).to.deep.equal(previousState)
+      assert.doesNotThrow(func)
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
     })
 
     it('should throw when target is not found', () => {
@@ -360,9 +362,9 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      expect(func).to.throw('Unable to find target for path datadog/42/PRODUCT/confId/config')
-      expect(rc.dispatch).to.not.have.been.called
-      expect(rc.state).to.deep.equal(previousState)
+      assert.throws(func, { message: 'Unable to find target for path datadog/42/PRODUCT/confId/config' })
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
     })
 
     it('should throw when target file is not found', () => {
@@ -381,9 +383,9 @@ describe('RemoteConfigManager', () => {
         })
       }
 
-      expect(func).to.throw('Unable to find file for path datadog/42/PRODUCT/confId/config')
-      expect(rc.dispatch).to.not.have.been.called
-      expect(rc.state).to.deep.equal(previousState)
+      assert.throws(func, { message: 'Unable to find file for path datadog/42/PRODUCT/confId/config' })
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
     })
 
     it('should throw when config path cannot be parsed', () => {
@@ -406,9 +408,9 @@ describe('RemoteConfigManager', () => {
         }]
       }
 
-      expect(func).to.throw('Unable to parse path datadog/42/confId/config')
-      expect(rc.dispatch).to.not.have.been.called
-      expect(rc.state).to.deep.equal(previousState)
+      assert.throws(func, { message: 'Unable to parse path datadog/42/confId/config' })
+      sinon.assert.notCalled(rc.dispatch)
+      assert.deepStrictEqual(rc.state, previousState)
     })
 
     it('should parse the config, call dispatch, and update the state', () => {
@@ -501,13 +503,14 @@ describe('RemoteConfigManager', () => {
         ]
       }
 
-      expect(func).to.not.throw()
+      // Calling func should not throw.
+      func()
 
-      expect(rc.state.client.state.targets_version).to.equal(12345)
-      expect(rc.state.client.state.backend_client_state).to.equal('opaquestateinbase64')
+      assert.strictEqual(rc.state.client.state.targets_version, 12345)
+      assert.strictEqual(rc.state.client.state.backend_client_state, 'opaquestateinbase64')
 
-      expect(rc.dispatch).to.have.been.calledThrice
-      expect(rc.dispatch.firstCall).to.have.been.calledWithExactly([{
+      sinon.assert.calledThrice(rc.dispatch)
+      sinon.assert.calledWithExactly(rc.dispatch.firstCall, [{
         path: 'datadog/42/UNAPPLY/confId/config',
         product: 'UNAPPLY',
         id: 'confId',
@@ -518,7 +521,7 @@ describe('RemoteConfigManager', () => {
         hashes: { sha256: 'anotherHash' },
         file: { asm: { enabled: true } }
       }], 'unapply')
-      expect(rc.dispatch.secondCall).to.have.been.calledWithExactly([{
+      sinon.assert.calledWithExactly(rc.dispatch.secondCall, [{
         path: 'datadog/42/APPLY/confId/config',
         product: 'APPLY',
         id: 'confId',
@@ -529,7 +532,7 @@ describe('RemoteConfigManager', () => {
         hashes: { sha256: 'haaaxx' },
         file: null
       }], 'apply')
-      expect(rc.dispatch.thirdCall).to.have.been.calledWithExactly([{
+      sinon.assert.calledWithExactly(rc.dispatch.thirdCall, [{
         path: 'datadog/42/MODIFY/confId/config',
         product: 'MODIFY',
         id: 'confId',
@@ -541,7 +544,7 @@ describe('RemoteConfigManager', () => {
         file: { config: 'newConf' }
       }], 'modify')
 
-      expect(rc.state.client.state.config_states).to.deep.equal([
+      assert.deepStrictEqual(rc.state.client.state.config_states, [
         {
           id: 'confId',
           version: 43,
@@ -564,7 +567,7 @@ describe('RemoteConfigManager', () => {
           apply_error: ''
         }
       ])
-      expect(rc.state.cached_target_files).to.deep.equal([
+      assert.deepStrictEqual(rc.state.cached_target_files, [
         {
           path: 'datadog/42/IGNORE/confId/config',
           length: 420,
@@ -622,57 +625,57 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch(list, 'apply')
 
-      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[0].file, list[0].id)
-      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[1].file, list[1].id)
-      expect(asyncGoodHandler).to.have.been.calledOnceWithExactly('apply', list[2].file, list[2].id)
-      expect(asyncBadHandler).to.have.been.calledOnceWithExactly('apply', list[3].file, list[3].id)
+      sinon.assert.calledOnceWithExactly(syncGoodNonAckHandler, 'apply', list[0].file, list[0].id)
+      sinon.assert.calledOnceWithExactly(syncBadNonAckHandler, 'apply', list[1].file, list[1].id)
+      sinon.assert.calledOnceWithExactly(asyncGoodHandler, 'apply', list[2].file, list[2].id)
+      sinon.assert.calledOnceWithExactly(asyncBadHandler, 'apply', list[3].file, list[3].id)
       assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', list[4].file, list[4].id)
       assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', list[5].file, list[5].id)
       assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', list[6].file, list[6].id)
       assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', list[7].file, list[7].id)
       assertAsyncHandlerCallArguments(unackHandler, 'apply', list[8].file, list[8].id)
 
-      expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
-      expect(list[0].apply_error).to.equal('')
-      expect(list[1].apply_state).to.equal(ERROR)
-      expect(list[1].apply_error).to.equal('Error: sync fn')
-      expect(list[2].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[2].apply_error).to.equal('')
-      expect(list[3].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[3].apply_error).to.equal('')
-      expect(list[4].apply_state).to.equal(ACKNOWLEDGED)
-      expect(list[4].apply_error).to.equal('')
-      expect(list[5].apply_state).to.equal(ERROR)
-      expect(list[5].apply_error).to.equal('Error: sync ack fn')
-      expect(list[6].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[6].apply_error).to.equal('')
-      expect(list[7].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[7].apply_error).to.equal('')
-      expect(list[8].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[8].apply_error).to.equal('')
+      assert.strictEqual(list[0].apply_state, ACKNOWLEDGED)
+      assert.strictEqual(list[0].apply_error, '')
+      assert.strictEqual(list[1].apply_state, ERROR)
+      assert.strictEqual(list[1].apply_error, 'Error: sync fn')
+      assert.strictEqual(list[2].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[2].apply_error, '')
+      assert.strictEqual(list[3].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[3].apply_error, '')
+      assert.strictEqual(list[4].apply_state, ACKNOWLEDGED)
+      assert.strictEqual(list[4].apply_error, '')
+      assert.strictEqual(list[5].apply_state, ERROR)
+      assert.strictEqual(list[5].apply_error, 'Error: sync ack fn')
+      assert.strictEqual(list[6].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[6].apply_error, '')
+      assert.strictEqual(list[7].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[7].apply_error, '')
+      assert.strictEqual(list[8].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[8].apply_error, '')
 
       for (let i = 0; i < list.length; i++) {
-        expect(rc.appliedConfigs.get(`datadog/42/PRODUCT_${i}/confId/config`)).to.equal(list[i])
+        assert.strictEqual(rc.appliedConfigs.get(`datadog/42/PRODUCT_${i}/confId/config`), list[i])
       }
 
       setImmediate(() => {
-        expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
-        expect(list[2].apply_error).to.equal('')
-        expect(list[3].apply_state).to.equal(ERROR)
-        expect(list[3].apply_error).to.equal('Error: async fn')
-        expect(list[6].apply_state).to.equal(ACKNOWLEDGED)
-        expect(list[6].apply_error).to.equal('')
-        expect(list[7].apply_state).to.equal(ERROR)
-        expect(list[7].apply_error).to.equal('Error: async ack fn')
-        expect(list[8].apply_state).to.equal(UNACKNOWLEDGED)
-        expect(list[8].apply_error).to.equal('')
+        assert.strictEqual(list[2].apply_state, ACKNOWLEDGED)
+        assert.strictEqual(list[2].apply_error, '')
+        assert.strictEqual(list[3].apply_state, ERROR)
+        assert.strictEqual(list[3].apply_error, 'Error: async fn')
+        assert.strictEqual(list[6].apply_state, ACKNOWLEDGED)
+        assert.strictEqual(list[6].apply_error, '')
+        assert.strictEqual(list[7].apply_state, ERROR)
+        assert.strictEqual(list[7].apply_error, 'Error: async ack fn')
+        assert.strictEqual(list[8].apply_state, UNACKNOWLEDGED)
+        assert.strictEqual(list[8].apply_error, '')
         done()
       })
 
       function assertAsyncHandlerCallArguments (handler, ...expectedArgs) {
-        expect(handler).to.have.been.calledOnceWith(...expectedArgs)
-        expect(handler.args[0].length).to.equal(expectedArgs.length + 1)
-        expect(handler.args[0][handler.args[0].length - 1]).to.be.a('function')
+        sinon.assert.calledOnceWithMatch(handler, ...expectedArgs)
+        assert.strictEqual(handler.args[0].length, expectedArgs.length + 1)
+        assert.strictEqual(typeof handler.args[0][handler.args[0].length - 1], 'function')
       }
     })
 
@@ -691,7 +694,7 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
-      expect(handler).to.have.been.calledOnceWithExactly('unapply', { asm: { enabled: true } }, 'asm_data')
+      sinon.assert.calledOnceWithExactly(handler, 'unapply', { asm: { enabled: true } }, 'asm_data')
       expect(rc.appliedConfigs).to.be.empty
     })
   })

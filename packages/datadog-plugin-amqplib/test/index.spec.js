@@ -1,17 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-const id = require('../../dd-trace/src/id')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 
+const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const id = require('../../dd-trace/src/id')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -74,15 +75,15 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
-                  expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
-                  expect(span).to.have.property('resource', `queue.declare ${queue}`)
-                  expect(span).to.not.have.property('type')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('out.host', 'localhost')
-                  expect(span.meta).to.have.property('component', 'amqplib')
-                  expect(span.meta).to.have.property('_dd.integration', 'amqplib')
-                  expect(span.metrics).to.have.property('network.destination.port', 5672)
+                  assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
+                  assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
+                  assert.strictEqual(span.resource, `queue.declare ${queue}`)
+                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.strictEqual(span.meta['span.kind'], 'client')
+                  assert.strictEqual(span.meta['out.host'], 'localhost')
+                  assert.strictEqual(span.meta.component, 'amqplib')
+                  assert.strictEqual(span.meta['_dd.integration'], 'amqplib')
+                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
                 })
                 .then(done)
                 .catch(done)
@@ -95,14 +96,14 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', expectedSchema.controlPlane.opName)
-                  expect(span).to.have.property('service', expectedSchema.controlPlane.serviceName)
-                  expect(span).to.have.property('resource', `queue.delete ${queue}`)
-                  expect(span).to.not.have.property('type')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('out.host', 'localhost')
-                  expect(span.meta).to.have.property('component', 'amqplib')
-                  expect(span.metrics).to.have.property('network.destination.port', 5672)
+                  assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
+                  assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
+                  assert.strictEqual(span.resource, `queue.delete ${queue}`)
+                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.strictEqual(span.meta['span.kind'], 'client')
+                  assert.strictEqual(span.meta['out.host'], 'localhost')
+                  assert.strictEqual(span.meta.component, 'amqplib')
+                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
                 })
                 .then(done)
                 .catch(done)
@@ -118,11 +119,11 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('error', 1)
-                  expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(span.meta).to.have.property('component', 'amqplib')
+                  assert.strictEqual(span.error, 1)
+                  assert.strictEqual(span.meta[ERROR_TYPE], error.name)
+                  assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+                  assert.strictEqual(span.meta[ERROR_STACK], error.stack)
+                  assert.strictEqual(span.meta.component, 'amqplib')
                 })
                 .then(done)
                 .catch(done)
@@ -154,15 +155,15 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('name', expectedSchema.send.opName)
-                  expect(span).to.have.property('service', expectedSchema.send.serviceName)
-                  expect(span).to.have.property('resource', 'basic.publish exchange routingKey')
-                  expect(span).to.not.have.property('type')
-                  expect(span.meta).to.have.property('out.host', 'localhost')
-                  expect(span.meta).to.have.property('span.kind', 'producer')
-                  expect(span.meta).to.have.property('amqp.routingKey', 'routingKey')
-                  expect(span.meta).to.have.property('component', 'amqplib')
-                  expect(span.metrics).to.have.property('network.destination.port', 5672)
+                  assert.strictEqual(span.name, expectedSchema.send.opName)
+                  assert.strictEqual(span.service, expectedSchema.send.serviceName)
+                  assert.strictEqual(span.resource, 'basic.publish exchange routingKey')
+                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.strictEqual(span.meta['out.host'], 'localhost')
+                  assert.strictEqual(span.meta['span.kind'], 'producer')
+                  assert.strictEqual(span.meta['amqp.routingKey'], 'routingKey')
+                  assert.strictEqual(span.meta.component, 'amqplib')
+                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
                 })
                 .then(done)
                 .catch(done)
@@ -178,11 +179,11 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  expect(span).to.have.property('error', 1)
-                  expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-                  expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-                  expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-                  expect(span.meta).to.have.property('component', 'amqplib')
+                  assert.strictEqual(span.error, 1)
+                  assert.strictEqual(span.meta[ERROR_TYPE], error.name)
+                  assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+                  assert.strictEqual(span.meta[ERROR_STACK], error.stack)
+                  assert.strictEqual(span.meta.component, 'amqplib')
                 })
                 .then(done)
                 .catch(done)
@@ -211,13 +212,13 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  expect(span).to.have.property('name', expectedSchema.receive.opName)
-                  expect(span).to.have.property('service', expectedSchema.receive.serviceName)
-                  expect(span).to.have.property('resource', `basic.deliver ${queue}`)
-                  expect(span).to.have.property('type', 'worker')
-                  expect(span.meta).to.have.property('span.kind', 'consumer')
-                  expect(span.meta).to.have.property('amqp.consumerTag', consumerTag)
-                  expect(span.meta).to.have.property('component', 'amqplib')
+                  assert.strictEqual(span.name, expectedSchema.receive.opName)
+                  assert.strictEqual(span.service, expectedSchema.receive.serviceName)
+                  assert.strictEqual(span.resource, `basic.deliver ${queue}`)
+                  assert.strictEqual(span.type, 'worker')
+                  assert.strictEqual(span.meta['span.kind'], 'consumer')
+                  assert.strictEqual(span.meta['amqp.consumerTag'], consumerTag)
+                  assert.strictEqual(span.meta.component, 'amqplib')
                 })
                 .then(done)
                 .catch(done)
@@ -240,7 +241,7 @@ describe('Plugin', () => {
                 if (err) return done(err)
 
                 channel.consume(ok.queue, () => {}, {}, () => {
-                  expect(tracer.scope().active()).to.be.null
+                  assert.strictEqual(tracer.scope().active(), null)
                   done()
                 })
               })
@@ -256,11 +257,11 @@ describe('Plugin', () => {
                   const parentId = msg.properties.headers['x-datadog-parent-id']
                   const spanContext = tracer.scope().active().context()
 
-                  expect(traceId).to.not.be.undefined
-                  expect(parentId).to.not.be.undefined
+                  assert.notStrictEqual(traceId, undefined)
+                  assert.notStrictEqual(parentId, undefined)
 
-                  expect(spanContext._traceId.toString(10)).to.equal(traceId)
-                  expect(spanContext._parentId.toString(10)).to.equal(parentId)
+                  assert.strictEqual(spanContext._traceId.toString(10), traceId)
+                  assert.strictEqual(spanContext._parentId.toString(10), parentId)
 
                   done()
                 }, {}, err => err && done(err))
@@ -270,7 +271,7 @@ describe('Plugin', () => {
             it('should support null messages', done => {
               channel.assertQueue('queue', {}, () => {
                 channel.consume('queue', (event) => {
-                  expect(event).to.be.null
+                  assert.strictEqual(event, null)
                   done()
                 }, {}, () => {
                   channel.deleteQueue('queue')
@@ -302,7 +303,7 @@ describe('Plugin', () => {
           it('should run the callback in the parent context', done => {
             channel.assertQueue(queue, {})
               .then(() => {
-                expect(tracer.scope().active()).to.be.null
+                assert.strictEqual(tracer.scope().active(), null)
                 done()
               })
               .catch(done)
@@ -351,14 +352,14 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived.length).to.be.at.least(1)
-              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+              assert.ok(statsPointsReceived.length >= 1)
+              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
                 'direction:out',
                 'has_routing_key:true',
                 `topic:${queue}`,
                 'type:rabbitmq'
               ])
-              expect(agent.dsmStatsExist(agent, expectedProducerHashWithTopic)).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue(queue, {}, (err, ok) => {
@@ -379,14 +380,14 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived.length).to.be.at.least(1)
-              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+              assert.ok(statsPointsReceived.length >= 1)
+              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
                 'direction:out',
                 'exchange:namedExchange',
                 'has_routing_key:true',
                 'type:rabbitmq'
               ])
-              expect(agent.dsmStatsExist(agent, expectedProducerHashWithExchange)).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithExchange), true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertExchange('namedExchange', 'direct', {}, (err, ok) => {
@@ -407,10 +408,10 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived.length).to.equal(2)
-              expect(statsPointsReceived[1].EdgeTags).to.deep.equal(
+              assert.strictEqual(statsPointsReceived.length, 2)
+              assert.deepStrictEqual(statsPointsReceived[1].EdgeTags,
                 ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
-              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue(queue, {}, (err, ok) => {
@@ -434,14 +435,14 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived.length).to.equal(1)
-              expect(statsPointsReceived[0].EdgeTags).to.deep.equal([
+              assert.strictEqual(statsPointsReceived.length, 1)
+              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
                 'direction:out',
                 'has_routing_key:true',
                 `topic:${queue}`,
                 'type:rabbitmq'
               ])
-              expect(agent.dsmStatsExist(agent, expectedProducerHashWithTopic)).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue(queue, {}, (err, ok) => {
@@ -462,10 +463,10 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived.length).to.equal(2)
-              expect(statsPointsReceived[1].EdgeTags).to.deep.equal(
+              assert.strictEqual(statsPointsReceived.length, 2)
+              assert.deepStrictEqual(statsPointsReceived[1].EdgeTags,
                 ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
-              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue(queue, {}, (err, ok) => {
@@ -484,7 +485,7 @@ describe('Plugin', () => {
 
               channel.get(ok.queue, {}, (err, msg) => {
                 if (err) return done(err)
-                expect(msg).to.equal(false)
+                assert.strictEqual(msg, false)
                 done()
               })
             })
@@ -504,7 +505,7 @@ describe('Plugin', () => {
                   produceSpanMeta = span.meta
                 }
 
-                expect(produceSpanMeta).to.include({
+                assertObjectContains(produceSpanMeta, {
                   'pathway.hash': expectedProducerHashWithTopic
                 })
               }, { timeoutMs: 10000 }).then(done, done)
@@ -527,7 +528,7 @@ describe('Plugin', () => {
                     consumeSpanMeta = span.meta
                   }
 
-                  expect(consumeSpanMeta).to.include({
+                  assertObjectContains(consumeSpanMeta, {
                     'pathway.hash': expectedConsumerHash
                   })
                 }, { timeoutMs: 10000 }).then(done, done)
@@ -562,8 +563,8 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'test-custom-service')
-              expect(traces[0][0]).to.have.property('resource', `queue.declare ${queue}`)
+              assert.strictEqual(traces[0][0].service, 'test-custom-service')
+              assert.strictEqual(traces[0][0].resource, `queue.declare ${queue}`)
             })
             .then(done)
             .catch(done)

@@ -1,13 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let logger
@@ -51,11 +52,11 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             logger.info('message')
 
-            expect(stream.write).to.have.been.called
+            sinon.assert.called(stream.write)
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.have.property('dd')
+            assert.ok(Object.hasOwn(record, 'dd'))
           })
         })
       })
@@ -73,11 +74,11 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             logger.info('message')
 
-            expect(stream.write).to.have.been.called
+            sinon.assert.called(stream.write)
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record.dd).to.deep.include({
+            assertObjectContains(record.dd, {
               trace_id: span.context().toTraceId(true),
               span_id: span.context().toSpanId()
             })
@@ -90,21 +91,21 @@ describe('Plugin', () => {
 
             logger.info(record)
 
-            expect(stream.write).to.have.been.called
-            expect(record).to.not.have.property('dd')
+            sinon.assert.called(stream.write)
+            assert.ok(!Object.hasOwn(record, 'dd'))
           })
         })
 
         it('should not inject trace_id or span_id without an active span', () => {
           logger.info('message')
 
-          expect(stream.write).to.have.been.called
+          sinon.assert.called(stream.write)
 
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-          expect(record).to.have.property('dd')
-          expect(record.dd).to.not.have.property('trace_id')
-          expect(record.dd).to.not.have.property('span_id')
+          assert.ok(Object.hasOwn(record, 'dd'))
+          assert.ok(!Object.hasOwn(record.dd, 'trace_id'))
+          assert.ok(!Object.hasOwn(record.dd, 'span_id'))
         })
       })
     })

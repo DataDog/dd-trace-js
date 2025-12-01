@@ -25,7 +25,7 @@ let shouldKill
 /**
  * @param {string} filename
  * @param {string} cwd
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
@@ -69,7 +69,7 @@ let sandbox
  * This _must_ be used with the useSandbox function
  *
  * @param {string} filename
- * @param {string|function} expectedOut
+ * @param {string|((out: Promise<string>) => void)} expectedOut
  * @param {string[]} expectedTelemetryPoints
  * @param {string} expectedSource
  */
@@ -165,6 +165,10 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 }
 
 /**
+ * @typedef {childProcess.ChildProcess & { url: string }} SpawnedProcess
+ */
+
+/**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
  *
  * @param {string|URL} filename - The filename of the Node.js script to spawn in a child process.
@@ -173,14 +177,14 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<childProcess.ChildProcess & { url?: string }|void>} A promise that resolves when the process
- *   is either ready or terminated without an error. If the process is terminated without an error, the promise will
- *   resolve with `undefined`.The returned process will have a `url` property if the process didn't terminate.
+ * @returns {Promise<SpawnedProcess|void>} A promise that resolves when the process is either ready or terminated
+ *   without an error. If the process is terminated without an error, the promise will resolve with `undefined`. The
+ *   returned process will have a `url` property if the process didn't terminate.
  */
 function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
 
-  return /** @type {Promise<childProcess.ChildProcess & { url?: string }|void>} */ (new Promise((resolve, reject) => {
+  return /** @type {Promise<SpawnedProcess|void>} */ (new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
         if (typeof port !== 'number' && typeof port !== 'string') {
@@ -494,7 +498,7 @@ async function curl (url) {
 /**
  * @param {FakeAgent} agent
  * @param {string|{ then: (callback: () => Promise<string>) => Promise<string> }|URL} procOrUrl
- * @param {function} fn
+ * @param {(res: { headers: Record<string, string>, payload: unknown[] }) => void} fn
  * @param {number} [timeout]
  * @param {number} [expectedMessageCount]
  * @param {boolean} [resolveAtFirstSuccess]
@@ -557,7 +561,7 @@ function checkSpansForServiceName (spans, name) {
  * @param {string} cwd
  * @param {string} serverFile
  * @param {string|number} agentPort
- * @param {function} [stdioHandler]
+ * @param {(data: Buffer) => void} [stdioHandler]
  * @param {Record<string, string|undefined>} [additionalEnvArgs]
  */
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs) {
@@ -594,8 +598,7 @@ function useEnv (env) {
 }
 
 /**
- * @param {unknown[]} args
- * @returns {object}
+ * @param {Parameters<createSandbox>} args
  */
 function useSandbox (...args) {
   before(async function () {

@@ -1,8 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
 const { describe, it } = require('mocha')
-
 require('../../setup/mocha')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
@@ -13,7 +14,7 @@ describe('JSONBuffer', () => {
   it('should call onFlush with the expected payload when the timeout is reached', function (done) {
     const onFlush = (json) => {
       const diff = Date.now() - start
-      expect(json).to.equal('[{"message":1},{"message":2},{"message":3}]')
+      assert.strictEqual(json, '[{"message":1},{"message":2},{"message":3}]')
       expect(diff).to.be.within(95, 110)
       done()
     }
@@ -33,7 +34,7 @@ describe('JSONBuffer', () => {
     ]
 
     const onFlush = (json) => {
-      expect(json).to.equal(expectedPayloads.shift())
+      assert.strictEqual(json, expectedPayloads.shift())
       if (expectedPayloads.length === 0) done()
     }
 
