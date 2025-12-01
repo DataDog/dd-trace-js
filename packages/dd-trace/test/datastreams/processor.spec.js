@@ -93,7 +93,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when no matching key is found', () => {
       const bucket = buckets.forCheckpoint(mockCheckpoint)
       const checkpoints = buckets.checkpoints
-      expect(bucket).to.be.an.instanceOf(StatsPoint)
+      assert.ok(bucket instanceof StatsPoint)
       assert.strictEqual(checkpoints.size, 1)
       const [key, value] = Array.from(checkpoints.entries())[0]
       assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
@@ -134,7 +134,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when empty', () => {
       const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
-      expect(bucket).to.be.an.instanceOf(Backlog)
+      assert.ok(bucket instanceof Backlog)
       const [, value] = Array.from(backlogs.entries())[0]
       assert.ok(value instanceof Backlog)
     })
@@ -191,7 +191,7 @@ describe('TimeBuckets', () => {
     assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
     assert.strictEqual(buckets.size, 1)
-    expect(bucket).to.be.an.instanceOf(StatsBucket)
+    assert.ok(bucket instanceof StatsBucket)
   })
 })
 

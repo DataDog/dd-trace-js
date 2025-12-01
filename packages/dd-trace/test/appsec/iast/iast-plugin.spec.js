@@ -78,7 +78,7 @@ describe('IAST Plugin', () => {
 
         sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
-        expect(args[0]).equal('test')
+        assert.strictEqual(args[0], 'test')
         assert.strictEqual(args[1], handler)
       })
 
@@ -88,7 +88,7 @@ describe('IAST Plugin', () => {
 
         sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
-        expect(args[0]).equal('test')
+        assert.strictEqual(args[0], 'test')
         assert.strictEqual(args[1], handler)
       })
 
@@ -97,7 +97,7 @@ describe('IAST Plugin', () => {
         iastPlugin.addSub(iastPluginSub, handler)
 
         assert.strictEqual(iastPlugin.pluginSubs.length, 1)
-        expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
+        assert.strictEqual(iastPlugin.pluginSubs[0].moduleName, 'test')
       })
 
       it('should infer moduleName from channelName after registering iastPluginSub with real channelName', () => {
@@ -105,7 +105,7 @@ describe('IAST Plugin', () => {
         iastPlugin.addSub(iastPluginSub, handler)
 
         assert.strictEqual(iastPlugin.pluginSubs.length, 1)
-        expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
+        assert.strictEqual(iastPlugin.pluginSubs[0].moduleName, 'test')
       })
 
       it('should not call _getTelemetryHandler', () => {
@@ -148,9 +148,10 @@ describe('IAST Plugin', () => {
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
+        })
         sinon.assert.calledOnce(logError)
       })
 
@@ -166,7 +167,7 @@ describe('IAST Plugin', () => {
         })
 
         sinon.assert.calledOnce(handler)
-        expect(metric.increase).to.not.be.called
+        sinon.assert.notCalled(metric.increase)
       })
     })
   })
@@ -356,9 +357,10 @@ describe('IAST Plugin', () => {
       it('should exec handler and catch exception if any', () => {
         const handler = () => { throw new Error('error') }
 
-        expect(iastPlugin._execHandlerAndIncMetric({
+        // Should not throw
+        iastPlugin._execHandlerAndIncMetric({
           handler
-        })).to.not.throw
+        })
         sinon.assert.calledOnce(logError)
       })
 

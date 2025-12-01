@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { getVerbosity, getName, Verbosity, isDebugAllowed, isInfoAllowed } =
   require('../../../../src/appsec/iast/telemetry/verbosity')
 
@@ -14,15 +12,15 @@ describe('Telemetry Verbosity', () => {
     })
 
     it('should get verbosity regardless of capitalization', () => {
-      expect(getVerbosity('dEBug')).to.be.eq(Verbosity.DEBUG)
+      assert.strictEqual(getVerbosity('dEBug'), Verbosity.DEBUG)
     })
 
     it('should get verbosity default verbosity if invalid env var', () => {
-      expect(getVerbosity('Invalid')).to.be.eq(Verbosity.INFORMATION)
+      assert.strictEqual(getVerbosity('Invalid'), Verbosity.INFORMATION)
     })
 
     it('should get verbosity default verbosity if empty env var', () => {
-      expect(getVerbosity()).to.be.eq(Verbosity.INFORMATION)
+      assert.strictEqual(getVerbosity(), Verbosity.INFORMATION)
     })
   })
 

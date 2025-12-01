@@ -1,7 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { EXECUTED_SINK, EXECUTED_SOURCE, REQUEST_TAINTED } = require('../../../../src/appsec/iast/telemetry/iast-metric')
@@ -34,8 +36,8 @@ describe('Telemetry Span tags', () => {
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
     expect(rootSpan.addTags).to.be.calledTwice
-    expect(rootSpan.addTags.firstCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_1': 42 })
-    expect(rootSpan.addTags.secondCall.args[0]).to.deep.eq({ '_dd.test.executed.sink.sink_type_1': 3 })
+    assert.deepStrictEqual(rootSpan.addTags.firstCall.args[0], { '_dd.test.executed.source.source_type_1': 42 })
+    assert.deepStrictEqual(rootSpan.addTags.secondCall.args[0], { '_dd.test.executed.sink.sink_type_1': 3 })
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics flattened', () => {
@@ -62,8 +64,8 @@ describe('Telemetry Span tags', () => {
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
     expect(rootSpan.addTags).to.be.calledTwice
-    expect(rootSpan.addTags.firstCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_1': 74 })
-    expect(rootSpan.addTags.secondCall.args[0]).to.deep.eq({ '_dd.test.executed.source.source_type_2': 2 })
+    assert.deepStrictEqual(rootSpan.addTags.firstCall.args[0], { '_dd.test.executed.source.source_type_1': 74 })
+    assert.deepStrictEqual(rootSpan.addTags.secondCall.args[0], { '_dd.test.executed.source.source_type_2': 2 })
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName\' for not tagged metrics', () => {

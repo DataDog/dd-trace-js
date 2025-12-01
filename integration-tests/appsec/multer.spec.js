@@ -1,7 +1,8 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
-const { assert } = require('chai')
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const path = require('node:path')
@@ -51,7 +52,7 @@ describe('multer', () => {
 
             const res = await axios.post(proc.url, form)
 
-            assert.equal(res.data, 'DONE')
+            assert.strictEqual(res.data, 'DONE')
           })
 
           it('should block the request when attack is detected', async () => {
@@ -63,7 +64,7 @@ describe('multer', () => {
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
-              assert.equal(e.response.status, 403)
+              assert.strictEqual(e.response.status, 403)
             }
           })
         })
@@ -75,7 +76,7 @@ describe('multer', () => {
 
             const res = await axios.post(`${proc.url}/no-middleware`, form)
 
-            assert.equal(res.data, 'DONE')
+            assert.strictEqual(res.data, 'DONE')
           })
 
           it('should block the request when attack is detected', async () => {
@@ -87,7 +88,7 @@ describe('multer', () => {
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
-              assert.equal(e.response.status, 403)
+              assert.strictEqual(e.response.status, 403)
             }
           })
         })
@@ -95,18 +96,18 @@ describe('multer', () => {
 
       describe('IAST', () => {
         function assertCmdInjection ({ payload }) {
-          assert.isArray(payload)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
 
           const { meta } = payload[0][0]
 
-          assert.property(meta, '_dd.iast.json')
+          assert.ok(Object.hasOwn(meta, '_dd.iast.json'))
 
           const iastJson = JSON.parse(meta['_dd.iast.json'])
 
-          assert.isTrue(iastJson.vulnerabilities.some(v => v.type === 'COMMAND_INJECTION'))
-          assert.isTrue(iastJson.sources.some(s => s.origin === 'http.request.body'))
+          assert.strictEqual(iastJson.vulnerabilities.some(v => v.type === 'COMMAND_INJECTION'), true)
+          assert.strictEqual(iastJson.sources.some(s => s.origin === 'http.request.body'), true)
         }
 
         describe('using middleware', () => {

@@ -25,7 +25,7 @@ describe('check-require-cache', () => {
   it('should find warnings when tracer loaded late', (done) => {
     exec(`${process.execPath} ./check-require-cache/bad-order.js`, opts, (error, stdout, stderr) => {
       assert.strictEqual(error, null)
-      expect(stderr).to.include("Package 'express' was loaded")
+      assert.match(stderr, /Package 'express' was loaded/)
       done()
     })
   })

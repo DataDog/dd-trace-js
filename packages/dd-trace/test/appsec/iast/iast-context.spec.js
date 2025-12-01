@@ -2,11 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { describe, it } = require('mocha')
 
 const iastContextHandler = require('../../../src/appsec/iast/iast-context')
-
 describe('IAST context', () => {
   const iastContext = 'IAST_CONTEXT'
 
@@ -16,7 +14,7 @@ describe('IAST context', () => {
         [iastContextHandler.IAST_CONTEXT_KEY]: iastContext
       }
       const returnedIastContext = iastContextHandler.getIastContext(store)
-      expect(returnedIastContext).to.be.not.null
+      assert.notStrictEqual(returnedIastContext, null)
       assert.strictEqual(returnedIastContext, iastContext)
     })
 
@@ -44,11 +42,11 @@ describe('IAST context', () => {
       const store = {}
       const topContext = {}
       const returnedIastContext = iastContextHandler.saveIastContext(store, topContext, iastContext)
-      expect(returnedIastContext).to.be.not.null
+      assert.notStrictEqual(returnedIastContext, null)
       assert.strictEqual(returnedIastContext, iastContext)
-      expect(store[iastContextHandler.IAST_CONTEXT_KEY]).to.be.not.null
+      assert.notStrictEqual(store[iastContextHandler.IAST_CONTEXT_KEY], null)
       assert.strictEqual(store[iastContextHandler.IAST_CONTEXT_KEY], iastContext)
-      expect(topContext[iastContextHandler.IAST_CONTEXT_KEY]).to.be.not.null
+      assert.notStrictEqual(topContext[iastContextHandler.IAST_CONTEXT_KEY], null)
       assert.strictEqual(topContext[iastContextHandler.IAST_CONTEXT_KEY], iastContext)
     })
 

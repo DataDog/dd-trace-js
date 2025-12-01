@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -114,13 +114,13 @@ describe('Disabled APM Tracing or Standalone', () => {
     it('should not return a prioritySampler when standalone ASM is disabled', () => {
       const prioritySampler = standalone.configure({ apmTracingEnabled: true })
 
-      assert.isUndefined(prioritySampler)
+      assert.strictEqual(prioritySampler, undefined)
     })
 
     it('should return a TraceSourcePrioritySampler when standalone ASM is enabled', () => {
       const prioritySampler = standalone.configure(config)
 
-      assert.instanceOf(prioritySampler, TraceSourcePrioritySampler)
+      assert.ok(prioritySampler instanceof TraceSourcePrioritySampler)
     })
   })
 
@@ -133,7 +133,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.notProperty(span.context()._tags, APM_TRACING_ENABLED_KEY)
+      assert.ok(!(APM_TRACING_ENABLED_KEY in span.context()._tags))
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -143,7 +143,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.property(span.context()._tags, APM_TRACING_ENABLED_KEY)
+      assert.ok(Object.hasOwn(span.context()._tags, APM_TRACING_ENABLED_KEY))
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -153,14 +153,14 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation'
       })
 
-      assert.propertyVal(parent.context()._tags, APM_TRACING_ENABLED_KEY, 0)
+      assert.strictEqual(parent.context()._tags[APM_TRACING_ENABLED_KEY], 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent
       })
 
-      assert.notProperty(child.context()._tags, APM_TRACING_ENABLED_KEY)
+      assert.ok(!(APM_TRACING_ENABLED_KEY in child.context()._tags))
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -177,7 +177,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         parent
       })
 
-      assert.propertyVal(child.context()._tags, APM_TRACING_ENABLED_KEY, 0)
+      assert.strictEqual(child.context()._tags[APM_TRACING_ENABLED_KEY], 0)
     })
   })
 
@@ -194,7 +194,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      assert.isUndefined(spanContext._sampling.priority)
+      assert.strictEqual(spanContext._sampling.priority, undefined)
     })
 
     it('should not reset dm if _dd.p.ts not present', () => {
@@ -210,7 +210,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-4')
+      assert.strictEqual(spanContext._trace.tags[DECISION_MAKER_KEY], '-4')
     })
 
     it('should keep priority if _dd.p.ts is present', () => {
@@ -227,7 +227,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
-      assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-5')
+      assert.strictEqual(spanContext._trace.tags[DECISION_MAKER_KEY], '-5')
     })
 
     it('should set USER_KEEP priority if _dd.p.ts=02 is present', () => {
@@ -280,12 +280,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.notProperty(carrier, 'x-datadog-trace-id')
-      assert.notProperty(carrier, 'x-datadog-parent-id')
-      assert.notProperty(carrier, 'x-datadog-sampling-priority')
+      assert.ok(!('x-datadog-trace-id' in carrier))
+      assert.ok(!('x-datadog-parent-id' in carrier))
+      assert.ok(!('x-datadog-sampling-priority' in carrier))
 
-      assert.notProperty(carrier, 'x-b3-traceid')
-      assert.notProperty(carrier, 'x-b3-spanid')
+      assert.ok(!('x-b3-traceid' in carrier))
+      assert.ok(!('x-b3-spanid' in carrier))
     })
 
     it('should keep priority if apm tracing is disabled and there is an appsec event', () => {
@@ -306,10 +306,10 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.property(carrier, 'x-datadog-trace-id')
-      assert.property(carrier, 'x-datadog-parent-id')
-      assert.property(carrier, 'x-datadog-sampling-priority')
-      assert.propertyVal(carrier, 'x-datadog-tags', '_dd.p.ts=02')
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.ts=02')
     })
 
     it('should not reset priority if standalone disabled', () => {
@@ -329,12 +329,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.property(carrier, 'x-datadog-trace-id')
-      assert.property(carrier, 'x-datadog-parent-id')
-      assert.property(carrier, 'x-datadog-sampling-priority')
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
 
-      assert.property(carrier, 'x-b3-traceid')
-      assert.property(carrier, 'x-b3-spanid')
+      assert.ok(Object.hasOwn(carrier, 'x-b3-traceid'))
+      assert.ok(Object.hasOwn(carrier, 'x-b3-spanid'))
     })
 
     it('should clear tracestate datadog info', () => {
@@ -358,8 +358,8 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.propertyVal(carrier, 'tracestate', 'other=id:0xC0FFEE')
-      assert.notProperty(carrier, 'traceparent')
+      assert.strictEqual(carrier.tracestate, 'other=id:0xC0FFEE')
+      assert.ok(!('traceparent' in carrier))
     })
   })
 })

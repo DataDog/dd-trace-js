@@ -270,7 +270,7 @@ describe('AppSec Index', function () {
       config.appsec.rasp.enabled = false
       AppSec.enable(config)
 
-      expect(rasp.enable).to.not.be.called
+      sinon.assert.notCalled(rasp.enable)
     })
   })
 

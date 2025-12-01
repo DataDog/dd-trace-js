@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
 const { fork } = require('child_process')
 const { join } = require('path')
-const { assert } = require('chai')
 const axios = require('axios')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
@@ -386,13 +387,13 @@ describe('opentelemetry', () => {
       assert.strictEqual(trace.length, 3)
 
       // Should have expected span names and ordering
-      assert.isTrue(eachEqual(trace, ['web.request', 'otel-sub', 'dd-sub'], span => span.name))
+      assert.strictEqual(eachEqual(trace, ['web.request', 'otel-sub', 'dd-sub'], span => span.name), true)
 
       // Should have matching trace ids
-      assert.isTrue(allEqual(trace, span => span.trace_id.toString()))
+      assert.ok(allEqual(trace, span => span.trace_id.toString()))
 
       // Should have matching service names
-      assert.isTrue(allEqual(trace, span => span.service))
+      assert.strictEqual(allEqual(trace, span => span.service), true)
 
       // Should have expected span parentage
       const [webSpan, otelSpan, ddSpan] = trace
@@ -422,7 +423,7 @@ describe('opentelemetry', () => {
       assert.strictEqual(trace.length, 9)
 
       // Should have expected span names and ordering
-      assert.isTrue(eachEqual(trace, [
+      assert.ok(eachEqual(trace, [
         'GET /second-endpoint',
         'middleware - query',
         'middleware - expressInit',
@@ -435,7 +436,7 @@ describe('opentelemetry', () => {
       ],
       (span) => span.name))
 
-      assert.isTrue(allEqual(trace, (span) => {
+      assert.ok(allEqual(trace, (span) => {
         span.trace_id.toString()
       }))
 

@@ -627,7 +627,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
               assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
               assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+              assert.ok(!('http.status_code' in traces[0][0].meta))
               assert.strictEqual(traces[0][0].meta.component, 'http')
             })
             .then(done)
@@ -654,7 +654,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+              assert.ok(!('http.status_code' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)
@@ -678,7 +678,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].error, 1)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+              assert.ok(!('http.status_code' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)
@@ -944,7 +944,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].error, 1)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+              assert.ok(!('http.status_code' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)

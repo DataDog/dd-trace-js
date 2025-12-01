@@ -264,7 +264,7 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 assert.strictEqual(traces[0][0].error, 0)
-                assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+                assert.ok(!('http.status_code' in traces[0][0].meta))
               })
               .then(done)
               .catch(done)

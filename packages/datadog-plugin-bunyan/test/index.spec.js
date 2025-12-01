@@ -92,7 +92,7 @@ describe('Plugin', () => {
             logger.info(record)
 
             sinon.assert.called(stream.write)
-            assert.ok(!Object.hasOwn(record, 'dd'))
+            assert.ok(!('dd' in record))
           })
         })
 
@@ -104,8 +104,8 @@ describe('Plugin', () => {
           const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
           assert.ok(Object.hasOwn(record, 'dd'))
-          assert.ok(!Object.hasOwn(record.dd, 'trace_id'))
-          assert.ok(!Object.hasOwn(record.dd, 'span_id'))
+          assert.ok(!('trace_id' in record.dd))
+          assert.ok(!('span_id' in record.dd))
         })
       })
     })

@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
@@ -274,7 +272,7 @@ describe('Plugin Manager', () => {
       it('should not instantiate plugins', () => {
         pm.configure()
         pm.configurePlugin('two')
-        expect(instantiated).to.be.empty
+        assert.strictEqual(instantiated.length, 0)
         sinon.assert.notCalled(Two.prototype.configure)
       })
     })

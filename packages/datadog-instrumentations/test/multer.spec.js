@@ -80,7 +80,7 @@ withVersions('multer', 'multer', version => {
       try {
         const res = await axios.post(`http://localhost:${port}/`, formData)
 
-        expect(middlewareProcessBodyStub).not.to.be.called
+        sinon.assert.notCalled(middlewareProcessBodyStub)
         assert.strictEqual(res.data, 'BLOCKED')
       } finally {
         multerReadCh.unsubscribe(blockRequest)

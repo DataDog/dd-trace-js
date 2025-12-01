@@ -2,10 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
 
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
@@ -52,11 +51,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('should have expected number of elements in state', function () {
-          expect(state).to.have.keys(['arr', 'map', 'set', 'wmap', 'wset', 'typedArray'])
+          assert.deepStrictEqual(Object.keys(state).sort(), ['arr', 'map', 'set', 'typedArray', 'wmap', 'wset'])
         })
 
         it('Array', function () {
-          expect(state).to.have.deep.property('arr', {
+          assert.ok('arr' in state)
+          assert.deepStrictEqual(state.arr, {
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
@@ -65,7 +65,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('Map', function () {
-          expect(state).to.have.deep.property('map', {
+          assert.ok('map' in state)
+          assert.deepStrictEqual(state.map, {
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
@@ -74,7 +75,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('Set', function () {
-          expect(state).to.have.deep.property('set', {
+          assert.ok('set' in state)
+          assert.deepStrictEqual(state.set, {
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
@@ -124,7 +126,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('TypedArray', function () {
-          expect(state).to.have.deep.property('typedArray', {
+          assert.ok('typedArray' in state)
+          assert.deepStrictEqual(state.typedArray, {
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',

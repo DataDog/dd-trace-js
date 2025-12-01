@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
+
 const { describe, it, beforeEach, context } = require('tap').mocha
 const sinon = require('sinon')
 const nock = require('nock')
@@ -54,8 +56,8 @@ describe('AgentProxyCiVisibilityExporter', () => {
     agentProxyCiVisibilityExporter.export(trace)
     agentProxyCiVisibilityExporter.exportCoverage(coverage)
 
-    expect(agentProxyCiVisibilityExporter.getUncodedTraces()).to.include(trace)
-    expect(agentProxyCiVisibilityExporter._coverageBuffer).to.include(coverage)
+    assertObjectContains(agentProxyCiVisibilityExporter.getUncodedTraces(), [trace])
+    assertObjectContains(agentProxyCiVisibilityExporter._coverageBuffer, [coverage])
 
     agentProxyCiVisibilityExporter.export = sinon.spy()
     agentProxyCiVisibilityExporter.exportCoverage = sinon.spy()

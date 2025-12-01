@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, before, after } = require('tap').mocha
 const axios = require('axios')
 const http = require('node:http')
@@ -195,7 +193,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(['::1', '127.0.0.1']).to.include(ip)
+        assert.ok(['::1', '127.0.0.1'].includes(ip))
         done()
       } catch (e) {
         done(e)
@@ -221,7 +219,7 @@ describe('ip extractor', () => {
     controller = function (req) {
       const ip = extractIp({}, req)
       try {
-        expect(['::1', '127.0.0.1']).to.include(ip)
+        assert.ok(['::1', '127.0.0.1'].includes(ip))
         done()
       } catch (e) {
         done(e)

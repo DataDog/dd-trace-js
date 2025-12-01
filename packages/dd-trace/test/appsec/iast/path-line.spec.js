@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const os = require('os')
 const path = require('path')
 
-const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 
 const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
@@ -341,7 +340,7 @@ describe('path-line', function () {
       const paths = pathLine.getNodeModulesPaths('/this/is/a/path', '/another/path')
 
       assert.strictEqual(paths.length, 2)
-      expect(paths[0].startsWith('node_modules')).to.true
+      assert.strictEqual(paths[0].startsWith('node_modules'), true)
     })
   })
 })

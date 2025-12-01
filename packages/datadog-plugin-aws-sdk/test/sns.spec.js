@@ -459,7 +459,7 @@ describe('Sns', function () {
               if (err) return done(err)
 
               try {
-                assert.ok(!data.Messages[0].Body.includes('datadog'))
+                assert.doesNotMatch(data.Messages[0].Body, /datadog/)
                 done()
               } catch (e) {
                 done(e)

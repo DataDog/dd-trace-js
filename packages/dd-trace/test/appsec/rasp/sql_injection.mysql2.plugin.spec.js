@@ -1,12 +1,13 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {

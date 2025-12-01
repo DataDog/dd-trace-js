@@ -1,8 +1,8 @@
 'use strict'
 
-const axios = require('axios')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 
+const axios = require('axios')
 const agent = require('../plugins/agent')
 const tracer = require('../../../../index')
 const appsec = require('../../src/appsec')
@@ -56,10 +56,10 @@ describe('Attacker fingerprinting', () => {
       }
 
       agent.assertSomeTraces(traces => {
-        assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
-        assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
+        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'))
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
+        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'))
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
       axios.get(`http://localhost:${port}/`, {
@@ -76,10 +76,10 @@ describe('Attacker fingerprinting', () => {
       }
 
       agent.assertSomeTraces(traces => {
-        assert.property(traces[0][0].meta, '_dd.appsec.fp.http.header')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
-        assert.property(traces[0][0].meta, '_dd.appsec.fp.http.network')
-        assert.equal(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
+        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'))
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000010-74c2908f-3-98425651')
+        assert.ok(Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'))
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
       axios.get(`http://localhost:${port}/`, {

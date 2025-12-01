@@ -1,11 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const os = require('node:os')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const Axios = require('axios')
-const { assert } = require('chai')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../version')

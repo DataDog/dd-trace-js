@@ -2,10 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
@@ -241,7 +240,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].error, 1)
               assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
               assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'grpc.status.code'))
+              assert.ok(!('grpc.status.code' in traces[0][0].meta))
             })
         })
 
@@ -491,7 +490,8 @@ describe('Plugin', () => {
               callback(null, {})
 
               try {
-                expect(call.metadata.getMap()).to.have.property('foo', 'bar')
+                assert.ok('foo' in call.metadata.getMap())
+                assert.strictEqual(call.metadata.getMap().foo, 'bar')
                 done()
               } catch (e) {
                 done(e)

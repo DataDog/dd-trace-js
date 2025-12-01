@@ -1,7 +1,9 @@
 'use strict'
 
+const assert = require('assert')
+
 describe('test-flaky-test-retries', () => {
   it('can retry failed tests', () => {
-    expect(1).toEqual(2)
+    assert.deepStrictEqual(1, 2)
   })
 })

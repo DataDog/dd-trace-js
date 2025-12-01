@@ -444,7 +444,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(startSpy.called, true)
               const ops = startSpy.getCall(0).args[0].ops
-              assert.ok(!Object.hasOwn(ops, 'comment'))
+              assert.ok(!('comment' in ops))
             })
             .then(done)
             .catch(done)

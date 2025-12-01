@@ -1,13 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 describe('failing', () => {
   it.failing('can report failed tests', () => {
-    expect(1 + 2).to.equal(4)
+    assert.strictEqual(1 + 2, 4)
   })
 
   it.failing('can report failing tests as failures', () => {
-    expect(1 + 2).to.equal(3) // this passes but it should fail! So the test.status should be fail
+    assert.strictEqual(1 + 2, 3) // this passes but it should fail! So the test.status should be fail
   })
 })

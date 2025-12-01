@@ -1,8 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
-const { expect } = require('chai')
 const { describe, it, beforeEach, afterEach } = require('tap').mocha
 const sinon = require('sinon')
 
@@ -29,7 +29,7 @@ describe('CI Visibility JSON encoder', () => {
     const encoder = new JSONEncoder()
     encoder.encode(payload)
     encoder.encode(payloadSecond)
-    expect(encoder.payloads).to.include.members([payload, payloadSecond])
+    assertObjectContains(encoder.payloads, [payload, payloadSecond])
     assert.strictEqual(encoder.count(), 2)
     const serializedPayload = encoder.makePayload()
     assert.strictEqual(serializedPayload, JSON.stringify([payload, payloadSecond]))

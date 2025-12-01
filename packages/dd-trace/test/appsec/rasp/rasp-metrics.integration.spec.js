@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
 describe('RASP metrics', () => {
   let axios, cwd, appFile
 
@@ -62,13 +62,13 @@ describe('RASP metrics', () => {
           const series = payload.payload.series
           const errorSerie = series.find(s => s.metric === 'rasp.error')
 
-          assert.exists(errorSerie, 'error serie should exist')
-          assert.include(errorSerie.tags, 'waf_error:-127')
+          assert.ok(errorSerie != null)
+          assert.ok(errorSerie.tags.includes('waf_error:-127'))
           assert.strictEqual(errorSerie.type, 'count')
         }
       }, 'generate-metrics', 30_000, 2)
 
-      assert.equal(appsecTelemetryMetricsReceived, true)
+      assert.strictEqual(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -101,7 +101,7 @@ describe('RASP metrics', () => {
       let appsecTelemetryReceived = false
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
-        assert.isTrue(payload[0][0].metrics['_dd.appsec.rasp.timeout'] > 0)
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.rasp.timeout'] > 0, true)
       })
 
       const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
@@ -112,16 +112,16 @@ describe('RASP metrics', () => {
           const series = payload.payload.series
           const timeoutSerie = series.find(s => s.metric === 'rasp.timeout')
 
-          assert.exists(timeoutSerie, 'Timeout serie should exist')
-          assert.include(timeoutSerie.tags, 'rule_type:command_injection')
-          assert.include(timeoutSerie.tags, 'rule_variant:shell')
+          assert.ok(timeoutSerie != null)
+          assert.ok(timeoutSerie.tags.includes('rule_type:command_injection'))
+          assert.ok(timeoutSerie.tags.includes('rule_variant:shell'))
           assert.strictEqual(timeoutSerie.type, 'count')
         }
       }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetry])
 
-      assert.equal(appsecTelemetryReceived, true)
+      assert.strictEqual(appsecTelemetryReceived, true)
     })
   })
 })

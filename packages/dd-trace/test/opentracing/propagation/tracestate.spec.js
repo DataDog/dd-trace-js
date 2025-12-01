@@ -1,8 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
 const { describe, it, beforeEach } = require('tap').mocha
 
 require('../../setup/core')
@@ -16,7 +14,7 @@ describe('TraceState', () => {
 
   it('should convert from header', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo;t.dm:-4')
-    expect(ts).to.be.an.instanceOf(Map)
+    assert.ok(ts instanceof Map)
     assert.strictEqual(ts.get('other'), 'bleh')
     assert.strictEqual(ts.get('dd'), 's:2;o:foo;t.dm:-4')
   })
@@ -39,7 +37,7 @@ describe('TraceState', () => {
     ts.forVendor('dd', (state) => {
       called = true
 
-      expect(state).to.be.an.instanceOf(Map)
+      assert.ok(state instanceof Map)
       assert.strictEqual(state.get('s'), '2')
       assert.strictEqual(state.get('o'), 'foo:bar')
       assert.strictEqual(state.get('t.dm'), '-4')

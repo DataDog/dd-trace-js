@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const axios = require('axios')
 
@@ -38,15 +38,15 @@ describe('graphql', () => {
 
   it('should not report any attack', async () => {
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-      assert.isArray(payload)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.propertyVal(payload[1][0], 'name', 'web.request')
-      assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
-      assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
-      assert.notProperty(payload[1][0].meta, '_dd.appsec.event')
-      assert.notProperty(payload[1][0].meta, '_dd.appsec.json')
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.ok(!('_dd.appsec.event' in payload[1][0].meta))
+      assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
 
     await axios({
@@ -100,15 +100,15 @@ describe('graphql', () => {
     }
 
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-      assert.isArray(payload)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.propertyVal(payload[1][0], 'name', 'web.request')
-      assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
-      assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
-      assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')
-      assert.property(payload[1][0].meta, '_dd.appsec.json')
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
+      assert.ok(Object.hasOwn(payload[1][0].meta, '_dd.appsec.json'))
       assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
