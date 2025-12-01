@@ -1,6 +1,9 @@
 'use strict'
 
-module.exports = {
+const extractOutput = require('../../../datadog-instrumentations/src/helpers/extract-prisma-client-path')
+const { getEnvironmentVariable } = require('../config-helper')
+
+const plugins = {
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -110,3 +113,13 @@ module.exports = {
   get winston () { return require('../../../datadog-plugin-winston/src') },
   get ws () { return require('../../../datadog-plugin-ws/src') }
 }
+
+// Add custom prisma output path to plugins if configured
+const ddPrismaOutputEnv = (getEnvironmentVariable('DD_PRISMA_OUTPUT') || '').trim()
+const prismaOutput = ddPrismaOutputEnv === 'auto' ? extractOutput() : (ddPrismaOutputEnv || null)
+
+if (prismaOutput) {
+  Object.defineProperty(plugins, prismaOutput, { get () { return require('../../../datadog-plugin-prisma/src') } })
+}
+
+module.exports = plugins

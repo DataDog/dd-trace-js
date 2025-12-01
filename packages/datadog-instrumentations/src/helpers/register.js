@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 const path = require('path')
+const { fileURLToPath } = require('url')
 const satisfies = require('semifies')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -10,14 +11,17 @@ const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
 const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
-
+const extractOutput = require('./extract-prisma-client-path')
+const Module = require('module')
 const envs = getEnvironmentVariables()
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = ''
+  DD_TRACE_DEBUG = '',
+  DD_PRISMA_OUTPUT
 } = envs
 
+const prismaOutput = DD_PRISMA_OUTPUT === 'auto' ? extractOutput() : (DD_PRISMA_OUTPUT || null)
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
@@ -51,9 +55,7 @@ const allInstrumentations = {}
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
-
   const hookOptions = {}
-
   let hook = hooks[packageName]
 
   if (hook !== null && typeof hook === 'object') {
@@ -62,29 +64,20 @@ for (const packageName of names) {
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }
-
   // get the instrumentation file name to save all hooked versions
   const instrumentationFileName = parseHookInstrumentationFileName(packageName)
 
-  // For file paths, resolve to absolute path and file URL so both ritm and iitm can match them properly
-  let hookModules = [packageName]
+  const hookModules = new Set([packageName])
   if (isFilePath(packageName)) {
-    try {
-      const absolutePath = path.resolve(packageName)
-      const fileUrl = `file://${absolutePath}`
-      hookModules = [absolutePath, fileUrl] // Register both for ritm and iitm
-    } catch (e) {
-      log.error('Error resolving file path "%s": %s', packageName, e.message)
-      return
-    }
+    const absolutePath = resolveFilePath(packageName)
+    if (!absolutePath) continue
+    hookModules.add(absolutePath)
   }
 
-  Hook(hookModules, hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  Hook([...hookModules], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
-
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
-
     if (!instrumentations[packageName]) {
       return moduleExports
     }
@@ -102,7 +95,6 @@ for (const packageName of names) {
       if (fullFilePattern) {
         fullFilePattern = filename(name, fullFilePattern)
       }
-
       // Create a WeakSet associated with the hook function so that patches on the same moduleExport only happens once
       // for example by instrumenting both dns and node:dns double the spans would be created
       // since they both patch the same moduleExport, this WeakSet is used to mitigate that
@@ -111,14 +103,13 @@ for (const packageName of names) {
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
-
       // For file paths, also check if the absolute paths match
       if (!matchesFile && isFilePath(name)) {
-        try {
-          const absoluteName = path.resolve(name)
-          matchesFile = moduleName === absoluteName
-        } catch (e) {
-          // ignore
+        const absoluteName = resolveFilePath(name)
+        if (absoluteName) {
+          matchesFile = file
+            ? moduleName === filename(absoluteName, file)
+            : Module._resolveFilename(absoluteName) === moduleName
         }
       }
 
@@ -165,12 +156,10 @@ for (const packageName of names) {
             // picked up due to the unification. Check what modules actually use the name.
             // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
             // This allows to reduce the instrumentation code (no return needed).
-
             moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
             // Set the moduleExports in the hooks WeakSet
             hook[HOOK_SYMBOL].add(moduleExports)
           } catch (e) {
-            console.log(`[REGISTER] Error during instrumentation of ${name}@${version}: ${e.message}`)
             log.info('Error during ddtrace instrumentation of application, aborting.', e)
             telemetry('error', [
               `error_type:${e.constructor.name}`,
@@ -183,8 +172,6 @@ for (const packageName of names) {
             })
           }
           namesAndSuccesses[`${name}@${version}`] = true
-        } else {
-          console.log(`[REGISTER] Version match failed for ${name}: version=${version}, ranges=${JSON.stringify(versions)}`)
         }
       }
     }
@@ -239,7 +226,6 @@ function parseHookInstrumentationFileName (packageName) {
     hook = hook.fn
   }
   const hookString = hook.toString()
-
   const regex = /require\('([^']*)'\)/
   const match = hookString.match(regex)
 
@@ -257,18 +243,33 @@ function parseHookInstrumentationFileName (packageName) {
 }
 
 function isFilePath (moduleName) {
-  // Check if it's a relative or absolute file path
-  // Must start with ./, ../, or /, or be a path that doesn't look like a package name
   if (moduleName.startsWith('./') || moduleName.startsWith('../') || moduleName.startsWith('/')) {
     return true
   }
 
-  // If it contains a slash and doesn't contain node_modules, and doesn't start with @, it's likely a file path
   if (moduleName.includes('/') && !moduleName.includes('node_modules/') && !moduleName.startsWith('@')) {
     return true
   }
 
   return false
+}
+
+function resolveFilePath (moduleName) {
+  let candidate
+
+  if (moduleName === prismaOutput) {
+    candidate = prismaOutput
+  }
+
+  if (!candidate) {
+    return null
+  }
+
+  if (path.isAbsolute(candidate)) {
+    return candidate
+  }
+
+  return path.resolve(candidate)
 }
 
 module.exports = {

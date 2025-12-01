@@ -64,7 +64,6 @@ function Hook (modules, options, onrequire) {
     } catch {
       return _origRequire.apply(this, arguments)
     }
-
     const core = !filename.includes(path.sep)
     let name, basedir, hooks
     // return known patched modules immediately
@@ -117,12 +116,36 @@ function Hook (modules, options, onrequire) {
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
+
+      let absolutePathModuleMatch = false
       if (!stat) {
         // Check if this is a direct file path that we want to hook
         hooks = moduleHooks[filename]
+
+        if (!hooks) {
+          // For absolute path modules, check if any registered module is a prefix of this filename,
+          // since hooks can specify files that we don't have at register time
+          for (const registeredModule of Object.keys(moduleHooks)) {
+            if (registeredModule.startsWith('/') && filename.startsWith(registeredModule + path.sep)) {
+              hooks = moduleHooks[registeredModule]
+              name = registeredModule
+              basedir = registeredModule
+              absolutePathModuleMatch = true
+              break
+            }
+          }
+        }
+
         if (!hooks) return exports // abort if filename isn't on whitelist
-        name = filename
-        basedir = path.dirname(filename)
+
+        if (!name) {
+          name = filename
+          basedir = path.dirname(filename)
+        }
+
+        if (absolutePathModuleMatch && name !== filename) {
+          name = name + path.sep + path.relative(basedir, filename)
+        }
       } else {
         name = stat.name
         basedir = stat.basedir
@@ -132,24 +155,28 @@ function Hook (modules, options, onrequire) {
       }
 
       // figure out if this is the main module file, or a file inside the module
-      const paths = Module._resolveLookupPaths(name, this, true)
-      if (!paths) {
-        // abort if _resolveLookupPaths return null
-        return exports
-      }
+      // Skip this for absolute path modules since _resolveLookupPaths returns null for them
+      // and we've already computed the internal file path above
+      if (!absolutePathModuleMatch) {
+        const paths = Module._resolveLookupPaths(name, this, true)
+        if (!paths) {
+          // abort if _resolveLookupPaths return null
+          return exports
+        }
 
-      let res
-      try {
-        res = Module._findPath(name, [basedir, ...paths])
-      } catch {
-        // case where the file specified in package.json "main" doesn't exist
-        // in this case, the file is treated as module-internal
-      }
+        let res
+        try {
+          res = Module._findPath(name, [basedir, ...paths])
+        } catch {
+          // case where the file specified in package.json "main" doesn't exist
+          // in this case, the file is treated as module-internal
+        }
 
-      if (!res || res !== filename) {
-        // this is a module-internal file
-        // use the module-relative path to the file, prefixed by original module name
-        name = name + path.sep + path.relative(basedir, filename)
+        if (!res || res !== filename) {
+          // this is a module-internal file
+          // use the module-relative path to the file, prefixed by original module name
+          name = name + path.sep + path.relative(basedir, filename)
+        }
       }
     }
 

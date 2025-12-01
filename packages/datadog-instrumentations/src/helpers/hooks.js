@@ -1,4 +1,6 @@
 'use strict'
+const extractOutput = require('./extract-prisma-client-path')
+const { getEnvironmentVariable } = require('../../../dd-trace/src/config-helper')
 
 const hooks = {
   '@anthropic-ai/sdk': { esmFirst: true, fn: () => require('../anthropic') },
@@ -145,10 +147,10 @@ const hooks = {
   ws: () => require('../ws')
 }
 
-const prismaOutput = (process.env.DD_PRISMA_OUTPUT || '').trim()
-
-if (prismaOutput) {
-  hooks[prismaOutput] = () => require('../prisma')
+const ddPrismaOutputEnv = (getEnvironmentVariable('DD_PRISMA_OUTPUT') || '').trim()
+const customPrismaOutput = ddPrismaOutputEnv === 'auto' ? extractOutput() : (ddPrismaOutputEnv || null)
+if (customPrismaOutput) {
+  hooks[customPrismaOutput] = () => require('../prisma')
 }
 
 module.exports = hooks
