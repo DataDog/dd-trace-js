@@ -17,7 +17,7 @@ class Scheduler {
   runAfterDelay (interval = this._interval) {
     this._timer = setTimeout(this._callback, interval, () => this.runAfterDelay())
 
-    this._timer.unref && this._timer.unref()
+    this._timer.unref?.()
   }
 
   stop () {
