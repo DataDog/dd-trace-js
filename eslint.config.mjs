@@ -455,6 +455,7 @@ export default [
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
       'no-unused-expressions': 'error',
       'no-useless-assignment': 'error',
+      'no-void': 'off',
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
