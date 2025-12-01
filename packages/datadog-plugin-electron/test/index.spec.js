@@ -11,6 +11,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 describe('Plugin', () => {
   let child
   let listener
+  let port
 
   before(done => {
     const server = http.createServer((req, res) => {
@@ -18,7 +19,10 @@ describe('Plugin', () => {
       res.end()
     })
 
-    listener = server.listen(0, '127.0.0.1', () => done())
+    listener = server.listen(0, '127.0.0.1', () => {
+      port = listener.address().port
+      done()
+    })
   })
 
   after(done => {
@@ -26,15 +30,14 @@ describe('Plugin', () => {
   })
 
   withVersions('electron', ['electron'], version => {
-    const startApp = (port, done) => {
+    const startApp = done => {
       const electron = require(`../../../versions/electron@${version}`).get()
 
       child = proc.spawn(electron, [join(__dirname, 'app')], {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
-          DD_TRACE_AGENT_PORT: port,
-          PORT: listener.address().port
+          DD_TRACE_AGENT_PORT: agent.port
         },
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
         windowsHide: true
@@ -46,24 +49,16 @@ describe('Plugin', () => {
 
     describe('electron', () => {
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('electron')
-        })
+        beforeEach(() => agent.load('electron'))
+        beforeEach(done => startApp(done))
 
-        beforeEach(done => {
-          startApp(agent.port, done)
-        })
-
-        afterEach(() => {
-          return agent.close({ ritmReset: false })
-        })
-
+        afterEach(() => agent.close({ ritmReset: false }))
         afterEach(done => {
-          child.send('quit')
+          child.send({ name: 'quit' })
           child.on('close', () => done())
         })
 
-        it('should do automatic instrumentation', done => {
+        it('should do automatic instrumentation for fetch', done => {
           agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
@@ -77,12 +72,38 @@ describe('Plugin', () => {
 
               assert.strictEqual(meta.component, 'electron')
               assert.strictEqual(meta['span.kind'], 'client')
-              assert.strictEqual(meta['http.url'], `http://127.0.0.1:${listener.address().port}/`)
+              assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/`)
               assert.strictEqual(meta['http.method'], 'GET')
               assert.strictEqual(meta['http.status_code'], '200')
             })
             .then(done)
             .catch(done)
+
+          child.send({ name: 'fetch', url: `http://127.0.0.1:${port}` })
+        })
+
+        it('should do automatic instrumentation for request', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.type, 'http')
+              assert.strictEqual(span.name, 'http.request')
+              assert.strictEqual(span.resource, 'GET')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'client')
+              assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/`)
+              assert.strictEqual(meta['http.method'], 'GET')
+              assert.strictEqual(meta['http.status_code'], '200')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'request', options: `http://127.0.0.1:${port}/` })
         })
       })
     })

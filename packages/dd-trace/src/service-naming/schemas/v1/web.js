@@ -48,7 +48,7 @@ const web = {
       opName: () => 'undici.request',
       serviceName: httpPluginClientService,
     },
-    'electron:net:fetch': {
+    'electron:net:request': {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
     },
