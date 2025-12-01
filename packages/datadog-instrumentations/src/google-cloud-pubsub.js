@@ -6,15 +6,13 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { storage } = require('../../datadog-core')
-const log = require('../../dd-trace/src/log')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
-} catch (e) {
+} catch {
   // Push subscription plugin is optional
-  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
@@ -81,7 +79,6 @@ function wrapMethod (method) {
     let restoredStore = null
     const isAckOperation = api === 'acknowledge' || api === 'modifyAckDeadline'
     if (isAckOperation && request && request.ackIds && request.ackIds.length > 0) {
-      // Try to find a stored context for any of these ack IDs
       for (const ackId of request.ackIds) {
         const storedContext = ackContextMap.get(ackId)
         if (storedContext) {
@@ -222,25 +219,27 @@ addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/su
 
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'], file: 'build/src/lease-manager.js' }, (obj) => {
   const LeaseManager = obj.LeaseManager
-  const ctx = {}
+  if (!LeaseManager) {
+    return obj
+  }
+
+  const messageContexts = new WeakMap()
 
   shimmer.wrap(LeaseManager.prototype, '_dispense', dispense => function (message) {
-    if (receiveStartCh.hasSubscribers) {
-      ctx.message = message
-      return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
-    }
-    return dispense.apply(this, arguments)
+    const ctx = { message }
+    messageContexts.set(message, ctx)
+
+    return receiveStartCh.runStores(ctx, dispense, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'remove', remove => function (message) {
+    const ctx = messageContexts.get(message) || { message }
+    messageContexts.delete(message)
+
     return receiveFinishCh.runStores(ctx, remove, this, ...arguments)
   })
 
   shimmer.wrap(LeaseManager.prototype, 'clear', clear => function () {
-    for (const message of this._messages) {
-      ctx.message = message
-      receiveFinishCh.publish(ctx)
-    }
     return clear.apply(this, arguments)
   })
 
@@ -270,19 +269,19 @@ function injectTraceContext (attributes, pubsub, topicName) {
 addHook({ name: '@google-cloud/pubsub', versions: ['>=1.2'] }, (obj) => {
   if (!obj.Topic?.prototype) return obj
 
-  // Wrap Topic.publishMessage (modern API)
-  if (obj.Topic.prototype.publishMessage) {
-    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => function (data) {
-      if (data && typeof data === 'object') {
-        if (!data.attributes) data.attributes = {}
-        injectTraceContext(data.attributes, this.pubsub, this.name)
+  if (typeof obj.Topic.prototype.publishMessage === 'function') {
+    shimmer.wrap(obj.Topic.prototype, 'publishMessage', publishMessage => {
+      return function (data, attributesOrCallback, callback) {
+        if (data && typeof data === 'object') {
+          if (!data.attributes) data.attributes = {}
+          injectTraceContext(data.attributes, this.pubsub, this.name)
+        }
+        return publishMessage.apply(this, arguments)
       }
-      return publishMessage.apply(this, arguments)
     })
   }
 
-  // Wrap Topic.publish (legacy API)
-  if (obj.Topic.prototype.publish) {
+  if (typeof obj.Topic.prototype.publish === 'function') {
     shimmer.wrap(obj.Topic.prototype, 'publish', publish => function (buffer, attributesOrCallback, callback) {
       if (typeof attributesOrCallback === 'function' || !attributesOrCallback) {
         arguments[1] = {}
