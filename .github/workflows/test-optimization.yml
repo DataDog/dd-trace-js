@@ -70,6 +70,7 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
+      - run: npx playwright install chromium
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: '-r ./ci/init'
