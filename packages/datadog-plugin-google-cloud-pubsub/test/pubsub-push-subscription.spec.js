@@ -8,14 +8,18 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 describe('Push Subscription Plugin', () => {
   let tracer
   let http
+  let express
   let server
   let port
 
-  withVersions('express', 'express', version => {
-    let express
-
+  withVersions('express', 'express', expressVersion => {
     beforeEach(() => {
       return agent.load(['http', 'express', 'google-cloud-pubsub'], { client: false })
+        .then(() => {
+          tracer = require('../../dd-trace')
+          http = require('http')
+          express = require(`../../../versions/express@${expressVersion}`).get()
+        })
     })
 
     afterEach(() => {
@@ -24,12 +28,6 @@ describe('Push Subscription Plugin', () => {
         server = null
       }
       return agent.close({ ritmReset: false })
-    })
-
-    beforeEach(() => {
-      tracer = require('../../dd-trace')
-      http = require('http')
-      express = require(`../../../versions/express@${version}`).get()
     })
 
     describe('Push subscription HTTP request handling', () => {
