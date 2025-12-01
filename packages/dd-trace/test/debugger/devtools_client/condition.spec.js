@@ -49,7 +49,7 @@ const testCases = [
   ...typeAndDefinitionChecks
 ]
 
-describe('Expresion language', function () {
+describe('Expression language', function () {
   beforeEach(() => {
     // Mock the presence of `util.types` as it would be available when DI is active in the tracer
     process[Symbol.for('datadog:node:util:types')] = require('util').types

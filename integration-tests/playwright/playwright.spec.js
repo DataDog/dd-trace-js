@@ -15,8 +15,8 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('../ci-visibility/web-app-server')
-const webAppServerWithRedirect = require('../ci-visibility/web-app-server-with-redirect')
+const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
   TEST_STATUS,
   TEST_SOURCE_START,
@@ -78,7 +78,7 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
+    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
     this.retries(2)
     this.timeout(80000)
@@ -86,14 +86,30 @@ versions.forEach((version) => {
     useSandbox([`@playwright/test@${version}`, 'typescript'], true)
 
     before(function (done) {
+      // Increase timeout for this hook specifically to account for slow chromium installation in CI
+      this.timeout(120000)
+
       cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
+      // This will use cached browsers if available, otherwise download
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      webAppServer.listen(0, () => {
+
+      // Create fresh server instances to avoid issues with retries
+      webAppServer = createWebAppServer()
+      webAppServerWithRedirect = createWebAppServerWithRedirect()
+
+      webAppServer.listen(0, (err) => {
+        if (err) {
+          return done(err)
+        }
         webAppPort = webAppServer.address().port
-        webAppServerWithRedirect.listen(0, () => {
+
+        webAppServerWithRedirect.listen(0, (err) => {
+          if (err) {
+            return done(err)
+          }
           webPortWithRedirect = webAppServerWithRedirect.address().port
           done()
         })

@@ -65,7 +65,7 @@ async function getLocalStateForCallFrame (
       if (scope.type === 'global') continue // The global scope is too noisy
       const { objectId } = scope.object
       if (objectId === undefined) continue // I haven't seen this happen, but according to the types it's possible
-      // The objectId for a scope points to a pseudo-object whos properties are the actual variables in the scope.
+      // The objectId for a scope points to a pseudo-object whose properties are the actual variables in the scope.
       // This is why we can just call `collectObjectProperties` directly and expect it to return the in-scope variables
       // as an array.
       // eslint-disable-next-line no-await-in-loop

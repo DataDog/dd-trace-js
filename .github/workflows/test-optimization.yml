@@ -47,6 +47,17 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      - name: Get latest Playwright version
+        id: playwright-version
+        run: |
+          PLAYWRIGHT_VERSION=$(npm view @playwright/test version)
+          echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest Playwright version: $PLAYWRIGHT_VERSION"
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - run: yarn test:integration:testopt
 
   integration-playwright:
@@ -70,6 +81,25 @@ jobs:
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
+      # We need this because the "oldest" playwright version depends on the major version of dd-trace
+      # For v5 it's 1.18.0 and for v6 it's 1.38.0
+      # We don't cache "latest" because it changes based on playwright releases.
+      # We could do it, but we'd have to request GitHub API to get the latest version,
+      # and the cache hit rate would be way lower than for "oldest", which should be 100%.
+      - name: Get dd-trace major version
+        if: matrix.playwright-version == 'oldest'
+        id: dd-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "dd-trace major version: $MAJOR"
+      - name: Cache Playwright browsers
+        if: matrix.playwright-version == 'oldest'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /github/home/.cache/ms-playwright
+          key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: '-r ./ci/init'
@@ -195,6 +225,14 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      # We cache Cypress binaries for fixed versions (6.7.0, 10.2.0, 14.5.4) but not for "latest"
+      # as that changes frequently and would have a low cache hit rate
+      - name: Cache Cypress binary
+        if: matrix.cypress-version != 'latest'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress --ignore-engines
         env:

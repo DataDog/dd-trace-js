@@ -28,15 +28,15 @@ describe('Dynamic Instrumentation', function () {
         // Two breakpoints, each triggering a request every 10ms, so we should get 200 requests per second
         const state = {
           [rcConfig1.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[0].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           },
           [rcConfig2.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[1].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           }
         }
@@ -45,7 +45,7 @@ describe('Dynamic Instrumentation', function () {
           payload.forEach((event) => {
             const { probeId, status } = event.debugger.diagnostics
             if (status === 'INSTALLED') {
-              state[probeId].tiggerBreakpointContinuously()
+              state[probeId].triggerBreakpointContinuously()
             }
           })
         })

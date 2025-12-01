@@ -33,7 +33,7 @@ const reservedWords = new Set([
   // Future reserved words in strict mode
   'implements', 'interface', 'package', 'private', 'protected', 'public',
 
-  // Litterals
+  // Literals
   'NaN'
 ])
 
