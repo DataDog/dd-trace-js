@@ -1,6 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 const { describe, it } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
@@ -34,12 +38,12 @@ const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/tes
 describe('test environment data', () => {
   it('getTestEnvironmentMetadata can include service name', () => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
-    expect(tags).to.contain({ 'service.name': 'service-name' })
+    assertObjectContains(tags, { 'service.name': 'service-name' })
   })
 
   it('getCIMetadata returns an empty object if the CI is not supported', () => {
     process.env = {}
-    expect(getCIMetadata()).to.eql({})
+    assert.deepStrictEqual(getCIMetadata(), {})
   })
 
   const ciProviders = fs.readdirSync(path.join(__dirname, 'ci-env'))
@@ -58,11 +62,11 @@ describe('test environment data', () => {
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
-        expect({
+        assert.deepStrictEqual({
           pullRequestBaseBranch,
           pullRequestBaseBranchHeadSha,
           headCommitSha
-        }).to.eql({
+        }, {
           pullRequestBaseBranch: 'datadog:main',
           pullRequestBaseBranchHeadSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
           headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
@@ -78,9 +82,9 @@ describe('test environment data', () => {
           [GIT_COMMIT_HEAD_SHA]: headCommitSha
         } = getTestEnvironmentMetadata()
 
-        expect(pullRequestBaseBranch).to.equal('datadog:main')
-        expect(pullRequestBaseBranchHeadSha).to.be.undefined
-        expect(headCommitSha).to.be.undefined
+        assert.strictEqual(pullRequestBaseBranch, 'datadog:main')
+        assert.strictEqual(pullRequestBaseBranchHeadSha, undefined)
+        assert.strictEqual(headCommitSha, undefined)
       })
     }
 
@@ -98,7 +102,7 @@ describe('test environment data', () => {
         expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
         // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
         if (envVars && expectedEnvVars) {
-          expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))
+          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars))
         }
         // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
         if (nodeLabels && expectedNodeLabels) {

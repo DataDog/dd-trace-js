@@ -1,14 +1,15 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
-const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 const { IastPlugin } = require('../../../src/appsec/iast/iast-plugin')
-
+const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 const VULNERABILITY_TYPE = TagKey.VULNERABILITY_TYPE
 const SOURCE_TYPE = TagKey.SOURCE_TYPE
 
@@ -75,27 +76,27 @@ describe('IAST Plugin', () => {
       it('should call Plugin.addSub with channelName and handler', () => {
         iastPlugin.addSub('test', handler)
 
-        expect(addSubMock).to.be.calledOnce
+        sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
         expect(args[0]).equal('test')
-        expect(args[1]).to.equal(handler)
+        assert.strictEqual(args[1], handler)
       })
 
       it('should call Plugin.addSub with channelName and handler after registering iastPluginSub', () => {
         const iastPluginSub = { channelName: 'test' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(addSubMock).to.be.calledOnce
+        sinon.assert.calledOnce(addSubMock)
         const args = addSubMock.getCall(0).args
         expect(args[0]).equal('test')
-        expect(args[1]).to.equal(handler)
+        assert.strictEqual(args[1], handler)
       })
 
       it('should infer moduleName from channelName after registering iastPluginSub', () => {
         const iastPluginSub = { channelName: 'test' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(iastPlugin.pluginSubs).to.have.lengthOf(1)
+        assert.strictEqual(iastPlugin.pluginSubs.length, 1)
         expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
       })
 
@@ -103,7 +104,7 @@ describe('IAST Plugin', () => {
         const iastPluginSub = { channelName: 'datadog:test:start' }
         iastPlugin.addSub(iastPluginSub, handler)
 
-        expect(iastPlugin.pluginSubs).to.have.lengthOf(1)
+        assert.strictEqual(iastPlugin.pluginSubs.length, 1)
         expect(iastPlugin.pluginSubs[0].moduleName).eq('test')
       })
 
@@ -128,8 +129,8 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(false)
         iastPlugin.configure(true)
 
-        expect(iastPlugin.configured).to.be.true
-        expect(iastPlugin.onConfigure).to.be.calledOnce
+        assert.strictEqual(iastPlugin.configured, true)
+        sinon.assert.calledOnce(iastPlugin.onConfigure)
       })
     })
 
@@ -141,7 +142,7 @@ describe('IAST Plugin', () => {
           handler
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
       })
 
       it('should exec handler and catch exception if any', () => {
@@ -150,7 +151,7 @@ describe('IAST Plugin', () => {
         expect(iastPlugin._execHandlerAndIncMetric({
           handler
         })).to.not.throw
-        expect(logError).to.be.calledOnce
+        sinon.assert.calledOnce(logError)
       })
 
       it('should exec handler and not increase metric', () => {
@@ -164,7 +165,7 @@ describe('IAST Plugin', () => {
           metric
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
         expect(metric.increase).to.not.be.called
       })
     })
@@ -349,7 +350,7 @@ describe('IAST Plugin', () => {
           handler
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
       })
 
       it('should exec handler and catch exception if any', () => {
@@ -358,7 +359,7 @@ describe('IAST Plugin', () => {
         expect(iastPlugin._execHandlerAndIncMetric({
           handler
         })).to.not.throw
-        expect(logError).to.be.calledOnce
+        sinon.assert.calledOnce(logError)
       })
 
       it('should exec handler and increase metric', () => {
@@ -375,7 +376,7 @@ describe('IAST Plugin', () => {
           iastContext
         })
 
-        expect(handler).to.be.calledOnce
+        sinon.assert.calledOnce(handler)
         expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tags)
       })
     })
@@ -410,20 +411,20 @@ describe('IAST Plugin', () => {
 
     it('should disable bad plugin', () => {
       badPlugin.configure({ enabled: true })
-      expect(badPlugin._enabled).to.be.true
+      assert.strictEqual(badPlugin._enabled, true)
 
       channel('appsec:badPlugin:start').publish({ foo: 'bar' })
 
-      expect(badPlugin._enabled).to.be.false
+      assert.strictEqual(badPlugin._enabled, false)
     })
 
     it('should not disable good plugin', () => {
       goodPlugin.configure({ enabled: true })
-      expect(goodPlugin._enabled).to.be.true
+      assert.strictEqual(goodPlugin._enabled, true)
 
       channel('appsec:goodPlugin:start').publish({ foo: 'bar' })
 
-      expect(goodPlugin._enabled).to.be.true
+      assert.strictEqual(goodPlugin._enabled, true)
     })
   })
 })

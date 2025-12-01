@@ -5,7 +5,7 @@ const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('source map support', function () {
-    describe('Different file extention (TypeScript)', function () {
+    describe('Different file extension (TypeScript)', function () {
       const t = setup({
         testApp: 'target-app/source-map-support/typescript.js',
         testAppSource: 'target-app/source-map-support/typescript.ts'
@@ -38,7 +38,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { probe: { location } } } }] }) => {
           assert.deepEqual(location, {
             file: 'target-app/source-map-support/minify.js',
-            lines: ['8']
+            lines: ['9']
           })
           done()
         })

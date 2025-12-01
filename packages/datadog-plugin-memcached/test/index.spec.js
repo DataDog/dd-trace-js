@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -69,7 +70,7 @@ describe('Plugin', () => {
             memcached.get('test', err => {
               if (err) return done(err)
               try {
-                expect(tracer.scope().active()).to.equal(span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -237,7 +238,7 @@ describe('Plugin', () => {
           it('trace should not contain memcached.command', done => {
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.not.have.property('memcached.command')
+                assert.ok(!Object.hasOwn(traces[0][0].meta, 'memcached.command'))
               })
               .then(done)
               .catch(done)

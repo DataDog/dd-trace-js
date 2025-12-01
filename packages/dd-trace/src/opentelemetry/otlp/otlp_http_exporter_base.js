@@ -10,14 +10,12 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /**
  * Base class for OTLP HTTP exporters.
  *
- * This implementation follows the OTLP HTTP specification:
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
-  #telemetryTags
-
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
@@ -49,31 +47,25 @@ class OtlpHttpExporterBase {
         ...this.#parseAdditionalHeaders(headers)
       }
     }
-    this.#telemetryTags = [
+    this.telemetryTags = [
       'protocol:http',
       `encoding:${isJson ? 'json' : 'protobuf'}`
     ]
   }
 
   /**
-   * Gets the telemetry tags for this exporter.
-   * @returns {Array<string>} Telemetry tags
-   * @protected
-   */
-  _getTelemetryTags () {
-    return this.#telemetryTags
-  }
-
-  /**
    * Records telemetry metrics for exported data.
    * @param {string} metricName - Name of the metric to record
    * @param {number} count - Count to increment
-   * @param {Array<string>} [tags] - Optional custom tags (defaults to this exporter's tags)
+   * @param {Array<string>} [additionalTags] - Optional custom tags (defaults to this exporter's tags)
    * @protected
    */
-  _recordTelemetry (metricName, count, tags) {
-    const telemetryTags = tags || this.#telemetryTags
-    tracerMetrics.count(metricName, telemetryTags).inc(count)
+  recordTelemetry (metricName, count, additionalTags) {
+    if (additionalTags?.length > 0) {
+      tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
+    } else {
+      tracerMetrics.count(metricName, this.telemetryTags).inc(count)
+    }
   }
 
   /**
@@ -82,7 +74,7 @@ class OtlpHttpExporterBase {
    * @param {Function} resultCallback - Callback for the result
    * @protected
    */
-  _sendPayload (payload, resultCallback) {
+  sendPayload (payload, resultCallback) {
     const options = {
       ...this.options,
       headers: {

@@ -46,6 +46,7 @@ let snapshotProbeIndexBuffer, snapshotProbeIndex
 
 if (SUPPORT_ARRAY_BUFFER_RESIZE) {
   // TODO: Is a limit of 256 snapshots ever going to be a problem?
+  // @ts-ignore - ArrayBuffer constructor with maxByteLength is available in Node.js 20+ but not in @types/node@18
   // eslint-disable-next-line n/no-unsupported-features/es-syntax
   snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
   // TODO: Is a limit of 256 probes ever going to be a problem?
@@ -177,7 +178,7 @@ session.on('Debugger.paused', async ({ params }) => {
   )
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recored as telemetry (DEBUG-2858)
+  const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
 
   // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
   // On my machine I'm seeing around 1.7ms of overhead.

@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 require('../../../setup/mocha')
 
 const { expect } = require('chai')
@@ -29,7 +30,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           fields: { secret: { type: 'string', notCapturedReason: 'redactedIdent' } }
         })
         expect(state).to.have.deep.property('obj')
-        expect(state.obj).to.have.property('type', 'Object')
+        assert.strictEqual(state.obj.type, 'Object')
 
         const { fields } = state.obj
         expect(fields).to.have.all.keys(

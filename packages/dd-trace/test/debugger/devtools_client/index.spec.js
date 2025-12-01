@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('../../setup/mocha')
 
@@ -23,7 +24,24 @@ const event = {
 }
 
 describe('onPause', function () {
-  let session, send, onPaused, ackReceived, log
+  /**
+   * @typedef {{
+   *   on: sinon.SinonSpy & { args: Array<[string, Function]> },
+   *   post: sinon.SinonSpy,
+   *   emit: sinon.SinonSpy,
+   *   '@noCallThru'?: boolean
+   * }} MockSession
+   */
+  /** @type {MockSession} */
+  let session
+  /** @type {sinon.SinonSpy} */
+  let send
+  /** @type {Function} */
+  let onPaused
+  /** @type {sinon.SinonSpy} */
+  let ackReceived
+  /** @type {unknown} */
+  let log
 
   beforeEach(async function () {
     ackReceived = sinon.spy()
@@ -82,14 +100,15 @@ describe('onPause', function () {
     })
 
     const onPausedCall = session.on.args.find(([event]) => event === 'Debugger.paused')
+    assert(onPausedCall, 'onPaused call should be found')
     onPaused = onPausedCall[1]
   })
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
-    expect(session.post).to.have.been.calledOnceWith('Debugger.resume')
-    expect(ackReceived).to.not.have.been.called
-    expect(send).to.not.have.been.called
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
   })
 
   it('should throw if paused for an unknown reason', async function () {
@@ -108,10 +127,10 @@ describe('onPause', function () {
       thrown = err
     }
 
-    expect(thrown).to.be.an('error')
-    expect(thrown.message).to.equal('Unexpected Debugger.paused reason: OOM')
-    expect(session.post).to.not.have.been.called
-    expect(ackReceived).to.not.have.been.called
-    expect(send).to.not.have.been.called
+    assert(thrown instanceof Error)
+    assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    sinon.assert.notCalled(session.post)
+    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(send)
   })
 })

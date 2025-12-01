@@ -124,7 +124,11 @@ describe('Dynamic Instrumentation', function () {
             const expected = expectedPayloads.shift()
             assertObjectContains(event, expected)
             assertUUID(event.debugger.diagnostics.runtimeId)
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()()
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger()
+            }
             endIfDone()
           })
         })
@@ -190,22 +194,24 @@ describe('Dynamic Instrumentation', function () {
 
       it(
         'should send expected error diagnostics messages if probe doesn\'t conform to expected schema',
-        unsupporedOrInvalidProbesTest({ invalid: 'config' }, { status: 'ERROR' })
+        unsupportedOrInvalidProbesTest({ invalid: 'config' }, { status: 'ERROR' })
       )
 
       it(
         'should send expected error diagnostics messages if probe type isn\'t supported',
-        unsupporedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
+        // @ts-expect-error Expecting this probe type to be invalid
+        unsupportedOrInvalidProbesTest(t.generateProbeConfig({ type: 'INVALID_PROBE' }))
       )
 
       it(
         'should send expected error diagnostics messages if it isn\'t a line-probe',
-        unsupporedOrInvalidProbesTest(
+        unsupportedOrInvalidProbesTest(
+          // @ts-expect-error Expecting this probe type to be invalid
           t.generateProbeConfig({ where: { typeName: 'index.js', methodName: 'handlerA' } })
         )
       )
 
-      function unsupporedOrInvalidProbesTest (config, customErrorDiagnosticsObj) {
+      function unsupportedOrInvalidProbesTest (config, customErrorDiagnosticsObj) {
         return function (done) {
           let receivedAckUpdate = false
 
@@ -363,7 +369,7 @@ describe('Dynamic Instrumentation', function () {
           t.agent.addRemoteConfig(rcConfig2)
         })
 
-        it('should only trigger the probes whos conditions are met (all have conditions)', function (done) {
+        it('should only trigger the probes whose conditions are met (all have conditions)', function (done) {
           let installed = 0
           const rcConfig1 = t.generateRemoteConfig({
             when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
@@ -444,7 +450,7 @@ describe('Dynamic Instrumentation', function () {
           }
         })
 
-        it('should only trigger the probes whos conditions are met (not all have conditions)', function (done) {
+        it('should only trigger the probes whose conditions are met (not all have conditions)', function (done) {
           let installed = 0
           const rcConfig1 = t.generateRemoteConfig({
             when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } }
@@ -513,7 +519,11 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
-            if (event.debugger.diagnostics.status === 'INSTALLED') triggers.shift()().catch(done)
+            if (event.debugger.diagnostics.status === 'INSTALLED') {
+              const trigger = triggers.shift()
+              assert.ok(trigger, 'expecting a trigger function to be defined')
+              trigger().catch(done)
+            }
           })
         })
 
@@ -529,7 +539,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             if (event.debugger.diagnostics.status === 'INSTALLED') {
-              t.agent.once('remote-confg-responded', async () => {
+              t.agent.once('remote-config-responded', async () => {
                 await t.axios.get(t.breakpoint.url)
                 // We want to wait enough time to see if the client triggers on the breakpoint so that the test can fail
                 // if it does, but not so long that the test times out.
@@ -587,19 +597,25 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should adhere to individual probes sample rate', function (done) {
+        /** @type {(() => void) & { calledOnce?: boolean }} */
+        const doneWhenCalledTwice = () => {
+          if (doneWhenCalledTwice.calledOnce) return done()
+          doneWhenCalledTwice.calledOnce = true
+        }
+
         const rcConfig1 = t.breakpoints[0].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const rcConfig2 = t.breakpoints[1].generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
         const state = {
           [rcConfig1.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[0].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           },
           [rcConfig2.config.id]: {
-            tiggerBreakpointContinuously () {
+            triggerBreakpointContinuously () {
               t.axios.get(t.breakpoints[1].url).catch(done)
-              this.timer = setTimeout(this.tiggerBreakpointContinuously.bind(this), 10)
+              this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
             }
           }
         }
@@ -607,7 +623,7 @@ describe('Dynamic Instrumentation', function () {
         t.agent.on('debugger-diagnostics', ({ payload }) => {
           payload.forEach((event) => {
             const { probeId, status } = event.debugger.diagnostics
-            if (status === 'INSTALLED') state[probeId].tiggerBreakpointContinuously()
+            if (status === 'INSTALLED') state[probeId].triggerBreakpointContinuously()
           })
         })
 
@@ -632,11 +648,6 @@ describe('Dynamic Instrumentation', function () {
 
         t.agent.addRemoteConfig(rcConfig1)
         t.agent.addRemoteConfig(rcConfig2)
-
-        function doneWhenCalledTwice () {
-          if (doneWhenCalledTwice.calledOnce) return done()
-          doneWhenCalledTwice.calledOnce = true
-        }
       })
     })
 
@@ -730,7 +741,7 @@ describe('Dynamic Instrumentation', function () {
               t.axios.get(t.breakpoint.url).catch((err) => {
                 // If the request hasn't fully completed by the time the tests ends and the target app is destroyed,
                 // Axios will complain with a "socket hang up" error. Hence this sanity check before calling
-                // `done(err)`. If we later add more tests below this one, this shouuldn't be an issue.
+                // `done(err)`. If we later add more tests below this one, this shouldn't be an issue.
                 if (!finished) done(err)
               })
             }
@@ -898,7 +909,7 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
     assert.isAbove(frame.columnNumber, 0)
   }
   const topFrame = payload.debugger.snapshot.stack[0]
-  // path seems to be prefeixed with `/private` on Mac
+  // path seems to be prefixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
   assert.strictEqual(topFrame.function, 'fooHandler')
   assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)

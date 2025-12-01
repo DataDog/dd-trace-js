@@ -1,14 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-
+const assert = require('node:assert/strict')
 const dns = require('node:dns')
 
-const { withPeerService } = require('../../dd-trace/test/setup/mocha')
+const { expect } = require('chai')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { withPeerService } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let net
@@ -75,7 +77,7 @@ describe('Plugin', () => {
 
         tracer.scope().activate(parent, () => {
           const socket = net.connect('/tmp/dd-trace.sock')
-          expect(socket.listenerCount('error')).to.equal(0)
+          assert.strictEqual(socket.listenerCount('error'), 0)
         })
       })
 
@@ -90,7 +92,7 @@ describe('Plugin', () => {
               resource: 'localhost'
             }, 2000).then(done).catch(done)
           })
-          expect(socket.listenerCount('error')).to.equal(0)
+          assert.strictEqual(socket.listenerCount('error'), 0)
         })
       })
 
@@ -131,7 +133,7 @@ describe('Plugin', () => {
               parent_id: BigInt(parent.context()._spanId.toString(10))
             }, 2000).then(done).catch(done)
           })
-          expect(socket.listenerCount('error')).to.equal(0)
+          assert.strictEqual(socket.listenerCount('error'), 0)
         })
       })
 
@@ -198,7 +200,7 @@ describe('Plugin', () => {
               service: 'test',
               resource: `localhost:${port}`
             })
-            expect(traces[0][0].meta).to.deep.include({
+            assertObjectContains(traces[0][0].meta, {
               component: 'net',
               'span.kind': 'client',
               'tcp.family': 'IPv4',
@@ -208,11 +210,11 @@ describe('Plugin', () => {
               [ERROR_MESSAGE]: error.message || error.code,
               [ERROR_STACK]: error.stack
             })
-            expect(traces[0][0].metrics).to.deep.include({
+            assertObjectContains(traces[0][0].metrics, {
               'network.destination.port': port,
               'tcp.remote.port': port
             })
-            expect(traces[0][0].parent_id.toString()).to.equal(parent.context().toSpanId())
+            assert.strictEqual(traces[0][0].parent_id.toString(), parent.context().toSpanId())
           })
           .then(done)
           .catch(done)
@@ -240,7 +242,7 @@ describe('Plugin', () => {
               // Node.js 21.2 broke this function. We'll have to do the more manual way for now.
               // expect(socket.eventNames()).to.not.include.members(events)
               for (const event of events) {
-                expect(socket.listeners(event)).to.have.lengthOf(0)
+                assert.strictEqual(socket.listeners(event).length, 0)
               }
               done()
             })
@@ -265,33 +267,33 @@ describe('Plugin', () => {
           })
 
           socket.on('connect', () => {
-            expect(tracer.scope().active()).to.equal(parent)
+            assert.strictEqual(tracer.scope().active(), parent)
             promises[0].resolve()
           })
 
           socket.on('ready', () => {
-            expect(tracer.scope().active()).to.equal(parent)
+            assert.strictEqual(tracer.scope().active(), parent)
             socket.destroy()
             promises[1].resolve()
           })
 
           socket.on('close', () => {
-            expect(tracer.scope().active()).to.not.be.null
-            expect(tracer.scope().active().context()._name).to.equal('tcp.connect')
+            assert.notStrictEqual(tracer.scope().active(), null)
+            assert.strictEqual(tracer.scope().active().context()._name, 'tcp.connect')
             promises[2].resolve()
           })
 
           socket.on('lookup', () => {
-            expect(tracer.scope().active()).to.not.be.null
-            expect(tracer.scope().active().context()._name).to.equal('tcp.connect')
+            assert.notStrictEqual(tracer.scope().active(), null)
+            assert.strictEqual(tracer.scope().active().context()._name, 'tcp.connect')
             promises[3].resolve()
           })
 
           socket.connect({
             port,
             lookup: (...args) => {
-              expect(tracer.scope().active()).to.not.be.null
-              expect(tracer.scope().active().context()._name).to.equal('tcp.connect')
+              assert.notStrictEqual(tracer.scope().active(), null)
+              assert.strictEqual(tracer.scope().active().context()._name, 'tcp.connect')
               promises[4].resolve()
               dns.lookup(...args)
             }
@@ -306,8 +308,8 @@ describe('Plugin', () => {
 
         tracer.scope().activate(parent, () => {
           socket.connect({ port }, function () {
-            expect(this).to.equal(socket)
-            expect(tracer.scope().active()).to.equal(parent)
+            assert.strictEqual(this, socket)
+            assert.strictEqual(tracer.scope().active(), parent)
             socket.destroy()
             done()
           })

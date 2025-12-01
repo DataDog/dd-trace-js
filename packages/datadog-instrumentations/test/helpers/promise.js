@@ -1,11 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const semver = require('semver')
+
 const { storage } = require('../../../datadog-core')
 const agent = require('../../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-
 module.exports = (name, factory, versionRange) => {
   describe('Instrumentation', () => {
     let Promise
@@ -44,7 +45,7 @@ module.exports = (name, factory, versionRange) => {
               const args = new Array(i + 1)
 
               args[i] = () => {
-                expect(storage('legacy').getStore()).to.equal(store)
+                assert.strictEqual(storage('legacy').getStore(), store)
               }
 
               promise = promise.then.apply(promise, args)
@@ -71,7 +72,7 @@ module.exports = (name, factory, versionRange) => {
                 throw err
               })
               .catch(() => {
-                expect(storage('legacy').getStore()).to.equal(store)
+                assert.strictEqual(storage('legacy').getStore(), store)
               })
           })
 
@@ -88,7 +89,7 @@ module.exports = (name, factory, versionRange) => {
 
             return promise
               .then(() => {
-                expect(storage('legacy').getStore()).to.be.null
+                assert.strictEqual(storage('legacy').getStore(), null)
               })
           })
         })
