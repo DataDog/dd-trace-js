@@ -71,17 +71,16 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   _createDeliverySpan (messageData, parentContext, tracer) {
-    const { message, subscription, topicName, attrs } = messageData
+    const { message, subscription, topicName } = messageData
     const subscriptionName = subscription.split('/').pop() || subscription
-    const publishStartTime = attrs['x-dd-publish-start-time']
-    const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
 
     const span = tracer._tracer.startSpan('pubsub.delivery', {
       childOf: parentContext,
-      startTime,
+      integrationName: 'google-cloud-pubsub',
       tags: {
         'span.kind': 'consumer',
         component: 'google-cloud-pubsub',
+        '_dd.integration': 'google-cloud-pubsub',
         'pubsub.method': 'delivery',
         'pubsub.subscription': subscription,
         'pubsub.message_id': message.messageId,
@@ -94,33 +93,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     })
 
     span.setTag('resource.name', `Push Subscription ${subscriptionName}`)
-    this._addBatchMetadata(span, attrs)
 
     return span
-  }
-
-  _addBatchMetadata (span, attrs) {
-    const batchSize = attrs['_dd.batch.size']
-    const batchIndex = attrs['_dd.batch.index']
-
-    if (batchSize && batchIndex !== undefined) {
-      const size = Number.parseInt(batchSize, 10)
-      const index = Number.parseInt(batchIndex, 10)
-
-      span.setTag('pubsub.batch.message_count', size)
-      span.setTag('pubsub.batch.message_index', index)
-      span.setTag('pubsub.batch.description', `Message ${index + 1} of ${size}`)
-
-      const requestTraceId = attrs['_dd.pubsub_request.trace_id']
-      const requestSpanId = attrs['_dd.pubsub_request.span_id']
-
-      if (requestTraceId) {
-        span.setTag('pubsub.batch.request_trace_id', requestTraceId)
-      }
-      if (requestSpanId) {
-        span.setTag('pubsub.batch.request_span_id', requestSpanId)
-      }
-    }
   }
 
   _extractProjectTopic (attrs, subscription) {
