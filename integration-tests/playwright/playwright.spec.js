@@ -90,9 +90,9 @@ versions.forEach((version) => {
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
-      if (!process.env.CI) {
-        execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      }
+      console.log('Installing chromium')
+      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      console.log('Chromium installed')
       webAppServer.listen(0, () => {
         webAppPort = webAppServer.address().port
         webAppServerWithRedirect.listen(0, () => {
