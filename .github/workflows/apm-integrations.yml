@@ -677,6 +677,17 @@ jobs:
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  log4js:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: log4js
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+
   mariadb:
     runs-on: ubuntu-latest
     services:
@@ -829,6 +840,27 @@ jobs:
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  neo4j-driver:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5.25.1
+        env:
+          NEO4J_AUTH: neo4j/password
+          NEO4J_ACCEPT_LICENSE_AGREEMENT: yes
+        ports:
+          - 7687:7687
+          - 7474:7474
+    env:
+      PLUGINS: neo4j-driver
+      SERVICES: neo4j
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
 
   net:
     runs-on: ubuntu-latest
