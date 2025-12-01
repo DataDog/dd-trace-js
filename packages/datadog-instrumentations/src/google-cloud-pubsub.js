@@ -5,13 +5,15 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 // Auto-load push subscription plugin to enable pubsub.delivery spans for push subscriptions
 try {
   const PushSubscriptionPlugin = require('../../datadog-plugin-google-cloud-pubsub/src/pubsub-push-subscription')
   new PushSubscriptionPlugin(null, {}).configure({})
-} catch {
+} catch (e) {
   // Push subscription plugin is optional
+  log.debug(`PushSubscriptionPlugin not loaded: ${e.message}`)
 }
 
 const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
