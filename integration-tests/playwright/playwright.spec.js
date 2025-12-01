@@ -267,7 +267,7 @@ versions.forEach((version) => {
       })
     })
 
-    it.only('works when tests are compiled to a different location', function (done) {
+    it('works when tests are compiled to a different location', function (done) {
       // this has shown some flakiness
       this.retries(1)
       let testOutput = ''
@@ -299,11 +299,9 @@ versions.forEach((version) => {
       )
       childProcess.stdout.on('data', chunk => {
         testOutput += chunk.toString()
-        console.log(chunk.toString())
       })
       childProcess.stderr.on('data', chunk => {
         testOutput += chunk.toString()
-        console.log(chunk.toString())
       })
     })
 
