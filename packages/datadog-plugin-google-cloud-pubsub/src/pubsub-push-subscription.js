@@ -122,6 +122,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const span = tracer._tracer.startSpan('pubsub.delivery', {
       childOf: parentContext,
       startTime,
+      integrationName: 'google-cloud-pubsub',
       tags: {
         'span.kind': 'consumer',
         component: 'google-cloud-pubsub',
