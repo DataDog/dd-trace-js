@@ -96,7 +96,7 @@ function wrap (prefix, fn) {
         return fn.apply(this, arguments)
       } catch (error) {
         ctx.error = error
-        error.stack // trigger getting the stack at the original throwing point
+        void error.stack // trigger getting the stack at the original throwing point
         errorCh.publish(ctx)
 
         throw error
@@ -162,7 +162,7 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       )
       return res
     } catch (e) {
-      e.stack
+      void e.stack
       ctx.error = e
       errorCh.publish(ctx)
       throw e
@@ -226,7 +226,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       try {
         return _n1qlReq.apply(this, arguments)
       } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
+        void err.stack // trigger getting the stack at the original throwing point
         ctx.error = err
         errorCh.publish(ctx)
 
