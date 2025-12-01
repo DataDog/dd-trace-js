@@ -214,6 +214,14 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
+      # We cache Cypress binaries for fixed versions (6.7.0, 10.2.0, 14.5.4) but not for "latest"
+      # as that changes frequently and would have a low cache hit rate
+      - name: Cache Cypress binary
+        if: matrix.cypress-version != 'latest'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress --ignore-engines
         env:
