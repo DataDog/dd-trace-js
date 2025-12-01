@@ -15,8 +15,8 @@ const {
   getCiVisEvpProxyConfig
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const webAppServer = require('../ci-visibility/web-app-server')
-const webAppServerWithRedirect = require('../ci-visibility/web-app-server-with-redirect')
+const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
   TEST_STATUS,
   TEST_SOURCE_START,
@@ -78,7 +78,7 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect
+    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
     this.retries(2)
     this.timeout(80000)
@@ -86,17 +86,46 @@ versions.forEach((version) => {
     useSandbox([`@playwright/test@${version}`, 'typescript'], true)
 
     before(function (done) {
+      // Increase timeout for this hook specifically to account for slow chromium installation in CI
+      this.timeout(120000)
+
+      const startTime = Date.now()
+      const logTiming = (message) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        console.log(`[${elapsed}s] ${message}`)
+      }
+
       cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
-      console.log('Installing chromium')
+      logTiming('Starting chromium installation...')
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      console.log('Chromium installed')
-      webAppServer.listen(0, () => {
+      logTiming('Chromium installation completed')
+
+      // Create fresh server instances to avoid issues with retries
+      logTiming('Creating web app server instances...')
+      webAppServer = createWebAppServer()
+      webAppServerWithRedirect = createWebAppServerWithRedirect()
+
+      logTiming('Starting webAppServer on random port...')
+      webAppServer.listen(0, (err) => {
+        if (err) {
+          logTiming(`ERROR: webAppServer failed to start: ${err.message}`)
+          return done(err)
+        }
         webAppPort = webAppServer.address().port
-        webAppServerWithRedirect.listen(0, () => {
+        logTiming(`webAppServer listening on port ${webAppPort}`)
+
+        logTiming('Starting webAppServerWithRedirect on random port...')
+        webAppServerWithRedirect.listen(0, (err) => {
+          if (err) {
+            logTiming(`ERROR: webAppServerWithRedirect failed to start: ${err.message}`)
+            return done(err)
+          }
           webPortWithRedirect = webAppServerWithRedirect.address().port
+          logTiming(`webAppServerWithRedirect listening on port ${webPortWithRedirect}`)
+          logTiming('Setup completed successfully')
           done()
         })
       })
