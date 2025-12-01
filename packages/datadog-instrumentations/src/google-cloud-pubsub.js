@@ -106,24 +106,22 @@ function wrapMethod (method) {
       if (parentSpan) {
         ctx.parentSpan = parentSpan
       }
-      const self = this
-      const args = arguments
       return storage('legacy').run(restoredStore, () => {
         return requestStartCh.runStores(ctx, () => {
-          const cb = args[args.length - 1]
+          const cb = arguments[arguments.length - 1]
 
           if (typeof cb === 'function') {
-            args[args.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
+            arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function (error) {
               if (error) {
                 ctx.error = error
                 requestErrorCh.publish(ctx)
               }
               return requestFinishCh.runStores(ctx, cb, this, ...arguments)
             })
-            return method.apply(self, args)
+            return method.apply(this, arguments)
           }
 
-          return method.apply(self, args)
+          return method.apply(this, arguments)
             .then(
               response => {
                 requestFinishCh.publish(ctx)
