@@ -498,6 +498,38 @@ describe('snapshot-pruner', function () {
       })
     })
 
+    it('should prune objects inside Map entries (arrays of arrays)', function () {
+      assertPrunedSnapshot(-1, {
+        myMap: {
+          type: 'map',
+          entries: [
+            [
+              { type: 'string', value: 'key1' },
+              { type: 'string', value: 'x'.repeat(500) } // Should be pruned
+            ],
+            [
+              { type: 'string', value: 'key2' },
+              { type: 'string', value: 'small' }
+            ]
+          ]
+        }
+      }, {
+        myMap: {
+          type: 'map',
+          entries: [
+            [
+              { type: 'string', value: 'key1' },
+              { pruned: true }
+            ],
+            [
+              { type: 'string', value: 'key2' },
+              { type: 'string', value: 'small' }
+            ]
+          ]
+        }
+      })
+    })
+
     /**
      * Assert that the pruneSnapshot function successfully prunes the snapshot and returns the expected locals.
      * @param {number} maxSize - Used to define the max allowed size of the snapshot. If positive, it's the absolute max
