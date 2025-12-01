@@ -416,7 +416,6 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
-      'no-unused-expressions': 'error',
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
@@ -454,6 +453,7 @@ export default [
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: true }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-unused-expressions': 'error',
       'no-useless-assignment': 'error',
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
