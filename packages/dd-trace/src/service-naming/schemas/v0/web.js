@@ -54,7 +54,7 @@ const web = {
       serviceName: httpPluginClientService,
       serviceSource: optionServiceSource,
     },
-    'electron:net:fetch': {
+    'electron:net:request': {
       opName: () => 'http.request',
       serviceName: httpPluginClientService,
     },
