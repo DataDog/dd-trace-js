@@ -89,44 +89,28 @@ versions.forEach((version) => {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
       this.timeout(120000)
 
-      const startTime = Date.now()
-      const logTiming = (message) => {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-        console.log(`[${elapsed}s] ${message}`)
-      }
-
       cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
       // Install chromium (configured in integration-tests/playwright.config.js)
       // *Be advised*: this means that we'll only be using chromium for this test suite
       // This will use cached browsers if available, otherwise download
-      logTiming('Ensuring chromium is installed (will use cache if available)...')
       execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-      logTiming('Chromium ready')
 
       // Create fresh server instances to avoid issues with retries
-      logTiming('Creating web app server instances...')
       webAppServer = createWebAppServer()
       webAppServerWithRedirect = createWebAppServerWithRedirect()
 
-      logTiming('Starting webAppServer on random port...')
       webAppServer.listen(0, (err) => {
         if (err) {
-          logTiming(`ERROR: webAppServer failed to start: ${err.message}`)
           return done(err)
         }
         webAppPort = webAppServer.address().port
-        logTiming(`webAppServer listening on port ${webAppPort}`)
 
-        logTiming('Starting webAppServerWithRedirect on random port...')
         webAppServerWithRedirect.listen(0, (err) => {
           if (err) {
-            logTiming(`ERROR: webAppServerWithRedirect failed to start: ${err.message}`)
             return done(err)
           }
           webPortWithRedirect = webAppServerWithRedirect.address().port
-          logTiming(`webAppServerWithRedirect listening on port ${webPortWithRedirect}`)
-          logTiming('Setup completed successfully')
           done()
         })
       })
