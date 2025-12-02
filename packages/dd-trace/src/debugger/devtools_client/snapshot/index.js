@@ -69,7 +69,7 @@ async function getLocalStateForCallFrame (
         { cause: err } // TODO: The cause is not used by the backend
       ))
     }
-    if (opts.ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
+    if (ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
   }
 
   // Delay calling `processRawState` so the caller gets a chance to resume the main thread before processing `rawState`

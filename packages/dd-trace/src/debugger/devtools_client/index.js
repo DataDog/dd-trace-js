@@ -216,7 +216,7 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     if (probe.captureSnapshot) {
-      if (captureErrors.length > 0) {
+      if (captureErrors?.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
         probe.captureSnapshot = false
         probe.permanentEvaluationErrors = captureErrors.map(error => ({
