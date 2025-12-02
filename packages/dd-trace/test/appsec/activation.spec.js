@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { beforeEach, describe, it } = require('mocha')
 
 const Activation = require('../../src/appsec/activation')
 
@@ -18,27 +19,27 @@ describe('Appsec Activation', () => {
     config.appsec.enabled = undefined
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.ONECLICK)
+    assert.strictEqual(activation, Activation.ONECLICK)
   })
 
   it('should return ENABLED with true value', () => {
     config.appsec.enabled = true
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.ENABLED)
+    assert.strictEqual(activation, Activation.ENABLED)
   })
 
   it('should return DISABLED with false value', () => {
     config.appsec.enabled = false
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.DISABLED)
+    assert.strictEqual(activation, Activation.DISABLED)
   })
 
   it('should return DISABLED with invalid value', () => {
     config.appsec.enabled = 'invalid'
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.DISABLED)
+    assert.strictEqual(activation, Activation.DISABLED)
   })
 })

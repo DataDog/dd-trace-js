@@ -318,7 +318,7 @@ function buildExpressServer (agent) {
     }
 
     res.on('close', () => {
-      agent.emit('remote-confg-responded')
+      agent.emit('remote-config-responded')
     })
 
     if (agent._rcTargetsVersion === state.targets_version) {

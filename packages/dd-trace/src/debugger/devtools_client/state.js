@@ -81,9 +81,14 @@ module.exports = {
       }
 
       // If we found a valid match and it's better than our previous best
+      // Note: bestMatch.url cannot be null when comparing lengths because:
+      // - The first time we enter this block, lastBoundaryPos > maxMatchLength is always true
+      // - We set bestMatch.url before we could evaluate the second condition
+      // - Subsequent evaluations have bestMatch.url already set
       if (atBoundary && (
         lastBoundaryPos > maxMatchLength ||
-        (lastBoundaryPos === maxMatchLength && url.length < bestMatch.url.length) // Prefer shorter paths
+        (lastBoundaryPos === maxMatchLength &&
+          url.length < /** @type {string} */ (/** @type {unknown} */ (bestMatch.url)).length) // Prefer shorter paths
       )) {
         maxMatchLength = lastBoundaryPos
         bestMatch.url = sourceUrl || url

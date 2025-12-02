@@ -1,11 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
 const { describe, it, before } = require('tap').mocha
-const sinon = require('sinon')
 const assert = require('node:assert')
 const os = require('node:os')
 
+const sinon = require('sinon')
 require('./setup/core')
 
 const { getConfigFresh } = require('./helpers/config')
@@ -71,7 +70,7 @@ describe('startup logging', () => {
   })
 
   it('startupLog should be formatted correctly', () => {
-    expect(firstStderrCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - ')).to.equal(true)
+    assert.strictEqual(firstStderrCall.args[0].startsWith('DATADOG TRACER CONFIGURATION - '), true)
     const info = JSON.parse(String(tracerInfoMethod()))
     assert.deepStrictEqual(info, {
       date: info.date,
@@ -103,7 +102,7 @@ describe('startup logging', () => {
   })
 
   it('startupLog should correctly also output the diagnostic message', () => {
-    expect(secondStderrCall.args[0]).to.equal('DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
+    assert.strictEqual(secondStderrCall.args[0], 'DATADOG TRACER DIAGNOSTIC - Agent Error: Error: fake error')
   })
 })
 
@@ -132,7 +131,7 @@ describe('profiling_enabled', () => {
       const infoStub = /** @type {sinon.SinonStub} */ (console.info)
       const logObj = JSON.parse(infoStub.firstCall.args[0].replace('DATADOG TRACER CONFIGURATION - ', ''))
       infoStub.restore()
-      expect(logObj.profiling_enabled).to.equal(expected)
+      assert.strictEqual(logObj.profiling_enabled, expected)
     })
   })
 })

@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { describe, it } = require('tap').mocha
 
 require('../../setup/core')
@@ -20,7 +20,7 @@ describe('env', () => {
   it('reads runtime and OS metadata', () => {
     const envMetadata = getRuntimeAndOSMetadata()
 
-    expect(envMetadata).to.eql(
+    assert.deepStrictEqual(envMetadata,
       {
         [RUNTIME_VERSION]: process.version,
         [OS_ARCHITECTURE]: process.arch,
