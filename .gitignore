@@ -134,3 +134,10 @@ packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modu
 __azurite_db_queue__.json
 __azurite_db_queue_extent__.json
 __queuestorage__/AzuriteConfig
+
+
+# ignore apm-instrumentation-toolkit analysis results dirs
+.analysis/
+
+# ignore claude settings
+.claude/

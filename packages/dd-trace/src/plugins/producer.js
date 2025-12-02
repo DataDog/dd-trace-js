@@ -7,7 +7,13 @@ class ProducerPlugin extends OutboundPlugin {
   static kind = 'producer'
   static type = 'messaging'
 
-  startSpan (options, enterOrCtx) {
+  startSpan (name, options, enterOrCtx) {
+    if (typeof name === 'object' && name !== null && enterOrCtx === undefined) {
+      enterOrCtx = options
+      options = name
+      name = this.operationName()
+    }
+
     const spanDefaults = {
       kind: this.constructor.kind
     }
@@ -19,7 +25,7 @@ class ProducerPlugin extends OutboundPlugin {
         if (!options[key]) options[key] = spanDefaults[key]
       }
     )
-    return super.startSpan(this.operationName(), options, enterOrCtx)
+    return super.startSpan(name, options, enterOrCtx)
   }
 }
 

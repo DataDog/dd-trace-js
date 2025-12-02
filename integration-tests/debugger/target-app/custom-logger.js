@@ -1,5 +1,6 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 require('dd-trace').init({
   logger: {
     error: (...args) => console.log('[CUSTOM LOGGER][ERROR]:', ...args), // eslint-disable-line no-console
