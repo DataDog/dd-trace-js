@@ -13,4 +13,10 @@ if (major < 16) {
   }
 }
 
+if (major >= 16) {
+  nextConfig.turbopack = {
+    root: __dirname,
+  }
+}
+
 module.exports = nextConfig
