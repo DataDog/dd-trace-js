@@ -219,7 +219,6 @@
     "channelName": "VectorStore_similaritySearch"
   },
   {
-
     "module": {
       "name": "@langchain/core",
       "versionRange": ">=0.1",
