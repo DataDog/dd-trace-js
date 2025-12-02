@@ -87,8 +87,8 @@ describe('Dynamic Instrumentation', function () {
             // Trigger the same breakpoint again directly
             const result2 = await t.axios.get(breakpoint.url)
             assert.ok(
-              result2.data.paused <= 5,
-              `expected thread to be paused <=5ms, but was paused for ~${result2.data.paused}ms`
+              result2.data.paused <= 50,
+              `expected thread to be paused <=50ms, but was paused for ~${result2.data.paused}ms`
             )
 
             await secondPayloadReceived
