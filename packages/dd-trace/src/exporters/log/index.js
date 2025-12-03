@@ -8,13 +8,27 @@ const TRACE_FORMAT_OVERHEAD = TRACE_PREFIX.length + TRACE_SUFFIX.length
 const MAX_SIZE = 64 * 1024 // 64kb
 
 class LogExporter {
+  constructor () {
+    this._isFirstSpanInSession = true
+  }
+
   export (spans) {
     log.debug('Adding trace to queue: %j', spans)
 
     let size = TRACE_FORMAT_OVERHEAD
     let queue = []
 
-    for (const span of spans) {
+    for (let i = 0; i < spans.length; i++) {
+      const span = spans[i]
+      
+      // Add process tags to the first span of the first chunk
+      if (i === 0 && this._isFirstSpanInSession && this._processTags) {
+        const { TRACING_FIELD_NAME } = require('../../process-tags')
+        span.meta = span.meta || {}
+        span.meta[TRACING_FIELD_NAME] = this._processTags
+        this._isFirstSpanInSession = false
+      }
+      
       const spanStr = JSON.stringify(span)
       if (spanStr.length + TRACE_FORMAT_OVERHEAD > MAX_SIZE) {
         log.debug('Span too large to send to logs, dropping')
