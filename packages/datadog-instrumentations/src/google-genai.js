@@ -93,7 +93,7 @@ addHook({
       constructor (...args) {
         super(...args)
 
-        // We are patching the instance instead of the prototype because when it is compiled form 
+        // We are patching the instance instead of the prototype because when it is compiled from
         // typescript, the models property is not available on the prototype.
         if (this.models) {
           if (this.models.generateContent) {
