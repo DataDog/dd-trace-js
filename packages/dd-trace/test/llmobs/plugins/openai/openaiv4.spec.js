@@ -128,6 +128,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -220,6 +221,7 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER
@@ -329,6 +331,7 @@ describe('integrations', () => {
             ],
             metrics: {
               cache_read_input_tokens: 0,
+              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -413,6 +416,7 @@ describe('integrations', () => {
             tags: { ml_app: 'test', integration: 'openai' },
             metrics: {
               cache_read_input_tokens: 0,
+              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER
@@ -599,6 +603,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321
@@ -647,6 +652,7 @@ describe('integrations', () => {
             output_tokens: 100,
             total_tokens: 1320,
             cache_read_input_tokens: 1152,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
@@ -689,7 +695,8 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -700,7 +707,6 @@ describe('integrations', () => {
             tool_choice: 'auto',
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
-            reasoning_tokens: 0,
             stream: false
           },
           tags: { ml_app: 'test', integration: 'openai' }
@@ -739,7 +745,8 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: 0
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -750,7 +757,6 @@ describe('integrations', () => {
             tool_choice: 'auto',
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
-            reasoning_tokens: 0,
             stream: true
           },
           tags: { ml_app: 'test', integration: 'openai' }
@@ -955,6 +961,54 @@ describe('integrations', () => {
                 'Please provide a comprehensive analysis.'
             }
           ])
+        })
+      })
+
+      it('submits a response span with reasoning tokens', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        // This test validates that reasoning_output_tokens metric is captured
+        // when the model performs reasoning steps (e.g., o1-preview, o1-mini)
+        await openai.responses.create({
+          model: 'gpt-5-mini',
+          input: 'Solve this step by step: What is 15 * 24?',
+          max_output_tokens: 500,
+          stream: false
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [
+            { role: 'user', content: 'Solve this step by step: What is 15 * 24?' }
+          ],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING }
+          ],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 128  // This should be non-zero for reasoning models
+          },
+          modelName: 'gpt-5-mini-2025-08-07', // update
+          modelProvider: 'openai',
+          metadata: {
+            max_output_tokens: 500,
+            top_p: 1,
+            temperature: 1,
+            tool_choice: 'auto',
+            truncation: 'disabled',
+            text: { format: { type: 'text' }, verbosity: 'medium' },
+            stream: false
+          },
+          tags: { ml_app: 'test', integration: 'openai' }
         })
       })
     })
