@@ -296,8 +296,10 @@ describe('spanFormat', () => {
         chunk: 'test',
         count: 1
       }
+      // Make this span the first in the trace (local root) to extract chunk tags
+      spanContext._trace.started = [span]
 
-      trace = spanFormat(span, true)
+      trace = spanFormat(span)
 
       assertObjectContains(trace.meta, {
         chunk: 'test'
@@ -313,8 +315,11 @@ describe('spanFormat', () => {
         chunk: 'test',
         count: 1
       }
+      // Make this span NOT the first in the trace
+      const otherSpan = { context: () => spanContext }
+      spanContext._trace.started = [otherSpan, span]
 
-      trace = spanFormat(span, false)
+      trace = spanFormat(span)
       expect(trace.meta).to.not.include({
         chunk: 'test'
       })
@@ -329,8 +334,10 @@ describe('spanFormat', () => {
         foo: '',
         count: 1
       }
+      // Make this span the first in the trace (local root) to extract chunk tags
+      spanContext._trace.started = [span]
 
-      trace = spanFormat(span, true)
+      trace = spanFormat(span)
 
       assertObjectContains(trace.meta, {
         foo: ''

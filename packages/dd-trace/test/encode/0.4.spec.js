@@ -647,4 +647,158 @@ describe('encode', () => {
       assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
     })
   })
+
+  describe('process tags', () => {
+    const { TRACING_FIELD_NAME } = require('../../src/process-tags')
+    
+    beforeEach(() => {
+      logger = {
+        debug: sinon.stub()
+      }
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../log': logger
+      })
+      
+      const processTagsValue = 'entrypoint.name:test,entrypoint.type:script'
+      writer = { 
+        flush: sinon.spy(),
+        _processTags: processTagsValue
+      }
+      encoder = new AgentEncoder(writer)
+    })
+
+    it('should only include process tags in first span of first chunk in payload', () => {
+      // First chunk (trace) - first span should get process tags
+      const firstChunk = [
+        {
+          trace_id: id('1111111111111111'),
+          span_id: id('1111111111111111'),
+          parent_id: id('0000000000000000'),
+          name: 'first-span-first-chunk',
+          resource: 'res1',
+          service: 'svc1',
+          error: 0,
+          meta: {
+            tag1: 'value1'
+          },
+          metrics: {},
+          start: 100,
+          duration: 50,
+          links: []
+        },
+        {
+          trace_id: id('1111111111111111'),
+          span_id: id('2222222222222222'),
+          parent_id: id('1111111111111111'),
+          name: 'second-span-first-chunk',
+          resource: 'res2',
+          service: 'svc1',
+          error: 0,
+          meta: {
+            tag2: 'value2'
+          },
+          metrics: {},
+          start: 110,
+          duration: 40,
+          links: []
+        }
+      ]
+
+      // Second chunk (trace) - should NOT get process tags
+      const secondChunk = [
+        {
+          trace_id: id('3333333333333333'),
+          span_id: id('3333333333333333'),
+          parent_id: id('0000000000000000'),
+          name: 'first-span-second-chunk',
+          resource: 'res3',
+          service: 'svc2',
+          error: 0,
+          meta: {
+            tag3: 'value3'
+          },
+          metrics: {},
+          start: 200,
+          duration: 60,
+          links: []
+        },
+        {
+          trace_id: id('3333333333333333'),
+          span_id: id('4444444444444444'),
+          parent_id: id('3333333333333333'),
+          name: 'second-span-second-chunk',
+          resource: 'res4',
+          service: 'svc2',
+          error: 0,
+          meta: {
+            tag4: 'value4'
+          },
+          metrics: {},
+          start: 210,
+          duration: 50,
+          links: []
+        }
+      ]
+
+      // Encode both chunks in the same payload
+      encoder.encode(firstChunk)
+      encoder.encode(secondChunk)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      // Check first chunk
+      const firstTrace = decoded[0]
+      assert.strictEqual(firstTrace.length, 2)
+      
+      // First span of first chunk should have process tags (added by encoder)
+      assert.strictEqual(firstTrace[0].meta[TRACING_FIELD_NAME], encoder._processTags)
+      assert.strictEqual(firstTrace[0].meta.tag1, 'value1')
+      
+      // Second span of first chunk should not have process tags
+      assert.strictEqual(firstTrace[1].meta[TRACING_FIELD_NAME], undefined)
+      assert.strictEqual(firstTrace[1].meta.tag2, 'value2')
+
+      // Check second chunk
+      const secondTrace = decoded[1]
+      assert.strictEqual(secondTrace.length, 2)
+      
+      // First span of second chunk should NOT have process tags
+      assert.strictEqual(secondTrace[0].meta[TRACING_FIELD_NAME], undefined)
+      assert.strictEqual(secondTrace[0].meta.tag3, 'value3')
+      
+      // Second span of second chunk should not have process tags
+      assert.strictEqual(secondTrace[1].meta[TRACING_FIELD_NAME], undefined)
+      assert.strictEqual(secondTrace[1].meta.tag4, 'value4')
+    })
+
+    it('should include process tags after reset', () => {
+      const chunk = [{
+        trace_id: id('1111111111111111'),
+        span_id: id('1111111111111111'),
+        parent_id: id('0000000000000000'),
+        name: 'test-span',
+        resource: 'res1',
+        service: 'svc1',
+        error: 0,
+        meta: {},
+        metrics: {},
+        start: 100,
+        duration: 50,
+        links: []
+      }]
+
+      // First payload
+      encoder.encode(chunk)
+      const buffer1 = encoder.makePayload()
+      const decoded1 = msgpack.decode(buffer1, { useBigInt64: true })
+      assert.strictEqual(decoded1[0][0].meta[TRACING_FIELD_NAME], encoder._processTags)
+
+      // After makePayload, the encoder resets, so next encode should include process tags again
+      encoder.encode(chunk)
+      const buffer2 = encoder.makePayload()
+      const decoded2 = msgpack.decode(buffer2, { useBigInt64: true })
+      assert.strictEqual(decoded2[0][0].meta[TRACING_FIELD_NAME], encoder._processTags)
+    })
+  })
 })

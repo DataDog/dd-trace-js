@@ -198,9 +198,14 @@ describe('SpanProcessor', () => {
       expect(foundATag).to.be.true
     }
 
-    expect(spanFormat.getCall(0)).to.have.been.calledWith(finishedSpan, true, processor._processTags)
-    expect(spanFormat.getCall(1)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
-    expect(spanFormat.getCall(2)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
-    expect(spanFormat.getCall(3)).to.have.been.calledWith(finishedSpan, false, processor._processTags)
+    // The process tags are passed to the exporter and added at the encoder level,
+    // not at the span formatting level anymore. The span processor just computes them.
+    expect(exporter._processTags).to.equal(processor._processTags)
+    
+    // Verify spans were formatted without process tag parameters
+    expect(spanFormat.getCall(0)).to.have.been.calledWith(finishedSpan)
+    expect(spanFormat.getCall(1)).to.have.been.calledWith(finishedSpan)
+    expect(spanFormat.getCall(2)).to.have.been.calledWith(finishedSpan)
+    expect(spanFormat.getCall(3)).to.have.been.calledWith(finishedSpan)
   })
 })
