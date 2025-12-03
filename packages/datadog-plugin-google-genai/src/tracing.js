@@ -3,7 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 
 class GenAiTracingPlugin extends TracingPlugin {
-  static id = 'genai'
+  static id = 'google-genai'
   static operation = 'request'
   static prefix = 'tracing:apm:google:genai:request'
 
