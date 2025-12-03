@@ -32,6 +32,7 @@
     "@fastify/cookie": "11.0.2",
     "@fastify/multipart": "9.3.0",
     "@fast-check/jest": "2.1.1",
+    "@google/genai": "1.19.0",
     "@google-cloud/pubsub": "5.2.0",
     "@google-cloud/vertexai": "1.10.0",
     "@graphql-tools/executor": "1.4.11",

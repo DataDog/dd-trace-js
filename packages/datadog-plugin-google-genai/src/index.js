@@ -5,7 +5,7 @@ const GenAiTracingPlugin = require('./tracing')
 const GenAiLLMObsPlugin = require('../../dd-trace/src/llmobs/plugins/genai')
 
 class GenAiPlugin extends CompositePlugin {
-  static id = 'genai'
+  static id = 'google-genai'
   static get plugins () {
     return {
       llmobs: GenAiLLMObsPlugin,

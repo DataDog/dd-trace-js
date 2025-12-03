@@ -16,14 +16,9 @@ class GenAiTracingPlugin extends TracingPlugin {
     const inputs = args[0]
     const model = inputs?.model || 'unknown'
 
-    const service = this.serviceName({ pluginConfig: this.config })
-
     this.startSpan('google_genai.request', {
-      service,
-      resource: methodName,
-      type: 'genai',
-      kind: 'client',
       meta: {
+        'resource.name': methodName,
         'google_genai.request.model': model,
         'google_genai.request.provider': 'google'
       }
