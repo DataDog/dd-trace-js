@@ -434,6 +434,121 @@ describe('Plugin', () => {
           )
         })
 
+        describe('consumer (eachBatch)', () => {
+          let consumer
+
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.connect()
+            await consumer.subscribe({ topic: testTopic })
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+
+          it('should be instrumented', async () => {
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: 'kafka.consume-batch',
+              service: 'test-kafka',
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs',
+                'messaging.destination.name': testTopic
+              },
+              resource: testTopic,
+              error: 0,
+              type: 'worker'
+            })
+
+            await consumer.run({
+              eachBatch: async () => {}
+            })
+            await sendMessages(kafka, testTopic, messages)
+            return expectedSpanPromise
+          })
+
+          it('should include batch size in metrics', async () => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              expect(span).to.include({
+                name: 'kafka.consume-batch',
+                resource: testTopic
+              })
+              expect(span.metrics['kafka.batch_size']).to.equal(messages.length)
+            })
+
+            await consumer.run({
+              eachBatch: async () => {}
+            })
+            await sendMessages(kafka, testTopic, messages)
+            return expectedSpanPromise
+          })
+
+          it('should include first and last offset tags', async () => {
+            const expectedSpanPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+              expect(span.meta['kafka.first_offset']).to.exist
+              expect(span.meta['kafka.last_offset']).to.exist
+            })
+
+            await consumer.run({
+              eachBatch: async () => {}
+            })
+            await sendMessages(kafka, testTopic, messages)
+            return expectedSpanPromise
+          })
+
+          it('should run the consumer in the context of the consumer span', done => {
+            const firstSpan = tracer.scope().active()
+
+            let eachBatch = async ({ batch }) => {
+              const currentSpan = tracer.scope().active()
+
+              try {
+                expect(currentSpan).to.not.equal(firstSpan)
+                expect(currentSpan.context()._name).to.equal('kafka.consume-batch')
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachBatch = () => {} // avoid being called for each message
+              }
+            }
+
+            consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
+              .catch(done)
+          })
+
+          it('should be instrumented w/ error', async () => {
+            const fakeError = new Error('Oh No!')
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: 'kafka.consume-batch',
+              service: 'test-kafka',
+              meta: {
+                [ERROR_TYPE]: fakeError.name,
+                [ERROR_MESSAGE]: fakeError.message,
+                [ERROR_STACK]: fakeError.stack,
+                component: 'kafkajs'
+              },
+              resource: testTopic,
+              error: 1,
+              type: 'worker'
+            })
+
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
+            await consumer.run({
+              eachBatch: async () => {
+                throw fakeError
+              }
+            })
+            await sendMessages(kafka, testTopic, messages)
+
+            return expectedSpanPromise
+          })
+        })
+
         describe('data stream monitoring', () => {
           let consumer
 
