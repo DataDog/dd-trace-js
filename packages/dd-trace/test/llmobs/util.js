@@ -65,7 +65,7 @@ function assertWithMockValues (actual, expected, key) {
     for (let i = 0; i < expected.length; i++) {
       assertWithMockValues(actual[i], expected[i], `${key}.${i}`)
     }
-  } else if (typeof expected === 'object') {
+  } else if (typeof expected === 'object' && expected !== null) {
     if (typeof actual !== 'object') {
       assert.fail(`${actualWithName} is not an object`)
     }

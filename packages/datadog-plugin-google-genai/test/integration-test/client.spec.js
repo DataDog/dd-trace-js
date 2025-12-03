@@ -40,11 +40,10 @@ describe('esm', () => {
 
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port, null, {
         NODE_OPTIONS: '--import dd-trace/initialize.mjs',
-        GOOGLE_API_KEY: '<not-a-real-key>'
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '<not-a-real-key>'
       })
 
       await res
     }).timeout(20000)
   })
 })
-
