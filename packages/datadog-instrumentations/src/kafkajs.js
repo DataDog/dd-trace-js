@@ -232,29 +232,44 @@ const getKafkaClusterId = (kafka) => {
     return kafka._ddKafkaClusterId
   }
 
-  if (!kafka.admin) {
+  if (typeof kafka.admin !== 'function') {
     return null
   }
 
   const admin = kafka.admin()
 
-  if (!admin.describeCluster) {
+  if (!admin || typeof admin.describeCluster !== 'function') {
     return null
   }
 
-  return admin.connect()
-    .then(() => {
-      return admin.describeCluster()
-    })
+  const disconnect = () => {
+    if (typeof admin.disconnect === 'function') {
+      return admin.disconnect().catch(() => {})
+    }
+  }
+
+  return Promise.resolve()
+    .then(() => admin.connect?.())
+    .then(() => admin.describeCluster())
     .then((clusterInfo) => {
       const clusterId = clusterInfo?.clusterId
-      kafka._ddKafkaClusterId = clusterId
-      admin.disconnect()
-      return clusterId
+
+      if (clusterId !== undefined) {
+        kafka._ddKafkaClusterId = clusterId
+      }
+
+      return clusterId ?? null
     })
     .catch((error) => {
-      throw error
+      log.warn('Failed to retrieve Kafka cluster id for kafkajs instrumentation. ' +
+        'Continuing without cluster metadata. Error: ' + (error?.message || error))
+      return null
     })
+    .finally(disconnect)
+}
+
+module.exports = {
+  getKafkaClusterId
 }
 
 function isPromise (obj) {
