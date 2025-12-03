@@ -730,17 +730,23 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
-        const failedCount = testStatuses.filter(status => status === 'fail').length
-        totalFailedTestCount += failedCount
-        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
-          totalPureQuarantinedFailedTestCount += failedCount
+        // Only count as failed if the final status (after retries) is 'fail'
+        const lastStatus = testStatuses[testStatuses.length - 1]
+        if (lastStatus === 'fail') {
+          totalFailedTestCount += 1
+          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+            totalPureQuarantinedFailedTestCount += 1
+          }
         }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
         const testFqn = getTestFullyQualifiedName(test)
         const testStatuses = testsToTestStatuses.get(testFqn)
-        totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
+        // Only count as failed if the final status (after retries) is 'fail'
+        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
+          totalAttemptToFixFailedTestCount += 1
+        }
       }
 
       const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
