@@ -15,11 +15,6 @@ const patchedTypes = new WeakSet()
 
 /** CHANNELS */
 
-// load channels
-const visitorLoadCh = channel('apm:graphql:visitor:load')
-const printerLoadCh = channel('apm:graphql:printer:load')
-const utilitiesLoadCh = channel('apm:graphql:utilities:load')
-
 // execute channels
 const startExecuteCh = channel('apm:graphql:execute:start')
 const finishExecuteCh = channel('apm:graphql:execute:finish')
