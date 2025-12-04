@@ -1,8 +1,29 @@
 'use strict'
 
-// The rewriter works effectively the same as Orchestrion with some additions:
-// - Supports an `astQuery` field to filter AST nodes with an esquery query.
-// - Supports replacing methods of child class instance in the base constructor.
+/*
+This rewriter is basically a JavaScript version of Orchestrion. The goal is not
+to replace Orchestrion, but rather to make it easier and faster to write new
+integrations in the short-term, especially as many changes to the rewriter will
+be needed as all the patterns we need have not been identified yet. This will
+avoid the back and forth of having to make Rust changes to an external library
+for basically every integration change or addition.
+
+The long term goal is to backport any additional feature we add to the JS
+rewriter to Orchestrion once we're confident that the implementation is fairly
+complete and has all features we need. This should ideally happen by summer
+2026, but it will depend on how quickly we start using the rewriter more.
+
+Here is a list of the additions and changes in this rewriter compared to
+Orchestrion that will need to be backported:
+
+(NOTE: Please keep this list up-to-date whenever new features are added)
+
+- Supports an `astQuery` field to filter AST nodes with an esquery query. This
+  is mostly meant to be used when experimenting or if what needs to be queried
+  is not a function. We'll see over time if something like this is needed to be
+  backported or if it can be replaced by simpler queries.
+- Supports replacing methods of child class instances in the base constructor.
+*/
 
 const { readFileSync } = require('fs')
 const { join } = require('path')
