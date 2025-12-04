@@ -27,6 +27,7 @@ module.exports = {
     moduleIds: 'named',
   },
   externals: {
+    '@openfeature/core': '@openfeature/core',
     '@opentelemetry/api': '@opentelemetry/api'
   },
   plugins: [
