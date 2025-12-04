@@ -333,7 +333,6 @@ versions.forEach((version) => {
       )
     })
 
-    // TODO: check that ATR and --retries does not affect EFD
     contextNewVersions('early flake detection', () => {
       it('retries new tests', async () => {
         receiver.setSettings({
@@ -798,6 +797,153 @@ versions.forEach((version) => {
               assert.equal(newTests.length, 0)
               const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               assert.equal(retriedTests.length, 0)
+            })
+        ])
+      })
+
+      it('--retries is disabled for tests retried by EFD', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          playwright: {
+            'flaky-test.js': ['playwright should retry old flaky tests']
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js --retries=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-efd-and-retries'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
+              )
+              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.forEach(test => {
+                // tests always fail because ATR and --retries are disabled for EFD,
+                // so testInfo.retry is always 0
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              retriedNewTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
+              // --retries works normally for old flaky tests
+              const oldFlakyTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
+              )
+              assert.equal(oldFlakyTests.length, 2)
+              const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              assert.equal(passedFlakyTests.length, 1)
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+              const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.equal(failedFlakyTests.length, 1)
+            })
+        ])
+      })
+
+      it('ATR is disabled for tests retried by EFD', async () => {
+        receiver.setSettings({
+          known_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          flaky_test_retries_enabled: true
+        })
+
+        receiver.setKnownTests({
+          playwright: {
+            'flaky-test.js': ['playwright should retry old flaky tests']
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-efd-and-retries',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
+              )
+              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              retriedNewTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
+              // ATR works normally for old flaky tests
+              const oldFlakyTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
+              )
+              assert.equal(oldFlakyTests.length, 2)
+              const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              assert.equal(passedFlakyTests.length, 1)
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+              const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.equal(failedFlakyTests.length, 1)
             })
         ])
       })
