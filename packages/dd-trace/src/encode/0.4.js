@@ -31,8 +31,6 @@ class AgentEncoder {
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
-    // Use getEnvironmentVariable instead of getResolvedEnv to avoid triggering async_hooks during span processing
-    // TODO: This needs to be supported by stable config, though...
     this._debugEncoding = isTrue(getResolvedEnv('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
   }

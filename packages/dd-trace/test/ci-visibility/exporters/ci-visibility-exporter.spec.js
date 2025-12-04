@@ -28,7 +28,6 @@ describe('CI Visibility Exporter', () => {
 
   afterEach(() => {
     sinon.restore()
-    delete process.env.DD_API_KEY
   })
 
   describe('sendGitMetadata', () => {

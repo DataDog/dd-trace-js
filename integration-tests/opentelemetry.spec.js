@@ -452,7 +452,6 @@ describe('opentelemetry', () => {
     })
   })
 
-  // TODO:This test is failing (line 464)
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
     proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
       cwd,
