@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - uses: ./.github/actions/node/active-lts
-      - run: yarn
+      - run: yarn --frozen-lockfile
         working-directory: vendor
       - run: git diff --exit-code
 
