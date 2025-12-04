@@ -15,6 +15,11 @@ const patchedTypes = new WeakSet()
 
 /** CHANNELS */
 
+// load channels
+const visitorLoadCh = channel('apm:graphql:visitor:load')
+const printerLoadCh = channel('apm:graphql:printer:load')
+const utilitiesLoadCh = channel('apm:graphql:utilities:load')
+
 // execute channels
 const startExecuteCh = channel('apm:graphql:execute:start')
 const finishExecuteCh = channel('apm:graphql:execute:finish')
@@ -359,4 +364,19 @@ addHook({ name: 'graphql', file: 'validation/validate.js', versions: ['>=0.10'] 
   shimmer.wrap(validate, 'validate', wrapValidate)
 
   return validate
+})
+
+addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
+  printerLoadCh.publish(printer)
+  return printer
+})
+
+addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
+  visitorLoadCh.publish(visitor)
+  return visitor
+})
+
+addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
+  utilitiesLoadCh.publish(utilities)
+  return utilities
 })
