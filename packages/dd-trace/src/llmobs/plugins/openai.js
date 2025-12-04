@@ -9,7 +9,7 @@ const allowedParamKeys = new Set([
   'reasoning'
 ])
 
-function isIterable(obj) {
+function isIterable (obj) {
   if (obj == null) {
     return false
   }
@@ -21,7 +21,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai'
   static prefix = 'tracing:apm:openai:request'
 
-  getLLMObsSpanRegisterOptions(ctx) {
+  getLLMObsSpanRegisterOptions (ctx) {
     const resource = ctx.methodName
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
@@ -42,7 +42,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  setLLMObsTags(ctx) {
+  setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     const resource = ctx.methodName
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
@@ -76,7 +76,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  _getModelProviderAndClient(baseUrl = '') {
+  _getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
     } else if (baseUrl.includes('deepseek')) {
@@ -85,7 +85,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return { modelProvider: 'openai', client: 'OpenAI' }
   }
 
-  _extractMetrics(response) {
+  _extractMetric (response) {
     const metrics = {}
     const tokenUsage = response.usage
 
@@ -130,7 +130,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return metrics
   }
 
-  _tagEmbedding(span, inputs, response, error) {
+  _tagEmbedding (span, inputs, response, error) {
     const { model, ...parameters } = inputs
 
     const metadata = {
@@ -160,7 +160,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
   }
 
-  _tagCompletion(span, inputs, response, error) {
+  _tagCompletion (span, inputs, response, error) {
     let { prompt, model, ...parameters } = inputs
     if (!Array.isArray(prompt)) prompt = [prompt]
 
@@ -172,7 +172,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagMetadata(span, parameters)
   }
 
-  _tagChatCompletion(span, inputs, response, error) {
+  _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {
@@ -228,7 +228,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagLLMIO(span, messages, outputMessages)
   }
 
-  #tagResponse(span, inputs, response, error) {
+  #tagResponse (span, inputs, response, error) {
     // Tag metadata - use allowlist approach for request parameters
 
     const { input, model, ...parameters } = inputs
@@ -404,7 +404,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 }
 
 // TODO: this will be moved to the APM integration
-function normalizeOpenAIResourceName(resource) {
+function normalizeOpenAIResourceName (resource) {
   switch (resource) {
     // completions
     case 'completions.create':
@@ -427,13 +427,13 @@ function normalizeOpenAIResourceName(resource) {
   }
 }
 
-function gateResource(resource) {
+function gateResource (resource) {
   return ['createCompletion', 'createChatCompletion', 'createEmbedding', 'createResponse'].includes(resource)
     ? resource
     : undefined
 }
 
-function getOperation(resource) {
+function getOperation (resource) {
   switch (resource) {
     case 'createCompletion':
       return 'completion'
