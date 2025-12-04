@@ -367,16 +367,19 @@ addHook({ name: 'graphql', file: 'validation/validate.js', versions: ['>=0.10'] 
 })
 
 addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
-  printerLoadCh.publish(printer)
+  // HACK: It's possible `graphql` is loaded before `@apollo/gateway` so we
+  //       can't use a channel as the latter plugin would load after the publish
+  //       happened. Not sure how to handle this so for now use a global.
+  globalThis._dd_graphql_printer = printer
   return printer
 })
 
 addHook({ name: 'graphql', file: 'language/visitor.js', versions: ['>=0.10'] }, visitor => {
-  visitorLoadCh.publish(visitor)
+  globalThis._dd_graphql_visitor = visitor
   return visitor
 })
 
 addHook({ name: 'graphql', file: 'utilities/index.js', versions: ['>=0.10'] }, utilities => {
-  utilitiesLoadCh.publish(utilities)
+  globalThis._dd_graphql_utilities = utilities
   return utilities
 })
