@@ -11,6 +11,22 @@ class GraphQLExecutePlugin extends TracingPlugin {
   static type = 'graphql'
   static kind = 'server'
 
+  constructor (...args) {
+    super(...args)
+
+    this.addSub('apm:graphql:visitor:load', visitor => {
+      this._visitor = visitor
+    })
+
+    this.addSub('apm:graphql:printer:load', printer => {
+      this._printer = printer
+    })
+
+    this.addSub('apm:graphql:utilities:load', utilities => {
+      this._utilities = utilities
+    })
+  }
+
   bindStart (ctx) {
     const { operation, args, docSource } = ctx
 
@@ -21,7 +37,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: getSignature(document, name, type, this.config.signature),
+      resource: getSignature(document, name, type, this.config.signature, this),
       kind: this.constructor.kind,
       type: this.constructor.type,
       meta: {
@@ -66,10 +82,13 @@ function addVariableTags (config, span, variableValues) {
   span.addTags(tags)
 }
 
-function getSignature (document, operationName, operationType, calculate) {
+function getSignature (document, operationName, operationType, calculate, self) {
   if (calculate !== false && tools !== false) {
     try {
       try {
+        globalThis._dd_graphql_visitor = self._visitor
+        globalThis._dd_graphql_printer = self._printer
+        globalThis._dd_graphql_utilities = self._utilities
         tools = tools || require('./tools')
       } catch (e) {
         tools = false
