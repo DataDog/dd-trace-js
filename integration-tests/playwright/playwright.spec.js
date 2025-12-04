@@ -1372,7 +1372,7 @@ versions.forEach((version) => {
               }
               if (shouldIncludeFlakyTest) {
                 const flakyTests = tests.filter(
-                  test => test.meta[TEST_NAME] === 'attempt to fix flaky test does not interfere with attempt to fix'
+                  test => test.meta[TEST_NAME] === 'flaky test is retried without attempt to fix'
                 )
                 // it passes at the second attempt
                 assert.equal(flakyTests.length, 2)
@@ -1814,7 +1814,7 @@ versions.forEach((version) => {
           await runQuarantineTest({ isQuarantining: true })
         })
 
-        it('can quarantine tests when there are other flaky tests', async () => {
+        it('can quarantine tests when there are other flaky tests retried with --retries', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
           await runQuarantineTest({
@@ -1824,7 +1824,7 @@ versions.forEach((version) => {
           })
         })
 
-        it('can quarantine tests when there are other flaky tests with ATR', async () => {
+        it('can quarantine tests when there are other flaky tests retried with ATR', async () => {
           receiver.setSettings({
             test_management: { enabled: true },
             flaky_test_retries_enabled: true

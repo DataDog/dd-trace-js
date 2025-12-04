@@ -687,11 +687,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this, config)
 
-    // ATR (Automatic Test Retries) is now compatible with Test Management.
-    // Test Management tests will have their retries set to 0 at the test level,
-    // preventing them from being retried by ATR.
-    const shouldSetRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
-    if (shouldSetRetries) {
+    // ATR and `--retries` are now compatible with Test Management.
+    // Test Management tests have their retries set to 0 at the test level,
+    // preventing them from being retried by ATR or `--retries`.
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    if (shouldSetATRRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
@@ -927,7 +927,7 @@ addHook({
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
-          // Prevent ATR (project-level retries) from retrying attemptToFix tests
+          // Prevent ATR or `--retries` from retrying attemptToFix tests
           test.retries = 0
           const fileSuite = getSuiteType(test, 'file')
 
@@ -1003,6 +1003,7 @@ addHook({
         newTests.forEach(newTest => {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+            // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
             newTest.retries = 0
             const fileSuite = getSuiteType(newTest, 'file')
             if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
