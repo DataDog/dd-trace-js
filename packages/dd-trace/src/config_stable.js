@@ -5,6 +5,9 @@ const fs = require('fs')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 class StableConfig {
+  // Cache file contents by path so that StableConfig uses a stable view of the
+  // configuration files across multiple instantiations in the same process.
+  static #fileContentsCache = new Map()
   constructor () {
     this.warnings = [] // Logger hasn't been initialized yet, so we can't use log.warn
     this.localEntries = {}
@@ -61,13 +64,23 @@ class StableConfig {
   }
 
   _readConfigFromPath (path) {
+    const cache = StableConfig.#fileContentsCache
+
+    if (cache.has(path)) {
+      return cache.get(path)
+    }
+
     try {
-      return fs.readFileSync(path, 'utf8')
+      const contents = fs.readFileSync(path, 'utf8')
+      cache.set(path, contents)
+      return contents
     } catch (err) {
       if (err.code !== 'ENOENT') {
         this.warnings.push(`Error reading config file at ${path}. ${err.code}: ${err.message}`)
       }
-      return '' // Always return a string to avoid undefined.toString() errors
+      const contents = '' // Always return a string to avoid undefined.toString() errors
+      cache.set(path, contents)
+      return contents
     }
   }
 
