@@ -22,6 +22,9 @@ module.exports = {
   mode: 'production',
   devtool: false,
   context: join(__dirname, 'node_modules'),
+  externals: {
+    '@opentelemetry/api': '@opentelemetry/api'
+  },
   plugins: [
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
