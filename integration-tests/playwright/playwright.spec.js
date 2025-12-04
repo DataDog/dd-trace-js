@@ -333,6 +333,7 @@ versions.forEach((version) => {
       )
     })
 
+    // TODO: check that ATR and --retries does not affect EFD
     contextNewVersions('early flake detection', () => {
       it('retries new tests', async () => {
         receiver.setSettings({
@@ -1133,7 +1134,8 @@ versions.forEach((version) => {
           shouldAlwaysPass,
           shouldFailSometimes,
           isDisabled,
-          isQuarantined
+          isQuarantined,
+          shouldIncludeFlakyTest
         }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1222,7 +1224,18 @@ versions.forEach((version) => {
                 assert.equal(testsMarkedAsFailedAllRetries, 0)
                 assert.equal(testsMarkedAsPassedAllRetries, 0)
               }
-            }, 25000)
+              if (shouldIncludeFlakyTest) {
+                const flakyTests = tests.filter(
+                  test => test.meta[TEST_NAME] === 'attempt to fix flaky test does not interfere with attempt to fix'
+                )
+                // it passes at the second attempt
+                assert.equal(flakyTests.length, 2)
+                const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                assert.equal(passedFlakyTest.length, 1)
+                assert.equal(failedFlakyTest.length, 1)
+              }
+            }, 30000)
 
         const runAttemptToFixTest = async ({
           isAttemptingToFix,
@@ -1230,18 +1243,21 @@ versions.forEach((version) => {
           extraEnvVars,
           shouldAlwaysPass,
           shouldFailSometimes,
-          isDisabled
+          isDisabled,
+          shouldIncludeFlakyTest,
+          cliArgs = 'attempt-to-fix-test.js'
         } = {}) => {
           const testAssertionsPromise = getTestAssertions({
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
             isDisabled,
-            isQuarantined
+            isQuarantined,
+            shouldIncludeFlakyTest
           })
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
             {
               cwd,
               env: {
@@ -1250,6 +1266,7 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                 ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
                 ...extraEnvVars
               },
               stdio: 'pipe'
@@ -1369,7 +1386,33 @@ versions.forEach((version) => {
           await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
         })
 
-        // TODO: check that ATR and --retries from playwright do not affect attempt to fix tests
+        it('--retries is disabled for an attempt to fix test', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
+
+          await runAttemptToFixTest({
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            // passing retries has no effect
+            cliArgs: 'attempt-to-fix-test.js --retries=20',
+            shouldIncludeFlakyTest: true
+          })
+        })
+
+        it('ATR is disabled for an attempt to fix test', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+            flaky_test_retries_enabled: true
+          })
+
+          await runAttemptToFixTest({
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
+            shouldIncludeFlakyTest: true
+          })
+        })
       })
 
       context('disabled', () => {
