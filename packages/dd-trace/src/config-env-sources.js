@@ -1,19 +1,8 @@
 'use strict'
 
-const { getEnvironmentVariables } = require('./config-helper')
 const { isInServerlessEnvironment } = require('./serverless')
+const { getValueFromEnvSource, getEnvironmentVariable } = require('./config-helper')
 
-/**
- * ConfigEnvSources - Resolves configuration from stable config files and environment variables
- * This class loads and merges local stable config, environment variables, and fleet stable config
- * in the correct priority order BEFORE the main Config class is instantiated.
- *
- * Priority order (ascending):
- * 1. Local stable config (lowest priority)
- * 2. Environment variables (middle priority)
- * 3. Fleet/Managed stable config (highest priority)
- *
- */
 class ConfigEnvSources {
   constructor () {
     const isServerless = isInServerlessEnvironment()
@@ -29,20 +18,9 @@ class ConfigEnvSources {
       }
     }
 
-    const envVars = getEnvironmentVariables()
-
-    Object.assign(this, localStableConfig)
-    for (const [key, value] of Object.entries(envVars)) {
-      if (value !== undefined) {
-        this[key] = value
-      }
-    }
-
-    for (const [key, value] of Object.entries(fleetStableConfig)) {
-      if (value !== undefined) {
-        this[key] = value
-      }
-    }
+    // Expose raw stable config on the instance
+    this.localStableConfig = localStableConfig
+    this.fleetStableConfig = fleetStableConfig
   }
 
   #loadStableConfig () {
@@ -91,28 +69,16 @@ function resetConfigEnvSources () {
  * @throws {Error} if the configuration is not supported
  */
 function getResolvedEnv (name) {
-  const { supportedConfigurations, aliases } = require('./supported-configurations.json')
-  const aliasToCanonical = {}
-  for (const canonical of Object.keys(aliases)) {
-    for (const alias of aliases[canonical]) {
-      aliasToCanonical[alias] = canonical
-    }
-  }
-
-  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-      !supportedConfigurations[name]) {
-    throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
-  }
   const config = getConfigEnvSources()
-  const value = config[name]
-  if (value === undefined && aliases[name]) {
-    for (const alias of aliases[name]) {
-      if (config[alias] !== undefined) {
-        return config[alias]
-      }
-    }
+  if (getValueFromEnvSource(name, config.fleetStableConfig) !== undefined) {
+    return getValueFromEnvSource(name, config.fleetStableConfig)
   }
-  return value
+  if (getEnvironmentVariable(name) !== undefined) {
+    return getEnvironmentVariable(name)
+  }
+  if (getValueFromEnvSource(name, config.localStableConfig) !== undefined) {
+    return getValueFromEnvSource(name, config.localStableConfig)
+  }
 }
 
 module.exports = {
