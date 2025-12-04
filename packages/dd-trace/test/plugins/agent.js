@@ -487,7 +487,7 @@ module.exports = {
 
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
-        const port = listener.address().port
+        const port = this.port = listener.address().port
 
         tracer.init(Object.assign({}, {
           service: 'test',
@@ -671,6 +671,7 @@ module.exports = {
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
+        this.port = null
 
         resolve()
       })
