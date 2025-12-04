@@ -17,6 +17,7 @@ class StableConfig {
       return
     }
 
+    // cache the file reads
     const localConfig = this._readConfigFromPath(localConfigPath)
     const fleetConfig = this._readConfigFromPath(fleetConfigPath)
     if (!localConfig && !fleetConfig) {
