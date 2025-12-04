@@ -65,7 +65,6 @@ jobs:
       - run: ls -lisa
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased
-        working-directory: ./package
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
