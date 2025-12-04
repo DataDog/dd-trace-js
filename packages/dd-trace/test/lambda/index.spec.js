@@ -7,7 +7,6 @@ const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../plugins/agent')
-const { resetConfigEnvSources } = require('../../src/config-env-sources')
 const oldEnv = process.env
 /**
  * Sets up the minimum environment variables to make sure
@@ -212,8 +211,6 @@ describe('lambda', () => {
       // Set the desired handler to patch
       process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'lambda'
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      // Reset ConfigEnvSources so lambda module picks up the env vars
-      resetConfigEnvSources()
       // Register hook for patching
       await loadAgent()
 
@@ -277,8 +274,6 @@ describe('lambda', () => {
       it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, () => {
         process.env[flushDeadlineEnvVar] = customDeadline
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
-        // Reset ConfigEnvSources so lambda handler picks up the env vars
-        resetConfigEnvSources()
 
         const _context = {
           getRemainingTimeInMillis: () => 25

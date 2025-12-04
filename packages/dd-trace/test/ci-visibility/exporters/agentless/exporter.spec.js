@@ -26,10 +26,6 @@ describe('CI Visibility Agentless Exporter', () => {
 
   before(() => {
     process.env.DD_API_KEY = '1'
-    // Reset ConfigEnvSources so it picks up the DD_API_KEY
-    // Agentless exporters use getResolvedEnv('DD_API_KEY')
-    const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
-    resetConfigEnvSources()
   })
 
   after(() => {
@@ -181,8 +177,6 @@ describe('CI Visibility Agentless Exporter', () => {
         )
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
         process.env.DD_API_KEY = '1'
-        // Reset ConfigEnvSources to pick up the restored DD_API_KEY
-        resetConfigEnvSources()
         done()
       })
     })

@@ -11,7 +11,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const ddpv = require('mocha/package.json').version
-const { resetConfigEnvSources } = require('../../dd-trace/src/config-env-sources')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName) => {
@@ -760,7 +759,6 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is disabled via env var', () => {
           before(() => {
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            resetConfigEnvSources()
             return agent.load('mongodb-core', {})
           })
 
@@ -802,7 +800,6 @@ describe('Plugin', () => {
         describe('when heartbeat tracing is enabled via env var', () => {
           before(() => {
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            resetConfigEnvSources()
             return agent.load('mongodb-core', {})
           })
 

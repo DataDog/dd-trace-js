@@ -10,7 +10,6 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 const { storage } = require('../../datadog-core')
-const { resetConfigEnvSources } = require('../src/config-env-sources')
 
 /* eslint-disable no-console */
 
@@ -58,7 +57,6 @@ describe('log', () => {
       process.env.DD_TRACE_LOG_LEVEL = 'error'
       process.env.DD_TRACE_DEBUG = 'false'
       process.env.OTEL_LOG_LEVEL = 'debug'
-      resetConfigEnvSources()
       const config = proxyquire('../src/log', {}).getConfig()
       assert.strictEqual(config.enabled, false)
       assert.strictEqual(config.logLevel, 'error')
@@ -66,7 +64,6 @@ describe('log', () => {
 
     it('should initialize with OTEL environment variables when DD env vars are not set', () => {
       process.env.OTEL_LOG_LEVEL = 'debug'
-      resetConfigEnvSources()
       const config = proxyquire('../src/log', {}).getConfig()
       assert.strictEqual(config.enabled, true)
       assert.strictEqual(config.logLevel, 'debug')
@@ -74,14 +71,12 @@ describe('log', () => {
 
     it('should initialize from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'true'
-      resetConfigEnvSources()
       const config = proxyquire('../src/log', {}).getConfig()
       assert.strictEqual(config.enabled, true)
     })
 
     it('should read case-insensitive booleans from environment variables', () => {
       process.env.DD_TRACE_DEBUG = 'TRUE'
-      resetConfigEnvSources()
       const config = proxyquire('../src/log', {}).getConfig()
       assert.strictEqual(config.enabled, true)
     })
@@ -95,24 +90,20 @@ describe('log', () => {
 
       it('uses DD_TRACE_DEBUG when fleetStableConfigValue is not set', () => {
         process.env.DD_TRACE_DEBUG = 'true'
-        resetConfigEnvSources()
         let log = proxyquire('../src/log', {})
         assert.strictEqual(log.isEnabled(undefined, 'false'), true)
 
         process.env.DD_TRACE_DEBUG = 'false'
-        resetConfigEnvSources()
         log = proxyquire('../src/log', {})
         assert.strictEqual(log.isEnabled(undefined, 'true'), false)
       })
 
       it('uses OTEL_LOG_LEVEL=debug when DD vars are not set', () => {
         process.env.OTEL_LOG_LEVEL = 'debug'
-        resetConfigEnvSources()
         let log = proxyquire('../src/log', {})
         assert.strictEqual(log.isEnabled(undefined, undefined), true)
 
         process.env.OTEL_LOG_LEVEL = 'info'
-        resetConfigEnvSources()
         log = proxyquire('../src/log', {})
         assert.strictEqual(log.isEnabled(undefined, undefined), false)
       })
