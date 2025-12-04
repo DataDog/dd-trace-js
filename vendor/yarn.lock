@@ -166,11 +166,6 @@
     "@emnapi/runtime" "^1.5.0"
     "@tybys/wasm-util" "^0.10.1"
 
-"@openfeature/core@^1.9.0":
-  version "1.9.1"
-  resolved "https://registry.yarnpkg.com/@openfeature/core/-/core-1.9.1.tgz#9925a04ed0745e92dd7b3793b35cff1ed89d54c1"
-  integrity sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==
-
 "@openfeature/server-sdk@~1.18.0":
   version "1.18.0"
   resolved "https://registry.yarnpkg.com/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz#5fed5f1d0900b2535878db18a78295bbaebb997b"
