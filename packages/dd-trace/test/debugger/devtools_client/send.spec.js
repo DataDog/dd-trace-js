@@ -15,9 +15,6 @@ require('../../setup/mocha')
 
 process.env.DD_ENV = 'my-env'
 process.env.DD_VERSION = 'my-version'
-// Reset ConfigEnvSources so it picks up DD_ENV and DD_VERSION
-const { resetConfigEnvSources } = require('../../../src/config-env-sources')
-resetConfigEnvSources()
 const service = 'my-service'
 const commitSHA = 'my-commit-sha'
 const repositoryUrl = 'my-repository-url'
