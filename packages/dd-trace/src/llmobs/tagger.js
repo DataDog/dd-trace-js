@@ -37,21 +37,21 @@ const { storage } = require('./storage')
 const registry = new WeakMap()
 
 class LLMObsTagger {
-  constructor(config, softFail = false) {
+  constructor (config, softFail = false) {
     this._config = config
 
     this.softFail = softFail
   }
 
-  static get tagMap() {
+  static get tagMap () {
     return registry
   }
 
-  static getSpanKind(span) {
+  static getSpanKind (span) {
     return registry.get(span)?.[SPAN_KIND]
   }
 
-  registerLLMObsSpan(span, {
+  registerLLMObsSpan (span, {
     modelName,
     modelProvider,
     sessionId,
@@ -114,27 +114,27 @@ class LLMObsTagger {
 
   // TODO: similarly for the following `tag` methods,
   // how can we transition from a span weakmap to core API functionality
-  tagLLMIO(span, inputData, outputData) {
+  tagLLMIO (span, inputData, outputData) {
     this.#tagMessages(span, inputData, INPUT_MESSAGES)
     this.#tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
-  tagEmbeddingIO(span, inputData, outputData) {
+  tagEmbeddingIO (span, inputData, outputData) {
     this.#tagDocuments(span, inputData, INPUT_DOCUMENTS)
     this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
-  tagRetrievalIO(span, inputData, outputData) {
+  tagRetrievalIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
-  tagTextIO(span, inputData, outputData) {
+  tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
   }
 
-  tagMetadata(span, metadata) {
+  tagMetadata (span, metadata) {
     const existingMetadata = registry.get(span)?.[METADATA]
     if (existingMetadata) {
       Object.assign(existingMetadata, metadata)
@@ -143,7 +143,7 @@ class LLMObsTagger {
     }
   }
 
-  tagMetrics(span, metrics) {
+  tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
       let processedKey = key
@@ -185,7 +185,7 @@ class LLMObsTagger {
     }
   }
 
-  tagSpanTags(span, tags) {
+  tagSpanTags (span, tags) {
     const currentTags = registry.get(span)?.[TAGS]
     if (currentTags) {
       Object.assign(currentTags, tags)
@@ -194,15 +194,15 @@ class LLMObsTagger {
     }
   }
 
-  changeKind(span, newKind) {
+  changeKind (span, newKind) {
     this._setTag(span, SPAN_KIND, newKind)
   }
 
-  tagModelName(span, modelName) {
+  tagModelName (span, modelName) {
     this._setTag(span, MODEL_NAME, modelName)
   }
 
-  #tagText(span, data, key) {
+  #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
         this._setTag(span, key, data)
@@ -217,7 +217,7 @@ class LLMObsTagger {
     }
   }
 
-  #tagDocuments(span, data, key) {
+  #tagDocuments (span, data, key) {
     if (!data) {
       return
     }
@@ -261,7 +261,7 @@ class LLMObsTagger {
     }
   }
 
-  #filterToolCalls(toolCalls) {
+  #filterToolCalls (toolCalls) {
     if (!Array.isArray(toolCalls)) {
       toolCalls = [toolCalls]
     }
@@ -288,7 +288,7 @@ class LLMObsTagger {
     return filteredToolCalls
   }
 
-  #filterToolResults(toolResults) {
+  #filterToolResults (toolResults) {
     if (!Array.isArray(toolResults)) {
       toolResults = [toolResults]
     }
@@ -320,7 +320,7 @@ class LLMObsTagger {
     return filteredToolResults
   }
 
-  #tagMessages(span, data, key) {
+  #tagMessages (span, data, key) {
     if (!data) {
       return
     }
@@ -397,7 +397,7 @@ class LLMObsTagger {
     }
   }
 
-  #tagConditionalString(data, type, carrier, key) {
+  #tagConditionalString (data, type, carrier, key) {
     if (data == null) return true
     if (typeof data !== 'string') {
       this.#handleFailure(`"${type}" must be a string.`)
@@ -407,7 +407,7 @@ class LLMObsTagger {
     return true
   }
 
-  #tagConditionalNumber(data, type, carrier, key) {
+  #tagConditionalNumber (data, type, carrier, key) {
     if (data == null) return true
     if (typeof data !== 'number') {
       this.#handleFailure(`"${type}" must be a number.`)
@@ -429,19 +429,19 @@ class LLMObsTagger {
 
   // any public-facing LLMObs APIs using this tagger should not soft fail
   // auto-instrumentation should soft fail
-  #handleFailure(msg, errorTag) {
+  #handleFailure (msg, errorTag) {
     if (this.softFail) {
       log.warn(msg)
     } else {
       const err = new Error(msg)
       if (errorTag) {
-        Object.defineProperty(err, 'ddErrorTag', { get() { return errorTag } })
+        Object.defineProperty(err, 'ddErrorTag', { get () { return errorTag } })
       }
       throw err
     }
   }
 
-  _register(span) {
+  _register (span) {
     if (!this._config.llmobs.enabled) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
@@ -451,7 +451,7 @@ class LLMObsTagger {
     registry.set(span, {})
   }
 
-  _setTag(span, key, value) {
+  _setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
