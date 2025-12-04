@@ -85,7 +85,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return { modelProvider: 'openai', client: 'OpenAI' }
   }
 
-  _extractMetric (response) {
+  _extractMetrics (response) {
     const metrics = {}
     const tokenUsage = response.usage
 
