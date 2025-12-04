@@ -113,6 +113,7 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER

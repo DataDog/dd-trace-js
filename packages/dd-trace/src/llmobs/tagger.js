@@ -417,7 +417,7 @@ class LLMObsTagger {
     return true
   }
 
-  #tagConditionalObject(data, type, carrier, key) {
+  #tagConditionalObject (data, type, carrier, key) {
     if (data == null) return true
     if (typeof data !== 'object') {
       this.#handleFailure(`"${type}" must be an object.`)
