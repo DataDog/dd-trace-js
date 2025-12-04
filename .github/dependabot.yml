@@ -31,7 +31,7 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 100
     cooldown:
       default-days: 1
       exclude:
@@ -50,6 +50,7 @@ updates:
       - dependency-name: "@datadog/pprof"
       - dependency-name: "@datadog/sketches-js"
       - dependency-name: "@datadog/wasm-js-rewriter"
+
       - dependency-name: "@types/node"
         # Update the types manually with new Node.js version support
         update-types: ["version-update:semver-major"]
@@ -99,7 +100,7 @@ updates:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
     labels:
       - dependabot
       - dependencies
@@ -114,7 +115,7 @@ updates:
       - "/integration-tests/esbuild"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
     labels:
       - dependabot
       - dependencies
