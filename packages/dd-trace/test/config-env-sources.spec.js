@@ -12,21 +12,16 @@ describe('ConfigEnvSources', () => {
   let createConfigEnvSources
   let getConfigEnvSources
   let resetConfigEnvSources
-  let getEnvironmentVariablesStub
   let isInServerlessEnvironmentStub
   let StableConfigStub
 
   beforeEach(() => {
     // Reset stubs
-    getEnvironmentVariablesStub = sinon.stub()
     isInServerlessEnvironmentStub = sinon.stub()
     StableConfigStub = sinon.stub()
 
     // Load module with stubs
     const mod = proxyquire('../src/config-env-sources', {
-      './config-helper': {
-        getEnvironmentVariables: getEnvironmentVariablesStub
-      },
       './serverless': {
         isInServerlessEnvironment: isInServerlessEnvironmentStub
       },
@@ -48,147 +43,67 @@ describe('ConfigEnvSources', () => {
   })
 
   describe('constructor', () => {
-    it('should merge sources in correct priority order: local < env < fleet', () => {
+    it('should load stable config when not in serverless environment', () => {
       isInServerlessEnvironmentStub.returns(false)
 
       // Mock stable config with local and fleet entries
-      StableConfigStub.returns({
-        localEntries: {
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {
           DD_SERVICE: 'local-service',
           DD_ENV: 'local-env',
           DD_VERSION: 'local-version'
-        },
-        fleetEntries: {
+        }
+        this.fleetEntries = {
           DD_SERVICE: 'fleet-service',
           DD_ENV: 'fleet-env'
-        },
-        warnings: []
-      })
-
-      // Mock environment variables
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'env-service',
-        DD_TRACE_ENABLED: 'true'
+        }
+        this.warnings = []
       })
 
       const sources = new ConfigEnvSources()
 
-      // Fleet should win for DD_SERVICE
-      expect(sources.DD_SERVICE).to.equal('fleet-service')
-      // Fleet should win for DD_ENV
-      expect(sources.DD_ENV).to.equal('fleet-env')
-      // Env should win for DD_TRACE_ENABLED (not in stable config)
-      expect(sources.DD_TRACE_ENABLED).to.equal('true')
-      // Local should be used for DD_VERSION (not overridden)
-      expect(sources.DD_VERSION).to.equal('local-version')
-    })
-
-    it('should use environment variables when stable config is not available', () => {
-      isInServerlessEnvironmentStub.returns(false)
-
-      // StableConfig throws error (not available)
-      StableConfigStub.throws(new Error('Config not found'))
-
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'env-service',
-        DD_ENV: 'env-env'
+      expect(StableConfigStub.calledOnce).to.be.true
+      expect(sources.localStableConfig).to.deep.equal({
+        DD_SERVICE: 'local-service',
+        DD_ENV: 'local-env',
+        DD_VERSION: 'local-version'
       })
-
-      const sources = new ConfigEnvSources()
-
-      expect(sources.DD_SERVICE).to.equal('env-service')
-      expect(sources.DD_ENV).to.equal('env-env')
+      expect(sources.fleetStableConfig).to.deep.equal({
+        DD_SERVICE: 'fleet-service',
+        DD_ENV: 'fleet-env'
+      })
     })
 
     it('should not load stable config in serverless environment', () => {
       isInServerlessEnvironmentStub.returns(true)
 
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'env-service',
-        DD_ENV: 'env-env'
-      })
-
       const sources = new ConfigEnvSources()
 
       // StableConfig should not be called
       expect(StableConfigStub.called).to.be.false
-      expect(sources.DD_SERVICE).to.equal('env-service')
-      expect(sources.DD_ENV).to.equal('env-env')
+      expect(sources.localStableConfig).to.deep.equal({})
+      expect(sources.fleetStableConfig).to.deep.equal({})
     })
 
-    it('should handle undefined values correctly', () => {
+    it('should handle empty or missing stable config entries', () => {
       isInServerlessEnvironmentStub.returns(false)
 
-      StableConfigStub.returns({
-        localEntries: {
-          DD_SERVICE: 'local-service',
-          DD_ENV: undefined
-        },
-        fleetEntries: {
-          DD_VERSION: 'fleet-version'
-        },
-        warnings: []
-      })
-
-      getEnvironmentVariablesStub.returns({
-        DD_TRACE_ENABLED: 'true',
-        DD_TRACE_DEBUG: undefined
+      StableConfigStub.callsFake(function () {
+        this.localEntries = null
+        this.fleetEntries = undefined
+        this.warnings = []
       })
 
       const sources = new ConfigEnvSources()
 
-      expect(sources.DD_SERVICE).to.equal('local-service')
-      expect(sources.DD_ENV).to.be.undefined
-      expect(sources.DD_VERSION).to.equal('fleet-version')
-      expect(sources.DD_TRACE_ENABLED).to.equal('true')
-      expect(sources.DD_TRACE_DEBUG).to.be.undefined
-    })
-
-    it('should make values accessible as properties', () => {
-      isInServerlessEnvironmentStub.returns(false)
-
-      StableConfigStub.returns({
-        localEntries: {},
-        fleetEntries: {},
-        warnings: []
-      })
-
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'my-service',
-        DD_ENV: 'production'
-      })
-
-      const sources = new ConfigEnvSources()
-
-      // Access as property
-      expect(sources.DD_SERVICE).to.equal('my-service')
-      // Access as bracket notation
-      expect(sources.DD_ENV).to.equal('production')
-    })
-
-    it('should handle empty stable config entries', () => {
-      isInServerlessEnvironmentStub.returns(false)
-
-      StableConfigStub.returns({
-        localEntries: null,
-        fleetEntries: undefined,
-        warnings: []
-      })
-
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'env-service'
-      })
-
-      const sources = new ConfigEnvSources()
-
-      expect(sources.DD_SERVICE).to.equal('env-service')
+      expect(sources.localStableConfig).to.deep.equal({})
+      expect(sources.fleetStableConfig).to.deep.equal({})
     })
   })
 
   describe('createConfigEnvSources', () => {
     it('should create a new ConfigEnvSources instance', () => {
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({})
 
       const sources1 = createConfigEnvSources()
       const sources2 = createConfigEnvSources()
@@ -202,7 +117,6 @@ describe('ConfigEnvSources', () => {
   describe('getConfigEnvSources', () => {
     it('should return a singleton instance', () => {
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({})
 
       const sources1 = getConfigEnvSources()
       const sources2 = getConfigEnvSources()
@@ -214,28 +128,24 @@ describe('ConfigEnvSources', () => {
     it('should create instance only once', () => {
       isInServerlessEnvironmentStub.returns(false)
 
-      StableConfigStub.returns({
-        localEntries: {},
-        fleetEntries: {},
-        warnings: []
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {}
+        this.fleetEntries = {}
+        this.warnings = []
       })
 
-      getEnvironmentVariablesStub.returns({})
-
       getConfigEnvSources()
       getConfigEnvSources()
       getConfigEnvSources()
 
-      // StableConfig should only be called once
+      // StableConfig should only be instantiated once
       expect(StableConfigStub.callCount).to.equal(1)
-      expect(getEnvironmentVariablesStub.callCount).to.equal(1)
     })
   })
 
   describe('resetConfigEnvSources', () => {
     it('should reset the singleton instance', () => {
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({})
 
       const sources1 = getConfigEnvSources()
       resetConfigEnvSources()
@@ -245,78 +155,31 @@ describe('ConfigEnvSources', () => {
     })
 
     it('should allow fresh instance creation with updated values', () => {
-      isInServerlessEnvironmentStub.returns(true)
+      isInServerlessEnvironmentStub.returns(false)
 
-      getEnvironmentVariablesStub.onCall(0).returns({
-        DD_SERVICE: 'service-1'
+      StableConfigStub.onCall(0).callsFake(function () {
+        this.localEntries = {
+          DD_SERVICE: 'service-1'
+        }
+        this.fleetEntries = {}
+        this.warnings = []
+      })
+
+      StableConfigStub.onCall(1).callsFake(function () {
+        this.localEntries = {
+          DD_SERVICE: 'service-2'
+        }
+        this.fleetEntries = {}
+        this.warnings = []
       })
 
       const sources1 = getConfigEnvSources()
-      expect(sources1.DD_SERVICE).to.equal('service-1')
+      expect(sources1.localStableConfig.DD_SERVICE).to.equal('service-1')
 
       resetConfigEnvSources()
 
-      getEnvironmentVariablesStub.onCall(1).returns({
-        DD_SERVICE: 'service-2'
-      })
-
       const sources2 = getConfigEnvSources()
-      expect(sources2.DD_SERVICE).to.equal('service-2')
-    })
-  })
-
-  describe('priority scenarios', () => {
-    it('should prioritize fleet over env over local', () => {
-      isInServerlessEnvironmentStub.returns(false)
-
-      StableConfigStub.returns({
-        localEntries: {
-          DD_TRACE_SAMPLE_RATE: '0.1',
-          DD_TRACE_ENABLED: 'false',
-          DD_SERVICE: 'local'
-        },
-        fleetEntries: {
-          DD_TRACE_SAMPLE_RATE: '0.9',
-          DD_SERVICE: 'fleet'
-        },
-        warnings: []
-      })
-
-      getEnvironmentVariablesStub.returns({
-        DD_TRACE_SAMPLE_RATE: '0.5',
-        DD_TRACE_ENABLED: 'true'
-      })
-
-      const sources = new ConfigEnvSources()
-
-      // Fleet wins
-      expect(sources.DD_TRACE_SAMPLE_RATE).to.equal('0.9')
-      expect(sources.DD_SERVICE).to.equal('fleet')
-      // Env wins (not in fleet)
-      expect(sources.DD_TRACE_ENABLED).to.equal('true')
-    })
-
-    it('should not override defined values with undefined', () => {
-      isInServerlessEnvironmentStub.returns(false)
-
-      StableConfigStub.returns({
-        localEntries: {
-          DD_SERVICE: 'local-service'
-        },
-        fleetEntries: {
-          DD_SERVICE: undefined
-        },
-        warnings: []
-      })
-
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: undefined
-      })
-
-      const sources = new ConfigEnvSources()
-
-      // Local value should remain since higher priorities are undefined
-      expect(sources.DD_SERVICE).to.equal('local-service')
+      expect(sources2.localStableConfig.DD_SERVICE).to.equal('service-2')
     })
   })
 })
@@ -324,19 +187,15 @@ describe('ConfigEnvSources', () => {
 describe('getResolvedEnv', () => {
   let getResolvedEnv
   let resetConfigEnvSources
-  let getEnvironmentVariablesStub
   let isInServerlessEnvironmentStub
+  let originalEnv
 
   beforeEach(() => {
-    // Reset stubs
-    getEnvironmentVariablesStub = sinon.stub()
     isInServerlessEnvironmentStub = sinon.stub().returns(true)
+    originalEnv = process.env
+    process.env = { ...originalEnv }
 
-    // Load config-env-sources with stubs
     const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
-      './config-helper': {
-        getEnvironmentVariables: getEnvironmentVariablesStub
-      },
       './serverless': {
         isInServerlessEnvironment: isInServerlessEnvironmentStub
       }
@@ -352,13 +211,12 @@ describe('getResolvedEnv', () => {
   afterEach(() => {
     sinon.restore()
     resetConfigEnvSources()
+    process.env = originalEnv
   })
 
   it('should return value from ConfigEnvSources for supported configuration', () => {
-    getEnvironmentVariablesStub.returns({
-      DD_SERVICE: 'my-service',
-      DD_ENV: 'production'
-    })
+    process.env.DD_SERVICE = 'my-service'
+    process.env.DD_ENV = 'production'
 
     const value = getResolvedEnv('DD_SERVICE')
 
@@ -366,9 +224,7 @@ describe('getResolvedEnv', () => {
   })
 
   it('should fall back to alias if canonical name is not set', () => {
-    getEnvironmentVariablesStub.returns({
-      DD_TRACE_AGENT_HOSTNAME: 'alias-hostname'
-    })
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
 
     // DD_AGENT_HOST is the canonical name, DD_TRACE_AGENT_HOSTNAME is an alias
     const value = getResolvedEnv('DD_AGENT_HOST')
@@ -377,9 +233,7 @@ describe('getResolvedEnv', () => {
   })
 
   it('should return undefined if neither canonical nor alias is set', () => {
-    getEnvironmentVariablesStub.returns({
-      DD_SERVICE: 'my-service'
-    })
+    process.env.DD_SERVICE = 'my-service'
 
     const value = getResolvedEnv('DD_ENV')
 
@@ -387,10 +241,8 @@ describe('getResolvedEnv', () => {
   })
 
   it('should prefer canonical name over alias', () => {
-    getEnvironmentVariablesStub.returns({
-      DD_AGENT_HOST: 'canonical-hostname',
-      DD_TRACE_AGENT_HOSTNAME: 'alias-hostname'
-    })
+    process.env.DD_AGENT_HOST = 'canonical-hostname'
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
 
     const value = getResolvedEnv('DD_AGENT_HOST')
 
@@ -398,26 +250,20 @@ describe('getResolvedEnv', () => {
   })
 
   it('should throw error for unsupported DD_ configuration', () => {
-    getEnvironmentVariablesStub.returns({})
-
     expect(() => {
       getResolvedEnv('DD_UNSUPPORTED_CONFIG')
     }).to.throw('Missing DD_UNSUPPORTED_CONFIG env/configuration in "supported-configurations.json" file.')
   })
 
   it('should throw error for unsupported OTEL_ configuration', () => {
-    getEnvironmentVariablesStub.returns({})
-
     expect(() => {
       getResolvedEnv('OTEL_UNSUPPORTED_CONFIG')
     }).to.throw('Missing OTEL_UNSUPPORTED_CONFIG env/configuration in "supported-configurations.json" file.')
   })
 
   it('should return value for non-DD/OTEL environment variables', () => {
-    getEnvironmentVariablesStub.returns({
-      NODE_ENV: 'production',
-      PATH: '/usr/bin'
-    })
+    process.env.NODE_ENV = 'production'
+    process.env.PATH = '/usr/bin'
 
     const value = getResolvedEnv('NODE_ENV')
 
@@ -425,39 +271,34 @@ describe('getResolvedEnv', () => {
   })
 
   it('should use singleton ConfigEnvSources instance', () => {
-    getEnvironmentVariablesStub.returns({
-      DD_SERVICE: 'my-service'
-    })
+    isInServerlessEnvironmentStub.returns(true)
+    process.env.DD_SERVICE = 'my-service'
 
     getResolvedEnv('DD_SERVICE')
     getResolvedEnv('DD_ENV')
 
-    // getEnvironmentVariables should only be called once (when singleton is created)
-    expect(getEnvironmentVariablesStub.callCount).to.equal(1)
+    // ConfigEnvSources should only be instantiated once (isInServerlessEnvironment called once)
+    expect(isInServerlessEnvironmentStub.callCount).to.equal(1)
   })
 
   it('should work with merged values from stable config and env vars', () => {
-    const StableConfigStub = sinon.stub().returns({
-      localEntries: {
+    const StableConfigStub = sinon.stub()
+    StableConfigStub.callsFake(function () {
+      this.localEntries = {
         DD_SERVICE: 'local-service'
-      },
-      fleetEntries: {
+      }
+      this.fleetEntries = {
         DD_SERVICE: 'fleet-service'
-      },
-      warnings: []
+      }
+      this.warnings = []
     })
 
     const isInServerlessStub = sinon.stub().returns(false)
-    const getEnvVarsStub = sinon.stub().returns({
-      DD_ENV: 'production'
-    })
+    process.env.DD_ENV = 'production'
 
     // Re-setup with stable config stub
     resetConfigEnvSources()
     const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
-      './config-helper': {
-        getEnvironmentVariables: getEnvVarsStub
-      },
       './serverless': {
         isInServerlessEnvironment: isInServerlessStub
       },
@@ -472,21 +313,85 @@ describe('getResolvedEnv', () => {
     expect(getResolvedEnvFn('DD_ENV')).to.equal('production')
   })
 
+  describe('priority scenarios', () => {
+    it('should prioritize fleet over env over local', () => {
+      const StableConfigStub = sinon.stub()
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {
+          DD_TRACE_SAMPLE_RATE: '0.1',
+          DD_TRACE_ENABLED: 'false',
+          DD_SERVICE: 'local'
+        }
+        this.fleetEntries = {
+          DD_TRACE_SAMPLE_RATE: '0.9',
+          DD_SERVICE: 'fleet'
+        }
+        this.warnings = []
+      })
+
+      const isInServerlessStub = sinon.stub().returns(false)
+
+      process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      resetConfigEnvSources()
+      const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
+        './serverless': {
+          isInServerlessEnvironment: isInServerlessStub
+        },
+        './config_stable': StableConfigStub
+      })
+
+      const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
+
+      // Fleet wins
+      expect(getResolvedEnvFn('DD_TRACE_SAMPLE_RATE')).to.equal('0.9')
+      expect(getResolvedEnvFn('DD_SERVICE')).to.equal('fleet')
+      // Env wins (not in fleet)
+      expect(getResolvedEnvFn('DD_TRACE_ENABLED')).to.equal('true')
+    })
+
+    it('should not override defined values with undefined', () => {
+      const StableConfigStub = sinon.stub()
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {
+          DD_SERVICE: 'local-service'
+        }
+        this.fleetEntries = {
+          DD_SERVICE: undefined
+        }
+        this.warnings = []
+      })
+
+      const isInServerlessStub = sinon.stub().returns(false)
+
+      // Env var is not set (undefined)
+
+      resetConfigEnvSources()
+      const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
+        './serverless': {
+          isInServerlessEnvironment: isInServerlessStub
+        },
+        './config_stable': StableConfigStub
+      })
+
+      const getResolvedEnvFn = configEnvSourcesMod.getResolvedEnv
+
+      // Local value should remain since higher priorities are undefined
+      expect(getResolvedEnvFn('DD_SERVICE')).to.equal('local-service')
+    })
+  })
+
   describe('compatibility with getEnvironmentVariable', () => {
     it('should return env var values when no stable config exists (serverless)', () => {
       // Set up env without stable config (serverless mode)
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'my-service',
-        DD_ENV: 'production',
-        DD_TRACE_AGENT_PORT: '8126'
-      })
+      process.env.DD_SERVICE = 'my-service'
+      process.env.DD_ENV = 'production'
+      process.env.DD_TRACE_AGENT_PORT = '8126'
 
       resetConfigEnvSources()
       const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
-        './config-helper': {
-          getEnvironmentVariables: getEnvironmentVariablesStub
-        },
         './serverless': {
           isInServerlessEnvironment: isInServerlessEnvironmentStub
         }
@@ -502,15 +407,10 @@ describe('getResolvedEnv', () => {
 
     it('should return undefined for unset values', () => {
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({
-        DD_SERVICE: 'my-service'
-      })
+      process.env.DD_SERVICE = 'my-service'
 
       resetConfigEnvSources()
       const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
-        './config-helper': {
-          getEnvironmentVariables: getEnvironmentVariablesStub
-        },
         './serverless': {
           isInServerlessEnvironment: isInServerlessEnvironmentStub
         }
@@ -525,13 +425,9 @@ describe('getResolvedEnv', () => {
 
     it('should throw same error for unsupported configuration', () => {
       isInServerlessEnvironmentStub.returns(true)
-      getEnvironmentVariablesStub.returns({})
 
       resetConfigEnvSources()
       const configEnvSourcesMod = proxyquire('../src/config-env-sources', {
-        './config-helper': {
-          getEnvironmentVariables: getEnvironmentVariablesStub
-        },
         './serverless': {
           isInServerlessEnvironment: isInServerlessEnvironmentStub
         }
