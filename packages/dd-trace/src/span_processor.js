@@ -83,8 +83,6 @@ class SpanProcessor {
   }
 
   _erase (trace, active) {
-    // Use getEnvironmentVariable instead of getResolvedEnv to avoid triggering async_hooks during span processing
-    // TODO: This needs to be supported by stable config, though...
     if (getResolvedEnv('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
       const started = new Set()
       const startedIds = new Set()

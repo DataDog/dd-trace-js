@@ -326,9 +326,7 @@ function useLlmObs ({
     })
   })
 
-  beforeEach(() => {
-    resetTracesPromises()
-  })
+  beforeEach(resetTracesPromises)
 
   after(() => {
     return agent.close({ ritmReset: false, ...closeOptions })

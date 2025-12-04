@@ -270,7 +270,6 @@ class Config {
   }
 
   constructor (options = {}) {
-    // TODO (mtoffl01, 2025-11-24): We can remove this if we move the stable config loading to ConfigEnvSources
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
       const StableConfig = require('./config_stable')

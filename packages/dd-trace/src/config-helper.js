@@ -121,5 +121,4 @@ module.exports = {
     }
     return value
   }
-
 }
