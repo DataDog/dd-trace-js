@@ -144,9 +144,6 @@ describe('CI Visibility Agentless Exporter', () => {
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
       delete process.env.DD_API_KEY
-      // Reset ConfigEnvSources to pick up the deleted DD_API_KEY
-      const { resetConfigEnvSources } = require('../../../../src/config-env-sources')
-      resetConfigEnvSources()
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
