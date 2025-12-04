@@ -800,6 +800,153 @@ versions.forEach((version) => {
             })
         ])
       })
+
+      it('--retries is disabled for tests retried by EFD', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          playwright: {
+            'flaky-test.js': ['playwright should retry old flaky tests']
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js --retries=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-efd-and-retries'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
+              )
+              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.forEach(test => {
+                // tests always fail because ATR and --retries are disabled for EFD,
+                // so testInfo.retry is always 0
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              retriedNewTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
+              // --retries works normally for old flaky tests
+              const oldFlakyTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
+              )
+              assert.equal(oldFlakyTests.length, 2)
+              const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              assert.equal(passedFlakyTests.length, 1)
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.ext)
+              const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.equal(failedFlakyTests.length, 1)
+            })
+        ])
+      })
+
+      it('ATR is disabled for tests retried by EFD', async () => {
+        receiver.setSettings({
+          known_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          },
+          flaky_test_retries_enabled: true
+        })
+
+        receiver.setKnownTests({
+          playwright: {
+            'flaky-test.js': ['playwright should retry old flaky tests']
+          }
+        })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-efd-and-retries',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
+              )
+              assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedNewTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedNewTests.length, NUM_RETRIES_EFD)
+              retriedNewTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
+              // ATR works normally for old flaky tests
+              const oldFlakyTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
+              )
+              assert.equal(oldFlakyTests.length, 2)
+              const passedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              assert.equal(passedFlakyTests.length, 1)
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_IS_RETRY, 'true')
+              assert.propertyVal(passedFlakyTests[0].meta, TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+              const failedFlakyTests = oldFlakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.equal(failedFlakyTests.length, 1)
+            })
+        ])
+      })
     })
 
     it('does not crash when maxFailures=1 and there is an error', (done) => {
@@ -1133,7 +1280,8 @@ versions.forEach((version) => {
           shouldAlwaysPass,
           shouldFailSometimes,
           isDisabled,
-          isQuarantined
+          isQuarantined,
+          shouldIncludeFlakyTest
         }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
@@ -1222,7 +1370,18 @@ versions.forEach((version) => {
                 assert.equal(testsMarkedAsFailedAllRetries, 0)
                 assert.equal(testsMarkedAsPassedAllRetries, 0)
               }
-            }, 25000)
+              if (shouldIncludeFlakyTest) {
+                const flakyTests = tests.filter(
+                  test => test.meta[TEST_NAME] === 'flaky test is retried without attempt to fix'
+                )
+                // it passes at the second attempt
+                assert.equal(flakyTests.length, 2)
+                const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                assert.equal(passedFlakyTest.length, 1)
+                assert.equal(failedFlakyTest.length, 1)
+              }
+            }, 30000)
 
         const runAttemptToFixTest = async ({
           isAttemptingToFix,
@@ -1230,18 +1389,21 @@ versions.forEach((version) => {
           extraEnvVars,
           shouldAlwaysPass,
           shouldFailSometimes,
-          isDisabled
+          isDisabled,
+          shouldIncludeFlakyTest,
+          cliArgs = 'attempt-to-fix-test.js'
         } = {}) => {
           const testAssertionsPromise = getTestAssertions({
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
             isDisabled,
-            isQuarantined
+            isQuarantined,
+            shouldIncludeFlakyTest
           })
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
             {
               cwd,
               env: {
@@ -1250,6 +1412,7 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-test-management',
                 ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                 ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
                 ...extraEnvVars
               },
               stdio: 'pipe'
@@ -1367,6 +1530,34 @@ versions.forEach((version) => {
           })
 
           await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
+        })
+
+        it('--retries is disabled for an attempt to fix test', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES }
+          })
+
+          await runAttemptToFixTest({
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            // passing retries has no effect
+            cliArgs: 'attempt-to-fix-test.js --retries=20',
+            shouldIncludeFlakyTest: true
+          })
+        })
+
+        it('ATR is disabled for an attempt to fix test', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+            flaky_test_retries_enabled: true
+          })
+
+          await runAttemptToFixTest({
+            isAttemptingToFix: true,
+            shouldFailSometimes: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
+            shouldIncludeFlakyTest: true
+          })
         })
       })
 
@@ -1526,29 +1717,73 @@ versions.forEach((version) => {
           })
         })
 
-        const getTestAssertions = (isQuarantining) =>
+        const getTestAssertions = ({ isQuarantining, hasFlakyTests }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              const failedTest = events.find(event => event.type === 'test').content
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const flakyTests = tests.filter(test => test.meta[TEST_NAME] === 'flaky should be flaky')
+              const quarantinedTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test'
+              )
+
+              quarantinedTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
 
               if (isQuarantining) {
                 assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'pass')
+                if (hasFlakyTests) {
+                  assert.equal(flakyTests.length, 2) // first attempt fails, second attempt passes
+                  assert.equal(quarantinedTests.length, 2) // both fail
+                  assert.notProperty(flakyTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(flakyTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                  const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                  assert.isTrue(failedFlakyTest.length === 1)
+                  assert.isTrue(passedFlakyTest.length === 1)
+                  assert.propertyVal(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                  assert.propertyVal(quarantinedTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                } else {
+                  assert.equal(quarantinedTests.length, 1)
+                  assert.propertyVal(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                }
               } else {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
+                if (hasFlakyTests) {
+                  assert.equal(flakyTests.length, 2) // first attempt fails, second attempt passes
+                  assert.equal(quarantinedTests.length, 2) // both fail
+                  assert.notProperty(flakyTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(flakyTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                  const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                  assert.isTrue(failedFlakyTest.length === 1)
+                  assert.isTrue(passedFlakyTest.length === 1)
+                  assert.notProperty(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(quarantinedTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                } else {
+                  assert.equal(quarantinedTests.length, 1)
+                  assert.notProperty(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                }
               }
             }, 25000)
 
-        const runQuarantineTest = async (isQuarantining, extraEnvVars) => {
-          const testAssertionsPromise = getTestAssertions(isQuarantining)
+        const runQuarantineTest = async ({
+          isQuarantining,
+          extraEnvVars,
+          cliArgs = 'quarantine-test.js',
+          hasFlakyTests = false
+        }) => {
+          const testAssertionsPromise = getTestAssertions({ isQuarantining, hasFlakyTests })
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
             {
               cwd,
               env: {
@@ -1576,19 +1811,43 @@ versions.forEach((version) => {
         it('can quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(true)
+          await runQuarantineTest({ isQuarantining: true })
+        })
+
+        it('can quarantine tests when there are other flaky tests retried with --retries', async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          await runQuarantineTest({
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
+            hasFlakyTests: true
+          })
+        })
+
+        it('can quarantine tests when there are other flaky tests retried with ATR', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true
+          })
+
+          await runQuarantineTest({
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js',
+            hasFlakyTests: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' }
+          })
         })
 
         it('fails if quarantine is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          await runQuarantineTest(false)
+          await runQuarantineTest({ isQuarantining: false })
         })
 
         it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runQuarantineTest({ isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
       })
 
