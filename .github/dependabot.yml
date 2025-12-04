@@ -4,7 +4,9 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+
 updates:
+  # Regular github actions
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -14,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 1
+      default-days: 3
       exclude:
         - "@datadog/*"
     groups:
@@ -26,6 +28,8 @@ updates:
       - dependencies
       - github_actions
       - semver-patch
+
+  # Regular npm packages that fall into our supported ranges
   - package-ecosystem: "npm"
     directories:
       - "/"
@@ -33,7 +37,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 100
     cooldown:
-      default-days: 1
+      default-days: 3
       exclude:
         - "@datadog/*"
     labels:
@@ -95,12 +99,18 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # Instrumented library support range
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies
@@ -110,12 +120,18 @@ updates:
       test-versions:
         patterns:
           - "*"
+
+  # Esbuild integration test dependencies
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
     schedule:
       interval: "daily"
     open-pull-requests-limit: 1
+    cooldown:
+      default-days: 1
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies
@@ -129,3 +145,44 @@ updates:
       test-versions:
         patterns:
           - "*"
+
+  # Security updates for all dependencies
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/integration-tests/esbuild"
+      - "/packages/dd-trace/test/plugins/versions"
+    schedule:
+      interval: "daily"
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+      - security
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # Security updates for github actions
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/*"
+      - "/.github/actions/*/*"
+      - "/.github/workflows/*"
+    schedule:
+      interval: "daily"
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    labels:
+      - dependabot
+      - dependencies
+      - github_actions
+      - semver-patch
+      - security
