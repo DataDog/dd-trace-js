@@ -123,7 +123,7 @@
     "version.js"
   ],
   "dependencies": {
-    "@openfeature/core": "^1.8.1",
+    "@datadog/openfeature-node-server": "^0.2.0",
     "dc-polyfill": "^0.1.10",
     "import-in-the-middle": "^1.14.2"
   },
