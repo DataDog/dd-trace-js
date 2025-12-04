@@ -2,6 +2,7 @@
 
 const dc = require('dc-polyfill')
 const instrumentations = require('./instrumentations')
+const rewriterInstrumentations = require('./rewriter/instrumentations')
 const { AsyncResource } = require('async_hooks')
 
 const channelMap = {}
@@ -20,6 +21,15 @@ exports.tracingChannel = function (name) {
   const tc = dc.tracingChannel(name)
   tracingChannelMap[name] = tc
   return tc
+}
+
+exports.getHooks = function getHooks (names) {
+  names = [names].flat()
+
+  return rewriterInstrumentations
+    .map(inst => inst.module)
+    .filter(({ name }) => names.includes(name))
+    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
 }
 
 /**
