@@ -763,7 +763,6 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             return agent.close({ ritmReset: false })
           })
 
@@ -804,7 +803,6 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            delete process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             return agent.close({ ritmReset: false })
           })
 

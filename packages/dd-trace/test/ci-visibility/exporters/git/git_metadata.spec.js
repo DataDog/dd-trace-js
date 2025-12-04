@@ -105,7 +105,6 @@ describe('git_metadata', () => {
 
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
     process.env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
-
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
