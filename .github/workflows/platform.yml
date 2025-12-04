@@ -27,7 +27,7 @@ jobs:
   bun-pack:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: mkdir npm bun
@@ -38,7 +38,7 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:core:ci
@@ -55,7 +55,7 @@ jobs:
     env:
       PLUGINS: dd-trace-api
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -64,7 +64,7 @@ jobs:
   esbuild:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:esbuild:ci
@@ -77,7 +77,7 @@ jobs:
     env:
       PLUGINS: bluebird
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -87,7 +87,7 @@ jobs:
     env:
       PLUGINS: body-parser
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -97,7 +97,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -107,7 +107,7 @@ jobs:
     env:
       PLUGINS: cookie-parser
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -123,7 +123,7 @@ jobs:
       PLUGINS: express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -133,7 +133,7 @@ jobs:
     env:
       PLUGINS: express-session
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -143,7 +143,7 @@ jobs:
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -153,7 +153,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -163,7 +163,7 @@ jobs:
     env:
       PLUGINS: generic-pool
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -173,7 +173,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -183,7 +183,7 @@ jobs:
     env:
       PLUGINS: knex
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -199,7 +199,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -209,7 +209,7 @@ jobs:
     env:
       PLUGINS: multer
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -228,7 +228,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -238,7 +238,7 @@ jobs:
     env:
       PLUGINS: passport
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -248,7 +248,7 @@ jobs:
     env:
       PLUGINS: passport-http
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -258,7 +258,7 @@ jobs:
     env:
       PLUGINS: passport-local
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -277,7 +277,7 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -287,7 +287,7 @@ jobs:
     env:
       PLUGINS: promise-js
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -297,7 +297,7 @@ jobs:
     env:
       PLUGINS: promise
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -307,7 +307,7 @@ jobs:
     env:
       PLUGINS: q
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -317,7 +317,7 @@ jobs:
     env:
       PLUGINS: url
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -327,7 +327,7 @@ jobs:
     env:
       PLUGINS: when
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/instrumentations/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -335,7 +335,7 @@ jobs:
   instrumentations-misc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -371,7 +371,7 @@ jobs:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -390,7 +390,7 @@ jobs:
   unit-guardrails:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
@@ -408,7 +408,7 @@ jobs:
         version: [14.0.0, 14, 16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -430,7 +430,7 @@ jobs:
     env:
       DD_TRACE_DEBUG: 'true' # This exercises more of the guardrails code
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -442,7 +442,7 @@ jobs:
   shimmer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci

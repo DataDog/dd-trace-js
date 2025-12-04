@@ -30,12 +30,12 @@ const snapshot = { snapshot: true }
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
   let clock
-  /** @type {Function} */
+  /** @type {typeof import('../../../src/debugger/devtools_client/send')} */
   let send
   /** @type {sinon.SinonSpy} */
   let request
-  /** @type {import('../../../src/debugger/devtools_client/json-buffer')} */
-  let jsonBuffer
+  /** @type {sinon.SinonSpy} */
+  let jsonBufferWrite
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
@@ -48,8 +48,7 @@ describe('input message http requests', function () {
     class JSONBufferSpy extends JSONBuffer {
       constructor (...args) {
         super(...args)
-        jsonBuffer = this
-        sinon.spy(this, 'write')
+        jsonBufferWrite = sinon.spy(this, 'write')
       }
     }
 
@@ -75,14 +74,9 @@ describe('input message http requests', function () {
   })
 
   it('should buffer instead of calling request directly', function () {
-    const callback = sinon.spy()
-
-    send(message, logger, dd, snapshot, callback)
+    send(message, logger, dd, snapshot)
     sinon.assert.notCalled(request)
-    sinon.assert.calledOnceWithMatch(jsonBuffer.write,
-      JSON.stringify(getPayload())
-    )
-    sinon.assert.notCalled(callback)
+    sinon.assert.calledOnceWithMatch(jsonBufferWrite, JSON.stringify(getPayload()))
   })
 
   it('should call request with the expected payload once the buffer is flushed', function (done) {

@@ -546,6 +546,7 @@ class Config {
       DD_TRACE_RATE_LIMIT,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
@@ -830,6 +831,9 @@ class Config {
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
     unprocessedTarget['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this.#setBoolean(target, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    if (DD_TRACE_RESOURCE_RENAMING_ENABLED !== undefined) {
+      this.#setBoolean(target, 'resourceRenamingEnabled', DD_TRACE_RESOURCE_RENAMING_ENABLED)
+    }
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
@@ -1254,6 +1258,15 @@ class Config {
 
     this.#setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
+
+    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
+    if (this.#env.resourceRenamingEnabled === undefined) {
+      const appsecEnabled = this.#options['appsec.enabled'] ?? this.#env['appsec.enabled']
+      if (appsecEnabled) {
+        this.#setBoolean(calc, 'resourceRenamingEnabled', true)
+      }
+    }
 
     this.#setBoolean(calc, 'spanComputePeerService', this.#getSpanComputePeerService())
     this.#setBoolean(calc, 'stats.enabled', this.#isTraceStatsComputationEnabled())
