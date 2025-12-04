@@ -687,9 +687,10 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this, config)
 
-    const shouldSetRetries = isFlakyTestRetriesEnabled &&
-      flakyTestRetriesCount > 0 &&
-      !isTestManagementTestsEnabled
+    // ATR (Automatic Test Retries) is now compatible with Test Management.
+    // Test Management tests will have their retries set to 0 at the test level,
+    // preventing them from being retried by ATR.
+    const shouldSetRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
     if (shouldSetRetries) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
@@ -722,6 +723,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       })
     })
 
+    let preventedToFail = false
+
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
     if (isTestManagementTestsEnabled && sessionStatus === 'failed') {
@@ -753,6 +756,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
+        preventedToFail = true
       }
     }
 
@@ -760,7 +764,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       onDone = resolve
     })
     testSessionFinishCh.publish({
-      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
@@ -923,6 +927,8 @@ addHook({
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
+          // Prevent ATR (project-level retries) from retrying attemptToFix tests
+          test.retries = 0
           const fileSuite = getSuiteType(test, 'file')
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {

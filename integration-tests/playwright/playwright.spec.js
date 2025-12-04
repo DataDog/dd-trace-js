@@ -1368,6 +1368,8 @@ versions.forEach((version) => {
 
           await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
         })
+
+        // TODO: check that ATR and --retries from playwright do not affect attempt to fix tests
       })
 
       context('disabled', () => {
@@ -1526,29 +1528,73 @@ versions.forEach((version) => {
           })
         })
 
-        const getTestAssertions = (isQuarantining) =>
+        const getTestAssertions = ({ isQuarantining, hasFlakyTests }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              const failedTest = events.find(event => event.type === 'test').content
-              assert.equal(failedTest.meta[TEST_STATUS], 'fail')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const flakyTests = tests.filter(test => test.meta[TEST_NAME] === 'flaky should be flaky')
+              const quarantinedTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'quarantine should quarantine failed test'
+              )
+
+              quarantinedTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_STATUS, 'fail')
+              })
 
               if (isQuarantining) {
                 assert.propertyVal(testSession.meta, TEST_MANAGEMENT_ENABLED, 'true')
-                assert.propertyVal(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'pass')
+                if (hasFlakyTests) {
+                  assert.equal(flakyTests.length, 2) // first attempt fails, second attempt passes
+                  assert.equal(quarantinedTests.length, 2) // both fail
+                  assert.notProperty(flakyTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(flakyTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                  const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                  assert.isTrue(failedFlakyTest.length === 1)
+                  assert.isTrue(passedFlakyTest.length === 1)
+                  assert.propertyVal(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                  assert.propertyVal(quarantinedTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                } else {
+                  assert.equal(quarantinedTests.length, 1)
+                  assert.propertyVal(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+                }
               } else {
                 assert.notProperty(testSession.meta, TEST_MANAGEMENT_ENABLED)
-                assert.notProperty(failedTest.meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
+                if (hasFlakyTests) {
+                  assert.equal(flakyTests.length, 2) // first attempt fails, second attempt passes
+                  assert.equal(quarantinedTests.length, 2) // both fail
+                  assert.notProperty(flakyTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(flakyTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  const failedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                  const passedFlakyTest = flakyTests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                  assert.isTrue(failedFlakyTest.length === 1)
+                  assert.isTrue(passedFlakyTest.length === 1)
+                  assert.notProperty(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                  assert.notProperty(quarantinedTests[1].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                } else {
+                  assert.equal(quarantinedTests.length, 1)
+                  assert.notProperty(quarantinedTests[0].meta, TEST_MANAGEMENT_IS_QUARANTINED)
+                }
               }
             }, 25000)
 
-        const runQuarantineTest = async (isQuarantining, extraEnvVars) => {
-          const testAssertionsPromise = getTestAssertions(isQuarantining)
+        const runQuarantineTest = async ({
+          isQuarantining,
+          extraEnvVars,
+          cliArgs = 'quarantine-test.js',
+          hasFlakyTests = false
+        }) => {
+          const testAssertionsPromise = getTestAssertions({ isQuarantining, hasFlakyTests })
 
           childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js quarantine-test.js',
+            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
             {
               cwd,
               env: {
@@ -1576,19 +1622,43 @@ versions.forEach((version) => {
         it('can quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(true)
+          await runQuarantineTest({ isQuarantining: true })
+        })
+
+        it('can quarantine tests when there are other flaky tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          await runQuarantineTest({
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
+            hasFlakyTests: true
+          })
+        })
+
+        it('can quarantine tests when there are other flaky tests with ATR', async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true
+          })
+
+          await runQuarantineTest({
+            isQuarantining: true,
+            cliArgs: 'quarantine-test.js quarantine-2-test.js',
+            hasFlakyTests: true,
+            extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1' }
+          })
         })
 
         it('fails if quarantine is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          await runQuarantineTest(false)
+          await runQuarantineTest({ isQuarantining: false })
         })
 
         it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runQuarantineTest({ isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
       })
 
