@@ -22,6 +22,10 @@ module.exports = {
   mode: 'production',
   devtool: false,
   context: join(__dirname, 'node_modules'),
+  optimization: {
+    checkIds: 'named',
+    moduleIds: 'named',
+  },
   externals: {
     '@opentelemetry/api': '@opentelemetry/api'
   },
