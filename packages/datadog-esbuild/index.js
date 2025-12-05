@@ -24,19 +24,30 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
+function moduleOfInterestKey (name, file) {
+  return file ? `${name}/${file}` : name
+}
+
+const builtinModules = new Set(require('module').builtinModules)
+
+function addModuleOfInterest (name, file) {
+  if (!name) return
+
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
+
+  if (builtinModules.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
+  }
+}
+
 const modulesOfInterest = new Set()
 
 for (const instrumentation of Object.values(instrumentations)) {
   for (const entry of instrumentation) {
-    if (!entry.file) {
-      modulesOfInterest.add(entry.name) // e.g. "redis"
-    } else {
-      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
-    }
+    addModuleOfInterest(entry.name, entry.file)
   }
 }
 
-const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
 const path = require('path')
 const fs = require('fs')
@@ -44,7 +55,7 @@ const { execSync } = require('child_process')
 
 const builtins = new Set()
 
-for (const builtin of RAW_BUILTINS) {
+for (const builtin of builtinModules) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
