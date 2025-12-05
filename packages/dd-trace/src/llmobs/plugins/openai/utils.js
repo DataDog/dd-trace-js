@@ -1,5 +1,10 @@
 'use strict'
 
+const IMAGE_FALLBACK = '[image]'
+const FILE_FALLBACK = '[file]'
+
+const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
+
 /**
  * Extracts chat templates from OpenAI response instructions by replacing variable values with placeholders.
  *
@@ -18,10 +23,9 @@ function extractChatTemplateFromInstructions (instructions, variables) {
   // Build map of values to placeholders - exclude fallback markers so they remain as-is
   const valueToPlaceholder = {}
   for (const [varName, varValue] of Object.entries(variables)) {
-    const valueStr = varValue ? String(varValue) : ''
     // Exclude fallback markers - they should remain as [image]/[file] in the template
-    if (valueStr && valueStr !== '[image]' && valueStr !== '[file]') {
-      valueToPlaceholder[valueStr] = `{{${varName}}}`
+    if (varValue && varValue !== IMAGE_FALLBACK && varValue !== FILE_FALLBACK) {
+      valueToPlaceholder[varValue] = `{{${varName}}}`
     }
   }
 
@@ -46,7 +50,7 @@ function extractChatTemplateFromInstructions (instructions, variables) {
     let fullText = textParts.join('')
     for (const valueStr of sortedValues) {
       const placeholder = valueToPlaceholder[valueStr]
-      const escapedValue = valueStr.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+      const escapedValue = valueStr.replaceAll(REGEX_SPECIAL_CHARS, String.raw`\$&`)
       fullText = fullText.replaceAll(new RegExp(escapedValue, 'g'), placeholder)
     }
 
@@ -66,18 +70,19 @@ function extractChatTemplateFromInstructions (instructions, variables) {
  * @returns {string|null} Text content, URL/file reference, or [image]/[file] fallback marker
  */
 function extractTextFromContentItem (contentItem) {
-  // Extract text content
+  if (!contentItem) return null
+
   if (contentItem.text) {
     return contentItem.text
   }
 
   // For image/file items, extract the actual reference value
   if (contentItem.type === 'input_image') {
-    return contentItem.image_url || contentItem.file_id || '[image]'
+    return contentItem.image_url || contentItem.file_id || IMAGE_FALLBACK
   }
 
   if (contentItem.type === 'input_file') {
-    return contentItem.file_id || contentItem.file_url || contentItem.filename || '[file]'
+    return contentItem.file_id || contentItem.file_url || contentItem.filename || FILE_FALLBACK
   }
 
   return null
@@ -94,21 +99,12 @@ function extractTextFromContentItem (contentItem) {
 function normalizePromptVariables (variables) {
   if (!variables) return {}
 
-  const normalized = {}
-  for (const [key, value] of Object.entries(variables)) {
-    let normalizedValue = value
-    if (value && typeof value === 'object') {
-      if (value.text !== undefined) { // ResponseInputText
-        normalizedValue = value.text
-      } else if (value.type === 'input_image') { // ResponseInputImage
-        normalizedValue = value.image_url || value.file_id || '[image]'
-      } else if (value.type === 'input_file') { // ResponseInputFile
-        normalizedValue = value.file_url || value.file_id || value.filename || '[file]'
-      }
-    }
-    normalized[key] = normalizedValue
-  }
-  return normalized
+  return Object.fromEntries(
+    Object.entries(variables).map(([key, value]) => [
+      key,
+      extractTextFromContentItem(value) ?? String(value ?? '')
+    ])
+  )
 }
 
 module.exports = {

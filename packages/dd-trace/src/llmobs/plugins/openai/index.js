@@ -234,7 +234,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     // For reusable prompts, use response.instructions if no explicit input is provided
-    if (!input && inputs.prompt && response && response.instructions) {
+    if (!input && inputs.prompt && response?.instructions) {
       input = response.instructions
     }
 
@@ -406,8 +406,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
     // Handle prompt tracking for reusable prompts
-    if (inputs.prompt && response && response.prompt) {
+    if (inputs.prompt && response?.prompt) {
       const { id, version } = response.prompt // ResponsePrompt
+      // TODO: Add proper tagger API for prompt metadata
       if (id && version) {
         const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
         const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
