@@ -71,6 +71,7 @@ jobs:
             --use-mirrors=mirrors.json \
             --no-scancode-strategy \
             --no-github-sbom-strategy \
+            --yarn-subdir vendor \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
       - name: Append vendored dependencies
