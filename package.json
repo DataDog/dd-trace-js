@@ -116,6 +116,7 @@
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
     "packages/node_modules/**/*.js",
+    "packages/node_modules/**/*.ts",
     "packages/node_modules/**/LICENSE",
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
