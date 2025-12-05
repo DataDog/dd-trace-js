@@ -295,7 +295,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           inputMessages.push({ role: item.role, content: item.content })
         }
       }
-    } else if (input) {
+    } else {
       // Simple string input
       inputMessages.push({ role: 'user', content: input })
     }
