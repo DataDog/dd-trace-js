@@ -13,7 +13,7 @@ const {
 } = require('./util')
 
 class GenAiLLMObsPlugin extends LLMObsPlugin {
-  static id = 'genai'
+  static id = 'google-genai'
   static integration = 'genai'
   static prefix = 'tracing:apm:google:genai:request'
 
@@ -33,22 +33,17 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     })
   }
 
-  // ============================================================================
-  // Public API Methods
-  // ============================================================================
-
   getLLMObsSpanRegisterOptions (ctx) {
     const { args, methodName } = ctx
     if (!methodName) return
 
     const inputs = args[0]
     const operation = getOperation(methodName)
-    const kind = operation
 
     return {
       modelProvider: 'google',
       modelName: inputs.model,
-      kind,
+      kind: operation,
       name: 'google_genai.request'
     }
   }
@@ -75,10 +70,6 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       this._tagger.tagMetrics(span, metrics)
     }
   }
-
-  // ============================================================================
-  // Tagging Methods
-  // ============================================================================
 
   #tagGenerateContent (span, inputs, response, error, isStreaming = false) {
     const { config = {} } = inputs

@@ -172,12 +172,11 @@ function formatFunctionCallMessage (parts, functionCalls, role) {
 
   const textParts = extractTextParts(parts)
   const content = textParts.length > 0 ? textParts.join('\n') : undefined
+  const message = { role, toolCalls }
 
-  return {
-    role,
-    ...(content && { content }),
-    toolCalls
-  }
+  if (content) message.content = content
+
+  return message
 }
 
 /**
@@ -476,24 +475,12 @@ function formatEmbeddingOutput (response) {
 }
 
 module.exports = {
-  ROLES,
   getOperation,
-  extractTextParts,
-  groupPartsByRole,
-  hasThoughtParts,
-  determineRole,
-  normalizeRole,
   extractMetrics,
   extractMetadata,
-  formatFunctionCallMessage,
-  formatFunctionResponseMessage,
   aggregateStreamingChunks,
-  formatContentObject,
   formatInputMessages,
   formatEmbeddingInput,
-  formatNonStreamingCandidate,
-  formatStreamingOutput,
-  formatNonStreamingOutput,
   formatOutputMessages,
   formatEmbeddingOutput
 }
