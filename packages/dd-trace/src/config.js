@@ -23,6 +23,7 @@ const {
 const { ORIGIN_KEY } = require('./constants')
 const { appendRules } = require('./payload-tagging/config')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables } = require('./config-helper')
+const { getConfigEnvSources } = require('./config-env-sources')
 const defaults = require('./config_defaults')
 const path = require('path')
 const { DD_MAJOR } = require('../../../version')
@@ -277,8 +278,12 @@ class Config {
   constructor (options = {}) {
     if (!isInServerlessEnvironment()) {
       // Bail out early if we're in a serverless environment, stable config isn't supported
-      const StableConfig = require('./config_stable')
-      this.stableConfig = new StableConfig()
+      const configEnvSources = getConfigEnvSources()
+      this.stableConfig = {
+        fleetEntries: configEnvSources.fleetStableConfig,
+        localEntries: configEnvSources.localStableConfig,
+        warnings: configEnvSources.stableConfigWarnings
+      }
     }
 
     options = {

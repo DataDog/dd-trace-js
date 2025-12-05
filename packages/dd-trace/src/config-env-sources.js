@@ -9,18 +9,21 @@ class ConfigEnvSources {
 
     let localStableConfig = {}
     let fleetStableConfig = {}
+    let stableConfigWarnings = []
 
     if (!isServerless) {
       const result = this.#loadStableConfig()
       if (result) {
         localStableConfig = result.localEntries
         fleetStableConfig = result.fleetEntries
+        stableConfigWarnings = result.warnings
       }
     }
 
     // Expose raw stable config on the instance
     this.localStableConfig = localStableConfig
     this.fleetStableConfig = fleetStableConfig
+    this.stableConfigWarnings = stableConfigWarnings
   }
 
   #loadStableConfig () {
@@ -28,7 +31,6 @@ class ConfigEnvSources {
       const StableConfig = require('./config_stable')
       const instance = new StableConfig()
       return {
-        instance,
         localEntries: instance.localEntries ?? {},
         fleetEntries: instance.fleetEntries ?? {},
         warnings: instance.warnings ?? []
