@@ -8,7 +8,7 @@
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
-const { CopyRspackPlugin, SourceMapDevToolPlugin } = require('@rspack/core')
+const { CopyRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
 const { join } = require('path')
 const { dependencies } = require('./package.json')
