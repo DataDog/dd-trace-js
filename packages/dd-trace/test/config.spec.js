@@ -13,6 +13,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../src/constants')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../src/config-helper')
+const { resetConfigEnvSources } = require('../src/config-env-sources')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../version')
 
@@ -3081,6 +3082,7 @@ describe('Config', () => {
     let tempDir
     let localConfigPath
     let fleetConfigPath
+
     beforeEach(() => {
       env = process.env
       tempDir = fs.mkdtempSync(path.join(baseTempDir, 'config-test-'))
@@ -3088,6 +3090,7 @@ describe('Config', () => {
       fleetConfigPath = path.join(tempDir, 'fleet.yaml')
       process.env.DD_TEST_LOCAL_CONFIG_PATH = localConfigPath
       process.env.DD_TEST_FLEET_CONFIG_PATH = fleetConfigPath
+      resetConfigEnvSources()
     })
 
     afterEach(() => {
@@ -3141,11 +3144,15 @@ rules:
     configuration:
       DD_SERVICE: service_local_stable
 `)
+      resetConfigEnvSources()
+
       const config2 = getConfig()
       assert.strictEqual(config2?.service, 'service_local_stable')
 
       // 3. Env > Local stable > Default
       process.env.DD_SERVICE = 'service_env'
+      resetConfigEnvSources()
+
       const config3 = getConfig()
       assert.strictEqual(config3?.service, 'service_env')
 
@@ -3162,6 +3169,7 @@ rules:
     configuration:
       DD_SERVICE: service_fleet_stable
 `)
+      resetConfigEnvSources()
       const config4 = getConfig()
       assert.strictEqual(config4?.service, 'service_fleet_stable')
 
@@ -3299,6 +3307,7 @@ apm_configuration_default:
   DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING: "all"
   DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '5'
 `)
+      resetConfigEnvSources()
       let config = getConfig()
       assertObjectContains(config, {
         apiKey: 'local-api-key',
@@ -3319,6 +3328,7 @@ apm_configuration_default:
       process.env.DD_APP_KEY = 'env-app-key'
       process.env.DD_INSTRUMENTATION_INSTALL_ID = 'env-install-id'
       process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = '7'
+      resetConfigEnvSources()
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'env-api-key',
@@ -3351,6 +3361,7 @@ rules:
       DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING: "all"
       DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: '15'
 `)
+      resetConfigEnvSources()
       config = getConfig()
       assertObjectContains(config, {
         apiKey: 'fleet-api-key',
