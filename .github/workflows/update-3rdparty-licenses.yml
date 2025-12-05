@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: watson/dd-license-attribution
-          ref: f529f30734809b971799002cb6e4fa1bb039a359
+          ref: 18b3d1cb2d17c500a14108891db2486f0f103826
           path: dd-license-attribution
 
       - name: Install dd-license-attribution
