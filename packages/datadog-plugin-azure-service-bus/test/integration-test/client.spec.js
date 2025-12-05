@@ -150,6 +150,22 @@ describe('esm', () => {
 
       await res
     }).timeout(60000)
+
+    it('tryAddMessage returns a boolean, not a Promise', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        // Verify we got the expected spans from the test
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0][0].name, 'azure.servicebus.create')
+        assert.strictEqual(payload[1][0].name, 'azure.servicebus.send')
+      })
+
+      // This test file will throw an error if tryAddMessage returns a Promise instead of a boolean
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'tryAddMessage-test.mjs', agent.port, spawnEnv)
+
+      await res
+    }).timeout(20000)
   })
 })
 
