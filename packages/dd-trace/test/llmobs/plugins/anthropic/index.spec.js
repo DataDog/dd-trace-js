@@ -3,7 +3,7 @@
 const { describe, before, it } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 const assert = require('node:assert')
-const semver = require('semver')
+const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 
 const {
@@ -44,7 +44,7 @@ describe('Plugin', () => {
 
   const getEvents = useLlmObs({ plugin: 'anthropic' })
 
-  withVersions('anthropic', '@anthropic-ai/sdk', (version, moduleName, resolvedVersion) => {
+  withVersions('anthropic', '@anthropic-ai/sdk', (version, moduleName, realVersion) => {
     let client
 
     before(() => {
@@ -52,7 +52,7 @@ describe('Plugin', () => {
       client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
     })
 
-    const isBetaSupported = semver.gte(semver.coerce(resolvedVersion), '0.33.0')
+    const isBetaSupported = semifies(realVersion, '>=0.33.0')
 
     describe('messages.create', () => {
       it('creates a span', async () => {
@@ -139,7 +139,7 @@ describe('Plugin', () => {
 
     describe('beta.messages.create', () => {
       before(function () {
-        if (!isBetaSupported || !client.beta?.messages) this.skip()
+        if (!isBetaSupported) this.skip()
       })
 
       it('creates a span', async () => {
@@ -176,6 +176,7 @@ describe('Plugin', () => {
 
     describe('beta.messages.stream', () => {
       before(function () {
+        // stream helper was added in 0.35.0
         if (!isBetaSupported || !client.beta?.messages?.stream) this.skip()
       })
 
