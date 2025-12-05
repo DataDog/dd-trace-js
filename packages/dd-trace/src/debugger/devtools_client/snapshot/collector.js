@@ -1,10 +1,12 @@
 'use strict'
 
-const { collectionSizeSym, fieldCountSym, timeBudgetSym } = require('./symbols')
+const { collectionSizeSym, largeCollectionSkipThresholdSym, fieldCountSym, timeBudgetSym } = require('./symbols')
+const { LARGE_OBJECT_SKIP_THRESHOLD } = require('./constants')
 const session = require('../session')
 
 const LEAF_SUBTYPES = new Set(['date', 'regexp'])
 const ITERABLE_SUBTYPES = new Set(['map', 'set', 'weakmap', 'weakset'])
+const SIZE_IN_DESCRIPTION_SUBTYPES = new Set(['array', 'typedarray', 'arraybuffer', 'dataview', 'map', 'set'])
 
 module.exports = {
   collectObjectProperties
@@ -16,9 +18,10 @@ module.exports = {
  * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
  * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
  * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
- * @property {Object} [ctx={}] - A context object to track the state/progress of the snapshot collection.
- * @property {boolean} [ctx.deadlineReached=false] - Whether the deadline has been reached. Should not be set by the
- *   caller, but is used to signal the deadline overrun to the caller.
+ * @property {Object} ctx - A context object to track the state/progress of the snapshot collection.
+ * @property {boolean} ctx.deadlineReached - Will be set to `true` if the deadline has been reached.
+ * @property {Error[]} ctx.captureErrors - An array on which errors can be pushed if an issue is detected while
+ *   collecting the snapshot.
  */
 
 /**
@@ -51,6 +54,13 @@ async function collectObjectProperties (objectId, opts, depth = 0, collection = 
   } else if (result.length > opts.maxFieldCount) {
     // Trim the number of properties on the object if there's too many.
     const size = result.length
+    if (size > LARGE_OBJECT_SKIP_THRESHOLD) {
+      opts.ctx.captureErrors.push(new Error(
+        `An object with ${size} properties was detected while collecting a snapshot. ` +
+        `This exceeds the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. ` +
+        'Future snapshots for existing probes in this location will be skipped until the Node.js process is restarted'
+      ))
+    }
     result.length = opts.maxFieldCount
     result[fieldCountSym] = size
   } else if (privateProperties) {
@@ -70,10 +80,17 @@ async function traverseGetPropertiesResult (props, opts, depth) {
 
   for (const prop of props) {
     if (prop.value === undefined) continue
-    const { value: { type, objectId, subtype } } = prop
+    const { value: { type, objectId, subtype, description } } = prop
     if (type === 'object') {
       if (objectId === undefined) continue // if `subtype` is "null"
       if (LEAF_SUBTYPES.has(subtype)) continue // don't waste time with these subtypes
+      const size = parseLengthFromDescription(description, subtype)
+      if (size !== null && size >= LARGE_OBJECT_SKIP_THRESHOLD) {
+        const empty = []
+        empty[largeCollectionSkipThresholdSym] = size
+        prop.value.properties = empty
+        continue
+      }
       work.push([
         prop.value,
         () => collectPropertiesBySubtype(subtype, objectId, opts, depth).then((properties) => {
@@ -233,6 +250,26 @@ function removeNonEnumerableProperties (props) {
       props.splice(i--, 1)
     }
   }
+}
+
+function parseLengthFromDescription (description, subtype) {
+  if (typeof description !== 'string') return null
+  if (!SIZE_IN_DESCRIPTION_SUBTYPES.has(subtype)) return null
+
+  const open = description.lastIndexOf('(')
+  if (open === -1) return null
+
+  const close = description.indexOf(')', open + 1)
+  if (close === -1) return null
+
+  const s = description.slice(open + 1, close)
+  if (s === '') return null
+
+  const n = Number(s)
+  if (!Number.isSafeInteger(n) || n < 0) return null
+  if (String(n) !== s) return null
+
+  return n
 }
 
 function overBudget (opts) {
