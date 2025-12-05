@@ -3,6 +3,26 @@
 const { isInServerlessEnvironment } = require('./serverless')
 const { getValueFromEnvSource, getEnvironmentVariable } = require('./config-helper')
 
+/**
+ * Internal helper that centralizes configuration coming from stable config files and environment variables.
+ *
+ * Responsibilities:
+ * - Load and parse the local and fleet stable configuration files (via `StableConfig`).
+ * - Expose the stable config maps (`localStableConfig`, `fleetStableConfig`) and any warnings
+ *   `stableConfigWarnings`.
+ * - Provide `getResolvedEnv(name)` to resolve a configuration value from:
+ *     1. Fleet stable config
+ *     2. Environment variables (and their aliases)
+ *     3. Local stable config
+ *
+ * Usage patterns:
+ * - Most modules that need a single resolved value should call `getResolvedEnv(name)`.
+ * - The main `Config` class reads `localStableConfig` / `fleetStableConfig` directly so it can:
+ *     - Preserve per-source origins (fleet/local/env) for telemetry reporting.
+ *     - Merge sources in its own priority order.
+ * - Tests can reset the singleton with `resetConfigEnvSources()` to force re-loading after
+ *   modifying stable config files or environment variables.
+ */
 class ConfigEnvSources {
   constructor () {
     const isServerless = isInServerlessEnvironment()
