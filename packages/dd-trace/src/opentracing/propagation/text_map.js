@@ -129,8 +129,8 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    if (this._config.legacyBaggageEnabled) {
-      spanContext?._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
+    if (this._config.legacyBaggageEnabled && spanContext?._baggageItems) {
+      Object.keys(spanContext._baggageItems).forEach(key => {
         carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
       })
     }
